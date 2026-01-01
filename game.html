@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mullet Pro</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body {
+            background: #2c2c2c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial Black', sans-serif;
+        }
+        #game-frame {
+            background: linear-gradient(145deg, #1a1a1a, #333);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            max-width: 700px;
+            width: 100%;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background: #000;
+            color: #0f0;
+            font-size: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+        }
+        canvas {
+            display: block;
+            border: 6px solid #000;
+            border-radius: 8px;
+            width: 100%;
+            background: #87ceeb;
+            image-rendering: pixelated;
+        }
+        #mobile-controls {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 15px;
+            margin-top: 20px;
+            align-items: center;
+        }
+        #dpad {
+            display: grid;
+            grid-template: repeat(3, 70px) / repeat(3, 70px);
+            gap: 5px;
+            justify-self: end;
+        }
+        .arrow {
+            background: linear-gradient(145deg, #444, #222);
+            border: 3px solid #000;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .arrow:active {
+            background: linear-gradient(145deg, #222, #111);
+            transform: translateY(2px);
+        }
+        #action {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #e74c3c, #c0392b);
+            border: 5px solid #000;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+            justify-self: start;
+        }
+        #action:active {
+            background: linear-gradient(145deg, #c0392b, #a93226);
+            transform: scale(0.95);
+        }
+        #start {
+            display: block;
+            margin: 20px auto;
+            padding: 15px 50px;
+            background: linear-gradient(145deg, #27ae60, #229954);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        #start:hover { background: linear-gradient(145deg, #229954, #1e8449); }
+        .empty { background: none; border: none; }
+    </style>
+</head>
+<body>
+    <div id="game-frame">
+        <div id="hud">
+            <span>LV:<span id="level">1</span></span>
+            <span>SCORE:<span id="score">0</span></span>
+            <span>TIME:<span id="timer">60</span></span>
+        </div>
+        <canvas id="game" width="640" height="480"></canvas>
+        <div id="mobile-controls">
+            <div id="dpad">
+                <div class="empty"></div>
+                <div class="arrow" data-dir="up">▲</div>
+                <div class="empty"></div>
+                <div class="arrow" data-dir="left">◄</div>
+                <div class="empty"></div>
+                <div class="arrow" data-dir="right">►</div>
+                <div class="empty"></div>
+                <div class="arrow" data-dir="down">▼</div>
+                <div class="empty"></div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: #fff; font-size: 14px; margin-bottom: 5px;">ACTION</div>
+            </div>
+            <button id="action">PRESS</button>
+        </div>
+        <button id="start" onclick="startGame()">START</button>
+    </div>
+
+```
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    
+    let state = 'menu';
+    let level = 1;
+    let score = 0;
+    let timer = 60;
+    let frame = 0;
+    
+    let player = { x: 320, y: 350, holding: null, walkFrame: 0 };
+    let computer = { x: 100, y: 300 };
+    let ui = { show: false, selectedColor: 0, confirming: false };
+    let npcs = [];
+    let cracks = [];
+    let keys = {};
+    
+    const COLORS = [
+        { name: 'RED', hex: '#e74c3c' },
+        { name: 'GREEN', hex: '#27ae60' },
+        { name: 'BLUE', hex: '#3498db' },
+        { name: 'YELLOW', hex: '#f1c40f' }
+    ];
+    
+    function initLevel(lv) {
+        level = lv;
+        npcs = [];
+        cracks = [];
+        player.holding = null;
+        ui = { show: false, selectedColor: 0, confirming: false };
+        
+        const count = level === 3 ? 4 : 3;
+        for (let i = 0; i < count; i++) {
+            npcs.push({
+                x: 200 + i * 140,
+                y: 300,
+                color: COLORS[i],
+                state: 'happy',
+                needsDoc: false,
+                anim: 0
+            });
+        }
+    }
+    
+    function startGame() {
+        state = 'playing';
+        level = 1;
+        score = 0;
+        timer = 60;
+        player = { x: 320, y: 350, holding: null, walkFrame: 0 };
+        initLevel(1);
+        document.getElementById('start').style.display = 'none';
+        spawnCracks();
+        gameLoop();
+    }
+    
+    function spawnCracks() {
+        if (state !== 'playing') return;
+        const delay = level === 1 ? 4000 : level === 2 ? 2800 : 2000;
+        setTimeout(() => {
+            if (state === 'playing') {
+                const available = npcs.filter(n => n.state === 'happy');
+                if (available.length > 0) {
+                    const npc = available[Math.floor(Math.random() * available.length)];
+                    cracks.push({ npc, time: Date.now(), max: 8000 });
+                    npc.state = 'stressed';
+                    npc.needsDoc = true;
+                }
+            }
+            spawnCracks();
+        }, delay);
+    }
+    
+    function drawCharacter(x, y, mullet = false, stressed = false) {
+        ctx.fillStyle = stressed ? '#e74c3c' : '#ffa07a';
+        ctx.beginPath();
+        ctx.arc(x, y - 30, 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        if (mullet) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x - 14, y - 35, 28, 15);
+            ctx.fillRect(x - 10, y - 24, 4, 6);
+            ctx.fillRect(x + 6, y - 24, 4, 6);
+        }
+        
+        ctx.fillStyle = '#3498db';
+        ctx.fillRect(x - 12, y - 15, 24, 20);
+        
+        ctx.fillStyle = '#2c3e50';
+        const legOffset = Math.sin(frame * 0.2) * 3;
+        ctx.fillRect(x - 10, y + 5, 8, 15 + legOffset);
+        ctx.fillRect(x + 2, y + 5, 8, 15 - legOffset);
+    }
+    
+    function drawScene() {
+        ctx.fillStyle = '#87ceeb';
+        ctx.fillRect(0, 0, 640, 480);
+        
+        ctx.fillStyle = '#8b7355';
+        ctx.fillRect(0, 390, 640, 90);
+        
+        ctx.fillStyle = '#555';
+        ctx.fillRect(computer.x - 30, computer.y - 40, 60, 50);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(computer.x - 25, computer.y - 35, 50, 35);
+        
+        for (let npc of npcs) {
+            ctx.strokeStyle = npc.color.hex;
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(npc.x, 50);
+            ctx.lineTo(npc.x, npc.y - 50);
+            ctx.stroke();
+            
+            const crack = cracks.find(c => c.npc === npc);
+            if (crack) {
+                const pct = (Date.now() - crack.time) / crack.max;
+                ctx.fillStyle = npc.color.hex;
+                ctx.globalAlpha = 0.3 + pct * 0.7;
+                const sz = 15 + pct * 25;
+                ctx.fillRect(npc.x - sz/2, 200, sz, sz);
+                ctx.globalAlpha = 1;
+            }
+            
+            if (npc.state === 'fixing') {
+                ctx.save();
+                ctx.translate(npc.x, 220);
+                ctx.rotate(npc.anim * 0.5);
+                ctx.fillStyle = '#95a5a6';
+                ctx.fillRect(-8, -3, 16, 6);
+                ctx.restore();
+                npc.anim += 0.2;
+            }
+            
+            drawCharacter(npc.x, npc.y, false, npc.state === 'stressed');
+            
+            if (npc.needsDoc) {
+                ctx.fillStyle = '#f39c12';
+                ctx.font = 'bold 28px Arial';
+                ctx.fillText('!', npc.x + 18, npc.y - 45);
+            }
+        }
+        
+        drawCharacter(player.x, player.y, true, false);
+        
+        if (player.holding) {
+            const col = COLORS.find(c => c.name === player.holding);
+            ctx.fillStyle = col.hex;
+            ctx.fillRect(player.x - 15, player.y - 50, 30, 20);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(col.name[0], player.x - 5, player.y - 35);
+        }
+        
+        if (ui.show) {
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(0, 320, 640, 160);
+            
+            if (!ui.confirming) {
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 24px Arial';
+                ctx.fillText('SELECT COLOR:', 40, 360);
+                
+                for (let i = 0; i < 4; i++) {
+                    ctx.fillStyle = i === ui.selectedColor ? '#fff' : '#666';
+                    ctx.fillRect(40 + i * 140, 380, 120, 60);
+                    ctx.fillStyle = COLORS[i].hex;
+                    ctx.fillRect(45 + i * 140, 385, 110, 50);
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.fillText(COLORS[i].name, 55 + i * 140, 415);
+                }
+            } else {
+                const col = COLORS[ui.selectedColor];
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 28px Arial';
+                ctx.fillText('PRINT ' + col.name + '?', 220, 370);
+                ctx.fillStyle = col.hex;
+                ctx.fillRect(260, 400, 120, 50);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 20px Arial';
+                ctx.fillText('CONFIRM', 270, 432);
+            }
+        }
+    }
+    
+    function update() {
+        if (keys['ArrowLeft'] || keys['left']) player.x = Math.max(50, player.x - 3);
+        if (keys['ArrowRight'] || keys['right']) player.x = Math.min(590, player.x + 3);
+        
+        if (keys[' '] || keys['action']) {
+            keys[' '] = false;
+            keys['action'] = false;
+            
+            const atComputer = Math.abs(player.x - computer.x) < 50;
+            if (atComputer && !player.holding && !ui.show) {
+                ui.show = true;
+                return;
+            }
+            
+            if (ui.show && !ui.confirming) {
+                ui.confirming = true;
+                return;
+            }
+            
+            if (ui.show && ui.confirming) {
+                player.holding = COLORS[ui.selectedColor].name;
+                ui.show = false;
+                ui.confirming = false;
+                return;
+            }
+            
+            if (player.holding) {
+                for (let npc of npcs) {
+                    if (Math.abs(player.x - npc.x) < 40 && npc.needsDoc && 
+                        npc.color.name === player.holding) {
+                        npc.needsDoc = false;
+                        npc.state = 'fixing';
+                        npc.anim = 0;
+                        player.holding = null;
+                        score += 100 * level;
+                        
+                        setTimeout(() => {
+                            cracks = cracks.filter(c => c.npc !== npc);
+                            npc.state = 'happy';
+                        }, 1500);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (ui.show && !ui.confirming) {
+            if (keys['ArrowLeft']) {
+                ui.selectedColor = Math.max(0, ui.selectedColor - 1);
+                keys['ArrowLeft'] = false;
+            }
+            if (keys['ArrowRight']) {
+                ui.selectedColor = Math.min(3, ui.selectedColor + 1);
+                keys['ArrowRight'] = false;
+            }
+        }
+        
+        for (let crack of cracks) {
+            if (Date.now() - crack.time > crack.max) {
+                gameOver();
+            }
+        }
+    }
+    
+    function gameOver() {
+        state = 'over';
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 640, 480);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText("YOU'RE FIRED!", 320, 240);
+        document.getElementById('start').style.display = 'block';
+        document.getElementById('start').textContent = 'TRY AGAIN';
+    }
+    
+    function winGame() {
+        state = 'win';
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 640, 480);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText("YOU'RE HIRED!", 320, 220);
+        ctx.font = '24px Arial';
+        ctx.fillText('SCORE: ' + score, 320, 270);
+        document.getElementById('start').style.display = 'block';
+        document.getElementById('start').textContent = 'PLAY AGAIN';
+    }
+    
+    function nextLevel() {
+        if (level < 3) {
+            level++;
+            timer = 60;
+            initLevel(level);
+        } else {
+            winGame();
+        }
+    }
+    
+    let lastTime = Date.now();
+    let counter = 0;
+    
+    function gameLoop() {
+        if (state !== 'playing') return;
+        
+        frame++;
+        const now = Date.now();
+        counter += now - lastTime;
+        lastTime = now;
+        
+        if (counter >= 1000) {
+            timer--;
+            counter = 0;
+            document.getElementById('timer').textContent = timer;
+            if (timer <= 0) nextLevel();
+        }
+        
+        update();
+        drawScene();
+        document.getElementById('level').textContent = level;
+        document.getElementById('score').textContent = score;
+        
+        requestAnimationFrame(gameLoop);
+    }
+    
+    document.addEventListener('keydown', e => { keys[e.key] = true; });
+    document.addEventListener('keyup', e => { keys[e.key] = false; });
+    
+    document.querySelectorAll('.arrow').forEach(btn => {
+        btn.addEventListener('touchstart', e => {
+            e.preventDefault();
+            keys[btn.dataset.dir] = true;
+        });
+        btn.addEventListener('touchend', e => {
+            e.preventDefault();
+            keys[btn.dataset.dir] = false;
+        });
+        btn.addEventListener('mousedown', e => {
+            keys[btn.dataset.dir] = true;
+        });
+        btn.addEventListener('mouseup', e => {
+            keys[btn.dataset.dir] = false;
+        });
+    });
+    
+    document.getElementById('action').addEventListener('touchstart', e => {
+        e.preventDefault();
+        keys['action'] = true;
+    });
+    document.getElementById('action').addEventListener('mousedown', e => {
+        keys['action'] = true;
+    });
+    
+    drawScene();
+</script>
+```
+
+</body>
+</html>
