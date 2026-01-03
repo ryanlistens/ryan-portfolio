@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mullet Pro</title>
-
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
 body {
@@ -43,65 +42,10 @@ canvas {
     width: 100%;
     background: #e8e6dc;
 }
-#controls-section {
-    margin-top: 20px;
-    padding: 20px;
-    background: #fffdf6;
-    border-radius: 8px;
-    border: 2px solid #e8e6dc;
-}
-#controls-grid {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 30px;
-    align-items: center;
-    justify-items: center;
-}
-#dpad-container {
-    display: grid;
-    grid-template: repeat(3, 65px) / repeat(3, 65px);
-    gap: 8px;
-}
-.control-btn {
-    background: linear-gradient(145deg, #005f99, #004a7c);
-    border: 3px solid #2b2b2b;
-    border-radius: 8px;
-    color: #f5f2ec;
-    font-size: 24px;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-#action-btn {
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
-    background: linear-gradient(145deg, #4d443d, #3a342f);
-    border: 5px solid #2b2b2b;
-    color: #f5f2ec;
-    font-size: 20px;
-    font-weight: bold;
-    cursor: pointer;
-}
-#start-btn {
-    display: block;
-    margin: 20px auto 0;
-    padding: 18px 60px;
-    background: linear-gradient(145deg, #005f99, #004a7c);
-    color: #f5f2ec;
-    border: 3px solid #2b2b2b;
-    border-radius: 10px;
-    font-size: 24px;
-    font-weight: bold;
-    cursor: pointer;
-}
-.empty { background: none; border: none; }
 </style>
 </head>
-
 <body>
+
 <div id="game-frame">
     <div id="hud">
         <span>LEVEL <span id="level">1</span></span>
@@ -109,203 +53,201 @@ canvas {
         <span><span id="timer">60</span>s</span>
         <span id="lives"></span>
     </div>
-
     <canvas id="game" width="700" height="500"></canvas>
-
-    <div id="controls-section">
-        <div id="controls-grid">
-            <div id="dpad-container">
-                <div class="empty"></div>
-                <button class="control-btn" data-dir="up">▲</button>
-                <div class="empty"></div>
-                <button class="control-btn" data-dir="left">◄</button>
-                <div class="empty"></div>
-                <button class="control-btn" data-dir="right">►</button>
-                <div class="empty"></div>
-                <button class="control-btn" data-dir="down">▼</button>
-                <div class="empty"></div>
-            </div>
-            <button id="action-btn">ACTION</button>
-        </div>
-    </div>
-
     <button id="start-btn" onclick="startGame()">START GAME</button>
 </div>
 
 <script>
-/* ================= CORE GAME ================= */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+let state = "menu",
+    level = 1,
+    score = 0,
+    timer = 60,
+    lives = 2,
+    frame = 0,
+    cardTimer = 0,
+    menuChoice = 0;
 
-let state = 'menu', level = 1, score = 0, timer = 60, lives = 2;
-let frame = 0, cardTimer = 0, menuChoice = 0;
 let player = { x: 350, y: 380, holding: null };
 let computer = { x: 120, y: 320 };
 let ui = { show: false, selectedColor: 0, confirming: false };
-let npcs = [], cracks = [], keys = {};
+let npcs = [];
+let cracks = [];
+let keys = {};
 
 const COLORS = [
-    { name: 'RED', hex: '#e74c3c' },
-    { name: 'GREEN', hex: '#27ae60' },
-    { name: 'BLUE', hex: '#005f99' },
-    { name: 'YELLOW', hex: '#f39c12' }
+    { name: "RED", hex: "#e74c3c" },
+    { name: "GREEN", hex: "#27ae60" },
+    { name: "BLUE", hex: "#005f99" },
+    { name: "YELLOW", hex: "#f39c12" }
 ];
 
-/* ================= UTIL ================= */
-
 function updateLives() {
-    let html = '';
-    for (let i = 0; i < lives; i++) html += '<span class="heart">♥</span>';
-    for (let i = lives; i < 2; i++) html += '<span class="heart" style="opacity:0.3">♥</span>';
-    document.getElementById('lives').innerHTML = html;
+    let html = "";
+    for (let i = 0; i < lives; i++) html += "<span class='heart'>♥</span>";
+    for (let i = lives; i < 2; i++) html += "<span class='heart' style='opacity:0.3'>♥</span>";
+    document.getElementById("lives").innerHTML = html;
 }
 
-function initLevel(lv) {
-    level = lv;
+function drawMulletPro(x, y) {
+    const s = 2;
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#3a2a1a";
+    ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
+}
+
+function drawNPC(npc) {
+    const x = npc.x, y = npc.y, s = 2;
+    ctx.fillStyle = npc.color.hex;
+    ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
+}
+
+function drawScene() {
+
+    if (state === "menu") {
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(0, 0, 700, 500);
+        ctx.font = "bold 72px Arial";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#ffd700";
+        ctx.fillText("MULLET PRO", 350, 150);
+        drawMulletPro(350, 340);
+        return;
+    }
+
+    if (state === "levelCard") {
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(0, 0, 700, 500);
+        ctx.font = "bold 80px Arial";
+        ctx.fillStyle = "#ffd700";
+        ctx.textAlign = "center";
+        ctx.fillText("LEVEL " + level, 350, 200);
+        return;
+    }
+
+    if (state === "over" || state === "win") {
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(0, 0, 700, 500);
+        ctx.font = "bold 56px Arial";
+        ctx.fillStyle = state === "win" ? "#27ae60" : "#e74c3c";
+        ctx.textAlign = "center";
+        ctx.fillText(state === "win" ? "YOU'RE HIRED!" : "YOU'RE FIRED!", 350, 180);
+        return;
+    }
+
+    ctx.fillStyle = "#e8e6dc";
+    ctx.fillRect(0, 0, 700, 500);
+
+    for (let npc of npcs) drawNPC(npc);
+    drawMulletPro(player.x, player.y);
+}<script>
+function spawnNPCs() {
     npcs = [];
-    cracks = [];
-    player.holding = null;
-    ui = { show: false, selectedColor: 0, confirming: false };
-
-    const count = level >= 2 ? 4 : 3;
-    const positions = level >= 2 ? [180, 300, 420, 540] : [230, 390, 550];
-
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < level + 1; i++) {
+        const color = COLORS[Math.floor(Math.random() * COLORS.length)];
         npcs.push({
-            x: positions[i],
-            y: 340,
-            color: COLORS[i],
-            state: 'happy',
-            needsDoc: false,
-            fixAnim: 0
+            x: 200 + i * 120,
+            y: 260,
+            color,
+            state: "waiting",
+            timer: 0
         });
     }
 }
 
 function startGame() {
-    state = 'levelCard';
+    state = "levelCard";
     level = 1;
     score = 0;
-    timer = 60;
     lives = 2;
-    cardTimer = 0;
-    player = { x: 350, y: 380, holding: null };
-    initLevel(1);
-    document.getElementById('timer').textContent = timer;
-    document.getElementById('start-btn').style.display = 'none';
+    timer = 60;
+    frame = 0;
+    spawnNPCs();
     updateLives();
-    gameLoop();
+    document.getElementById("score").textContent = score;
+    document.getElementById("level").textContent = level;
 }
 
-/* ================= SPAWNING ================= */
-
-function spawnCracks() {
-    if (state !== 'playing') return;
-    const delay = level === 1 ? 5000 : level === 2 ? 4000 : 3000;
-    setTimeout(() => {
-        if (state === 'playing') {
-            const available = npcs.filter(n => n.state === 'happy');
-            if (available.length) {
-                const npc = available[Math.floor(Math.random() * available.length)];
-                cracks.push({ npc, time: Date.now(), max: 12000 });
-                npc.state = 'stressed';
-                npc.needsDoc = true;
-            }
-        }
-        spawnCracks();
-    }, delay);
-}
-
-/* ================= DRAWING ================= */
-/* (UNCHANGED FROM YOUR ORIGINAL, JUST QUOTE FIXES) */
-
-function drawMulletPro(x, y) {
-    const s = 2;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x - 6 * s, y - 16 * s, 12 * s, 20 * s);
-}
-
-function drawNPC(npc) {
-    ctx.fillStyle = npc.color.hex;
-    ctx.fillRect(npc.x - 10, npc.y - 30, 20, 40);
-}
-
-function drawScene() {
-    ctx.clearRect(0, 0, 700, 500);
-
-    if (state === 'menu') {
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, 700, 500);
-        ctx.font = 'bold 72px Arial';
-        ctx.fillStyle = '#ffd700';
-        ctx.textAlign = 'center';
-        ctx.fillText('MULLET PRO', 350, 150);
-        drawMulletPro(350, 340);
-        if (Math.floor(frame / 30) % 2 === 0) {
-            ctx.font = 'bold 28px Arial';
-            ctx.fillText('PRESS START', 350, 430);
-        }
+function nextLevel() {
+    level++;
+    if (level > 5) {
+        state = "win";
         return;
     }
-
-    if (state === 'levelCard') {
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, 700, 500);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 80px Arial';
-        ctx.fillText('LEVEL ' + level, 350, 200);
-        return;
-    }
-
-    ctx.fillStyle = '#e8e6dc';
-    ctx.fillRect(0, 0, 700, 500);
-
-    for (let npc of npcs) drawNPC(npc);
-    drawMulletPro(player.x, player.y);
+    timer = 60;
+    spawnNPCs();
+    state = "levelCard";
+    document.getElementById("level").textContent = level;
 }
-
-/* ================= UPDATE ================= */
 
 function update() {
-    if (state === 'levelCard') {
+    frame++;
+
+    if (state === "levelCard") {
         cardTimer++;
-        if (cardTimer > 120) {
-            state = 'playing';
-            spawnCracks();
+        if (cardTimer > 90) {
+            cardTimer = 0;
+            state = "playing";
         }
         return;
     }
-}
 
-/* ================= LOOP ================= */
+    if (state !== "playing") return;
 
-let last = Date.now(), acc = 0;
-function gameLoop() {
-    if (!['menu', 'playing', 'levelCard', 'over', 'win'].includes(state)) return;
+    timer -= 1 / 60;
+    document.getElementById("timer").textContent = Math.ceil(timer);
 
-    frame++;
-    const now = Date.now();
-    acc += now - last;
-    last = now;
-
-    if (state === 'playing' && acc >= 1000) {
-        timer--;
-        acc = 0;
-        document.getElementById('timer').textContent = timer;
+    if (timer <= 0) {
+        lives--;
+        updateLives();
+        if (lives <= 0) {
+            state = "over";
+        } else {
+            timer = 60;
+        }
     }
 
+    for (let npc of npcs) {
+        npc.timer++;
+        if (npc.timer > 180 && npc.state === "waiting") {
+            npc.state = "fixing";
+            npc.timer = 0;
+        }
+        if (npc.state === "fixing" && npc.timer > 120) {
+            npc.state = "waiting";
+            npc.timer = 0;
+            score += 10;
+            document.getElementById("score").textContent = score;
+        }
+    }
+
+    if (score >= level * 50) {
+        nextLevel();
+    }
+}
+
+function gameLoop() {
     update();
     drawScene();
     requestAnimationFrame(gameLoop);
 }
 
-/* ================= INPUT ================= */
+document.addEventListener("keydown", e => {
+    keys[e.key] = true;
+});
 
-document.addEventListener('keydown', e => keys[e.key] = true);
-document.addEventListener('keyup', e => keys[e.key] = false);
+document.addEventListener("keyup", e => {
+    keys[e.key] = false;
+});
 
-drawScene();
+updateLives();
+gameLoop();
 </script>
+
 </body>
 </html>
