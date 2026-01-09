@@ -144,6 +144,8 @@ let npcs=[],cracks=[],keys={},explosions=[],bullets=[],muzzleFlashes=[];
 let boss={active:false,x:750,y:380,needsColor:null,walking:false,spawnTime:0,angry:false,facing:'left',bossKills:0};
 let ghostGun={hasGun:false,ammo:0,printing:false,printProgress:0};
 let resettingLevel=false;
+let fadeAlpha=0;
+let fadeDirection=0;
 const COLORS=[{name:'RED',hex:'#e74c3c'},{name:'GREEN',hex:'#27ae60'},{name:'BLUE',hex:'#005f99'},{name:'YELLOW',hex:'#f39c12'}];
 
 function updateLives(){
@@ -165,6 +167,8 @@ function initLevel(lv){
     ui={show:false,selectedColor:0,confirming:false,gunUI:false,gunChoice:0};
     boss={active:false,x:750,y:380,needsColor:null,walking:false,spawnTime:0,angry:false,facing:'left',bossKills:boss.bossKills||0};
     resettingLevel=false;
+    fadeAlpha=0;
+    fadeDirection=0;
     if(level===1){
         npcs.push({x:280,y:340,color:COLORS[0],state:'happy',needsDoc:false,fixAnim:0});
         npcs.push({x:390,y:340,color:COLORS[1],state:'happy',needsDoc:false,fixAnim:0});
@@ -193,6 +197,8 @@ function startGame(){
     player={x:350,y:380,holding:null,facing:'forward',lastMove:0};
     boss.bossKills=0;
     ghostGun={hasGun:false,ammo:0,printing:false,printProgress:0};
+    fadeAlpha=0;
+    fadeDirection=0;
     initLevel(1);
     updateLives();
 }
@@ -258,17 +264,35 @@ function drawMulletPro(x,y,facing){
     ctx.ellipse(x,y+36,12,4,0,0,Math.PI*2);
     ctx.fill();
     
-    if(facing==='left'||facing==='right'){
-        ctx.save();
-        if(facing==='left'){
-            ctx.translate(x,y);
-            ctx.scale(-1,1);
-            ctx.translate(-x,-y);
-        }
-        
+    if(facing==='left'){
         ctx.fillStyle='#3a2a1a';
-        ctx.fillRect(x-8*s,y-16*s,12*s,4*s);
-        ctx.fillRect(x-10*s,y-12*s,14*s,10*s);
+        ctx.fillRect(x+s,y-16*s,12*s,4*s);
+        ctx.fillRect(x-2*s,y-12*s,14*s,10*s);
+        ctx.fillStyle='#f5c89a';
+        ctx.fillRect(x-4*s,y-12*s,10*s,10*s);
+        ctx.fillStyle='#000';
+        ctx.fillRect(x,y-9*s,2*s,2*s);
+        ctx.fillRect(x-s,y-5*s,3*s,s);
+        ctx.fillStyle='#800020';
+        ctx.fillRect(x-7*s,y-2*s,14*s,10*s);
+        ctx.fillStyle='#600018';
+        ctx.fillRect(x+5*s,y-2*s,2*s,10*s);
+        ctx.fillStyle='#1a1a1a';
+        ctx.fillRect(x-3*s,y-2*s,6*s,4*s);
+        ctx.fillStyle='#f5c89a';
+        ctx.fillRect(x-9*s,y,2*s,7*s);
+        ctx.fillRect(x+7*s,y,2*s,7*s);
+        ctx.fillStyle='#a4c2db';
+        const legAnimL=Math.sin(frame*0.15)*2;
+        ctx.fillRect(x-5*s,y+8*s,4*s,8*s);
+        ctx.fillRect(x+s,y+8*s,4*s,8*s);
+        ctx.fillStyle='#654321';
+        ctx.fillRect(x-5*s,y+16*s+legAnimL,4*s,2*s);
+        ctx.fillRect(x+s,y+16*s-legAnimL,4*s,2*s);
+    }else if(facing==='right'){
+        ctx.fillStyle='#3a2a1a';
+        ctx.fillRect(x-13*s,y-16*s,12*s,4*s);
+        ctx.fillRect(x-12*s,y-12*s,14*s,10*s);
         ctx.fillStyle='#f5c89a';
         ctx.fillRect(x-6*s,y-12*s,10*s,10*s);
         ctx.fillStyle='#000';
@@ -281,17 +305,15 @@ function drawMulletPro(x,y,facing){
         ctx.fillStyle='#1a1a1a';
         ctx.fillRect(x-3*s,y-2*s,6*s,4*s);
         ctx.fillStyle='#f5c89a';
-        ctx.fillRect(x+4*s,y,2*s,7*s);
         ctx.fillRect(x-9*s,y,2*s,7*s);
+        ctx.fillRect(x+7*s,y,2*s,7*s);
         ctx.fillStyle='#a4c2db';
-        const legAnim=Math.sin(frame*0.15)*2;
+        const legAnimR=Math.sin(frame*0.15)*2;
         ctx.fillRect(x-5*s,y+8*s,4*s,8*s);
         ctx.fillRect(x+s,y+8*s,4*s,8*s);
         ctx.fillStyle='#654321';
-        ctx.fillRect(x-5*s,y+16*s+legAnim,4*s,2*s);
-        ctx.fillRect(x+s,y+16*s-legAnim,4*s,2*s);
-        
-        ctx.restore();
+        ctx.fillRect(x-5*s,y+16*s+legAnimR,4*s,2*s);
+        ctx.fillRect(x+s,y+16*s-legAnimR,4*s,2*s);
     }else{
         ctx.fillStyle='#3a2a1a';
         ctx.fillRect(x-7*s,y-16*s,14*s,4*s);
@@ -328,23 +350,44 @@ function drawBoss(x,y,facing){
     ctx.ellipse(x,y+36,12,4,0,0,Math.PI*2);
     ctx.fill();
     
-    if(facing==='left'||facing==='right'){
-        ctx.save();
-        if(facing==='left'){
-            ctx.translate(x,y);
-            ctx.scale(-1,1);
-            ctx.translate(-x,-y);
+    if(facing==='left'){
+        ctx.fillStyle=boss.angry?'#cc0000':'#f5c89a';
+        ctx.fillRect(x-4*s,y-12*s,10*s,10*s);
+        ctx.fillStyle='#000';
+        if(boss.angry){
+            ctx.fillRect(x-s,y-10*s,3*s,s);
+            ctx.fillRect(x-s,y-9*s,2*s,2*s);
+            ctx.fillRect(x-s,y-6*s,2*s,s);
+        }else{
+            ctx.fillRect(x-s,y-9*s,2*s,2*s);
+            ctx.fillRect(x-s,y-6*s,3*s,s);
         }
-        
+        ctx.fillStyle='#fff';
+        ctx.fillRect(x-6*s,y-2*s,12*s,10*s);
+        ctx.fillStyle='#e0e0e0';
+        ctx.fillRect(x+4*s,y-2*s,2*s,10*s);
+        ctx.fillStyle='#1a1a1a';
+        ctx.fillRect(x-2*s,y-2*s,4*s,10*s);
+        ctx.fillStyle=boss.angry?'#cc0000':'#f5c89a';
+        ctx.fillRect(x-8*s,y,2*s,6*s);
+        ctx.fillRect(x+6*s,y,2*s,6*s);
+        ctx.fillStyle='#2b2b2b';
+        ctx.fillRect(x-5*s,y+8*s,4*s,8*s);
+        ctx.fillRect(x+s,y+8*s,4*s,8*s);
+        ctx.fillStyle='#1a1a1a';
+        const legAnimL=boss.walking?Math.sin(frame*0.2)*3:0;
+        ctx.fillRect(x-5*s,y+16*s+legAnimL,4*s,2*s);
+        ctx.fillRect(x+s,y+16*s-legAnimL,4*s,2*s);
+    }else if(facing==='right'){
         ctx.fillStyle=boss.angry?'#cc0000':'#f5c89a';
         ctx.fillRect(x-6*s,y-12*s,10*s,10*s);
         ctx.fillStyle='#000';
         if(boss.angry){
-            ctx.fillRect(x-4*s,y-10*s,3*s,s);
-            ctx.fillRect(x-3*s,y-9*s,2*s,2*s);
+            ctx.fillRect(x-2*s,y-10*s,3*s,s);
+            ctx.fillRect(x-s,y-9*s,2*s,2*s);
             ctx.fillRect(x-s,y-6*s,2*s,s);
         }else{
-            ctx.fillRect(x-3*s,y-9*s,2*s,2*s);
+            ctx.fillRect(x-s,y-9*s,2*s,2*s);
             ctx.fillRect(x-2*s,y-6*s,3*s,s);
         }
         ctx.fillStyle='#fff';
@@ -354,17 +397,15 @@ function drawBoss(x,y,facing){
         ctx.fillStyle='#1a1a1a';
         ctx.fillRect(x-2*s,y-2*s,4*s,10*s);
         ctx.fillStyle=boss.angry?'#cc0000':'#f5c89a';
-        ctx.fillRect(x+4*s,y,2*s,6*s);
-        ctx.fillRect(x-9*s,y,2*s,6*s);
+        ctx.fillRect(x-8*s,y,2*s,6*s);
+        ctx.fillRect(x+6*s,y,2*s,6*s);
         ctx.fillStyle='#2b2b2b';
         ctx.fillRect(x-5*s,y+8*s,4*s,8*s);
         ctx.fillRect(x+s,y+8*s,4*s,8*s);
         ctx.fillStyle='#1a1a1a';
-        const legAnim=boss.walking?Math.sin(frame*0.2)*3:0;
-        ctx.fillRect(x-5*s,y+16*s+legAnim,4*s,2*s);
-        ctx.fillRect(x+s,y+16*s-legAnim,4*s,2*s);
-        
-        ctx.restore();
+        const legAnimR=boss.walking?Math.sin(frame*0.2)*3:0;
+        ctx.fillRect(x-5*s,y+16*s+legAnimR,4*s,2*s);
+        ctx.fillRect(x+s,y+16*s-legAnimR,4*s,2*s);
     }else{
         ctx.fillStyle=boss.angry?'#cc0000':'#f5c89a';
         ctx.fillRect(x-5*s,y-12*s,10*s,10*s);
@@ -796,6 +837,10 @@ function drawScene(){
         ctx.textAlign='center';
         ctx.fillText('AMMO:'+ghostGun.ammo,player.x,player.y-55);
     }
+    if(fadeAlpha>0){
+        ctx.fillStyle=`rgba(232,230,220,${fadeAlpha})`;
+        ctx.fillRect(0,0,700,500);
+    }
     if(ui.show){
         ctx.fillStyle='rgba(0,0,0,0.85)';
         ctx.fillRect(0,340,700,160);
@@ -984,6 +1029,19 @@ function update(){
             ghostGun.ammo=1;
         }
     }
+    if(fadeDirection!==0){
+        fadeAlpha+=fadeDirection*0.05;
+        if(fadeAlpha>=1){
+            fadeDirection=0;
+            fadeAlpha=1;
+            initLevel(level);
+            setTimeout(()=>{fadeDirection=-1;},300);
+        }
+        if(fadeAlpha<=0&&fadeDirection===-1){
+            fadeAlpha=0;
+            fadeDirection=0;
+        }
+    }
     for(let i=explosions.length-1;i>=0;i--){
         let exp=explosions[i];
         exp.radius+=3;
@@ -1004,13 +1062,13 @@ function update(){
             muzzleFlashes.splice(i,1);
         }
     }
-        for(let i=bullets.length-1;i>=0;i--){
+    for(let i=bullets.length-1;i>=0;i--){
         bullets[i].x+=bullets[i].vx;
         if(bullets[i].x>750||bullets[i].x<0){
             bullets.splice(i,1);
             continue;
         }
-        if(boss.active&&Math.abs(bullets[i].x-boss.x)<40&&Math.abs(bullets[i].y-(boss.y+10))<40){
+        if(boss.active&&Math.abs(bullets[i].x-boss.x)<30&&Math.abs(bullets[i].y-boss.y)<30){
             boss.active=false;
             boss.needsColor=null;
             boss.walking=false;
@@ -1026,7 +1084,6 @@ function update(){
             checkPromotion();
         }
     }
-
     if(keys[' ']||keys['action']){
         keys[' ']=false;
         keys['action']=false;
@@ -1036,13 +1093,15 @@ function update(){
             ui.gunUI=true;
             return;
         }
-                if(ghostGun.hasGun&&ghostGun.ammo>0&&!ui.show&&!ui.gunUI){
+        if(ghostGun.hasGun&&ghostGun.ammo>0&&!ui.show&&!ui.gunUI){
             const direction=player.facing==='left'?-1:player.facing==='right'?1:0;
             if(direction!==0){
-                bullets.push({x:player.x,y:player.y-20,vx:direction*10});
-                createMuzzleFlash(player.x,player.y-20,player.facing);
+                bullets.push({x:player.x,y:player.y-30,vx:direction*10});
+                createMuzzleFlash(player.x,player.y-30,player.facing);
                 ghostGun.ammo--;
-                ghostGun.hasGun=false;
+                if(ghostGun.ammo===0){
+                    ghostGun.hasGun=false;
+                }
             }
             return;
         }
@@ -1113,11 +1172,9 @@ function update(){
         if(!keys['ArrowLeft']&&!keys['left'])keys.leftProcessed=false;
         if(!keys['ArrowRight']&&!keys['right'])keys.rightProcessed=false;
     }
-        for(let i=cracks.length-1;i>=0;i--){
-        let crack=cracks[i];
+    for(let crack of cracks){
         if(Date.now()-crack.time>crack.max){
             createExplosion(crack.npc.x,240);
-            cracks.splice(i,1);
             lives--;
             updateLives();
             resettingLevel=true;
@@ -1134,7 +1191,6 @@ function update(){
             return;
         }
     }
-
 }
 
 function winGame(){
