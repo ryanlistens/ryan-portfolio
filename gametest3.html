@@ -212,14 +212,15 @@ let level5 = {
         docColor: null,
         giveTimer: 0,
         walkTarget: null,
-        state: 'idle'
+        state: 'idle',
+        facing: 'forward'
     },
     pipeRoom: {
-        leftDoor: {x: 50, y: 250}
+        leftDoor: {x: 30, y: 250}
     },
     hallway: {
-        leftDoor: {x: 50, y: 250},
-        rightDoor: {x: 650, y: 250},
+        leftDoor: {x: 30, y: 250},
+        rightDoor: {x: 670, y: 250},
         offices: [
             {x: 150, y: 180, color: COLORS[0]},
             {x: 280, y: 180, color: COLORS[1]},
@@ -228,7 +229,7 @@ let level5 = {
         ]
     },
     furnaceRoom: {
-        rightDoor: {x: 650, y: 250},
+        rightDoor: {x: 670, y: 250},
         furnace: {x: 350, y: 280, flameTime: 0, glowPhase: 0}
     },
     docsCollected: 0,
@@ -641,6 +642,8 @@ function drawBoss(x, y, facing) {
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 8*s, y, 2*s, 6*s);
         ctx.fillRect(x + 6*s, y, 2*s, 6*s);
+
+
         
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
@@ -668,13 +671,15 @@ function drawBoss(x, y, facing) {
         ctx.fillStyle = '#fff';
         ctx.fillRect(x - 6*s, y - 2*s, 12*s, 10*s);
         ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 6*s, y - 2*s, 2*s, 10*s);
+        ctx.fillRect(x + 4*s, y - 2*s, 2*s, 10*s);
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
         
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 8*s, y, 2*s, 6*s);
         ctx.fillRect(x + 6*s, y, 2*s, 6*s);
+
+
         
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
@@ -961,27 +966,31 @@ function drawLevel5PipeRoom() {
         drawNPC(npc);
     }
     
-    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, 'forward');
+        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing);
+
     
     if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
         drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
     }
     
+        // Draw door on FAR LEFT
     ctx.fillStyle = '#654321';
-    ctx.fillRect(level5.pipeRoom.leftDoor.x - 10, level5.pipeRoom.leftDoor.y, 50, 90);
+    ctx.fillRect(20, level5.pipeRoom.leftDoor.y, 50, 90);
     ctx.fillStyle = '#4a3a1a';
-    ctx.fillRect(level5.pipeRoom.leftDoor.x - 5, level5.pipeRoom.leftDoor.y + 5, 40, 80);
+    ctx.fillRect(25, level5.pipeRoom.leftDoor.y + 5, 40, 80);
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
-    ctx.arc(level5.pipeRoom.leftDoor.x + 30, level5.pipeRoom.leftDoor.y + 45, 3, 0, Math.PI * 2);
+    ctx.arc(60, level5.pipeRoom.leftDoor.y + 45, 3, 0, Math.PI * 2);
     ctx.fill();
     
-    if(Math.abs(player.x - level5.pipeRoom.leftDoor.x) < 50) {
+    if(player.x < 80) {
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('← HALLWAY', level5.pipeRoom.leftDoor.x + 15, level5.pipeRoom.leftDoor.y - 10);
+        ctx.fillText('PRESS ACTION', 45, level5.pipeRoom.leftDoor.y - 10);
+        ctx.fillText('→ HALLWAY', 45, level5.pipeRoom.leftDoor.y + 110);
     }
+
 }
 
 function drawLevel5Hallway() {
@@ -1665,9 +1674,41 @@ if(state === 'over' || state === 'win' || state === 'theend') {
             }
         }
         
+            if(level === 5) {
+        // Mullet Pro AI - runs regardless of which room player is in
+        if(level5.mulletPro.state === 'idle' && level5.mulletPro.hasDoc) {
+            const targetNPC = level5.npcPipes.find(n => n.color.name === level5.mulletPro.docColor.name);
+            if(targetNPC && Date.now() > level5.mulletPro.giveTimer) {
+                level5.mulletPro.state = 'walking';
+                level5.mulletPro.walkTarget = targetNPC;
+            }
+        }
+        
+        if(level5.mulletPro.state === 'walking' && level5.mulletPro.walkTarget) {
+            if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
+                const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
+                level5.mulletPro.x += direction * 2;
+                level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
+            } else {
+                level5.mulletPro.hasDoc = false;
+                level5.mulletPro.docColor = null;
+                level5.mulletPro.state = 'idle';
+                level5.mulletPro.walkTarget = null;
+                level5.mulletPro.facing = 'forward';
+                
+                setTimeout(() => {
+                    level5.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
+                    level5.mulletPro.hasDoc = true;
+                    level5.mulletPro.giveTimer = Date.now() + 3000;
+                    level5.mulletPro.x = 280;
+                }, 2000);
+            }
+        }
+        
+        // PIPE ROOM
         if(level5.room === 'pipeRoom') {
             player.y = 380;
-            const atDoor = Math.abs(player.x - level5.pipeRoom.leftDoor.x) < 40;
+            const atDoor = player.x < 80;
             const atMullet = Math.abs(player.x - level5.mulletPro.x) < 50;
             
             if((keys[' '] || keys['action']) && atMullet && level5.mulletPro.hasDoc && !player.holding) {
@@ -1676,6 +1717,7 @@ if(state === 'over' || state === 'win' || state === 'theend') {
                 level5.mulletPro.docColor = null;
                 level5.mulletPro.state = 'idle';
                 level5.mulletPro.walkTarget = null;
+                level5.mulletPro.facing = 'forward';
                 keys[' '] = false;
                 keys['action'] = false;
                 
@@ -1683,31 +1725,42 @@ if(state === 'over' || state === 'win' || state === 'theend') {
                     level5.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
                     level5.mulletPro.hasDoc = true;
                     level5.mulletPro.giveTimer = Date.now() + 3000;
+                    level5.mulletPro.x = 280;
                 }, 2000);
             }
             
-            if(atDoor && player.x < 100) {
+            if((keys[' '] || keys['action']) && atDoor) {
                 level5.room = 'hallway';
-                player.x = 100;
+                player.x = 80;
+                keys[' '] = false;
+                keys['action'] = false;
             }
-        } else if(level5.room === 'hallway') {
+        } 
+        // HALLWAY
+        else if(level5.room === 'hallway') {
             player.y = 380;
-            const atLeftDoor = Math.abs(player.x - level5.hallway.leftDoor.x) < 40;
-            const atRightDoor = Math.abs(player.x - level5.hallway.rightDoor.x) < 40;
+            const atLeftDoor = player.x < 80;
+            const atRightDoor = player.x > 620;
             
-            if(atLeftDoor && player.x < 100) {
+            if((keys[' '] || keys['action']) && atLeftDoor) {
                 level5.room = 'pipeRoom';
-                player.x = 600;
+                player.x = 620;
+                keys[' '] = false;
+                keys['action'] = false;
             }
             
-            if(atRightDoor && player.x > 600) {
+            if((keys[' '] || keys['action']) && atRightDoor) {
                 level5.room = 'furnaceRoom';
-                player.x = 100;
+                player.x = 80;
+                keys[' '] = false;
+                keys['action'] = false;
             }
-        } else if(level5.room === 'furnaceRoom') {
+        } 
+        // FURNACE ROOM
+        else if(level5.room === 'furnaceRoom') {
             player.y = 380;
             const atFurnace = Math.abs(player.x - level5.furnaceRoom.furnace.x) < 80;
-            const atDoor = Math.abs(player.x - level5.furnaceRoom.rightDoor.x) < 40;
+            const atDoor = player.x > 620;
             
             if((keys[' '] || keys['action']) && atFurnace && player.holding) {
                 player.holding = null;
@@ -1717,9 +1770,11 @@ if(state === 'over' || state === 'win' || state === 'theend') {
                 keys['action'] = false;
             }
             
-            if(atDoor && player.x > 600) {
+            if((keys[' '] || keys['action']) && atDoor) {
                 level5.room = 'hallway';
-                player.x = 600;
+                player.x = 620;
+                keys[' '] = false;
+                keys['action'] = false;
             }
         }
         
@@ -1746,6 +1801,7 @@ if(state === 'over' || state === 'win' || state === 'theend') {
         
         return;
     }
+
     
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
