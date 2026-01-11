@@ -300,11 +300,12 @@ boss.facing = 'left';
     level5.furnaceRoom.furnace.glowPhase = 0;
     level5.docsCollected = 0;
     level5.npcPipes = [
-        {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false},  // Changed from y:380 to y:340
-        {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false},  // Changed from y:380 to y:340
-        {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false},  // Changed from y:380 to y:340
-        {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false}   // Changed from y:380 to y:340
-    ];
+    {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+    {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+    {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+    {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+];
+
     updateLives();
     return;
 }
@@ -1074,19 +1075,18 @@ function drawLevel5PipeRoom() {
         ctx.lineTo(700, pipeY + 25);
         ctx.stroke();
         
-        // ADD CRACK ANIMATION HERE
         if(npc.needsDoc && npc.crackStartTime) {
-            const crackTime = Date.now() - npc.crackStartTime;
-            const pct = Math.min(crackTime / 12000, 1);
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.4 + pct * 0.6;
-            const sz = 18 + pct * 28;
-            for(let i = 0; i < 3; i++) {
-                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
-            }
-            ctx.globalAlpha = 1;
-        }
-        // END CRACK ANIMATION
+    const crackTime = Date.now() - npc.crackStartTime;
+    const pct = Math.min(crackTime / 15000, 1); // SLOWER: 15 seconds instead of 12
+    ctx.fillStyle = npc.color.hex;
+    ctx.globalAlpha = 0.4 + pct * 0.6;
+    const sz = 18 + pct * 28;
+    for(let i = 0; i < 3; i++) {
+        ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+    }
+    ctx.globalAlpha = 1;
+}
+
         
         drawNPC(npc);
     }
@@ -1911,24 +1911,25 @@ function update() {
             }
         }
         
-        // Level 5 pipe stress system - random cracks (happens in all rooms)
-        for(let npc of level5.npcPipes) {
-            // Random chance to start needing a doc
-            if(!npc.needsDoc && Math.random() < 0.0008) {
-                npc.needsDoc = true;
-                npc.crackStartTime = Date.now();
-            }
-            
-            // Check if pipe explodes (Mullet Pro failed)
-            if(npc.needsDoc && npc.crackStartTime) {
-                if(Date.now() - npc.crackStartTime > 12000) {
-                    createExplosion(npc.x, 240);
-                    state = 'over';
-                    menuChoice = 0;
-                    return;
-                }
-            }
+        // Level 5 pipe stress system - SLOWER cracks like Level 1
+for(let npc of level5.npcPipes) {
+    // Random chance to start needing a doc (REDUCED frequency)
+    if(!npc.needsDoc && Math.random() < 0.0003) { // SLOWER: 0.0003 instead of 0.0008
+        npc.needsDoc = true;
+        npc.crackStartTime = Date.now();
+    }
+    
+    // Pipes can burst but BOSS DOESN'T GET FIRED from pipe bursts
+    if(npc.needsDoc && npc.crackStartTime) {
+        if(Date.now() - npc.crackStartTime > 15000) { // 15 seconds instead of 12
+            // Pipe bursts - visual only, doesn't fire the boss
+            createExplosion(npc.x, 240);
+            npc.needsDoc = false;
+            npc.state = 'happy';
+            npc.crackStartTime = null;
         }
+    }
+}
         
         if(level5.room === 'pipeRoom') {
             player.y = 380;
