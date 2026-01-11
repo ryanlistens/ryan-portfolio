@@ -1872,7 +1872,7 @@ function update() {
         return;
     }
 
-            if(level === 5) {
+         if(level === 5) {
         // Mullet Pro AI - continuous doc delivery cycle
         if(level5.mulletPro.state === 'walkingToComputer') {
             if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
@@ -1890,7 +1890,7 @@ function update() {
             }
         }
         
-                if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
+        if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
             if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
                 const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
                 level5.mulletPro.x += direction * 2;
@@ -1908,66 +1908,123 @@ function update() {
                 level5.mulletPro.facing = 'forward';
             }
         }
-
+        
+        // Level 5 pipe stress system - random cracks (happens in all rooms)
+        for(let npc of level5.npcPipes) {
+            // Random chance to start needing a doc
+            if(!npc.needsDoc && Math.random() < 0.0008) {
+                npc.needsDoc = true;
+                npc.crackStartTime = Date.now();
+            }
+            
+            // Check if pipe explodes (Mullet Pro failed)
+            if(npc.needsDoc && npc.crackStartTime) {
+                if(Date.now() - npc.crackStartTime > 12000) {
+                    createExplosion(npc.x, 240);
+                    state = 'over';
+                    menuChoice = 0;
+                    return;
+                }
+            }
+        }
         
         if(level5.room === 'pipeRoom') {
-    player.y = 380;
-    const atRightEdge = player.x >= 630;  // Changed from > 640 to >= 630
-    const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
-    
-    // Steal doc from Mullet Pro directly
-    if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
-        player.holding = level5.mulletPro.docColor.name;
-        level5.mulletPro.hasDoc = false;
-        level5.mulletPro.docColor = null;
-        level5.mulletPro.state = 'walkingToComputer';
-        level5.mulletPro.walkTarget = null;
-        level5.mulletPro.facing = 'forward';
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-            // Mullet Pro delivers doc to NPC - this clears the stress
-        if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
-            if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
-                const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
-                level5.mulletPro.x += direction * 2;
-                level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
-            } else {
-                // Delivered doc to NPC - CLEAR THE STRESS
+            player.y = 380;
+            const atRightEdge = player.x >= 630;
+            const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
+            
+            // Steal doc from Mullet Pro directly
+            if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
+                player.holding = level5.mulletPro.docColor.name;
                 level5.mulletPro.hasDoc = false;
                 level5.mulletPro.docColor = null;
                 level5.mulletPro.state = 'walkingToComputer';
                 level5.mulletPro.walkTarget = null;
                 level5.mulletPro.facing = 'forward';
-                
-                // CLEAR PIPE STRESS
-                if(level5.mulletPro.walkTarget) {
-                    level5.mulletPro.walkTarget.needsDoc = false;
-                    level5.mulletPro.walkTarget.crackStartTime = null;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            
+            // Auto-transition to hallway when walking right
+            if(atRightEdge) {
+                level5.room = 'hallway';
+                player.x = 80;
+            }
+        } 
+       
+        else if(level5.room === 'hallway') {
+            player.y = 380;
+            const atLeftDoor = player.x < 80;
+            const atRightDoor = player.x > 620;
+            
+            if((keys[' '] || keys['action']) && atLeftDoor) {
+                level5.room = 'pipeRoom';
+                player.x = 620;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            
+            if((keys[' '] || keys['action']) && atRightDoor) {
+                level5.room = 'furnaceRoom';
+                player.x = 80;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+        } 
+        
+        else if(level5.room === 'furnaceRoom') {
+            player.y = 380;
+            const atFurnace = Math.abs(player.x - level5.furnaceRoom.furnace.x) < 80;
+            const atDoor = player.x < 80;
+            
+            if((keys[' '] || keys['action']) && atFurnace) {
+                if(player.holding) {
+                    // Burn the document
+                    player.holding = null;
+                    level5.furnaceRoom.furnace.flameTime = Date.now();
+                    level5.docsCollected++;
+                } else {
+                    // Burn yourself - YOU'RE FIRED!
+                    level5.furnaceRoom.furnace.flameTime = Date.now();
+                    createExplosion(player.x, player.y);
+                    state = 'over';
+                    menuChoice = 0;
                 }
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            
+            if((keys[' '] || keys['action']) && atDoor) {
+                level5.room = 'hallway';
+                player.x = 620;
+                keys[' '] = false;
+                keys['action'] = false;
             }
         }
         
-        // Level 5 pipe stress system - random cracks
-        if(level5.room === 'pipeRoom') {
-            for(let npc of level5.npcPipes) {
-                // Random chance to start needing a doc
-                if(!npc.needsDoc && Math.random() < 0.0008) {
-                    npc.needsDoc = true;
-                    npc.crackStartTime = Date.now();
-                }
-                
-                // Check if pipe explodes (Mullet Pro failed)
-                if(npc.needsDoc && npc.crackStartTime) {
-                    if(Date.now() - npc.crackStartTime > 12000) {
-                        createExplosion(npc.x, 240);
-                        state = 'over';
-                        menuChoice = 0;
-                        return;
-                    }
-                }
+        const prevX = player.x;
+        if(keys['ArrowLeft'] || keys['left']) {
+            player.x = Math.max(60, player.x - 5);
+            if(player.x !== prevX) {
+                player.facing = 'left';
+                player.lastMove = Date.now();
             }
         }
+        if(keys['ArrowRight'] || keys['right']) {
+            player.x = Math.min(640, player.x + 5);
+            if(player.x !== prevX) {
+                player.facing = 'right';
+                player.lastMove = Date.now();
+            }
+        }
+        if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
+            if(Date.now() - player.lastMove > 200) {
+                player.facing = 'forward';
+            }
+        }
+        
+        return;
+    }
 
     
     if(!ui.show && !ui.gunUI) {
