@@ -1043,20 +1043,6 @@ function drawLevel5PipeRoom() {
         for(let npc of level5.npcPipes) {
         const pipeY = 240;
         
-        // ADD CRACK ANIMATION - Check if this NPC needs a doc
-        if(npc.needsDoc) {
-            const crackTime = Date.now() - (npc.crackStartTime || Date.now());
-            const pct = Math.min(crackTime / 12000, 1);
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.4 + pct * 0.6;
-            const sz = 18 + pct * 28;
-            for(let i = 0; i < 3; i++) {
-                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
-            }
-            ctx.globalAlpha = 1;
-        }
-        // END CRACK ANIMATION
-        
         ctx.strokeStyle = npc.color.hex;
         ctx.lineWidth = 14;
         ctx.beginPath();
@@ -1086,8 +1072,23 @@ function drawLevel5PipeRoom() {
         ctx.lineTo(700, pipeY + 25);
         ctx.stroke();
         
+        // ADD CRACK ANIMATION HERE
+        if(npc.needsDoc && npc.crackStartTime) {
+            const crackTime = Date.now() - npc.crackStartTime;
+            const pct = Math.min(crackTime / 12000, 1);
+            ctx.fillStyle = npc.color.hex;
+            ctx.globalAlpha = 0.4 + pct * 0.6;
+            const sz = 18 + pct * 28;
+            for(let i = 0; i < 3; i++) {
+                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+            }
+            ctx.globalAlpha = 1;
+        }
+        // END CRACK ANIMATION
+        
         drawNPC(npc);
     }
+
     
     drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing);
     
@@ -1889,13 +1890,17 @@ function update() {
             }
         }
         
-        if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
+                if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
             if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
                 const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
                 level5.mulletPro.x += direction * 2;
                 level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
             } else {
-                // Delivered doc to NPC
+                // Delivered doc to NPC - fixes the pipe
+                const targetNPC = level5.mulletPro.walkTarget;
+                targetNPC.needsDoc = false;
+                targetNPC.crackStartTime = null;
+                
                 level5.mulletPro.hasDoc = false;
                 level5.mulletPro.docColor = null;
                 level5.mulletPro.state = 'walkingToComputer';
@@ -1903,6 +1908,7 @@ function update() {
                 level5.mulletPro.facing = 'forward';
             }
         }
+
         
         if(level5.room === 'pipeRoom') {
     player.y = 380;
@@ -1920,6 +1926,50 @@ function update() {
         keys[' '] = false;
         keys['action'] = false;
     }
+            // Mullet Pro delivers doc to NPC - this clears the stress
+        if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
+            if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
+                const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
+                level5.mulletPro.x += direction * 2;
+                level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
+            } else {
+                // Delivered doc to NPC - CLEAR THE STRESS
+                level5.mulletPro.hasDoc = false;
+                level5.mulletPro.docColor = null;
+                level5.mulletPro.state = 'walkingToComputer';
+                level5.mulletPro.walkTarget = null;
+                level5.mulletPro.facing = 'forward';
+                
+                // CLEAR PIPE STRESS
+                if(level5.mulletPro.walkTarget) {
+                    level5.mulletPro.walkTarget.needsDoc = false;
+                    level5.mulletPro.walkTarget.crackStartTime = null;
+                }
+            }
+        }
+        
+        // Level 5 pipe stress system - random cracks
+        if(level5.room === 'pipeRoom') {
+            for(let npc of level5.npcPipes) {
+                // Random chance to start needing a doc
+                if(!npc.needsDoc && Math.random() < 0.0008) {
+                    npc.needsDoc = true;
+                    npc.crackStartTime = Date.now();
+                }
+                
+                // Check if pipe explodes (Mullet Pro failed)
+                if(npc.needsDoc && npc.crackStartTime) {
+                    if(Date.now() - npc.crackStartTime > 12000) {
+                        createExplosion(npc.x, 240);
+                        state = 'over';
+                        menuChoice = 0;
+                        return;
+                    }
+                }
+            }
+        }
+        }
+
     
     // Auto-transition to hallway when walking right
     if(atRightEdge) {
