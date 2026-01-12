@@ -176,6 +176,9 @@ const OFFICE_EMAILS = {
     }
 };
 
+const SAFE_CODE = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
+
+
 // section 3
 
 let state = 'menu';
@@ -224,6 +227,38 @@ let boss = {
     facing: 'left',
     bossKills: 0
 };
+
+let ceo = {
+    x: 350,
+    y: 200,
+    facing: 'forward',
+    state: 'offering', // offering, admiring, hunting, dead
+    health: 6,
+    shootTimer: 0,
+    moveTimer: 0,
+    blinkTimer: 0,
+    lastShot: 0,
+    hasDrink: true,
+    walkTarget: null
+};
+
+let level6 = {
+    room: 'pipeRoom',
+    safeUnlocked: false,
+    safeUI: false,
+    codeInput: [],
+    hasRevolver: false,
+    revolverAmmo: 6,
+    cashSacks: [],
+    moneyLives: 0,
+    ceoDefeated: false,
+    computerUI: false,
+    endingTriggered: false,
+    npcExitSequence: false,
+    npcExitTimer: 0,
+    exitingNPCs: []
+};
+
 
 let ghostGun = {
     hasGun: false,
@@ -276,11 +311,20 @@ let level5 = {
     npcPipes: []
 };
 
+
 // section 4
 
 function updateLives() {
     if(level === 5) {
         document.getElementById('lives').innerHTML = '<span class="money">$$$</span>';
+        return;
+    }
+    if(level === 6) {
+        let h = '';
+        for(let i = 0; i < level6.moneyLives; i++) {
+            h += '<span class="money">$</span>';
+        }
+        document.getElementById('lives').innerHTML = h;
         return;
     }
     let h = '';
@@ -292,6 +336,7 @@ function updateLives() {
     }
     document.getElementById('lives').innerHTML = h;
 }
+
 
 function initLevel(lv) {
     level = lv;
@@ -319,7 +364,7 @@ function initLevel(lv) {
     fadeIn = false;
     fadeOut = false;
     
-    if(level === 5) {
+        if(level === 5) {
         player.x = 80;
         player.y = 380;
         level5.room = 'furnaceRoom';
@@ -347,6 +392,41 @@ function initLevel(lv) {
         updateLives();
         return;
     }
+    
+    if(level === 6) {
+        player.x = 350;
+        player.y = 380;
+        level6.room = 'pipeRoom';
+        level6.safeUnlocked = false;
+        level6.safeUI = false;
+        level6.codeInput = [];
+        level6.hasRevolver = false;
+        level6.revolverAmmo = 6;
+        level6.cashSacks = [];
+        level6.moneyLives = 1;
+        level6.ceoDefeated = false;
+        level6.computerUI = false;
+        level6.endingTriggered = false;
+        level6.npcExitSequence = false;
+        level6.npcExitTimer = 0;
+        level6.exitingNPCs = [];
+        
+        ceo.x = 350;
+        ceo.y = 200;
+        ceo.facing = 'forward';
+        ceo.state = 'offering';
+        ceo.health = 6;
+        ceo.shootTimer = 0;
+        ceo.moveTimer = 0;
+        ceo.blinkTimer = 0;
+        ceo.lastShot = 0;
+        ceo.hasDrink = true;
+        ceo.walkTarget = null;
+        
+        updateLives();
+        return;
+    }
+
     
     if(level === 1) {
         npcs.push({x:280, y:340, color:COLORS[0], state:'happy', needsDoc:false, fixAnim:0});
@@ -988,6 +1068,203 @@ function drawGhostGun(x, y, facing) {
         ctx.restore();
     }
 }
+function drawCEO(x, y, facing) {
+    const s = 2;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Blink red when hit
+    const skinColor = ceo.blinkTimer > 0 ? '#cc0000' : '#f5c89a';
+    
+    if(facing === 'left') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x - 3*s, y - 6*s, 3*s, s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(x + 5*s, y + s, 2*s, 11*s);
+        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+        
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        const legL = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + legL, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - legL, 4*s, 2*s);
+        
+    } else if(facing === 'right') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x, y - 6*s, 3*s, s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
+        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+        
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        const legR = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + legR, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - legR, 4*s, 2*s);
+        
+    } else {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x - 2*s, y - 6*s, 4*s, s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
+        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+        
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        const leg = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + leg, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - leg, 4*s, 2*s);
+    }
+    
+    // Draw brandy glass if offering
+    if(ceo.hasDrink && ceo.state === 'offering') {
+        const glassX = x + (facing === 'right' ? 20 : -20);
+        const glassY = y;
+        
+        ctx.fillStyle = 'rgba(200,200,255,0.4)';
+        ctx.beginPath();
+        ctx.moveTo(glassX - 4, glassY);
+        ctx.lineTo(glassX + 4, glassY);
+        ctx.lineTo(glassX + 3, glassY + 12);
+        ctx.lineTo(glassX - 3, glassY + 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        ctx.fillStyle = 'rgba(139,69,19,0.7)';
+        ctx.fillRect(glassX - 3, glassY + 6, 6, 5);
+    }
+    
+    // Draw money sack if offering
+    if(ceo.state === 'offering') {
+        const sackX = x + (facing === 'left' ? 20 : -20);
+        const sackY = y + 5;
+        
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath();
+        ctx.arc(sackX, sackY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1e8449';
+        ctx.fillRect(sackX - 3, sackY - 8, 6, 4);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('$', sackX, sackY + 3);
+    }
+}
+
+function drawRevolver(x, y, facing) {
+    const offsetX = facing === 'left' ? -20 : facing === 'right' ? 20 : 0;
+    const gunX = x + offsetX;
+    const gunY = y - 25;
+    
+    if(facing === 'right') {
+        ctx.save();
+        ctx.translate(gunX, gunY);
+        ctx.scale(-1, 1);
+        ctx.translate(-gunX, -gunY);
+    }
+    
+    // Gold barrel
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(gunX - 10, gunY - 2, 16, 4);
+    
+    // Cylinder
+    ctx.fillStyle = '#d4af37';
+    ctx.beginPath();
+    ctx.arc(gunX - 2, gunY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Wooden handle
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(gunX - 8, gunY + 2, 6, 8);
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(gunX - 7, gunY + 3, 4, 6);
+    
+    if(facing === 'right') {
+        ctx.restore();
+    }
+}
+
+function drawCashSack(x, y) {
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1e8449';
+    ctx.fillRect(x - 5, y - 12, 10, 6);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('$', x, y + 5);
+}
+
 
 // section 9
 
@@ -1295,6 +1572,392 @@ function drawLevel5Hallway() {
         ctx.fillText('FURNACE →', level5.hallway.rightDoor.x - 15, level5.hallway.rightDoor.y - 10);
     }
 }
+function drawLevel6PipeRoom() {
+    ctx.fillStyle = '#e8e6dc';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+    
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(20, 30, 220, 110);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(25, 35, 210, 100);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(28, 38, 204, 94);
+    
+    for(let bx = 0; bx < 2; bx++) {
+        for(let by = 0; by < 2; by++) {
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8a8a8a';
+            ctx.beginPath();
+            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 130, 75);
+    
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(50, 82, 160, 1);
+    
+    ctx.fillStyle = '#d0d0d0';
+    ctx.font = '10px Arial';
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
+    
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(50, 105 + i * 5, 160, 3);
+    }
+    
+    ctx.fillStyle = '#c4bfad';
+    ctx.fillRect(0, 410, 700, 90);
+    
+    // Right door is CLOSED on level 6
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(660, 340, 40, 60);
+    
+    if(player.x < 40) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('CEO OFFICE →', 350, 250);
+    }
+}
+
+function drawLevel6Entryway() {
+    ctx.fillStyle = '#8b0000';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#660000';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        ctx.strokeStyle = '#550000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * 35, 400, 35, 100);
+    }
+    
+    // Giant double doors
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(250, 150, 200, 250);
+    
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(255, 155, 90, 240);
+    ctx.fillRect(355, 155, 90, 240);
+    
+    // Door panels
+    for(let i = 0; i < 2; i++) {
+        const doorX = 255 + i * 100;
+        ctx.strokeStyle = '#2a1000';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(doorX + 10, 165, 70, 100);
+        ctx.strokeRect(doorX + 10, 275, 70, 110);
+    }
+    
+    // Gold handles
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(330, 300, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(370, 300, 6, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Golden placard
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(270, 120, 160, 25);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(275, 123, 150, 19);
+    
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ALDON PIPERSWORTH', 350, 137);
+    
+    if(Math.abs(player.y - 350) < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('PRESS ACTION TO ENTER', 350, 420);
+    }
+}
+
+function drawLevel6CEOOffice() {
+    // Black void background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    // Room floor (circular office feel)
+    ctx.fillStyle = '#2b1810';
+    ctx.beginPath();
+    ctx.ellipse(350, 250, 280, 220, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#3a2416';
+    ctx.beginPath();
+    ctx.ellipse(350, 250, 260, 200, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Earth rug with pipe rings
+    const earthX = 350;
+    const earthY = 280;
+    
+    // Pipes as rings around earth
+    for(let i = 0; i < 4; i++) {
+        const radius = 50 + i * 12;
+        ctx.strokeStyle = COLORS[i].hex;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.ellipse(earthX, earthY, radius, radius * 0.3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    
+    // Earth
+    ctx.fillStyle = '#4a9eff';
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, 40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.arc(earthX - 10, earthY - 5, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(earthX + 12, earthY + 8, 12, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Mahogany desk (back center)
+    const deskX = 350;
+    const deskY = 120;
+    
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(deskX - 80, deskY, 160, 60);
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(deskX - 75, deskY + 5, 150, 50);
+    
+    // Gold drawer handles
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(deskX - 60, deskY + 25, 8, 3);
+    ctx.fillRect(deskX - 20, deskY + 25, 8, 3);
+    ctx.fillRect(deskX + 20, deskY + 25, 8, 3);
+    ctx.fillRect(deskX + 52, deskY + 25, 8, 3);
+    
+    // Safe on desk
+    const safeX = deskX;
+    const safeY = deskY + 10;
+    const safeOpen = level6.safeUnlocked;
+    
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(safeX - 25, safeY, 50, 45);
+    ctx.fillStyle = safeOpen ? '#1a1a1a' : '#0a0a0a';
+    ctx.fillRect(safeX - 20, safeY + 5, 40, 35);
+    
+    if(!safeOpen) {
+        // Keypad
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(safeX - 15, safeY + 10, 30, 25);
+        
+        // Lock indicator
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(safeX, safeY + 13, 2, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // Open safe showing contents
+        if(!level6.hasRevolver) {
+            // Revolver visible
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(safeX - 10, safeY + 15, 20, 8);
+        }
+        if(level6.moneyLives < 3) {
+            // Money sack visible
+            ctx.fillStyle = '#27ae60';
+            ctx.beginPath();
+            ctx.arc(safeX - 5, safeY + 32, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Crystal brandy carafe
+    ctx.fillStyle = 'rgba(200,220,255,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(deskX + 50, deskY + 20);
+    ctx.lineTo(deskX + 60, deskY + 20);
+    ctx.lineTo(deskX + 58, deskY + 45);
+    ctx.lineTo(deskX + 52, deskY + 45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Brandy liquid
+    ctx.fillStyle = 'rgba(139,69,19,0.7)';
+    ctx.fillRect(deskX + 53, deskY + 32, 5, 12);
+    
+    // Coaster with ring stain
+    ctx.fillStyle = '#8b4513';
+    ctx.beginPath();
+    ctx.arc(deskX - 50, deskY + 40, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(deskX - 50, deskY + 40, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Monitor (only active after CEO defeated)
+    const monX = deskX - 35;
+    const monY = deskY + 15;
+    
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(monX, monY, 30, 25);
+    ctx.fillStyle = level6.ceoDefeated ? '#1a1a1a' : '#0a0a0a';
+    ctx.fillRect(monX + 2, monY + 2, 26, 18);
+    
+    if(level6.ceoDefeated && !level6.computerUI) {
+        ctx.fillStyle = '#004a7c';
+        ctx.fillRect(monX + 2, monY + 2, 26, 18);
+    }
+    
+    // Monitor stand
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(monX + 12, monY + 27, 6, 4);
+    ctx.fillRect(monX + 8, monY + 31, 14, 2);
+    
+    // Golden trophy cabinet (right back wall)
+    const cabinetX = 550;
+    const cabinetY = 100;
+    
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(cabinetX, cabinetY, 80, 100);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(cabinetX + 5, cabinetY + 5, 70, 90);
+    
+    // Trophy silhouette
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(cabinetX + 32, cabinetY + 25, 16, 20);
+    ctx.fillRect(cabinetX + 30, cabinetY + 45, 20, 4);
+    ctx.fillRect(cabinetX + 28, cabinetY + 49, 24, 6);
+    
+    // Dictator photo on cabinet
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(cabinetX + 10, cabinetY + 60, 60, 30);
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(cabinetX + 15, cabinetY + 65, 15, 15);
+    ctx.fillRect(cabinetX + 35, cabinetY + 65, 15, 15);
+    ctx.fillRect(cabinetX + 55, cabinetY + 65, 10, 15);
+    
+    // "YOU WIN" mirror (left back wall)
+    const mirrorX = 150;
+    const mirrorY = 100;
+    
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(mirrorX, mirrorY, 90, 110);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(mirrorX + 5, mirrorY + 5, 80, 100);
+    
+    // Mirror surface
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(mirrorX + 10, mirrorY + 10, 70, 90);
+    
+    // "YOU WIN" text etched in glass
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOU', mirrorX + 45, mirrorY + 50);
+    ctx.fillText('WIN', mirrorX + 45, mirrorY + 75);
+    
+    // CEO reflection if admiring
+    if(ceo.state === 'admiring') {
+        ctx.fillStyle = 'rgba(245,200,154,0.4)';
+        ctx.fillRect(mirrorX + 30, mirrorY + 30, 30, 60);
+    }
+    
+    // Army propaganda portrait (center back)
+    const portraitX = 350;
+    const portraitY = 50;
+    
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(portraitX - 45, portraitY, 90, 70);
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(portraitX - 40, portraitY + 5, 80, 60);
+    
+    // Young CEO in fatigues
+    ctx.fillStyle = '#3a4a2a';
+    ctx.fillRect(portraitX - 30, portraitY + 20, 60, 40);
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(portraitX - 15, portraitY + 15, 30, 25);
+    
+    // High and tight haircut
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(portraitX - 15, portraitY + 12, 30, 8);
+    
+    // Stern eyes
+    ctx.fillStyle = '#000';
+    ctx.fillRect(portraitX - 10, portraitY + 25, 5, 3);
+    ctx.fillRect(portraitX + 5, portraitY + 25, 5, 3);
+    
+    // Caption below portrait
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('FREEDOM ISN\'T FREE', portraitX, portraitY + 75);
+    
+    // Door at bottom (can't be opened once entered)
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(325, 430, 50, 70);
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(330, 435, 40, 60);
+    
+    // Cash sacks dropped when CEO is hit
+    for(let sack of level6.cashSacks) {
+        drawCashSack(sack.x, sack.y);
+    }
+    
+    // Interaction prompts
+    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION TO ACCESS SAFE', safeX, safeY - 10);
+    }
+    
+    if(level6.safeUnlocked && !level6.hasRevolver && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION TO TAKE REVOLVER', safeX, safeY - 10);
+    }
+    
+    if(level6.safeUnlocked && level6.moneyLives < 3 && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 50 && level6.hasRevolver) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION FOR $ LIFE', safeX, safeY - 10);
+    }
+    
+    if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 40 && Math.abs(player.y - monY) < 40) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION TO USE COMPUTER', monX + 15, monY - 10);
+    }
+}
+
 
 // section 10
 
