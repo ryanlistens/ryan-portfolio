@@ -174,6 +174,7 @@ const OFFICE_EMAILS = {
     }
 };
 
+
 const SAFE_CODE = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
 
 
@@ -269,6 +270,33 @@ let fadeIn = false;
 let fadeOut = false;
 let resetting = false;
 
+safeUI: false,
+    codeInput: [],
+    hasRevolver: false,
+    revolverAmmo: 6,
+    cashSacks: [],
+    moneyLives: 0,
+    ceoDefeated: false,
+    computerUI: false,
+    endingTriggered: false,
+    npcExitSequence: false,
+    npcExitTimer: 0,
+    exitingNPCs: []
+};
+
+let ghostGun = {
+    hasGun: false,
+    ammo: 0,
+    printing: false,
+    printProgress: 0,
+    printingHeart: false
+};
+
+let fadeAlpha = 0;
+let fadeIn = false;
+let fadeOut = false;
+let resetting = false;
+
 let level5 = {
     room: 'furnaceRoom',
     currentOffice: null,
@@ -307,6 +335,7 @@ let level5 = {
     docsCollected: 0,
     npcPipes: []
 };
+
 
 
 // SECTION 4: Initialization Functions
@@ -360,34 +389,35 @@ function initLevel(lv) {
     fadeOut = false;
     
     if(level === 5) {
-        player.x = 80;
-        player.y = 380;
-        level5.room = 'furnaceRoom';
-        level5.currentOffice = null;
-        level5.viewingEmail = false;
-        level5.viewingLetter = false;
-        level5.emailScrollOffset = 0;
-        level5.mulletPro.hasDoc = false;
-        level5.mulletPro.docColor = null;
-        level5.mulletPro.giveTimer = 0;
-        level5.mulletPro.state = 'walkingToComputer';
-        level5.mulletPro.x = 180;
-        level5.mulletPro.y = 380;
-        level5.mulletPro.walkTarget = null;
-        level5.mulletPro.facing = 'left';
-        level5.furnaceRoom.furnace.flameTime = 0;
-        level5.furnaceRoom.furnace.glowPhase = 0;
-        level5.hallway.trafficTimer = 0;
-        level5.docsCollected = 0;
-        level5.npcPipes = [
-            {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
-            {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
-            {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
-            {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
-        ];
-        updateLives();
-        return;
-    }
+    player.x = 80;
+    player.y = 380;
+    level5.room = 'furnaceRoom';
+    level5.currentOffice = null;
+    level5.viewingEmail = false;
+    level5.viewingLetter = false;
+    level5.emailScrollOffset = 0;
+    level5.mulletPro.hasDoc = false;
+    level5.mulletPro.docColor = null;
+    level5.mulletPro.giveTimer = 0;
+    level5.mulletPro.state = 'walkingToComputer';
+    level5.mulletPro.x = 180;
+    level5.mulletPro.y = 380;
+    level5.mulletPro.walkTarget = null;
+    level5.mulletPro.facing = 'left';
+    level5.furnaceRoom.furnace.flameTime = 0;
+    level5.furnaceRoom.furnace.glowPhase = 0;
+    level5.hallway.trafficTimer = 0;
+    level5.docsCollected = 0;
+    level5.npcPipes = [
+        {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+        {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+        {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+        {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+    ];
+    updateLives();
+    return;
+}
+
     
     if(level === 6) {
         player.x = 350;
@@ -1257,17 +1287,18 @@ function drawLevel5PipeRoom() {
 
 function drawLevel5Hallway() {
     ctx.fillStyle = '#d4c8b0';
-    ctx.fillRect(0, 0, 700, 340);
+    ctx.fillRect(0, 0, 700, 500);
     
     ctx.fillStyle = '#a89b85';
-    ctx.fillRect(0, 340, 700, 160);
+    ctx.fillRect(0, 400, 700, 100);
     
     for(let i = 0; i < 20; i++) {
         ctx.strokeStyle = '#988870';
         ctx.lineWidth = 1;
-        ctx.strokeRect(i * 35, 340, 35, 160);
+        ctx.strokeRect(i * 35, 400, 35, 100);
     }
     
+    // CEO portrait at top
     const portraitX = 350;
     const portraitY = 30;
     const portraitW = 120;
@@ -1347,6 +1378,7 @@ function drawLevel5Hallway() {
     ctx.lineTo(700, pipeY - 4);
     ctx.stroke();
     
+    // Left and right working doors (at y=340)
     const leftDoor = level5.hallway.leftDoor;
     ctx.fillStyle = '#654321';
     ctx.fillRect(leftDoor.x, leftDoor.y, 50, 80);
@@ -1367,6 +1399,7 @@ function drawLevel5Hallway() {
     ctx.arc(rightDoor.x + 10, rightDoor.y + 40, 4, 0, Math.PI * 2);
     ctx.fill();
     
+    // Office doors at y=280 - FUNCTIONAL
     for(let office of level5.hallway.offices) {
         const doorX = office.x;
         const doorY = office.y;
@@ -1390,6 +1423,7 @@ function drawLevel5Hallway() {
         ctx.fillText(office.color.name, doorX, doorY - 8);
     }
     
+    // Door labels
     if(Math.abs(player.x - (leftDoor.x + 25)) < 40) {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 14px Arial';
@@ -1406,6 +1440,7 @@ function drawLevel5Hallway() {
         ctx.fillText('FURNACE →', rightDoor.x + 25, rightDoor.y - 28);
     }
     
+    // Office door interaction prompts
     for(let office of level5.hallway.offices) {
         if(Math.abs(player.x - office.x) < 40 && player.y > 450) {
             ctx.fillStyle = '#ffd700';
@@ -1415,6 +1450,7 @@ function drawLevel5Hallway() {
         }
     }
 }
+
 
 
 // SECTION 10: Level 5 Scene Drawing Functions (Part 2)
@@ -2446,6 +2482,190 @@ function drawCEO(x, y, facing) {
         ctx.fillText('$', sackX, sackY + 3);
     }
 }
+function drawEmailUI(officeName) {
+    const email = OFFICE_EMAILS[officeName];
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillRect(50, 50, 600, 400);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.fillRect(60, 60, 580, 380);
+    
+    const office = level5.hallway.offices.find(o => o.name === officeName);
+    ctx.fillStyle = office.color.hex;
+    ctx.fillRect(60, 60, 580, 40);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Pmail', 80, 88);
+    
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('From: ' + email.from, 80, 130);
+    ctx.fillText('To: ' + email.to, 80, 155);
+    ctx.fillText('Subject: ' + email.subject, 80, 180);
+    
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(80, 195);
+    ctx.lineTo(620, 195);
+    ctx.stroke();
+    
+    ctx.font = '16px Arial';
+    const lines = email.body.split('\n');
+    let yPos = 220 - level5.emailScrollOffset;
+    for(let line of lines) {
+        if(yPos > 200 && yPos < 420) {
+            ctx.fillText(line, 80, yPos);
+        }
+        yPos += 25;
+    }
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 420);
+    ctx.fillText('↑↓ TO SCROLL', 350, 440);
+}
+
+function drawLetterUI() {
+    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillRect(50, 50, 600, 400);
+    
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(100, 80, 500, 350);
+    
+    ctx.fillStyle = '#005f99';
+    ctx.fillRect(100, 80, 500, 60);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 350, 118);
+    ctx.font = '12px Arial';
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 350, 133);
+    
+    ctx.fillStyle = '#000';
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Red:', 130, 180);
+    ctx.fillText('Please see me in the furnace room', 130, 220);
+    ctx.fillText('at your soonest convenience.', 130, 245);
+    ctx.fillText('Thanks,', 130, 290);
+    ctx.font = 'italic 18px Arial';
+    ctx.fillText('Aldon Pipersworth', 130, 320);
+    ctx.font = '14px Arial';
+    ctx.fillText('Founder / CEO of PipeTech', 130, 340);
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 420);
+}
+
+function drawOfficeRoom(officeName) {
+    const office = level5.hallway.offices.find(o => o.name === officeName);
+    const color = office.color;
+    
+    ctx.fillStyle = '#d4c8b0';
+    ctx.fillRect(0, 0, 700, 300);
+    
+    ctx.fillStyle = color.hex;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(0, 300, 700, 200);
+    ctx.globalAlpha = 1;
+    
+    for(let i = 0; i < 20; i++) {
+        ctx.strokeStyle = color.hex;
+        ctx.globalAlpha = 0.2;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * 35, 300, 35, 200);
+        ctx.globalAlpha = 1;
+    }
+    
+    // Window
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(180, 40, 340, 200);
+    
+    ctx.strokeStyle = '#4a3a1a';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(180, 40, 340, 200);
+    
+    // Desk
+    const deskX = 350;
+    const deskY = 250;
+    
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(deskX - 50, deskY, 100, 40);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(deskX - 48, deskY + 2, 96, 36);
+    
+    // Monitor
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(deskX - 15, deskY + 8, 30, 22);
+    ctx.fillStyle = level5.viewingEmail ? '#fff' : '#1a1a1a';
+    ctx.fillRect(deskX - 13, deskY + 10, 26, 16);
+    
+    if(level5.viewingEmail) {
+        ctx.shadowColor = '#fff';
+        ctx.shadowBlur = 15;
+        ctx.fillRect(deskX - 13, deskY + 10, 26, 16);
+        ctx.shadowBlur = 0;
+    }
+    
+    // Letter on RED's desk
+    if(officeName === 'RED') {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(deskX + 8, deskY + 10, 14, 18);
+        
+        ctx.strokeStyle = 'rgba(139,69,19,0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(deskX + 18, deskY + 15, 5, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.fillStyle = '#000';
+        ctx.globalAlpha = 0.3;
+        for(let i = 0; i < 4; i++) {
+            ctx.fillRect(deskX + 10, deskY + 13 + i * 3, 10, 1);
+        }
+        ctx.globalAlpha = 1;
+    }
+    
+    // Exit door
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(325, 440, 50, 60);
+    ctx.fillStyle = '#4a3a1a';
+    ctx.fillRect(330, 445, 40, 50);
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(365, 470, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    if(player.y > 420 && Math.abs(player.x - 350) < 60) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION - EXIT TO HALLWAY', 350, 430);
+    }
+    
+    if(Math.abs(player.x - deskX) < 50 && Math.abs(player.y - (deskY + 20)) < 40 && !level5.viewingEmail && !level5.viewingLetter) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION', deskX, deskY - 5);
+    }
+    
+    if(officeName === 'RED' && Math.abs(player.x - (deskX + 15)) < 25 && Math.abs(player.y - (deskY + 19)) < 30 && !level5.viewingEmail && !level5.viewingLetter) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACTION', deskX + 15, deskY + 5);
+    }
+}
+
 
 function drawScene() {
     if(state === 'menu') {
@@ -2614,36 +2834,37 @@ function drawScene() {
     }
     
     if(level === 5) {
-        if(level5.room === 'pipeRoom') {
-            drawLevel5PipeRoom();
-        } else if(level5.room === 'hallway') {
-            drawLevel5Hallway();
-        } else if(level5.room === 'furnaceRoom') {
-            drawLevel5FurnaceRoom();
-        } else if(level5.currentOffice) {
-            drawOfficeRoom(level5.currentOffice);
-        }
-        
-        if(level5.viewingEmail && level5.currentOffice) {
-            drawEmailUI(level5.currentOffice);
-        } else if(level5.viewingLetter) {
-            drawLetterUI();
-        }
-        
-        if(!level5.viewingEmail && !level5.viewingLetter) {
-            drawBaldManager(player.x, player.y, player.facing);
-            
-            if(player.holding) {
-                drawHeldDoc(player.x, player.y, player.holding);
-            }
-        }
-        
-        if(fadeAlpha > 0) {
-            ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
-            ctx.fillRect(0, 0, 700, 500);
-        }
-        return;
+    if(level5.room === 'pipeRoom') {
+        drawLevel5PipeRoom();
+    } else if(level5.room === 'hallway') {
+        drawLevel5Hallway();
+    } else if(level5.room === 'furnaceRoom') {
+        drawLevel5FurnaceRoom();
+    } else if(level5.currentOffice) {
+        drawOfficeRoom(level5.currentOffice);
     }
+    
+    if(level5.viewingEmail && level5.currentOffice) {
+        drawEmailUI(level5.currentOffice);
+    } else if(level5.viewingLetter) {
+        drawLetterUI();
+    }
+    
+    if(!level5.viewingEmail && !level5.viewingLetter) {
+        drawBaldManager(player.x, player.y, player.facing);
+        
+        if(player.holding) {
+            drawHeldDoc(player.x, player.y, player.holding);
+        }
+    }
+    
+    if(fadeAlpha > 0) {
+        ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
+        ctx.fillRect(0, 0, 700, 500);
+    }
+    return;
+}
+
     
     if(level === 6) {
     if(level6.room === 'pipeRoom') {
@@ -3122,181 +3343,158 @@ function update() {
         }
         
         // Handle email scrolling
-        if(level5.viewingEmail) {
-            if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
-                level5.emailScrollOffset = Math.max(0, level5.emailScrollOffset - 25);
-                keys.upProcessed = true;
-            }
-            if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                level5.emailScrollOffset = Math.min(200, level5.emailScrollOffset + 25);
-                keys.downProcessed = true;
-            }
-            if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
-            if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
-            
-            if(keys[' '] || keys['action']) {
-                level5.viewingEmail = false;
-                level5.emailScrollOffset = 0;
-                keys[' '] = false;
-                keys['action'] = false;
-            }
-            return;
+if(level5.viewingEmail) {
+    if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
+        level5.emailScrollOffset = Math.max(0, level5.emailScrollOffset - 25);
+        keys.upProcessed = true;
+    }
+    if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
+        level5.emailScrollOffset = Math.min(200, level5.emailScrollOffset + 25);
+        keys.downProcessed = true;
+    }
+    if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
+    if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
+    
+    if(keys[' '] || keys['action']) {
+        level5.viewingEmail = false;
+        level5.emailScrollOffset = 0;
+        keys[' '] = false;
+        keys['action'] = false;
+    }
+    return;
+}
+
+if(level5.viewingLetter) {
+    if(keys[' '] || keys['action']) {
+        level5.viewingLetter = false;
+        keys[' '] = false;
+        keys['action'] = false;
+    }
+    return;
+}
+
+// HALLWAY
+else if(level5.room === 'hallway') {
+    player.y = 380;
+    
+    const leftDoor = level5.hallway.leftDoor;
+    const rightDoor = level5.hallway.rightDoor;
+    
+    const atLeftDoor = Math.abs(player.x - (leftDoor.x + 25)) < 40;
+    const atRightDoor = Math.abs(player.x - (rightDoor.x + 25)) < 40;
+    
+    if((keys[' '] || keys['action']) && atLeftDoor) {
+        level5.room = 'pipeRoom';
+        player.x = 620;
+        player.y = 380;
+        keys[' '] = false;
+        keys['action'] = false;
+    }
+    
+    if((keys[' '] || keys['action']) && atRightDoor) {
+        level5.room = 'furnaceRoom';
+        player.x = 80;
+        player.y = 380;
+        keys[' '] = false;
+        keys['action'] = false;
+    }
+    
+    // Office door interactions
+    for(let office of level5.hallway.offices) {
+        const belowDoor = player.y > 450 && Math.abs(player.x - office.x) < 40;
+        if(belowDoor && (keys[' '] || keys['action'])) {
+            level5.currentOffice = office.name;
+            level5.room = 'office';
+            player.x = 350;
+            player.y = 400;
+            keys[' '] = false;
+            keys['action'] = false;
+            break;
         }
-        
-        if(level5.viewingLetter) {
-            if(keys[' '] || keys['action']) {
-                level5.viewingLetter = false;
-                keys[' '] = false;
-                keys['action'] = false;
-            }
-            return;
+    }
+}
+
+// OFFICE
+else if(level5.room === 'office' && level5.currentOffice) {
+    // Exit office
+    if(player.y > 450 && Math.abs(player.x - 350) < 60 && (keys[' '] || keys['action'])) {
+        level5.room = 'hallway';
+        const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
+        player.x = office.x;
+        player.y = 480;
+        level5.currentOffice = null;
+        keys[' '] = false;
+        keys['action'] = false;
+    }
+    
+    // Interact with monitor
+    const deskX = 350;
+    const deskY = 250;
+    if(Math.abs(player.x - deskX) < 50 && Math.abs(player.y - (deskY + 20)) < 40) {
+        if(keys[' '] || keys['action']) {
+            level5.viewingEmail = true;
+            level5.emailScrollOffset = 0;
+            keys[' '] = false;
+            keys['action'] = false;
         }
-        
-        // PIPE ROOM
-        if(level5.room === 'pipeRoom') {
-            player.y = 380;
-            const atRightEdge = player.x >= 630;
-            const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
-            
-            if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
-                player.holding = level5.mulletPro.docColor.name;
-                level5.mulletPro.hasDoc = false;
-                level5.mulletPro.docColor = null;
-                level5.mulletPro.state = 'walkingToComputer';
-                level5.mulletPro.walkTarget = null;
-                level5.mulletPro.facing = 'forward';
-                keys[' '] = false;
-                keys['action'] = false;
-            }
-            
-            if(atRightEdge) {
-                level5.room = 'hallway';
-                player.x = 80;
-                player.y = 380;
-            }
-        } 
-        
-        // HALLWAY
-        else if(level5.room === 'hallway') {
-            player.y = 380;
-            
-            const leftDoor = level5.hallway.leftDoor;
-            const rightDoor = level5.hallway.rightDoor;
-            
-            const atLeftDoor = Math.abs(player.x - (leftDoor.x + 25)) < 40;
-            const atRightDoor = Math.abs(player.x - (rightDoor.x + 25)) < 40;
-            
-            if((keys[' '] || keys['action']) && atLeftDoor) {
-                level5.room = 'pipeRoom';
-                player.x = 620;
-                player.y = 380;
-                keys[' '] = false;
-                keys['action'] = false;
-            }
-            
-            if((keys[' '] || keys['action']) && atRightDoor) {
-                level5.room = 'furnaceRoom';
-                player.x = 80;
-                player.y = 380;
-                keys[' '] = false;
-                keys['action'] = false;
-            }
-            
-            // Check for office door interactions
-            for(let office of level5.hallway.offices) {
-                const belowDoor = player.y > 450 && Math.abs(player.x - office.x) < 40;
-                if(belowDoor && (keys[' '] || keys['action'])) {
-                    level5.currentOffice = office.name;
-                    level5.room = 'office';
-                    player.x = 350;
-                    player.y = 400;
-                    keys[' '] = false;
-                    keys['action'] = false;
-                    break;
-                }
-            }
+    }
+    
+    // Interact with letter (RED only)
+    if(level5.currentOffice === 'RED' && Math.abs(player.x - (deskX + 15)) < 25 && Math.abs(player.y - (deskY + 19)) < 30) {
+        if(keys[' '] || keys['action']) {
+            level5.viewingLetter = true;
+            keys[' '] = false;
+            keys['action'] = false;
         }
-        
-        // OFFICE
-        else if(level5.room === 'office' && level5.currentOffice) {
-            // Exit office
-            if(player.y > 450 && Math.abs(player.x - 350) < 60 && (keys[' '] || keys['action'])) {
-                level5.room = 'hallway';
-                const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
-                player.x = office.x;
-                player.y = 480;
-                level5.currentOffice = null;
-                keys[' '] = false;
-                keys['action'] = false;
-            }
-            
-            // Interact with monitor
-            const deskX = 350;
-            const deskY = 250;
-            if(Math.abs(player.x - deskX) < 50 && Math.abs(player.y - (deskY + 20)) < 40) {
-                if(keys[' '] || keys['action']) {
-                    level5.viewingEmail = true;
-                    level5.emailScrollOffset = 0;
-                    keys[' '] = false;
-                    keys['action'] = false;
-                }
-            }
-            
-            // Interact with letter (RED only)
-            if(level5.currentOffice === 'RED' && Math.abs(player.x - (deskX + 15)) < 25 && Math.abs(player.y - (deskY + 19)) < 30) {
-                if(keys[' '] || keys['action']) {
-                    level5.viewingLetter = true;
-                    keys[' '] = false;
-                    keys['action'] = false;
-                }
-            }
-            
-            // Full 2D movement in office
-            const prevX = player.x;
-            const prevY = player.y;
-            
-            if(keys['ArrowLeft'] || keys['left']) {
-                player.x = Math.max(100, player.x - 5);
-                if(player.x !== prevX) {
-                    player.facing = 'left';
-                    player.lastMove = Date.now();
-                }
-            }
-            if(keys['ArrowRight'] || keys['right']) {
-                player.x = Math.min(600, player.x + 5);
-                if(player.x !== prevX) {
-                    player.facing = 'right';
-                    player.lastMove = Date.now();
-                }
-            }
-            if(keys['ArrowUp'] || keys['up']) {
-                player.y = Math.max(100, player.y - 5);
-                if(player.y !== prevY) player.lastMove = Date.now();
-            }
-            if(keys['ArrowDown'] || keys['down']) {
-                player.y = Math.min(480, player.y + 5);
-                if(player.y !== prevY) player.lastMove = Date.now();
-            }
-            
-            // Collision with desk
-            if(player.x > deskX - 70 && player.x < deskX + 70 && player.y > deskY - 30 && player.y < deskY + 60) {
-                player.x = prevX;
-                player.y = prevY;
-            }
-            
-            // Collision with chair
-            if(player.x > deskX - 30 && player.x < deskX + 30 && player.y > deskY + 50 && player.y < deskY + 100) {
-                player.x = prevX;
-                player.y = prevY;
-            }
-            
-            if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
-               !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
-                if(Date.now() - player.lastMove > 200) {
-                    player.facing = 'forward';
-                }
-            }
+    }
+    
+    // Full 2D movement in office
+    const prevX = player.x;
+    const prevY = player.y;
+    
+    if(keys['ArrowLeft'] || keys['left']) {
+        player.x = Math.max(100, player.x - 5);
+        if(player.x !== prevX) {
+            player.facing = 'left';
+            player.lastMove = Date.now();
         }
+    }
+    if(keys['ArrowRight'] || keys['right']) {
+        player.x = Math.min(600, player.x + 5);
+        if(player.x !== prevX) {
+            player.facing = 'right';
+            player.lastMove = Date.now();
+        }
+    }
+    if(keys['ArrowUp'] || keys['up']) {
+        player.y = Math.max(100, player.y - 5);
+        if(player.y !== prevY) player.lastMove = Date.now();
+    }
+    if(keys['ArrowDown'] || keys['down']) {
+        player.y = Math.min(480, player.y + 5);
+        if(player.y !== prevY) player.lastMove = Date.now();
+    }
+    
+    // Collision with desk
+    if(player.x > deskX - 70 && player.x < deskX + 70 && player.y > deskY - 30 && player.y < deskY + 60) {
+        player.x = prevX;
+        player.y = prevY;
+    }
+    
+    // Collision with chair
+    if(player.x > deskX - 30 && player.x < deskX + 30 && player.y > deskY + 50 && player.y < deskY + 100) {
+        player.x = prevX;
+        player.y = prevY;
+    }
+    
+    if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
+       !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
+        if(Date.now() - player.lastMove > 200) {
+            player.facing = 'forward';
+        }
+    }
+}
+
         
         // FURNACE ROOM
         else if(level5.room === 'furnaceRoom') {
