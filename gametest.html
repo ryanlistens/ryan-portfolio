@@ -258,7 +258,8 @@ let level6 = {
     endingTriggered: false,
     npcExitSequence: false,
     npcExitTimer: 0,
-    exitingNPCs: []
+    exitingNPCs: [],
+    npcPipes: []
 };
 
 let ghostGun = {
@@ -398,7 +399,7 @@ function initLevel(lv) {
 
     
     if(level === 6) {
-        player.x = 350;
+        player.x = 620;
         player.y = 380;
         level6.room = 'pipeRoom';
         level6.safeUnlocked = false;
@@ -417,6 +418,12 @@ function initLevel(lv) {
         level6.npcExitSequence = false;
         level6.npcExitTimer = 0;
         level6.exitingNPCs = [];
+        level6.npcPipes = [
+            {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+        ];
         
         ceo.x = 350;
         ceo.y = 200;
@@ -1945,11 +1952,105 @@ function drawLevel6PipeRoom() {
     
     ctx.fillStyle = '#c4bfad';
     ctx.fillRect(0, 410, 700, 90);
-    
+
+    // Draw animated pipe NPCs
+    for(let npc of level6.npcPipes) {
+        const pipeY = 240;
+
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 12;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(npc.x, pipeY);
+        ctx.lineTo(npc.x, 400);
+        ctx.stroke();
+
+        // Pipe shine
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(npc.x - 3, pipeY + 10);
+        ctx.lineTo(npc.x - 3, 390);
+        ctx.stroke();
+
+        // Pipe connector at top
+        ctx.fillStyle = npc.color.hex;
+        ctx.beginPath();
+        ctx.arc(npc.x, pipeY, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#2b2b2b';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Crack animation if needed
+        if(npc.needsDoc && npc.crackStartTime) {
+            const elapsed = Date.now() - npc.crackStartTime;
+            if(elapsed < 3000) {
+                const crackHeight = Math.min((elapsed / 3000) * 140, 140);
+                ctx.strokeStyle = '#8b0000';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(npc.x + 2, pipeY + 20);
+                ctx.lineTo(npc.x + 2, pipeY + 20 + crackHeight);
+                ctx.stroke();
+
+                // Crack warning effect
+                if(elapsed % 400 < 200) {
+                    ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                    ctx.fillRect(npc.x - 10, pipeY, 20, crackHeight + 20);
+                }
+            }
+        }
+
+        // Smoke/steam if cracked
+        if(npc.needsDoc && npc.state === 'cracked') {
+            ctx.fillStyle = 'rgba(200,200,200,0.4)';
+            const smokeOffset = (Date.now() % 2000) / 20;
+            ctx.beginPath();
+            ctx.arc(npc.x + 4, pipeY + 80 - smokeOffset, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(npc.x - 4, pipeY + 100 - smokeOffset, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Face/emotion
+        if(npc.state === 'happy') {
+            ctx.fillStyle = '#2b2b2b';
+            ctx.beginPath();
+            ctx.arc(npc.x - 3, pipeY + 50, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(npc.x + 3, pipeY + 50, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#2b2b2b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(npc.x, pipeY + 58, 4, 0, Math.PI);
+            ctx.stroke();
+        } else if(npc.state === 'stressed') {
+            ctx.fillStyle = '#8b0000';
+            ctx.beginPath();
+            ctx.arc(npc.x - 3, pipeY + 50, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(npc.x + 3, pipeY + 50, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#8b0000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(npc.x, pipeY + 65, 4, Math.PI, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+
     // Right door is CLOSED on level 6
     ctx.fillStyle = '#2b2b2b';
     ctx.fillRect(660, 340, 40, 160);
-    
+
     if(player.x < 60) {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 16px Arial';
@@ -4009,7 +4110,22 @@ if(level === 6) {
         if(ceo.blinkTimer > 0) {
             ceo.blinkTimer--;
         }
-        
+
+        // Pipe NPC crack spawning in pipe room
+        if(level6.room === 'pipeRoom') {
+            for(let npc of level6.npcPipes) {
+                if(!npc.needsDoc && Math.random() < 0.0005) {
+                    npc.needsDoc = true;
+                    npc.crackStartTime = Date.now();
+                    npc.state = 'stressed';
+                }
+
+                if(npc.needsDoc && npc.crackStartTime && Date.now() - npc.crackStartTime > 3000 && npc.state !== 'cracked') {
+                    npc.state = 'cracked';
+                }
+            }
+        }
+
         // NPC exit sequence
         if(level6.npcExitSequence) {
             level6.npcExitTimer++;
