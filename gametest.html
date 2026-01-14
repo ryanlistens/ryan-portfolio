@@ -266,7 +266,17 @@ let level6 = {
     npcExitSequence: false,
     npcExitTimer: 0,
     exitingNPCs: [],
-    npcPipes: []
+    npcPipes: [],
+    mulletPro: {
+        x: 180,
+        y: 380,
+        hasDoc: false,
+        docColor: null,
+        giveTimer: 0,
+        walkTarget: null,
+        state: 'walkingToComputer',
+        facing: 'left'
+    }
 };
 
 let ghostGun = {
@@ -359,6 +369,7 @@ function initLevel(lv) {
     player.holding = null;
     player.facing = 'forward';
     player.x = 350;
+    player.y = 380;
     ui = {show: false, selectedColor: 0, confirming: false, gunUI: false, gunChoice: 0};
     
     boss.active = false;
@@ -432,7 +443,15 @@ function initLevel(lv) {
             {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
             {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
         ];
-        
+        level6.mulletPro.hasDoc = false;
+        level6.mulletPro.docColor = null;
+        level6.mulletPro.giveTimer = 0;
+        level6.mulletPro.state = 'walkingToComputer';
+        level6.mulletPro.x = 180;
+        level6.mulletPro.y = 380;
+        level6.mulletPro.walkTarget = null;
+        level6.mulletPro.facing = 'left';
+
         ceo.x = 350;
         ceo.y = 200;
         ceo.facing = 'forward';
@@ -444,7 +463,7 @@ function initLevel(lv) {
         ceo.lastShot = 0;
         ceo.hasDrink = true;
         ceo.walkTarget = null;
-        
+
         updateLives();
         return;
     }
@@ -2134,6 +2153,23 @@ function drawLevel6PipeRoom() {
 
         // Draw NPC face (using standard drawNPC function)
         drawNPC(npc);
+    }
+
+    // Draw Mullet Pro NPC
+    drawMulletPro(level6.mulletPro.x, level6.mulletPro.y, level6.mulletPro.facing);
+
+    // Draw doc if Mullet Pro has one
+    if(level6.mulletPro.hasDoc && level6.mulletPro.docColor) {
+        drawHeldDoc(level6.mulletPro.x, level6.mulletPro.y, level6.mulletPro.docColor);
+
+        // Interaction prompt (but can't take in Level 6)
+        const dist = Math.sqrt(Math.pow(player.x - level6.mulletPro.x, 2) + Math.pow(player.y - level6.mulletPro.y, 2));
+        if(dist < 60 && level6.mulletPro.giveTimer > 0) {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('DOCUMENTS LOCKED', level6.mulletPro.x, level6.mulletPro.y - 90);
+        }
     }
 
     // Right door is CLOSED on level 6 - match floor color to blend in
@@ -3865,7 +3901,8 @@ function update() {
             if(menuChoice === 0) {
                 window.location.href = '/';
             } else {
-                state = 'menu';
+                // Reset to level 1
+                startGame();
             }
         }
         return;
@@ -4255,13 +4292,20 @@ if(level === 6) {
         
         if(ceo.state === 'admiring') {
             const mirrorX = 150;
-            if(Math.abs(ceo.x - (mirrorX + 45)) > 5) {
-                const direction = ceo.x < (mirrorX + 45) ? 1 : -1;
-                ceo.x += direction * 2;
-                ceo.facing = direction > 0 ? 'right' : 'left';
+            const mirrorTargetX = mirrorX + 45;
+            const mirrorTargetY = 160;
+
+            const dx = mirrorTargetX - ceo.x;
+            const dy = mirrorTargetY - ceo.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if(dist > 5) {
+                ceo.x += (dx / dist) * 2;
+                ceo.y += (dy / dist) * 2;
+                ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
             } else {
-                ceo.x = mirrorX + 45;
-                ceo.y = 160;
+                ceo.x = mirrorTargetX;
+                ceo.y = mirrorTargetY;
                 ceo.facing = 'forward';
             }
         }
@@ -4301,6 +4345,60 @@ if(level === 6) {
         
         if(ceo.blinkTimer > 0) {
             ceo.blinkTimer--;
+        }
+
+        // Mullet Pro AI in pipe room
+        if(level6.room === 'pipeRoom') {
+            const computer = {x: 180, y: 350};
+
+            if(level6.mulletPro.state === 'walkingToComputer') {
+                if(Math.abs(level6.mulletPro.x - computer.x) > 5) {
+                    const direction = level6.mulletPro.x < computer.x ? 1 : -1;
+                    level6.mulletPro.x += direction * 2;
+                    level6.mulletPro.facing = direction > 0 ? 'right' : 'left';
+                } else {
+                    level6.mulletPro.hasDoc = true;
+                    level6.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
+                    level6.mulletPro.state = 'walkingToNPC';
+                    const targetNPC = level6.npcPipes.find(n => n.color.name === level6.mulletPro.docColor.name);
+                    level6.mulletPro.walkTarget = targetNPC;
+                    level6.mulletPro.facing = 'forward';
+                }
+            }
+
+            if(level6.mulletPro.state === 'walkingToNPC' && level6.mulletPro.walkTarget) {
+                if(Math.abs(level6.mulletPro.x - level6.mulletPro.walkTarget.x) > 5) {
+                    const direction = level6.mulletPro.x < level6.mulletPro.walkTarget.x ? 1 : -1;
+                    level6.mulletPro.x += direction * 2;
+                    level6.mulletPro.facing = direction > 0 ? 'right' : 'left';
+                } else {
+                    const targetNPC = level6.mulletPro.walkTarget;
+
+                    // Show doc for a moment, then go back (but player can't take it)
+                    level6.mulletPro.giveTimer = 60;
+                    level6.mulletPro.state = 'offering';
+                    level6.mulletPro.facing = 'forward';
+                }
+            }
+
+            if(level6.mulletPro.state === 'offering') {
+                level6.mulletPro.giveTimer--;
+                if(level6.mulletPro.giveTimer <= 0) {
+                    // Doc goes back, NPC is fixed
+                    const targetNPC = level6.mulletPro.walkTarget;
+                    if(targetNPC) {
+                        targetNPC.needsDoc = false;
+                        targetNPC.crackStartTime = null;
+                        targetNPC.state = 'happy';
+                    }
+
+                    level6.mulletPro.hasDoc = false;
+                    level6.mulletPro.docColor = null;
+                    level6.mulletPro.state = 'walkingToComputer';
+                    level6.mulletPro.walkTarget = null;
+                    level6.mulletPro.facing = 'forward';
+                }
+            }
         }
 
         // Pipe NPC crack spawning in pipe room
