@@ -3990,767 +3990,157 @@ function update() {
             }
         }
         
-        // Handle email scrolling
-if(level5.viewingEmail) {
-    if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
-        level5.emailScrollOffset = Math.max(0, level5.emailScrollOffset - 25);
-        keys.upProcessed = true;
-    }
-    if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-        level5.emailScrollOffset = Math.min(200, level5.emailScrollOffset + 25);
-        keys.downProcessed = true;
-    }
-    if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
-    if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
+                // Handle email scrolling
+        if(level5.viewingEmail) {
+            if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
+                level5.emailScrollOffset = Math.max(0, level5.emailScrollOffset - 25);
+                keys.upProcessed = true;
+            }
+            if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
+                level5.emailScrollOffset = Math.min(200, level5.emailScrollOffset + 25);
+                keys.downProcessed = true;
+            }
+            if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
+            if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
     
-    if(keys[' '] || keys['action']) {
-        level5.viewingEmail = false;
-        level5.emailScrollOffset = 0;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-    return;
-}
-
-if(level5.viewingLetter) {
-    if(keys[' '] || keys['action']) {
-        level5.viewingLetter = false;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-    return;
-}
-
-if(level5.viewingPortrait) {
-    if(keys[' '] || keys['action']) {
-        level5.viewingPortrait = false;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-    return;
-}
-
-// PIPE ROOM
-if(level5.room === 'pipeRoom') {
-    player.y = 380;
-    const atRightEdge = player.x >= 630;
-    const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
-
-    // Steal doc from Mullet Pro directly
-    if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
-        player.holding = level5.mulletPro.docColor.name;
-        level5.mulletPro.hasDoc = false;
-        level5.mulletPro.docColor = null;
-        level5.mulletPro.state = 'walkingToComputer';
-        level5.mulletPro.walkTarget = null;
-        level5.mulletPro.facing = 'forward';
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-
-    // Auto-transition to hallway when walking right
-    if(atRightEdge) {
-        level5.room = 'hallway';
-        player.x = 80;
-    }
-}
-
-// HALLWAY
-else if(level5.room === 'hallway') {
-    player.y = 380;
-
-    const atLeftDoor = player.x < 80;
-    const atRightDoor = player.x > 620;
-
-    if((keys[' '] || keys['action']) && atLeftDoor) {
-        level5.room = 'pipeRoom';
-        player.x = 620;
-        player.y = 380;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-
-    if((keys[' '] || keys['action']) && atRightDoor) {
-        level5.room = 'furnaceRoom';
-        player.x = 80;
-        player.y = 380;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-
-    // Office door interactions - press action in front of door at y=380
-    for(let office of level5.hallway.offices) {
-        const atOfficeDoor = Math.abs(player.x - office.x) < 40;
-        if(atOfficeDoor && (keys[' '] || keys['action'])) {
-            level5.currentOffice = office.name;
-            level5.room = 'office';
-            player.x = 350;
-            player.y = 400;
-            keys[' '] = false;
-            keys['action'] = false;
-            break;
-        }
-    }
-
-    // Portrait interaction - press action near portrait (center x=350, top of hallway)
-    const nearPortrait = Math.abs(player.x - 350) < 80 && player.y < 320;
-    if(nearPortrait && (keys[' '] || keys['action'])) {
-        level5.viewingPortrait = true;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-}
-
-// OFFICE
-else if(level5.room === 'office' && level5.currentOffice) {
-    // Exit office
-    if(player.y > 450 && Math.abs(player.x - 350) < 60 && (keys[' '] || keys['action'])) {
-        level5.room = 'hallway';
-        const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
-        player.x = office.x;
-        player.y = 380;
-        level5.currentOffice = null;
-        keys[' '] = false;
-        keys['action'] = false;
-    }
-    
-    // Interact with monitor - expanded range for easier access (center/right position)
-    const deskX = 350;
-    const deskY = 250;
-    const monitorX = deskX + 10;
-    if(Math.abs(player.x - monitorX) < 40 && player.y > deskY + 30 && player.y < deskY + 70) {
-        if(keys[' '] || keys['action']) {
-            level5.viewingEmail = true;
-            level5.emailScrollOffset = 0;
-            keys[' '] = false;
-            keys['action'] = false;
-        }
-    }
-
-    // Interact with letter (RED only) - on LEFT side of desk
-    const letterX = deskX - 25;
-    if(level5.currentOffice === 'RED' && Math.abs(player.x - letterX) < 30 && player.y > deskY + 30 && player.y < deskY + 70) {
-        if(keys[' '] || keys['action']) {
-            level5.viewingLetter = true;
-            keys[' '] = false;
-            keys['action'] = false;
-        }
-    }
-    
-    // Full 2D movement in office
-    const prevX = player.x;
-    const prevY = player.y;
-    
-    if(keys['ArrowLeft'] || keys['left']) {
-        player.x = Math.max(100, player.x - 5);
-        if(player.x !== prevX) {
-            player.facing = 'left';
-            player.lastMove = Date.now();
-        }
-    }
-    if(keys['ArrowRight'] || keys['right']) {
-        player.x = Math.min(600, player.x + 5);
-        if(player.x !== prevX) {
-            player.facing = 'right';
-            player.lastMove = Date.now();
-        }
-    }
-    if(keys['ArrowUp'] || keys['up']) {
-        player.y = Math.max(100, player.y - 5);
-        if(player.y !== prevY) player.lastMove = Date.now();
-    }
-    if(keys['ArrowDown'] || keys['down']) {
-        player.y = Math.min(480, player.y + 5);
-        if(player.y !== prevY) player.lastMove = Date.now();
-    }
-    
-    // Collision with window (top wall)
-    if(player.x > 160 && player.x < 540 && player.y < 260) {
-        player.x = prevX;
-        player.y = prevY;
-    }
-
-    // Collision with desk - allow approach from bottom for monitor access
-    // Desk top blocking (can't walk through from sides/top)
-    if(player.y < deskY + 45) {
-        if(player.x > deskX - 70 && player.x < deskX + 70 && player.y > deskY - 30 && player.y < deskY + 45) {
-            player.x = prevX;
-            player.y = prevY;
-        }
-    }
-
-    // Chair collision - narrower to allow monitor access from sides
-    if(player.x > deskX - 20 && player.x < deskX + 20 && player.y > deskY + 50 && player.y < deskY + 100) {
-        player.x = prevX;
-        player.y = prevY;
-    }
-    
-    if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
-       !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
-        if(Date.now() - player.lastMove > 200) {
-            player.facing = 'forward';
-        }
-    }
-}
-
-        
-        // FURNACE ROOM
-        else if(level5.room === 'furnaceRoom') {
-            player.y = 380;
-            
-            const furnace = level5.furnaceRoom.furnace;
-            const leftDoor = level5.furnaceRoom.leftDoor;
-            
-            const atFurnace = Math.abs(player.x - furnace.x) < 80;
-            const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
-            
-            if((keys[' '] || keys['action']) && atFurnace) {
-                if(player.holding) {
-                    player.holding = null;
-                    furnace.flameTime = Date.now();
-                    level5.docsCollected++;
-                    
-                    if(level5.docsCollected >= 10) {
-                        level = 6;
-                        timer = 180;
-                        state = 'levelCard';
-                        cardTimer = 0;
-                        initLevel(6);
-                        keys[' '] = false;
-                        keys['action'] = false;
-                        return;
-                    }
-                } else {
-                    furnace.flameTime = Date.now();
-                    createExplosion(player.x, player.y);
-                    state = 'over';
-                    menuChoice = 0;
-                }
+            if(keys[' '] || keys['action']) {
+                level5.viewingEmail = false;
+                level5.emailScrollOffset = 0;
                 keys[' '] = false;
                 keys['action'] = false;
             }
-            
-            if((keys[' '] || keys['action']) && atDoor) {
+            return;
+        }
+
+        if(level5.viewingLetter) {
+            if(keys[' '] || keys['action']) {
+                level5.viewingLetter = false;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            return;
+        }
+
+        if(level5.viewingPortrait) {
+            if(keys[' '] || keys['action']) {
+                level5.viewingPortrait = false;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            return;
+        }
+
+        // PIPE ROOM
+        if(level5.room === 'pipeRoom') {
+            player.y = 380;
+            const atRightEdge = player.x >= 630;
+            const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
+
+            // Steal doc from Mullet Pro directly
+            if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
+                player.holding = level5.mulletPro.docColor.name;
+                level5.mulletPro.hasDoc = false;
+                level5.mulletPro.docColor = null;
+                level5.mulletPro.state = 'walkingToComputer';
+                level5.mulletPro.walkTarget = null;
+                level5.mulletPro.facing = 'forward';
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+
+            // Auto-transition to hallway when walking right
+            if(atRightEdge) {
                 level5.room = 'hallway';
+                player.x = 80;
+            }
+        }
+
+        // HALLWAY
+        else if(level5.room === 'hallway') {
+            player.y = 380;
+
+            const atLeftDoor = player.x < 80;
+            const atRightDoor = player.x > 620;
+
+            if((keys[' '] || keys['action']) && atLeftDoor) {
+                level5.room = 'pipeRoom';
                 player.x = 620;
                 player.y = 380;
                 keys[' '] = false;
                 keys['action'] = false;
             }
-        }
-        
-        // Horizontal movement for pipe room, hallway, and furnace room
-        if(level5.room === 'pipeRoom' || level5.room === 'hallway' || level5.room === 'furnaceRoom') {
-            player.y = 380;
-            const prevX = player.x;
-            if(keys['ArrowLeft'] || keys['left']) {
-                player.x = Math.max(60, player.x - 5);
-                if(player.x !== prevX) {
-                    player.facing = 'left';
-                    player.lastMove = Date.now();
-                }
-            }
-            if(keys['ArrowRight'] || keys['right']) {
-                player.x = Math.min(640, player.x + 5);
-                if(player.x !== prevX) {
-                    player.facing = 'right';
-                    player.lastMove = Date.now();
-                }
-            }
-            if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
-                if(Date.now() - player.lastMove > 200) {
-                    player.facing = 'forward';
-                }
-            }
-        }
-        
-        return;
-    }
-    
-// LEVEL 6 LOGIC
-if(level === 6) {
-        // CEO AI logic
-        if(ceo.state === 'offering') {
-            // First walk to middle rug if not there yet
-            if(ceo.walkTarget) {
-                const dx = ceo.walkTarget.x - ceo.x;
-                const dy = ceo.walkTarget.y - ceo.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if(dist > 5) {
-                    ceo.x += (dx / dist) * 2;
-                    ceo.y += (dy / dist) * 2;
-                    ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
-                } else {
-                    ceo.walkTarget = null;
-                    ceo.facing = 'forward';
-                }
-            } else {
-                // Once at rug, follow player horizontally
-                if(Math.abs(ceo.x - player.x) > 60) {
-                    const direction = ceo.x < player.x ? 1 : -1;
-                    ceo.x += direction * 1.5;
-                    ceo.facing = direction > 0 ? 'right' : 'left';
-                } else {
-                    ceo.facing = 'forward';
-                }
-            }
-        }
-        
-        if(ceo.state === 'admiring') {
-            const mirrorX = 150;
-            const mirrorTargetX = mirrorX + 45;
-            const mirrorTargetY = 160;
-
-            const dx = mirrorTargetX - ceo.x;
-            const dy = mirrorTargetY - ceo.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if(dist > 5) {
-                ceo.x += (dx / dist) * 2;
-                ceo.y += (dy / dist) * 2;
-                ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
-            } else {
-                ceo.x = mirrorTargetX;
-                ceo.y = mirrorTargetY;
-                ceo.facing = 'forward';
-            }
-        }
-        
-        if(ceo.state === 'hunting') {
-            ceo.moveTimer++;
-            
-            const dx = player.x - ceo.x;
-            const dy = player.y - ceo.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if(dist > 10) {
-                ceo.x += (dx / dist) * 2;
-                ceo.y += (dy / dist) * 2;
-                
-                if(Math.abs(dx) > Math.abs(dy)) {
-                    ceo.facing = dx > 0 ? 'right' : 'left';
-                } else {
-                    ceo.facing = 'forward';
-                }
-            }
-            
-            ceo.shootTimer++;
-            if(ceo.shootTimer > 120 && Date.now() - ceo.lastShot > 2000) {
-                const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
-                bullets.push({
-                    x: ceo.x,
-                    y: ceo.y,
-                    vx: Math.cos(angle) * 8,
-                    vy: Math.sin(angle) * 8,
-                    fromCEO: true
-                });
-                ceo.lastShot = Date.now();
-                ceo.shootTimer = 0;
-            }
-        }
-        
-        if(ceo.blinkTimer > 0) {
-            ceo.blinkTimer--;
-        }
-
-        // Mullet Pro AI in pipe room
-        if(level6.room === 'pipeRoom') {
-            const computer = {x: 180, y: 350};
-
-            if(level6.mulletPro.state === 'walkingToComputer') {
-                if(Math.abs(level6.mulletPro.x - computer.x) > 5) {
-                    const direction = level6.mulletPro.x < computer.x ? 1 : -1;
-                    level6.mulletPro.x += direction * 2;
-                    level6.mulletPro.facing = direction > 0 ? 'right' : 'left';
-                } else {
-                    level6.mulletPro.hasDoc = true;
-                    level6.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
-                    level6.mulletPro.state = 'walkingToNPC';
-                    const targetNPC = level6.npcPipes.find(n => n.color.name === level6.mulletPro.docColor.name);
-                    level6.mulletPro.walkTarget = targetNPC;
-                    level6.mulletPro.facing = 'forward';
-                }
-            }
-
-            if(level6.mulletPro.state === 'walkingToNPC' && level6.mulletPro.walkTarget) {
-                if(Math.abs(level6.mulletPro.x - level6.mulletPro.walkTarget.x) > 5) {
-                    const direction = level6.mulletPro.x < level6.mulletPro.walkTarget.x ? 1 : -1;
-                    level6.mulletPro.x += direction * 2;
-                    level6.mulletPro.facing = direction > 0 ? 'right' : 'left';
-                } else {
-                    const targetNPC = level6.mulletPro.walkTarget;
-
-                    // Show doc for a moment, then go back (but player can't take it)
-                    level6.mulletPro.giveTimer = 60;
-                    level6.mulletPro.state = 'offering';
-                    level6.mulletPro.facing = 'forward';
-                }
-            }
-
-            if(level6.mulletPro.state === 'offering') {
-                level6.mulletPro.giveTimer--;
-                if(level6.mulletPro.giveTimer <= 0) {
-                    // Doc goes back, NPC is fixed
-                    const targetNPC = level6.mulletPro.walkTarget;
-                    if(targetNPC) {
-                        targetNPC.needsDoc = false;
-                        targetNPC.crackStartTime = null;
-                        targetNPC.state = 'happy';
-                    }
-
-                    level6.mulletPro.hasDoc = false;
-                    level6.mulletPro.docColor = null;
-                    level6.mulletPro.state = 'walkingToComputer';
-                    level6.mulletPro.walkTarget = null;
-                    level6.mulletPro.facing = 'forward';
-                }
-            }
-        }
-
-        // Pipe NPC crack spawning in pipe room
-        if(level6.room === 'pipeRoom') {
-            for(let npc of level6.npcPipes) {
-                if(!npc.needsDoc && Math.random() < 0.0005) {
-                    npc.needsDoc = true;
-                    npc.crackStartTime = Date.now();
-                    npc.state = 'stressed';
-                }
-
-                if(npc.needsDoc && npc.crackStartTime && Date.now() - npc.crackStartTime > 3000 && npc.state !== 'cracked') {
-                    npc.state = 'cracked';
-                }
-            }
-        }
-
-        // NPC exit sequence
-        if(level6.npcExitSequence) {
-            level6.npcExitTimer++;
-            
-            for(let npc of level6.exitingNPCs) {
-                if(!npc.hasSack && !npc.exiting) {
-                    let nearestSack = null;
-                    let nearestDist = Infinity;
-                    
-                    for(let sack of level6.cashSacks) {
-                        if(!sack.claimed) {
-                            const dist = Math.sqrt((npc.x - sack.x)**2 + (npc.y - sack.y)**2);
-                            if(dist < nearestDist) {
-                                nearestDist = dist;
-                                nearestSack = sack;
-                            }
-                        }
-                    }
-                    
-                    if(nearestSack) {
-                        const dx = nearestSack.x - npc.x;
-                        const dy = nearestSack.y - npc.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        
-                        if(dist > 5) {
-                            npc.x += (dx / dist) * 2;
-                            npc.y += (dy / dist) * 2;
-                            npc.facing = dx > 0 ? 'right' : dx < 0 ? 'left' : 'forward';
-                        } else {
-                            npc.hasSack = true;
-                            nearestSack.claimed = true;
-                        }
-                    }
-                } else if(npc.hasSack && !npc.exiting) {
-                    const exitY = 460;
-                    const dy = exitY - npc.y;
-                    
-                    if(Math.abs(dy) > 5) {
-                        npc.y += dy > 0 ? 2 : -2;
-                        npc.facing = 'forward';
-                    } else {
-                        npc.exiting = true;
-                    }
-                }
-            }
-            
-            const allExited = level6.exitingNPCs.every(npc => npc.exiting);
-            if(allExited && level6.npcExitTimer > 180) {
-                const unclaimedSack = level6.cashSacks.find(s => !s.claimed);
-                if(unclaimedSack && !level6.endingTriggered) {
-                    if(Math.abs(player.x - unclaimedSack.x) < 30 && Math.abs(player.y - unclaimedSack.y) < 30) {
-                        if(keys[' '] || keys['action']) {
-                            level6.endingTriggered = true;
-                            state = 'victory';
-                            menuChoice = 0;
-                            keys[' '] = false;
-                            keys['action'] = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Movement for pipeRoom and entryway
-        if(level6.room === 'pipeRoom' || level6.room === 'entryway') {
-            const prevX = player.x;
-            if(keys['ArrowLeft'] || keys['left']) {
-                player.x = Math.max(20, player.x - 5);
-                if(player.x !== prevX) {
-                    player.facing = 'left';
-                    player.lastMove = Date.now();
-                }
-            }
-            if(keys['ArrowRight'] || keys['right']) {
-                player.x = Math.min(680, player.x + 5);
-                if(player.x !== prevX) {
-                    player.facing = 'right';
-                    player.lastMove = Date.now();
-                }
-            }
-            if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
-                if(Date.now() - player.lastMove > 200) {
-                    player.facing = 'forward';
-                }
-            }
-        }
-
-        // Room transitions
-        if(level6.room === 'pipeRoom') {
-            player.y = 380;
-
-            if(player.x < 40) {
-                level6.room = 'entryway';
-                player.x = 640;
-                player.y = 400;
-            }
-        } 
-        
-        else if(level6.room === 'entryway') {
-            player.y = 400;
-            
-            if(player.x > 660) {
-                level6.room = 'pipeRoom';
+            if((keys[' '] || keys['action']) && atRightDoor) {
+                level5.room = 'furnaceRoom';
                 player.x = 80;
                 player.y = 380;
-            }
-            
-            if(Math.abs(player.x - 350) < 100 && (keys[' '] || keys['action'])) {
-                level6.room = 'ceoOffice';
-                player.x = 350;
-                player.y = 420;
                 keys[' '] = false;
                 keys['action'] = false;
-
-                // Set CEO to walk to middle rug on entry
-                ceo.walkTarget = {x: 350, y: 340};
             }
-        } 
-        
-        else if(level6.room === 'ceoOffice') {
-            // Handle safe UI
-            if(level6.safeUI) {
-                // Item selection mode (after unlock)
-                if(level6.selectingItem) {
-                    if(keys['ArrowLeft'] || keys['left']) {
-                        level6.itemSelection = Math.max(0, level6.itemSelection - 1);
-                        keys['ArrowLeft'] = false;
-                        keys['left'] = false;
-                    }
-                    if(keys['ArrowRight'] || keys['right']) {
-                        level6.itemSelection = Math.min(2, level6.itemSelection + 1);
-                        keys['ArrowRight'] = false;
-                        keys['right'] = false;
-                    }
-                    if(keys[' '] || keys['action']) {
-                        keys[' '] = false;
-                        keys['action'] = false;
 
-                        if(level6.itemSelection === 0 && !level6.hasRevolver) {
-                            // Take revolver
-                            level6.hasRevolver = true;
-                            level6.revolverAmmo = 6;
-                            level6.selectingItem = false;
-                            level6.safeUI = false;
-                        } else if(level6.itemSelection === 1 && level6.moneyLives < 3) {
-                            // Take $ life
-                            level6.moneyLives++;
-                            updateLives();
-                            level6.selectingItem = false;
-                            level6.safeUI = false;
-                        } else if(level6.itemSelection === 2) {
-                            // Take bullets (unlimited, adds 6 bullets)
-                            level6.revolverAmmo = Math.min(level6.revolverAmmo + 6, 99);
-                            level6.selectingItem = false;
-                            level6.safeUI = false;
-                        }
-                    }
-                    return;
-                }
-
-                // Code entry mode
-                if(keys['ArrowLeft'] || keys['left']) {
-                    const row = Math.floor(level6.selectedButton / 2);
-                    const col = level6.selectedButton % 2;
-                    if(col > 0) {
-                        level6.selectedButton--;
-                    }
-                    keys['ArrowLeft'] = false;
-                    keys['left'] = false;
-                }
-                if(keys['ArrowRight'] || keys['right']) {
-                    const row = Math.floor(level6.selectedButton / 2);
-                    const col = level6.selectedButton % 2;
-                    if(col < 1) {
-                        level6.selectedButton++;
-                    }
-                    keys['ArrowRight'] = false;
-                    keys['right'] = false;
-                }
-                if(keys['ArrowUp'] || keys['up']) {
-                    const row = Math.floor(level6.selectedButton / 2);
-                    if(row > 0) {
-                        level6.selectedButton -= 2;
-                    }
-                    keys['ArrowUp'] = false;
-                    keys['up'] = false;
-                }
-                if(keys['ArrowDown'] || keys['down']) {
-                    const row = Math.floor(level6.selectedButton / 2);
-                    if(row < 1) {
-                        level6.selectedButton += 2;
-                    }
-                    keys['ArrowDown'] = false;
-                    keys['down'] = false;
-                }
-                if(keys[' '] || keys['action']) {
+            // Office door interactions - press action in front of door at y=380
+            for(let office of level5.hallway.offices) {
+                const atOfficeDoor = Math.abs(player.x - office.x) < 40;
+                if(atOfficeDoor && (keys[' '] || keys['action'])) {
+                    level5.currentOffice = office.name;
+                    level5.room = 'office';
+                    player.x = 350;
+                    player.y = 400;
                     keys[' '] = false;
                     keys['action'] = false;
-
-                    if(level6.codeInput.length < 4) {
-                        const selectedColor = COLORS[level6.selectedButton].name;
-                        level6.codeInput.push(selectedColor);
-
-                        if(level6.codeInput.length === 4) {
-                            const correct = level6.codeInput.every((color, i) => color === SAFE_CODE[i]);
-                            if(correct) {
-                                setTimeout(() => {
-                                    level6.safeUnlocked = true;
-                                    level6.safeUI = false;
-                                    level6.codeInput = [];
-                                    level6.selectedButton = 0;
-                                }, 1000);
-                            } else {
-                                setTimeout(() => {
-                                    level6.codeInput = [];
-                                    level6.selectedButton = 0;
-                                }, 1000);
-                            }
-                        }
-                    }
+                    break;
                 }
-                return;
             }
-            
-            // Handle computer UI
-            if(level6.computerUI) {
-                if(keys[' '] || keys['action']) {
-                    keys[' '] = false;
-                    keys['action'] = false;
-                    
-                    const choice = 'deliver';
-                    
-                    if(choice === 'destruct') {
-                        state = 'over';
-                        menuChoice = 0;
-                    } else {
-                        level6.npcExitSequence = true;
-                        level6.computerUI = false;
-                        
-                        level6.exitingNPCs = [
-                            {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                            {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                            {x: 330, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                            {x: 390, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                            {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, exiting: false, isMulletPro: true}
-                        ];
-                    }
-                }
-                return;
-            }
-            
-            // CEO office interactions
-            if(keys[' '] || keys['action']) {
+
+            // Portrait interaction - press action near portrait (center x=350, top of hallway)
+            const nearPortrait = Math.abs(player.x - 350) < 80 && player.y < 320;
+            if(nearPortrait && (keys[' '] || keys['action'])) {
+                level5.viewingPortrait = true;
                 keys[' '] = false;
                 keys['action'] = false;
-                
-                const safeX = 350;
-                const safeY = 130;
-                
-                if(ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
-                    level6.moneyLives++;
-                    updateLives();
-                    ceo.hasDrink = true;
-                    ceo.state = 'admiring';
-                }
-                
-                // Open safe code entry UI if locked
-                if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
-                    level6.safeUI = true;
-                    level6.selectedButton = 0;
-                }
+            }
+        }
 
-                // Open safe item selection UI if unlocked (always accessible for bullets)
-                if(level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
-                    level6.safeUI = true;
-                    level6.selectingItem = true;
-                    level6.itemSelection = 0;
-                }
-                
-                const monX = 375;
-                const monY = 195;
-                if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 40 && Math.abs(player.y - (monY + 15)) < 40) {
-                    level6.computerUI = true;
-                }
-                
-                if(level6.hasRevolver && level6.revolverAmmo > 0) {
-                    const direction = player.facing === 'left' ? -1 : player.facing === 'right' ? 1 : 0;
-                    const vertDir = player.facing === 'forward' ? -1 : 0;
-                    
-                    if(direction !== 0 || vertDir !== 0) {
-                        bullets.push({
-                            x: player.x,
-                            y: player.y - 25,
-                            vx: direction * 12,
-                            vy: vertDir * 12,
-                            fromCEO: false
-                        });
-                        level6.revolverAmmo--;
-                        
-                        if(ceo.state !== 'dead' && Math.abs(bullets[bullets.length-1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length-1].y - ceo.y) < 50) {
-                            ceo.health--;
-                            ceo.blinkTimer = 10;
-
-                            // Spread cash sacks in a circle pattern for visibility
-                            const sackIndex = 6 - ceo.health;
-                            const angle = (sackIndex / 6) * Math.PI * 2;
-                            const radius = 40;
-                            level6.cashSacks.push({
-                                x: ceo.x + Math.cos(angle) * radius,
-                                y: ceo.y + Math.sin(angle) * radius,
-                                claimed: false
-                            });
-
-                            if(ceo.health <= 0) {
-                                ceo.state = 'dead';
-                                level6.ceoDefeated = true;
-                            } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
-                                ceo.state = 'hunting';
-                            }
-                        }
-                    }
+        // OFFICE
+        else if(level5.room === 'office' && level5.currentOffice) {
+            // Exit office
+            if(player.y > 450 && Math.abs(player.x - 350) < 60 && (keys[' '] || keys['action'])) {
+                level5.room = 'hallway';
+                const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
+                player.x = office.x;
+                player.y = 380;
+                level5.currentOffice = null;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+    
+            // Interact with monitor - expanded range for easier access (center/right position)
+            const deskX = 350;
+            const deskY = 250;
+            const monitorX = deskX + 10;
+            if(Math.abs(player.x - monitorX) < 40 && player.y > deskY + 30 && player.y < deskY + 70) {
+                if(keys[' '] || keys['action']) {
+                    level5.viewingEmail = true;
+                    level5.emailScrollOffset = 0;
+                    keys[' '] = false;
+                    keys['action'] = false;
                 }
             }
-            
-            // Full 2D movement in CEO office
+
+            // Interact with letter (RED only) - on LEFT side of desk
+            const letterX = deskX - 25;
+            if(level5.currentOffice === 'RED' && Math.abs(player.x - letterX) < 30 && player.y > deskY + 30 && player.y < deskY + 70) {
+                if(keys[' '] || keys['action']) {
+                    level5.viewingLetter = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+            }
+    
+            // Full 2D movement in office
             const prevX = player.x;
             const prevY = player.y;
-            
+    
             if(keys['ArrowLeft'] || keys['left']) {
                 player.x = Math.max(100, player.x - 5);
                 if(player.x !== prevX) {
@@ -4770,34 +4160,31 @@ if(level === 6) {
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
             if(keys['ArrowDown'] || keys['down']) {
-                player.y = Math.min(450, player.y + 5);
+                player.y = Math.min(480, player.y + 5);
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
-            
-            // Collision with desk - more precise, only desk surface
-            const deskX = 350;
-            const deskY = 180;
-            if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 5 && player.y < deskY + 65) {
+    
+            // Collision with window (top wall)
+            if(player.x > 160 && player.x < 540 && player.y < 260) {
                 player.x = prevX;
                 player.y = prevY;
             }
-            
-            // Collision with trophy cabinet
-            const cabinetX = 550;
-            const cabinetY = 100;
-            if(player.x > cabinetX - 20 && player.x < cabinetX + 100 && player.y < cabinetY + 120) {
+
+            // Collision with desk - allow approach from bottom for monitor access
+            // Desk top blocking (can't walk through from sides/top)
+            if(player.y < deskY + 45) {
+                if(player.x > deskX - 70 && player.x < deskX + 70 && player.y > deskY - 30 && player.y < deskY + 45) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            }
+
+            // Chair collision - narrower to allow monitor access from sides
+            if(player.x > deskX - 20 && player.x < deskX + 20 && player.y > deskY + 50 && player.y < deskY + 100) {
                 player.x = prevX;
                 player.y = prevY;
             }
-            
-            // Collision with mirror
-            const mirrorX = 150;
-            const mirrorY = 100;
-            if(player.x > mirrorX - 20 && player.x < mirrorX + 110 && player.y < mirrorY + 130) {
-                player.x = prevX;
-                player.y = prevY;
-            }
-            
+    
             if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
                !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
                 if(Date.now() - player.lastMove > 200) {
@@ -4805,57 +4192,670 @@ if(level === 6) {
                 }
             }
         }
+
         
-        // Bullet collision
-        for(let i = bullets.length - 1; i >= 0; i--) {
-            bullets[i].x += bullets[i].vx;
-            bullets[i].y += bullets[i].vy;
+                // FURNACE ROOM
+                else if(level5.room === 'furnaceRoom') {
+                    player.y = 380;
             
-            if(bullets[i].x < 0 || bullets[i].x > 700 || bullets[i].y < 0 || bullets[i].y > 500) {
-                bullets.splice(i, 1);
-                continue;
-            }
+                    const furnace = level5.furnaceRoom.furnace;
+                    const leftDoor = level5.furnaceRoom.leftDoor;
             
-            if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
-                level6.moneyLives--;
-                updateLives();
-                bullets.splice(i, 1);
-                
-                if(level6.moneyLives <= 0) {
-                    state = 'over';
-                    menuChoice = 0;
+                    const atFurnace = Math.abs(player.x - furnace.x) < 80;
+                    const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
+            
+                    if((keys[' '] || keys['action']) && atFurnace) {
+                        if(player.holding) {
+                            player.holding = null;
+                            furnace.flameTime = Date.now();
+                            level5.docsCollected++;
+                    
+                            if(level5.docsCollected >= 10) {
+                                level = 6;
+                                timer = 180;
+                                state = 'levelCard';
+                                cardTimer = 0;
+                                initLevel(6);
+                                keys[' '] = false;
+                                keys['action'] = false;
+                                return;
+                            }
+                        } else {
+                            furnace.flameTime = Date.now();
+                            createExplosion(player.x, player.y);
+                            state = 'over';
+                            menuChoice = 0;
+                        }
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
+            
+                    if((keys[' '] || keys['action']) && atDoor) {
+                        level5.room = 'hallway';
+                        player.x = 620;
+                        player.y = 380;
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
                 }
-                continue;
-            }
-            
-            if(!bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
-                ceo.health--;
-                ceo.blinkTimer = 10;
-
-                // Spread cash sacks in a circle pattern for visibility
-                const sackIndex = 6 - ceo.health;
-                const angle = (sackIndex / 6) * Math.PI * 2;
-                const radius = 40;
-                level6.cashSacks.push({
-                    x: ceo.x + Math.cos(angle) * radius,
-                    y: ceo.y + Math.sin(angle) * radius,
-                    claimed: false
-                });
-
-                bullets.splice(i, 1);
-
-                if(ceo.health <= 0) {
-                    ceo.state = 'dead';
-                    level6.ceoDefeated = true;
-                } else if(ceo.state === 'admiring') {
-                    ceo.state = 'hunting';
+        
+                // Horizontal movement for pipe room, hallway, and furnace room
+                if(level5.room === 'pipeRoom' || level5.room === 'hallway' || level5.room === 'furnaceRoom') {
+                    player.y = 380;
+                    const prevX = player.x;
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        player.x = Math.max(60, player.x - 5);
+                        if(player.x !== prevX) {
+                            player.facing = 'left';
+                            player.lastMove = Date.now();
+                        }
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        player.x = Math.min(640, player.x + 5);
+                        if(player.x !== prevX) {
+                            player.facing = 'right';
+                            player.lastMove = Date.now();
+                        }
+                    }
+                    if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
+                if(Date.now() - player.lastMove > 200) {
+                    player.facing = 'forward';
                 }
-                continue;
             }
         }
         
         return;
     }
+    
+    // LEVEL 6 LOGIC
+    if(level === 6) {
+            // CEO AI logic
+            if(ceo.state === 'offering') {
+                // First walk to middle rug if not there yet
+                if(ceo.walkTarget) {
+                    const dx = ceo.walkTarget.x - ceo.x;
+                    const dy = ceo.walkTarget.y - ceo.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if(dist > 5) {
+                        ceo.x += (dx / dist) * 2;
+                        ceo.y += (dy / dist) * 2;
+                        ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
+                    } else {
+                        ceo.walkTarget = null;
+                        ceo.facing = 'forward';
+                    }
+                } else {
+                    // Once at rug, follow player horizontally
+                    if(Math.abs(ceo.x - player.x) > 60) {
+                        const direction = ceo.x < player.x ? 1 : -1;
+                        ceo.x += direction * 1.5;
+                        ceo.facing = direction > 0 ? 'right' : 'left';
+                    } else {
+                        ceo.facing = 'forward';
+                    }
+                }
+            }
+        
+            if(ceo.state === 'admiring') {
+                const mirrorX = 150;
+                const mirrorTargetX = mirrorX + 45;
+                const mirrorTargetY = 160;
+
+                const dx = mirrorTargetX - ceo.x;
+                const dy = mirrorTargetY - ceo.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if(dist > 5) {
+                    ceo.x += (dx / dist) * 2;
+                    ceo.y += (dy / dist) * 2;
+                    ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
+                } else {
+                    ceo.x = mirrorTargetX;
+                    ceo.y = mirrorTargetY;
+                    ceo.facing = 'forward';
+                }
+            }
+        
+            if(ceo.state === 'hunting') {
+                ceo.moveTimer++;
+            
+                const dx = player.x - ceo.x;
+                const dy = player.y - ceo.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+            
+                if(dist > 10) {
+                    ceo.x += (dx / dist) * 2;
+                    ceo.y += (dy / dist) * 2;
+                
+                    if(Math.abs(dx) > Math.abs(dy)) {
+                        ceo.facing = dx > 0 ? 'right' : 'left';
+                    } else {
+                        ceo.facing = 'forward';
+                    }
+                }
+            
+                ceo.shootTimer++;
+                if(ceo.shootTimer > 120 && Date.now() - ceo.lastShot > 2000) {
+                    const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
+                    bullets.push({
+                        x: ceo.x,
+                        y: ceo.y,
+                        vx: Math.cos(angle) * 8,
+                        vy: Math.sin(angle) * 8,
+                        fromCEO: true
+                    });
+                    ceo.lastShot = Date.now();
+                    ceo.shootTimer = 0;
+                }
+            }
+        
+            if(ceo.blinkTimer > 0) {
+                ceo.blinkTimer--;
+            }
+
+            // Mullet Pro AI in pipe room
+            if(level6.room === 'pipeRoom') {
+                const computer = {x: 180, y: 350};
+
+                if(level6.mulletPro.state === 'walkingToComputer') {
+                    if(Math.abs(level6.mulletPro.x - computer.x) > 5) {
+                        const direction = level6.mulletPro.x < computer.x ? 1 : -1;
+                        level6.mulletPro.x += direction * 2;
+                        level6.mulletPro.facing = direction > 0 ? 'right' : 'left';
+                    } else {
+                        level6.mulletPro.hasDoc = true;
+                        level6.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
+                        level6.mulletPro.state = 'walkingToNPC';
+                        const targetNPC = level6.npcPipes.find(n => n.color.name === level6.mulletPro.docColor.name);
+                        level6.mulletPro.walkTarget = targetNPC;
+                        level6.mulletPro.facing = 'forward';
+                    }
+                }
+
+                if(level6.mulletPro.state === 'walkingToNPC' && level6.mulletPro.walkTarget) {
+                    if(Math.abs(level6.mulletPro.x - level6.mulletPro.walkTarget.x) > 5) {
+                        const direction = level6.mulletPro.x < level6.mulletPro.walkTarget.x ? 1 : -1;
+                        level6.mulletPro.x += direction * 2;
+                        level6.mulletPro.facing = direction > 0 ? 'right' : 'left';
+                    } else {
+                        const targetNPC = level6.mulletPro.walkTarget;
+
+                        // Show doc for a moment, then go back (but player can't take it)
+                        level6.mulletPro.giveTimer = 60;
+                        level6.mulletPro.state = 'offering';
+                        level6.mulletPro.facing = 'forward';
+                    }
+                }
+
+                if(level6.mulletPro.state === 'offering') {
+                    level6.mulletPro.giveTimer--;
+                    if(level6.mulletPro.giveTimer <= 0) {
+                        // Doc goes back, NPC is fixed
+                        const targetNPC = level6.mulletPro.walkTarget;
+                        if(targetNPC) {
+                            targetNPC.needsDoc = false;
+                            targetNPC.crackStartTime = null;
+                            targetNPC.state = 'happy';
+                        }
+
+                        level6.mulletPro.hasDoc = false;
+                        level6.mulletPro.docColor = null;
+                        level6.mulletPro.state = 'walkingToComputer';
+                        level6.mulletPro.walkTarget = null;
+                        level6.mulletPro.facing = 'forward';
+                    }
+                }
+            }
+
+            // Pipe NPC crack spawning in pipe room
+            if(level6.room === 'pipeRoom') {
+                for(let npc of level6.npcPipes) {
+                    if(!npc.needsDoc && Math.random() < 0.0005) {
+                        npc.needsDoc = true;
+                        npc.crackStartTime = Date.now();
+                        npc.state = 'stressed';
+                    }
+
+                    if(npc.needsDoc && npc.crackStartTime && Date.now() - npc.crackStartTime > 3000 && npc.state !== 'cracked') {
+                        npc.state = 'cracked';
+                    }
+                }
+            }
+
+            // NPC exit sequence
+            if(level6.npcExitSequence) {
+                level6.npcExitTimer++;
+            
+                for(let npc of level6.exitingNPCs) {
+                    if(!npc.hasSack && !npc.exiting) {
+                        let nearestSack = null;
+                        let nearestDist = Infinity;
+                    
+                        for(let sack of level6.cashSacks) {
+                            if(!sack.claimed) {
+                                const dist = Math.sqrt((npc.x - sack.x)**2 + (npc.y - sack.y)**2);
+                                if(dist < nearestDist) {
+                                    nearestDist = dist;
+                                    nearestSack = sack;
+                                }
+                            }
+                        }
+                    
+                        if(nearestSack) {
+                            const dx = nearestSack.x - npc.x;
+                            const dy = nearestSack.y - npc.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                        
+                            if(dist > 5) {
+                                npc.x += (dx / dist) * 2;
+                                npc.y += (dy / dist) * 2;
+                                npc.facing = dx > 0 ? 'right' : dx < 0 ? 'left' : 'forward';
+                            } else {
+                                npc.hasSack = true;
+                                nearestSack.claimed = true;
+                            }
+                        }
+                    } else if(npc.hasSack && !npc.exiting) {
+                        const exitY = 460;
+                        const dy = exitY - npc.y;
+                    
+                        if(Math.abs(dy) > 5) {
+                            npc.y += dy > 0 ? 2 : -2;
+                            npc.facing = 'forward';
+                        } else {
+                            npc.exiting = true;
+                        }
+                    }
+                }
+            
+                const allExited = level6.exitingNPCs.every(npc => npc.exiting);
+                if(allExited && level6.npcExitTimer > 180) {
+                    const unclaimedSack = level6.cashSacks.find(s => !s.claimed);
+                    if(unclaimedSack && !level6.endingTriggered) {
+                        if(Math.abs(player.x - unclaimedSack.x) < 30 && Math.abs(player.y - unclaimedSack.y) < 30) {
+                            if(keys[' '] || keys['action']) {
+                                level6.endingTriggered = true;
+                                state = 'victory';
+                                menuChoice = 0;
+                                keys[' '] = false;
+                                keys['action'] = false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Movement for pipeRoom and entryway
+            if(level6.room === 'pipeRoom' || level6.room === 'entryway') {
+                const prevX = player.x;
+                if(keys['ArrowLeft'] || keys['left']) {
+                    player.x = Math.max(20, player.x - 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'left';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(keys['ArrowRight'] || keys['right']) {
+                    player.x = Math.min(680, player.x + 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'right';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
+                    if(Date.now() - player.lastMove > 200) {
+                        player.facing = 'forward';
+                    }
+                }
+            }
+
+            // Room transitions
+            if(level6.room === 'pipeRoom') {
+                player.y = 380;
+
+                if(player.x < 40) {
+                    level6.room = 'entryway';
+                    player.x = 640;
+                    player.y = 400;
+                }
+            } 
+        
+            else if(level6.room === 'entryway') {
+                player.y = 400;
+            
+                if(player.x > 660) {
+                    level6.room = 'pipeRoom';
+                    player.x = 80;
+                    player.y = 380;
+                }
+            
+                if(Math.abs(player.x - 350) < 100 && (keys[' '] || keys['action'])) {
+                    level6.room = 'ceoOffice';
+                    player.x = 350;
+                    player.y = 420;
+                    keys[' '] = false;
+                    keys['action'] = false;
+
+                    // Set CEO to walk to middle rug on entry
+                    ceo.walkTarget = {x: 350, y: 340};
+                }
+            } 
+        
+            else if(level6.room === 'ceoOffice') {
+                // Handle safe UI
+                if(level6.safeUI) {
+                    // Item selection mode (after unlock)
+                    if(level6.selectingItem) {
+                        if(keys['ArrowLeft'] || keys['left']) {
+                            level6.itemSelection = Math.max(0, level6.itemSelection - 1);
+                            keys['ArrowLeft'] = false;
+                            keys['left'] = false;
+                        }
+                        if(keys['ArrowRight'] || keys['right']) {
+                            level6.itemSelection = Math.min(2, level6.itemSelection + 1);
+                            keys['ArrowRight'] = false;
+                            keys['right'] = false;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false;
+                            keys['action'] = false;
+
+                            if(level6.itemSelection === 0 && !level6.hasRevolver) {
+                                // Take revolver
+                                level6.hasRevolver = true;
+                                level6.revolverAmmo = 6;
+                                level6.selectingItem = false;
+                                level6.safeUI = false;
+                            } else if(level6.itemSelection === 1 && level6.moneyLives < 3) {
+                                // Take $ life
+                                level6.moneyLives++;
+                                updateLives();
+                                level6.selectingItem = false;
+                                level6.safeUI = false;
+                            } else if(level6.itemSelection === 2) {
+                                // Take bullets (unlimited, adds 6 bullets)
+                                level6.revolverAmmo = Math.min(level6.revolverAmmo + 6, 99);
+                                level6.selectingItem = false;
+                                level6.safeUI = false;
+                            }
+                        }
+                        return;
+                    }
+
+                    // Code entry mode
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        const col = level6.selectedButton % 2;
+                        if(col > 0) {
+                            level6.selectedButton--;
+                        }
+                        keys['ArrowLeft'] = false;
+                        keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        const col = level6.selectedButton % 2;
+                        if(col < 1) {
+                            level6.selectedButton++;
+                        }
+                        keys['ArrowRight'] = false;
+                        keys['right'] = false;
+                    }
+                    if(keys['ArrowUp'] || keys['up']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        if(row > 0) {
+                            level6.selectedButton -= 2;
+                        }
+                        keys['ArrowUp'] = false;
+                        keys['up'] = false;
+                    }
+                    if(keys['ArrowDown'] || keys['down']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        if(row < 1) {
+                            level6.selectedButton += 2;
+                        }
+                        keys['ArrowDown'] = false;
+                        keys['down'] = false;
+                    }
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+
+                        if(level6.codeInput.length < 4) {
+                            const selectedColor = COLORS[level6.selectedButton].name;
+                            level6.codeInput.push(selectedColor);
+
+                            if(level6.codeInput.length === 4) {
+                                const correct = level6.codeInput.every((color, i) => color === SAFE_CODE[i]);
+                                if(correct) {
+                                    setTimeout(() => {
+                                        level6.safeUnlocked = true;
+                                        level6.safeUI = false;
+                                        level6.codeInput = [];
+                                        level6.selectedButton = 0;
+                                    }, 1000);
+                                } else {
+                                    setTimeout(() => {
+                                        level6.codeInput = [];
+                                        level6.selectedButton = 0;
+                                    }, 1000);
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
+            
+                // Handle computer UI
+                if(level6.computerUI) {
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    
+                        const choice = 'deliver';
+                    
+                        if(choice === 'destruct') {
+                            state = 'over';
+                            menuChoice = 0;
+                        } else {
+                            level6.npcExitSequence = true;
+                            level6.computerUI = false;
+                        
+                            level6.exitingNPCs = [
+                                {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 330, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 390, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, exiting: false, isMulletPro: true}
+                            ];
+                        }
+                    }
+                    return;
+                }
+            
+                // CEO office interactions
+                if(keys[' '] || keys['action']) {
+                    keys[' '] = false;
+                    keys['action'] = false;
+                
+                    const safeX = 350;
+                    const safeY = 130;
+                
+                    if(ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
+                        level6.moneyLives++;
+                        updateLives();
+                        ceo.hasDrink = true;
+                        ceo.state = 'admiring';
+                    }
+                
+                    // Open safe code entry UI if locked
+                    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
+                        level6.safeUI = true;
+                        level6.selectedButton = 0;
+                    }
+
+                    // Open safe item selection UI if unlocked (always accessible for bullets)
+                    if(level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
+                        level6.safeUI = true;
+                        level6.selectingItem = true;
+                        level6.itemSelection = 0;
+                    }
+                
+                    const monX = 375;
+                    const monY = 195;
+                    if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 40 && Math.abs(player.y - (monY + 15)) < 40) {
+                        level6.computerUI = true;
+                    }
+                
+                    if(level6.hasRevolver && level6.revolverAmmo > 0) {
+                        const direction = player.facing === 'left' ? -1 : player.facing === 'right' ? 1 : 0;
+                        const vertDir = player.facing === 'forward' ? -1 : 0;
+                    
+                        if(direction !== 0 || vertDir !== 0) {
+                            bullets.push({
+                                x: player.x,
+                                y: player.y - 25,
+                                vx: direction * 12,
+                                vy: vertDir * 12,
+                                fromCEO: false
+                            });
+                            level6.revolverAmmo--;
+                        
+                            if(ceo.state !== 'dead' && Math.abs(bullets[bullets.length-1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length-1].y - ceo.y) < 50) {
+                                ceo.health--;
+                                ceo.blinkTimer = 10;
+
+                                // Spread cash sacks in a circle pattern for visibility
+                                const sackIndex = 6 - ceo.health;
+                                const angle = (sackIndex / 6) * Math.PI * 2;
+                                const radius = 40;
+                                level6.cashSacks.push({
+                                    x: ceo.x + Math.cos(angle) * radius,
+                                    y: ceo.y + Math.sin(angle) * radius,
+                                    claimed: false
+                                });
+
+                                if(ceo.health <= 0) {
+                                    ceo.state = 'dead';
+                                    level6.ceoDefeated = true;
+                                } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
+                                    ceo.state = 'hunting';
+                                }
+                            }
+                        }
+                    }
+                }
+            
+                // Full 2D movement in CEO office
+                const prevX = player.x;
+                const prevY = player.y;
+            
+                if(keys['ArrowLeft'] || keys['left']) {
+                    player.x = Math.max(100, player.x - 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'left';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(keys['ArrowRight'] || keys['right']) {
+                    player.x = Math.min(600, player.x + 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'right';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(keys['ArrowUp'] || keys['up']) {
+                    player.y = Math.max(100, player.y - 5);
+                    if(player.y !== prevY) player.lastMove = Date.now();
+                }
+                if(keys['ArrowDown'] || keys['down']) {
+                    player.y = Math.min(450, player.y + 5);
+                    if(player.y !== prevY) player.lastMove = Date.now();
+                }
+            
+                // Collision with desk - more precise, only desk surface
+                const deskX = 350;
+                const deskY = 180;
+                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 5 && player.y < deskY + 65) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            
+                // Collision with trophy cabinet
+                const cabinetX = 550;
+                const cabinetY = 100;
+                if(player.x > cabinetX - 20 && player.x < cabinetX + 100 && player.y < cabinetY + 120) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            
+                // Collision with mirror
+                const mirrorX = 150;
+                const mirrorY = 100;
+                if(player.x > mirrorX - 20 && player.x < mirrorX + 110 && player.y < mirrorY + 130) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            
+                if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
+                   !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
+                    if(Date.now() - player.lastMove > 200) {
+                        player.facing = 'forward';
+                    }
+                }
+            }
+        
+            // Bullet collision
+            for(let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].vx;
+                bullets[i].y += bullets[i].vy;
+            
+                if(bullets[i].x < 0 || bullets[i].x > 700 || bullets[i].y < 0 || bullets[i].y > 500) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+            
+                if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
+                    level6.moneyLives--;
+                    updateLives();
+                    bullets.splice(i, 1);
+                
+                    if(level6.moneyLives <= 0) {
+                        state = 'over';
+                        menuChoice = 0;
+                    }
+                    continue;
+                }
+            
+                if(!bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
+                    ceo.health--;
+                    ceo.blinkTimer = 10;
+
+                    // Spread cash sacks in a circle pattern for visibility
+                    const sackIndex = 6 - ceo.health;
+                    const angle = (sackIndex / 6) * Math.PI * 2;
+                    const radius = 40;
+                    level6.cashSacks.push({
+                        x: ceo.x + Math.cos(angle) * radius,
+                        y: ceo.y + Math.sin(angle) * radius,
+                        claimed: false
+                    });
+
+                    bullets.splice(i, 1);
+
+                    if(ceo.health <= 0) {
+                        ceo.state = 'dead';
+                        level6.ceoDefeated = true;
+                    } else if(ceo.state === 'admiring') {
+                        ceo.state = 'hunting';
+                    }
+                    continue;
+                }
+            }
+        
+            return;
+        }
 
     
     // LEVELS 1-4 LOGIC
