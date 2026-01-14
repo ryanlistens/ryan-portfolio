@@ -1,0 +1,5088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mullet Pro</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body {
+            background: #f5f2ec;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            padding: 20px;
+        }
+        #game-frame {
+            background: #4d443d;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            max-width: 750px;
+            width: 100%;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: #2b2b2b;
+            color: #f5f2ec;
+            font-size: 18px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .heart { color: #e74c3c; font-size: 20px; }
+        .money { color: #27ae60; font-size: 20px; }
+        canvas {
+            display: block;
+            border: 4px solid #2b2b2b;
+            border-radius: 6px;
+            width: 100%;
+            height: auto;
+            background: #e8e6dc;
+        }
+        #controls-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #fffdf6;
+            border-radius: 8px;
+            border: 2px solid #e8e6dc;
+        }
+        #controls-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 30px;
+            align-items: center;
+            justify-items: center;
+        }
+        #dpad-container {
+            display: grid;
+            grid-template: repeat(3, 65px) / repeat(3, 65px);
+            gap: 8px;
+        }
+        .control-btn {
+            background: linear-gradient(145deg, #005f99, #004a7c);
+            border: 3px solid #2b2b2b;
+            border-radius: 8px;
+            color: #f5f2ec;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+            transition: all 0.1s;
+        }
+        .control-btn:active {
+            background: linear-gradient(145deg, #004a7c, #003d66);
+            transform: translateY(2px);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        #action-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #4d443d, #3a342f);
+            border: 5px solid #2b2b2b;
+            color: #f5f2ec;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+        }
+        #action-btn:active {
+            background: linear-gradient(145deg, #3a342f, #2b2520);
+            transform: scale(0.95);
+        }
+        .empty { background: none; border: none; }
+        @media (max-width: 600px) {
+            #controls-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-frame">
+        <div id="hud">
+            <span>LEVEL <span id="level">1</span></span>
+            <span>SCORE <span id="score">0</span></span>
+            <span><span id="timer">60</span>s</span>
+            <span id="lives"></span>
+        </div>
+        <canvas id="game" width="700" height="500"></canvas>
+        <div id="controls-section">
+            <div id="controls-grid">
+                <div id="dpad-container">
+                    <div class="empty"></div>
+                    <button class="control-btn" data-dir="up">▲</button>
+                    <div class="empty"></div>
+                    <button class="control-btn" data-dir="left">◄</button>
+                    <div class="empty"></div>
+                    <button class="control-btn" data-dir="right">►</button>
+                    <div class="empty"></div>
+                    <button class="control-btn" data-dir="down">▼</button>
+                    <div class="empty"></div>
+                </div>
+                <button id="action-btn">ACTION</button>
+            </div>
+        </div>
+    </div>
+<script>
+
+
+// SECTION 2: Canvas Setup and Constants
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// Load photorealistic images
+const portraitImg = new Image();
+portraitImg.src = 'images/14065C15-1E0F-4E93-96B0-A2B4D680271C.png';
+
+const letterImg = new Image();
+letterImg.src = 'images/604E8268-5DFB-46F1-8E86-A0B6EC8B64E6.png';
+
+const COLORS = [
+    {name:'RED', hex:'#e74c3c'},
+    {name:'GREEN', hex:'#27ae60'},
+    {name:'BLUE', hex:'#005f99'},
+    {name:'YELLOW', hex:'#f39c12'}
+];
+
+const OFFICE_EMAILS = {
+    RED: {
+        from: 'RED',
+        to: 'BLUE',
+        subject: 'Meeting Request',
+        body: 'Dear B.,\n\nI need to speak with you urgently\nabout a confidential matter. Can we\nmeet in the parking lot after hours?\n\nThis is important.\n\n—R.'
+    },
+    GREEN: {
+        from: 'GREEN',
+        to: 'YELLOW',
+        subject: 'Coffee?',
+        body: 'Dear Y.,\n\nWould you like to grab coffee after\nwork today? I know a great place\ndowntown.\n\nThinking of you.\n\n—G.'
+    },
+    BLUE: {
+        from: 'BLUE',
+        to: 'GREEN',
+        subject: 'Homesick',
+        body: 'Dear G.,\n\nI miss home so much. This job is\nwearing me down. Do you ever feel\nlike leaving it all behind?\n\nWish I could see the ocean again.\n\n—B.'
+    },
+    YELLOW: {
+        from: 'YELLOW',
+        to: 'GREEN',
+        subject: 'Re: Coffee?',
+        body: 'Dear G.,\n\nI would love that! You always know\nhow to make my day better.\n\nSee you at 5?\n\n—Y.'
+    }
+};
+
+
+const SAFE_CODE = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
+
+
+// SECTION 3: Game State Variables
+let state = 'menu';
+let level = 1;
+let score = 0;
+let timer = 60;
+let lives = 3;
+let frame = 0;
+let cardTimer = 0;
+let menuChoice = 0;
+
+let player = {
+    x: 350,
+    y: 380,
+    holding: null,
+    facing: 'forward',
+    lastMove: 0
+};
+
+let computer = {x: 180, y: 350};
+let printer3d = {x: 50, y: 360};
+
+let ui = {
+    show: false,
+    selectedColor: 0,
+    confirming: false,
+    gunUI: false,
+    gunChoice: 0
+};
+
+let npcs = [];
+let cracks = [];
+let keys = {};
+let explosions = [];
+let bullets = [];
+let muzzleFlashes = [];
+
+let boss = {
+    active: false,
+    x: 750,
+    y: 344,
+    needsColor: null,
+    walking: false,
+    spawnTime: 0,
+    angry: false,
+    facing: 'left',
+    bossKills: 0
+};
+
+let ceo = {
+    x: 350,
+    y: 200,
+    facing: 'forward',
+    state: 'offering',
+    health: 6,
+    shootTimer: 0,
+    moveTimer: 0,
+    blinkTimer: 0,
+    lastShot: 0,
+    hasDrink: true,
+    walkTarget: null
+};
+
+let level6 = {
+    room: 'pipeRoom',
+    safeUnlocked: false,
+    safeUI: false,
+    codeInput: [],
+    selectedButton: 0,
+    itemSelection: 0,
+    selectingItem: false,
+    hasRevolver: false,
+    revolverAmmo: 6,
+    cashSacks: [],
+    moneyLives: 0,
+    ceoDefeated: false,
+    computerUI: false,
+    endingTriggered: false,
+    npcExitSequence: false,
+    npcExitTimer: 0,
+    exitingNPCs: [],
+    npcPipes: []
+};
+
+let ghostGun = {
+    hasGun: false,
+    ammo: 0,
+    printing: false,
+    printProgress: 0,
+    printingHeart: false
+};
+
+let fadeAlpha = 0;
+let fadeIn = false;
+let fadeOut = false;
+let resetting = false;
+
+
+let level5 = {
+    room: 'furnaceRoom',
+    currentOffice: null,
+    viewingEmail: false,
+    viewingLetter: false,
+    viewingPortrait: false,
+    emailScrollOffset: 0,
+    mulletPro: {
+        x: 180,
+        y: 380,
+        hasDoc: false,
+        docColor: null,
+        giveTimer: 0,
+        walkTarget: null,
+        state: 'walkingToComputer',
+        facing: 'left'
+    },
+    pipeRoom: {
+        rightDoor: {x: 670, y: 340}
+    },
+    hallway: {
+        leftDoor: {x: 30, y: 340},
+        rightDoor: {x: 670, y: 340},
+        offices: [
+            {x: 150, y: 280, color: COLORS[0], name: 'RED'},
+            {x: 280, y: 280, color: COLORS[1], name: 'GREEN'},
+            {x: 420, y: 280, color: COLORS[2], name: 'BLUE'},
+            {x: 550, y: 280, color: COLORS[3], name: 'YELLOW'}
+        ],
+        trafficTimer: 0
+    },
+    furnaceRoom: {
+        leftDoor: {x: 30, y: 340},
+        furnace: {x: 350, y: 280, flameTime: 0, glowPhase: 0}
+    },
+    computer: {x: 180, y: 350},
+    docsCollected: 0,
+    npcPipes: []
+};
+
+
+
+// SECTION 4: Initialization Functions
+function updateLives() {
+    if(level === 5) {
+        document.getElementById('lives').innerHTML = '<span class="money">$$$</span>';
+        return;
+    }
+    if(level === 6) {
+        let h = '';
+        for(let i = 0; i < level6.moneyLives; i++) {
+            h += '<span class="money">$</span>';
+        }
+        document.getElementById('lives').innerHTML = h;
+        return;
+    }
+    let h = '';
+    for(let i = 0; i < lives; i++) {
+        h += '<span class="heart">♥</span>';
+    }
+    for(let i = lives; i < 3; i++) {
+        h += '<span class="heart" style="opacity:0.3">♥</span>';
+    }
+    document.getElementById('lives').innerHTML = h;
+}
+
+function initLevel(lv) {
+    level = lv;
+    npcs = [];
+    cracks = [];
+    explosions = [];
+    bullets = [];
+    muzzleFlashes = [];
+    player.holding = null;
+    player.facing = 'forward';
+    player.x = 350;
+    player.y = 380;
+    ui = {show: false, selectedColor: 0, confirming: false, gunUI: false, gunChoice: 0};
+    
+    boss.active = false;
+    boss.x = 750;
+    boss.y = 344;
+    boss.needsColor = null;
+    boss.walking = false;
+    boss.spawnTime = 0;
+    boss.angry = false;
+    boss.facing = 'left';
+    
+    resetting = false;
+    fadeAlpha = 0;
+    fadeIn = false;
+    fadeOut = false;
+    
+    if(level === 5) {
+    player.x = 80;
+    player.y = 380;
+    level5.room = 'furnaceRoom';
+    level5.currentOffice = null;
+    level5.viewingEmail = false;
+    level5.viewingLetter = false;
+    level5.emailScrollOffset = 0;
+    level5.mulletPro.hasDoc = false;
+    level5.mulletPro.docColor = null;
+    level5.mulletPro.giveTimer = 0;
+    level5.mulletPro.state = 'walkingToComputer';
+    level5.mulletPro.x = 180;
+    level5.mulletPro.y = 380;
+    level5.mulletPro.walkTarget = null;
+    level5.mulletPro.facing = 'left';
+    level5.furnaceRoom.furnace.flameTime = 0;
+    level5.furnaceRoom.furnace.glowPhase = 0;
+    level5.hallway.trafficTimer = 0;
+    level5.docsCollected = 0;
+    level5.npcPipes = [
+        {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+        {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+        {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+        {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+    ];
+    updateLives();
+    return;
+}
+
+    
+    if(level === 6) {
+        player.x = 620;
+        player.y = 380;
+        level6.room = 'pipeRoom';
+        level6.safeUnlocked = false;
+        level6.safeUI = false;
+        level6.codeInput = [];
+        level6.selectedButton = 0;
+        level6.itemSelection = 0;
+        level6.selectingItem = false;
+        level6.hasRevolver = false;
+        level6.revolverAmmo = 6;
+        level6.cashSacks = [];
+        level6.moneyLives = 3;
+        level6.ceoDefeated = false;
+        level6.computerUI = false;
+        level6.endingTriggered = false;
+        level6.npcExitSequence = false;
+        level6.npcExitTimer = 0;
+        level6.exitingNPCs = [];
+        level6.npcPipes = [
+            {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+        ];
+
+        ceo.x = 350;
+        ceo.y = 200;
+        ceo.facing = 'forward';
+        ceo.state = 'offering';
+        ceo.health = 6;
+        ceo.shootTimer = 0;
+        ceo.moveTimer = 0;
+        ceo.blinkTimer = 0;
+        ceo.lastShot = 0;
+        ceo.hasDrink = true;
+        ceo.walkTarget = null;
+
+        updateLives();
+        return;
+    }
+    
+    if(level === 1) {
+        npcs.push({x:280, y:340, color:COLORS[0], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:390, y:340, color:COLORS[1], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:500, y:340, color:COLORS[2], state:'happy', needsDoc:false, fixAnim:0});
+    } else {
+        npcs.push({x:260, y:340, color:COLORS[0], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:360, y:340, color:COLORS[1], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:460, y:340, color:COLORS[2], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:560, y:340, color:COLORS[3], state:'happy', needsDoc:false, fixAnim:0});
+    }
+    
+    if(level === 3) {
+        setTimeout(() => spawnBoss(), 5000);
+    }
+    if(level === 4) {
+        setTimeout(() => spawnBoss(), 3000);
+    }
+}
+
+function startGame() {
+    state = 'levelCard';
+    level = 1;
+    score = 0;
+    timer = 60;
+    lives = 3;
+    cardTimer = 0;
+    boss.bossKills = 0;
+    ghostGun = {hasGun: false, ammo: 0, printing: false, printProgress: 0, printingHeart: false};
+    initLevel(1);
+    updateLives();
+}
+
+
+// SECTION 5: Spawn and Utility Functions
+function spawnCracks() {
+    if(state !== 'playing' || resetting || level === 5 || level === 6) return;
+    
+    const delay = level === 1 ? 5000 : level === 4 ? 3000 : 4000;
+    
+    setTimeout(() => {
+        if(state === 'playing' && !resetting && level !== 5 && level !== 6) {
+            const available = npcs.filter(n => n.state === 'happy');
+            if(available.length > 0) {
+                const npc = available[Math.floor(Math.random() * available.length)];
+                cracks.push({npc: npc, time: Date.now(), max: 12000});
+                npc.state = 'stressed';
+                npc.needsDoc = true;
+            }
+        }
+        spawnCracks();
+    }, delay);
+}
+
+function spawnBoss() {
+    if((level !== 3 && level !== 4) || state !== 'playing' || resetting) return;
+    if(!boss.active) {
+        boss.active = true;
+        boss.x = 750;
+        boss.y = 344;
+        boss.needsColor = COLORS[Math.floor(Math.random() * 4)].name;
+        boss.walking = true;
+        boss.spawnTime = 0;
+        boss.angry = false;
+        boss.facing = 'left';
+        
+        const nextSpawn = level === 4 ? 12000 : 18000;
+        setTimeout(() => spawnBoss(), nextSpawn);
+    }
+}
+
+function createExplosion(x, y) {
+    explosions.push({x, y, radius: 0, maxRadius: 100, alpha: 1, particles: []});
+    for(let i = 0; i < 20; i++) {
+        explosions[explosions.length - 1].particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8 - 2,
+            life: 1
+        });
+    }
+}
+
+function createMuzzleFlash(x, y, facing) {
+    muzzleFlashes.push({x, y, facing, life: 10});
+}
+
+function checkPromotion() {
+    if(boss.bossKills >= 3) {
+        state = 'promotion';
+        menuChoice = 0;
+    }
+}
+
+
+// SECTION 6: Character Drawing Functions
+function drawHeldDoc(x, y, colorName) {
+    const col = COLORS.find(c => c.name === colorName);
+    ctx.fillStyle = col.hex;
+    ctx.fillRect(x - 20, y - 70, 40, 35);
+    
+    ctx.strokeStyle = '#2b2b2b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 20, y - 70, 40, 35);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(col.name, x, y - 50);
+}
+
+function drawMulletPro(x, y, facing) {
+    const s = 2;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 32, 10, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    if(facing === 'left') {
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(x - 5*s, y - 16*s, 12*s, 4*s);
+        ctx.fillRect(x - 6*s, y - 12*s, 14*s, 10*s);
+        
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#600018';
+        ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 9*s, y, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+        
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
+        ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#a4c2db';
+        const legL = Math.sin(frame * 0.15) * 2;
+        ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 8*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 5*s, y + 16*s + legL, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 16*s - legL, 4*s, 2*s);
+        
+    } else if(facing === 'right') {
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(x - 7*s, y - 16*s, 12*s, 4*s);
+        ctx.fillRect(x - 8*s, y - 12*s, 14*s, 10*s);
+        
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x, y - 5*s, 3*s, s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#600018';
+        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 9*s, y, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+        
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
+        ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#a4c2db';
+        const legR = Math.sin(frame * 0.15) * 2;
+        ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 8*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 5*s, y + 16*s + legR, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 16*s - legR, 4*s, 2*s);
+        
+    } else {
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
+        ctx.fillRect(x - 8*s, y - 12*s, 16*s, 10*s);
+        
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#600018';
+        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 9*s, y, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+        
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
+        ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#a4c2db';
+        const leg = Math.sin(frame * 0.15) * 2;
+        ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 8*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 5*s, y + 16*s + leg, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 16*s - leg, 4*s, 2*s);
+    }
+}
+
+function drawBaldManager(x, y, facing) {
+    const s = 2;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 32, 10, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    const skinColor = '#f5c89a';
+    
+    if(facing === 'left') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 9*s, y, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
+        ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#000';
+        const legL = Math.sin(frame * 0.15) * 2;
+        ctx.fillRect(x - 5*s, y + 20*s + legL, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 20*s - legL, 4*s, 2*s);
+        
+    } else if(facing === 'right') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x, y - 5*s, 3*s, s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 9*s, y, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
+        ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#000';
+        const legR = Math.sin(frame * 0.15) * 2;
+        ctx.fillRect(x - 5*s, y + 20*s + legR, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 20*s - legR, 4*s, 2*s);
+        
+    } else {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
+        ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 9*s, y, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
+        ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#000';
+        const leg = Math.sin(frame * 0.15) * 2;
+        ctx.fillRect(x - 5*s, y + 20*s + leg, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 20*s - leg, 4*s, 2*s);
+    }
+}
+
+
+// SECTION 7: Boss and NPC Drawing Functions
+function drawBoss(x, y, facing) {
+    const s = 2;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    const skinColor = boss.angry ? '#cc0000' : '#f5c89a';
+    
+    if(facing === 'left') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        
+        ctx.fillStyle = '#000';
+        if(boss.angry) {
+            ctx.fillRect(x - 2*s, y - 10*s, 3*s, s);
+            ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+            ctx.fillRect(x - 2*s, y - 6*s, 2*s, s);
+        } else {
+            ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+            ctx.fillRect(x - 3*s, y - 6*s, 3*s, s);
+        }
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(x + 5*s, y + s, 2*s, 11*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+        
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        const legL = boss.walking ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + legL, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - legL, 4*s, 2*s);
+        
+    } else if(facing === 'right') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        
+        ctx.fillStyle = '#000';
+        if(boss.angry) {
+            ctx.fillRect(x - s, y - 10*s, 3*s, s);
+            ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+            ctx.fillRect(x, y - 6*s, 2*s, s);
+        } else {
+            ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+            ctx.fillRect(x, y - 6*s, 3*s, s);
+        }
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
+        
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+        
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+        
+        ctx.fillStyle = '#1a1a1a';
+        const legR = boss.walking ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + legR, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - legR, 4*s, 2*s);
+    }
+    
+    if(boss.needsColor) {
+        const col = COLORS.find(c => c.name === boss.needsColor);
+        const bubbleX = facing === 'right' ? x + 10 : x - 70;
+        
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(bubbleX, y - 55, 60, 30, 8);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(bubbleX + (facing === 'right' ? 5 : 55), y - 25);
+        ctx.lineTo(bubbleX + (facing === 'right' ? 0 : 60), y - 18);
+        ctx.lineTo(bubbleX + (facing === 'right' ? 15 : 45), y - 25);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(col.name, bubbleX + 30, y - 35);
+    }
+}
+
+function drawNPC(npc) {
+    const x = npc.x;
+    const y = npc.y;
+    const s = 2;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 32, 10, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = npc.color.hex;
+    ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
+    
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+    
+    ctx.fillStyle = '#000';
+    if(npc.state === 'stressed') {
+        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
+        ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
+        ctx.fillRect(x - s, y - 7*s, 2*s, s);
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 8*s, y - 9*s, 3*s, 4*s);
+    } else {
+        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 2*s);
+        ctx.fillRect(x + s, y - 10*s, 2*s, 2*s);
+        ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
+    }
+    
+    ctx.fillStyle = npc.color.hex;
+    ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+    ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+    ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
+    ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+    ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+    
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+    ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+    
+    if(npc.needsDoc) {
+        ctx.fillStyle = '#f39c12';
+        ctx.font = 'bold 28px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('!', x + 20, y - 24);
+    }
+    
+    if(npc.state === 'fixing') {
+        ctx.save();
+        ctx.translate(x, 220);
+        ctx.rotate(npc.fixAnim);
+        ctx.fillStyle = '#95a5a6';
+        ctx.fillRect(-10*s, -2*s, 20*s, 4*s);
+        ctx.fillStyle = '#7f8c8d';
+        ctx.fillRect(-9*s, -s, 18*s, 2*s);
+        ctx.restore();
+    }
+}
+
+
+// SECTION 8: Equipment and Object Drawing Functions
+function drawComputer(x, y) {
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(x - 30, y, 60, 35);
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 25, y - 30, 50, 30);
+    
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(x - 22, y - 27, 44, 24);
+    
+    if(ui.show || player.holding) {
+        const displayColor = player.holding ? 
+            COLORS.find(c => c.name === player.holding).hex : 
+            COLORS[ui.selectedColor].hex;
+        ctx.fillStyle = displayColor;
+    } else {
+        ctx.fillStyle = '#004a7c';
+    }
+    ctx.fillRect(x - 20, y - 25, 40, 20);
+    
+    if(ui.show || player.holding) {
+        ctx.shadowColor = ui.show ? 
+            COLORS[ui.selectedColor].hex : 
+            COLORS.find(c => c.name === player.holding).hex;
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 20, y - 25, 40, 20);
+        ctx.shadowBlur = 0;
+    }
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x - 20, y - 25, 40, 5);
+    
+    ctx.fillStyle = '#444';
+    ctx.fillRect(x - 5, y, 10, 3);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 7px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('DOC PRINTER', x, y + 30);
+}
+
+function draw3DPrinter(x, y) {
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(x - 25, y - 35, 50, 50);
+    
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(x - 20, y - 30, 40, 40);
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 18, y - 28, 36, 36);
+    
+    ctx.fillStyle = 'rgba(100,150,200,0.3)';
+    ctx.fillRect(x - 16, y - 26, 32, 28);
+    
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 16, y - 26, 32, 28);
+    
+    if(ghostGun.printing) {
+        const progress = ghostGun.printProgress;
+        if(ghostGun.printingHeart) {
+            const heartSize = 20 * progress;
+            ctx.fillStyle = `rgba(231,76,60,${progress})`;
+            ctx.font = `bold ${heartSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('♥', x, y);
+        } else {
+            const gunH = 15 * progress;
+            ctx.fillStyle = 'rgba(160,160,160,' + progress + ')';
+            ctx.fillRect(x - 6, y + 2 - gunH, 12, gunH);
+            ctx.fillRect(x + 6, y - gunH / 2, 5, gunH * 0.4);
+        }
+    }
+    
+    ctx.fillStyle = '#00ff00';
+    ctx.fillRect(x - 20, y + 5, 4, 4);
+    
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(x - 25, y + 12, 50, 8);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 7px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('3D PRINTER', x, y + 18);
+}
+
+function drawGhostGun(x, y, facing) {
+    const offsetX = facing === 'left' ? -20 : facing === 'right' ? 20 : 0;
+    const gunX = x + offsetX;
+    const gunY = y - 25;
+    
+    if(facing === 'right') {
+        ctx.save();
+        ctx.translate(gunX, gunY);
+        ctx.scale(-1, 1);
+        ctx.translate(-gunX, -gunY);
+    }
+    
+    ctx.fillStyle = '#999';
+    ctx.fillRect(gunX - 10, gunY - 3, 18, 6);
+    ctx.fillRect(gunX + 8, gunY - 2, 6, 4);
+    
+    ctx.fillStyle = '#777';
+    ctx.fillRect(gunX - 10, gunY - 5, 5, 2);
+    
+    if(facing === 'right') {
+        ctx.restore();
+    }
+}
+
+function drawRevolver(x, y, facing) {
+    const offsetX = facing === 'left' ? -20 : facing === 'right' ? 20 : 0;
+    const gunX = x + offsetX;
+    const gunY = y - 25;
+
+    if(facing === 'right') {
+        ctx.save();
+        ctx.translate(gunX, gunY);
+        ctx.scale(-1, 1);
+        ctx.translate(-gunX, -gunY);
+    }
+
+    // Barrel
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(gunX - 14, gunY - 2, 18, 5);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(gunX - 14, gunY - 1, 18, 2);
+
+    // Barrel tip/sight
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(gunX - 15, gunY - 3, 2, 7);
+
+    // Cylinder
+    ctx.fillStyle = '#5a5a5a';
+    ctx.beginPath();
+    ctx.arc(gunX - 2, gunY + 1, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Cylinder chambers (6 visible dots)
+    ctx.fillStyle = '#2a2a2a';
+    for(let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const cx = gunX - 2 + Math.cos(angle) * 2.5;
+        const cy = gunY + 1 + Math.sin(angle) * 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Frame
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(gunX + 2, gunY - 2, 4, 8);
+
+    // Hammer
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(gunX + 3, gunY - 5, 2, 4);
+    ctx.fillRect(gunX + 2, gunY - 6, 4, 2);
+
+    // Wooden grip
+    ctx.fillStyle = '#8b4513';
+    ctx.beginPath();
+    ctx.moveTo(gunX + 5, gunY + 1);
+    ctx.lineTo(gunX + 5, gunY + 10);
+    ctx.lineTo(gunX + 2, gunY + 12);
+    ctx.lineTo(gunX + 2, gunY + 1);
+    ctx.closePath();
+    ctx.fill();
+
+    // Grip texture
+    ctx.fillStyle = '#654321';
+    for(let i = 0; i < 4; i++) {
+        ctx.fillRect(gunX + 3, gunY + 3 + i * 2, 2, 1);
+    }
+
+    // Trigger guard
+    ctx.strokeStyle = '#4a4a4a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(gunX + 1, gunY + 4, 3, 0, Math.PI);
+    ctx.stroke();
+
+    // Trigger
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(gunX, gunY + 3, 2, 3);
+
+    if(facing === 'right') {
+        ctx.restore();
+    }
+}
+
+function drawCashSack(x, y) {
+    // Cloth sack body - bulging bottom
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, 14, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sack texture/wrinkles
+    ctx.strokeStyle = '#1e8449';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y);
+    ctx.lineTo(x - 8, y + 10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 10, y + 2);
+    ctx.lineTo(x + 8, y + 12);
+    ctx.stroke();
+
+    // Tied rope at neck
+    ctx.fillStyle = '#8b6914';
+    ctx.fillRect(x - 8, y - 8, 16, 4);
+
+    // Rope knot
+    ctx.fillStyle = '#6b4904';
+    ctx.beginPath();
+    ctx.arc(x, y - 6, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rope ends
+    ctx.fillStyle = '#8b6914';
+    ctx.fillRect(x - 10, y - 10, 4, 6);
+    ctx.fillRect(x + 6, y - 10, 4, 6);
+
+    // Gathered cloth at neck
+    ctx.fillStyle = '#1e8449';
+    ctx.fillRect(x - 6, y - 6, 12, 6);
+
+    // Large $ symbol
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('$', x, y + 10);
+
+    // Outline for definition
+    ctx.strokeStyle = '#1e8449';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, 14, 16, 0, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+
+// SECTION 9: Level 5 Scene Drawing Functions (Part 1)
+function drawLevel5PipeRoom() {
+    ctx.fillStyle = '#e8e6dc';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+    
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(20, 30, 220, 110);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(25, 35, 210, 100);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(28, 38, 204, 94);
+    
+    for(let bx = 0; bx < 2; bx++) {
+        for(let by = 0; by < 2; by++) {
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8a8a8a';
+            ctx.beginPath();
+            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 130, 75);
+    
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(50, 82, 160, 1);
+    
+    ctx.fillStyle = '#d0d0d0';
+    ctx.font = '10px Arial';
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
+    
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(50, 105 + i * 5, 160, 3);
+    }
+    
+    ctx.fillStyle = '#c4bfad';
+    ctx.fillRect(0, 410, 700, 90);
+    
+    const comp = level5.computer;
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(comp.x - 30, comp.y, 60, 35);
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(comp.x - 25, comp.y - 30, 50, 30);
+    
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(comp.x - 22, comp.y - 27, 44, 24);
+    
+    if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
+        ctx.fillStyle = level5.mulletPro.docColor.hex;
+    } else {
+        ctx.fillStyle = '#004a7c';
+    }
+    ctx.fillRect(comp.x - 20, comp.y - 25, 40, 20);
+    
+    if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
+        ctx.shadowColor = level5.mulletPro.docColor.hex;
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(comp.x - 20, comp.y - 25, 40, 20);
+        ctx.shadowBlur = 0;
+    }
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(comp.x - 20, comp.y - 25, 40, 5);
+    
+    ctx.fillStyle = '#444';
+    ctx.fillRect(comp.x - 5, comp.y, 10, 3);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 7px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
+    
+    for(let npc of level5.npcPipes) {
+        const pipeY = 240;
+        
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(npc.x, 60);
+        ctx.lineTo(npc.x, pipeY);
+        ctx.stroke();
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(npc.x - 4, 60);
+        ctx.lineTo(npc.x - 4, pipeY);
+        ctx.stroke();
+        
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(npc.x, pipeY);
+        ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
+        ctx.lineTo(700, pipeY + 25);
+        ctx.stroke();
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(npc.x + 21, pipeY + 25);
+        ctx.lineTo(700, pipeY + 25);
+        ctx.stroke();
+        
+        if(npc.needsDoc && npc.crackStartTime) {
+            const crackTime = Date.now() - npc.crackStartTime;
+            const pct = Math.min(crackTime / 15000, 1);
+            ctx.fillStyle = npc.color.hex;
+            ctx.globalAlpha = 0.4 + pct * 0.6;
+            const sz = 18 + pct * 28;
+            for(let i = 0; i < 3; i++) {
+                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+            }
+            ctx.globalAlpha = 1;
+        }
+        
+        drawNPC(npc);
+    }
+    
+    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing);
+    
+    if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
+        drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
+    }
+}
+
+function drawLevel5Hallway() {
+    ctx.fillStyle = '#d4c8b0';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#a89b85';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        ctx.strokeStyle = '#988870';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * 35, 400, 35, 100);
+    }
+
+    // CEO portrait at top - photorealistic image with ornate frame
+    const portraitX = 350;
+    const portraitY = 30;
+    const portraitW = 120;
+    const portraitH = 140;
+
+    // Ornate golden frame
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(portraitX - portraitW/2 - 8, portraitY - 8, portraitW + 16, portraitH + 16);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(portraitX - portraitW/2 - 6, portraitY - 6, portraitW + 12, portraitH + 12);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(portraitX - portraitW/2 - 4, portraitY - 4, portraitW + 8, portraitH + 8);
+
+    // Draw photorealistic portrait image
+    if(portraitImg.complete && portraitImg.naturalWidth > 0) {
+        ctx.drawImage(portraitImg, portraitX - portraitW/2, portraitY, portraitW, portraitH);
+    } else {
+        // Fallback dark background if image not loaded
+        ctx.fillStyle = '#2b2520';
+        ctx.fillRect(portraitX - portraitW/2, portraitY, portraitW, portraitH);
+    }
+    
+    ctx.fillStyle = '#005f99';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PipeTech is your family.', 350, 215);
+    
+    const pipeY = 240;
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(0, pipeY);
+    ctx.lineTo(700, pipeY);
+    ctx.stroke();
+    
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, pipeY - 4);
+    ctx.lineTo(700, pipeY - 4);
+    ctx.stroke();
+    
+    // Decorative office doors at ground level (y=280) - game.html style
+    const officeDoorY = 280;
+    for(let office of level5.hallway.offices) {
+        // Office colored frame
+        ctx.fillStyle = office.color.hex;
+        ctx.fillRect(office.x - 35, officeDoorY, 70, 120);
+        ctx.fillStyle = office.color.hex;
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(office.x - 30, officeDoorY + 5, 60, 110);
+        ctx.globalAlpha = 1;
+
+        // Office door
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(office.x - 22, officeDoorY + 15, 44, 95);
+        ctx.fillStyle = '#4a3a1a';
+        ctx.fillRect(office.x - 18, officeDoorY + 20, 36, 85);
+
+        // Door knob
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(office.x + 10, officeDoorY + 62, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Color name above door
+        ctx.fillStyle = '#2b2b2b';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(office.name, office.x, officeDoorY - 8);
+    }
+
+    // Left working door (50x60 size, at y=340)
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(level5.hallway.leftDoor.x - 10, level5.hallway.leftDoor.y, 50, 60);
+    ctx.fillStyle = '#4a3a1a';
+    ctx.fillRect(level5.hallway.leftDoor.x - 5, level5.hallway.leftDoor.y + 5, 40, 50);
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(level5.hallway.leftDoor.x + 30, level5.hallway.leftDoor.y + 30, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Right working door (50x60 size, at y=340)
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(level5.hallway.rightDoor.x - 10, level5.hallway.rightDoor.y, 50, 60);
+    ctx.fillStyle = '#4a3a1a';
+    ctx.fillRect(level5.hallway.rightDoor.x - 5, level5.hallway.rightDoor.y + 5, 40, 50);
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(level5.hallway.rightDoor.x - 25, level5.hallway.rightDoor.y + 30, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Door labels
+    if(Math.abs(player.x - level5.hallway.leftDoor.x) < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('← PIPE ROOM', level5.hallway.leftDoor.x + 15, level5.hallway.leftDoor.y - 10);
+    }
+    if(Math.abs(player.x - level5.hallway.rightDoor.x) < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('FURNACE →', level5.hallway.rightDoor.x - 15, level5.hallway.rightDoor.y - 10);
+    }
+
+    // Office door interaction prompts
+    for(let office of level5.hallway.offices) {
+        if(Math.abs(player.x - office.x) < 40) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PRESS ACTION → ' + office.name, office.x, officeDoorY - 10);
+        }
+    }
+
+    // Portrait interaction prompt
+    if(Math.abs(player.x - portraitX) < 80 && player.y < 320) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION to view portrait', portraitX, portraitY + portraitH + 25);
+    }
+}
+
+
+
+// SECTION 10: Level 5 Scene Drawing Functions (Part 2)
+function drawLevel5FurnaceRoom() {
+    ctx.fillStyle = '#2b2520';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#1a1815';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#0a0a08';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+    
+    const furnace = level5.furnaceRoom.furnace;
+    level5.furnaceRoom.furnace.glowPhase += 0.05;
+    const glowIntensity = Math.sin(level5.furnaceRoom.furnace.glowPhase) * 0.3 + 0.7;
+    
+    const gradient = ctx.createRadialGradient(furnace.x, furnace.y, 20, furnace.x, furnace.y, 120);
+    gradient.addColorStop(0, `rgba(255,100,0,${glowIntensity * 0.6})`);
+    gradient.addColorStop(0.5, `rgba(255,50,0,${glowIntensity * 0.3})`);
+    gradient.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(furnace.x, furnace.y, 120, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(furnace.x - 60, furnace.y - 40, 120, 80);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(furnace.x - 50, furnace.y - 30, 100, 60);
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(furnace.x - 40, furnace.y - 20, 80, 40);
+    
+    const isFlaming = Date.now() - furnace.flameTime < 2000;
+    if(isFlaming) {
+        const flameAlpha = Math.max(0, 1 - (Date.now() - furnace.flameTime) / 2000);
+        for(let i = 0; i < 5; i++) {
+            const flameY = furnace.y - 10 + Math.sin(frame * 0.3 + i) * 8;
+            const flameH = 30 + Math.cos(frame * 0.2 + i) * 10;
+            ctx.fillStyle = `rgba(255,${100 + i * 30},0,${flameAlpha * 0.8})`;
+            ctx.fillRect(furnace.x - 30 + i * 15, flameY, 8, flameH);
+        }
+    } else {
+        ctx.fillStyle = `rgba(255,100,0,${glowIntensity})`;
+        ctx.fillRect(furnace.x - 35, furnace.y - 15, 70, 30);
+    }
+    
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(level5.furnaceRoom.leftDoor.x - 10, level5.furnaceRoom.leftDoor.y, 50, 60);
+    ctx.fillStyle = '#4a3a1a';
+    ctx.fillRect(level5.furnaceRoom.leftDoor.x - 5, level5.furnaceRoom.leftDoor.y + 5, 40, 50);
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(level5.furnaceRoom.leftDoor.x + 30, level5.furnaceRoom.leftDoor.y + 30, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    if(Math.abs(player.x - level5.furnaceRoom.leftDoor.x) < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('← HALLWAY', level5.furnaceRoom.leftDoor.x + 15, level5.furnaceRoom.leftDoor.y - 10);
+    }
+    
+    if(Math.abs(player.x - furnace.x) < 90 && !player.holding) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('FURNACE', furnace.x, furnace.y - 60);
+    }
+    if(Math.abs(player.x - furnace.x) < 90 && player.holding) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION TO BURN DOC', furnace.x, furnace.y - 60);
+    }
+}
+
+function drawOfficeRoom(officeName) {
+    const office = level5.hallway.offices.find(o => o.name === officeName);
+    const color = office.color;
+    
+    ctx.fillStyle = '#d4c8b0';
+    ctx.fillRect(0, 0, 700, 300);
+    
+    ctx.fillStyle = color.hex;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(0, 300, 700, 200);
+    ctx.globalAlpha = 1;
+    
+    for(let i = 0; i < 20; i++) {
+        ctx.strokeStyle = color.hex;
+        ctx.globalAlpha = 0.2;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * 35, 300, 35, 200);
+        ctx.globalAlpha = 1;
+    }
+    
+    // Window view - realistic outdoor scene
+    // Sky with gradient
+    const skyGradient = ctx.createLinearGradient(180, 40, 180, 120);
+    skyGradient.addColorStop(0, '#87CEEB');
+    skyGradient.addColorStop(1, '#b0d8f0');
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(180, 40, 340, 200);
+
+    // Clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(250, 70, 20, 0, Math.PI * 2);
+    ctx.arc(270, 70, 25, 0, Math.PI * 2);
+    ctx.arc(290, 70, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(420, 90, 18, 0, Math.PI * 2);
+    ctx.arc(435, 90, 22, 0, Math.PI * 2);
+    ctx.arc(450, 90, 18, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Window frame - wooden
+    ctx.strokeStyle = '#4a3a1a';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(180, 40, 340, 200);
+
+    // Window curtains/blinds
+    ctx.fillStyle = color.hex;
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(160, 35, 15, 210);
+    ctx.fillRect(525, 35, 15, 210);
+    ctx.globalAlpha = 1;
+
+    // Curtain texture
+    ctx.strokeStyle = color.hex;
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 2;
+    for(let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(163 + i * 3, 40);
+        ctx.lineTo(163 + i * 3, 240);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(528 + i * 3, 40);
+        ctx.lineTo(528 + i * 3, 240);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Distant buildings/skyline
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(190, 80, 320, 75);
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(210, 90, 40, 65);
+    ctx.fillRect(280, 100, 50, 55);
+    ctx.fillRect(360, 95, 45, 60);
+    ctx.fillRect(430, 105, 55, 50);
+
+    // Building windows
+    for(let row = 0; row < 2; row++) {
+        for(let col = 0; col < 8; col++) {
+            ctx.fillStyle = row % 2 === col % 2 ? '#4a9eff' : '#3a8eef';
+            ctx.fillRect(200 + col * 38, 135 + row * 12, 25, 8);
+        }
+    }
+
+    // Parking lot surface - realistic asphalt
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(190, 160, 320, 78);
+
+    // Parking lot lines (white stripes)
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    for(let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(190 + i * 80, 160);
+        ctx.lineTo(190 + i * 80, 238);
+        ctx.stroke();
+    }
+
+    // Realistic cars with better detail
+    const carColors = [
+        {body: '#c0392b', dark: '#8b2a1f', light: '#e74c3c'},  // Red
+        {body: '#27ae60', dark: '#1e8449', light: '#2ecc71'},  // Green
+        {body: '#005f99', dark: '#004466', light: '#007acc'},  // Blue
+        {body: '#d68910', dark: '#aa6c08', light: '#f39c12'}   // Orange
+    ];
+
+    for(let i = 0; i < 4; i++) {
+        const carX = 200 + i * 80;
+        const carY = 180;
+        const colors = carColors[i];
+
+        // Car body
+        ctx.fillStyle = colors.body;
+        ctx.fillRect(carX, carY, 60, 35);
+
+        // Car roof
+        ctx.fillRect(carX + 10, carY - 15, 40, 15);
+
+        // Car shading
+        ctx.fillStyle = colors.dark;
+        ctx.fillRect(carX, carY + 30, 60, 5);
+        ctx.fillRect(carX + 10, carY - 15, 40, 3);
+
+        // Windshield
+        ctx.fillStyle = 'rgba(150,180,220,0.6)';
+        ctx.fillRect(carX + 12, carY - 13, 16, 12);
+
+        // Back window
+        ctx.fillRect(carX + 32, carY - 13, 16, 12);
+
+        // Side window reflection
+        ctx.fillStyle = 'rgba(200,220,255,0.3)';
+        ctx.fillRect(carX + 5, carY + 5, 50, 18);
+
+        // Tires
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(carX + 8, carY + 32, 10, 6);
+        ctx.fillRect(carX + 42, carY + 32, 10, 6);
+
+        // Tire shine
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(carX + 10, carY + 33, 6, 2);
+        ctx.fillRect(carX + 44, carY + 33, 6, 2);
+
+        // Headlights
+        ctx.fillStyle = colors.light;
+        ctx.fillRect(carX + 2, carY + 10, 3, 8);
+        ctx.fillRect(carX + 2, carY + 20, 3, 8);
+    }
+
+    // Ground/grass at base
+    ctx.fillStyle = '#5a7a3a';
+    ctx.fillRect(190, 232, 320, 8);
+
+    // Ground texture
+    ctx.fillStyle = '#6b8e23';
+    ctx.fillRect(192, 234, 316, 2);
+    ctx.fillRect(194, 237, 312, 1);
+
+    // Pole for sign
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(346, 150, 8, 86);
+
+    // PipeTech sign - professional corporate style
+    ctx.fillStyle = '#005f99';
+    ctx.fillRect(295, 95, 110, 40);
+
+    // Sign border
+    ctx.strokeStyle = '#003f66';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(295, 95, 110, 40);
+
+    // Company name
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 350, 115);
+
+    // Tagline
+    ctx.font = '9px Arial';
+    ctx.fillText('Industrial Solutions', 350, 128);
+    
+    const deskX = 350;
+    const deskY = 250;
+
+    // Desk - more realistic with wood-like appearance
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(deskX - 52, deskY - 2, 104, 44);
+
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(deskX - 50, deskY, 100, 40);
+
+    // Desk surface with gradient effect
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(deskX - 48, deskY + 2, 96, 36);
+
+    // Desk legs
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(deskX - 45, deskY + 38, 6, 12);
+    ctx.fillRect(deskX + 39, deskY + 38, 6, 12);
+
+    // Desk edge highlight
+    ctx.strokeStyle = '#6a6a6a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(deskX - 50, deskY, 100, 40);
+    
+    // Monitor - positioned center/right of desk
+    const monitorX = deskX + 10;
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(monitorX - 18, deskY + 6, 36, 26);
+    ctx.fillRect(monitorX - 15, deskY + 4, 30, 30);
+
+    // Monitor screen
+    ctx.fillStyle = level5.viewingEmail ? '#4a9eff' : '#1a1a1a';
+    ctx.fillRect(monitorX - 13, deskY + 8, 26, 18);
+
+    // Screen glow effect when active
+    if(level5.viewingEmail) {
+        ctx.shadowColor = '#4a9eff';
+        ctx.shadowBlur = 20;
+        ctx.fillRect(monitorX - 13, deskY + 8, 26, 18);
+        ctx.shadowBlur = 0;
+
+        // Email content preview
+        ctx.fillStyle = '#fff';
+        ctx.font = '6px Arial';
+        ctx.fillRect(monitorX - 11, deskY + 10, 22, 2);
+        ctx.fillRect(monitorX - 11, deskY + 13, 18, 1);
+        ctx.fillRect(monitorX - 11, deskY + 15, 20, 1);
+        ctx.fillRect(monitorX - 11, deskY + 17, 16, 1);
+    } else {
+        // Idle screen with subtle blue tint
+        ctx.fillStyle = 'rgba(74, 158, 255, 0.1)';
+        ctx.fillRect(monitorX - 13, deskY + 8, 26, 18);
+    }
+
+    // Monitor bezel highlights
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(monitorX - 13, deskY + 8, 26, 18);
+
+    // Monitor stand
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(monitorX - 4, deskY + 30, 8, 6);
+    ctx.fillRect(monitorX - 10, deskY + 36, 20, 3);
+    
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(deskX - 38, deskY + 15, 18, 12);
+    ctx.fillRect(deskX - 43, deskY + 12, 8, 6);
+    ctx.fillStyle = '#3a3a3a';
+    for(let i = 0; i < 3; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.fillRect(deskX - 36 + j * 5, deskY + 18 + i * 3, 3, 2);
+        }
+    }
+    
+    ctx.fillStyle = color.hex;
+    ctx.fillRect(deskX + 25, deskY + 18, 14, 16);
+    ctx.strokeStyle = color.hex;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(deskX + 32, deskY + 26, 7, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    for(let i = 0; i < 4; i++) {
+        ctx.strokeStyle = COLORS[i].hex;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(deskX + 27 + i * 3, deskY + 18);
+        ctx.lineTo(deskX + 27 + i * 3, deskY + 8);
+        ctx.stroke();
+    }
+    
+    // Letter on LEFT side of desk (RED office only)
+    if(officeName === 'RED') {
+        const letterX = deskX - 25;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(letterX - 7, deskY + 10, 14, 18);
+
+        // Coffee stain ring
+        ctx.strokeStyle = 'rgba(139,69,19,0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(letterX + 2, deskY + 15, 5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Letter text lines
+        ctx.fillStyle = '#000';
+        ctx.globalAlpha = 0.3;
+        for(let i = 0; i < 4; i++) {
+            ctx.fillRect(letterX - 5, deskY + 13 + i * 3, 10, 1);
+        }
+        ctx.globalAlpha = 1;
+    }
+    
+    // Office chair - more detailed and recognizable
+    // Chair back
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(deskX - 18, deskY + 54, 36, 38);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(deskX - 16, deskY + 56, 32, 34);
+
+    // Chair back cushion detail
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(deskX - 14, deskY + 58, 28, 30);
+
+    // Chair seat
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(deskX - 20, deskY + 44, 40, 14);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(deskX - 18, deskY + 46, 36, 10);
+
+    // Chair base/wheels
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(deskX - 2, deskY + 86, 4, 6);
+
+    // Wheels
+    ctx.fillStyle = '#555';
+    ctx.fillRect(deskX - 18, deskY + 90, 8, 3);
+    ctx.fillRect(deskX + 10, deskY + 90, 8, 3);
+    ctx.fillRect(deskX - 4, deskY + 90, 8, 3);
+
+    // Exit area (no physical door - open space)
+    if(player.y > 420 && Math.abs(player.x - 350) < 70) {
+        // Exit prompt with dark background for visibility
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(250, 418, 200, 24);
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION - EXIT TO HALLWAY', 350, 435);
+
+        // Arrow pointing down/out
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(340, 445);
+        ctx.lineTo(350, 455);
+        ctx.lineTo(360, 445);
+        ctx.fill();
+    }
+    
+    // Monitor interaction prompt - more visible and clearer range
+    if(Math.abs(player.x - deskX) < 60 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION - VIEW MONITOR', deskX, deskY - 5);
+
+        // Arrow pointing to monitor
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(deskX - 5, deskY);
+        ctx.lineTo(deskX, deskY + 5);
+        ctx.lineTo(deskX + 5, deskY);
+        ctx.fill();
+    }
+    
+    // Letter interaction prompt (RED office only)
+    if(officeName === 'RED' && Math.abs(player.x - (deskX + 15)) < 30 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACTION - VIEW LETTER', deskX + 15, deskY + 5);
+    }
+}
+// SECTION 10: Level 6 Scene Drawing Functions
+function drawLevel6PipeRoom() {
+    ctx.fillStyle = '#e8e6dc';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+    
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(20, 30, 220, 110);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(25, 35, 210, 100);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(28, 38, 204, 94);
+    
+    for(let bx = 0; bx < 2; bx++) {
+        for(let by = 0; by < 2; by++) {
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8a8a8a';
+            ctx.beginPath();
+            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 130, 75);
+    
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(50, 82, 160, 1);
+    
+    ctx.fillStyle = '#d0d0d0';
+    ctx.font = '10px Arial';
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
+    
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(50, 105 + i * 5, 160, 3);
+    }
+    
+    ctx.fillStyle = '#c4bfad';
+    ctx.fillRect(0, 410, 700, 90);
+
+    // Computer / DOC PRINTER (same as Level 5)
+    const compX = 180;
+    const compY = 350;
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(compX - 30, compY, 60, 35);
+
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(compX - 25, compY - 30, 50, 30);
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(compX - 22, compY - 27, 44, 24);
+
+    ctx.fillStyle = '#004a7c';
+    ctx.fillRect(compX - 20, compY - 25, 40, 20);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(compX - 20, compY - 25, 40, 5);
+
+    ctx.fillStyle = '#444';
+    ctx.fillRect(compX - 5, compY, 10, 3);
+
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 7px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('DOC PRINTER', compX, compY + 30);
+
+    // Draw animated pipe NPCs (matching Level 5 style)
+    for(let npc of level6.npcPipes) {
+        const pipeY = 240;
+
+        // Vertical pipe from top
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(npc.x, 60);
+        ctx.lineTo(npc.x, pipeY);
+        ctx.stroke();
+
+        // Vertical pipe shine
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(npc.x - 4, 60);
+        ctx.lineTo(npc.x - 4, pipeY);
+        ctx.stroke();
+
+        // Horizontal pipe to right (matching Level 5)
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(npc.x, pipeY);
+        ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
+        ctx.lineTo(700, pipeY + 25);
+        ctx.stroke();
+
+        // Horizontal pipe shine
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(npc.x + 21, pipeY + 25);
+        ctx.lineTo(700, pipeY + 25);
+        ctx.stroke();
+
+        // Crack animation (matching Level 5 style)
+        if(npc.needsDoc && npc.crackStartTime) {
+            const crackTime = Date.now() - npc.crackStartTime;
+            const pct = Math.min(crackTime / 15000, 1);
+            ctx.fillStyle = npc.color.hex;
+            ctx.globalAlpha = 0.4 + pct * 0.6;
+            const sz = 18 + pct * 28;
+            for(let i = 0; i < 3; i++) {
+                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // Draw NPC face (using standard drawNPC function)
+        drawNPC(npc);
+    }
+
+    // Right door is CLOSED on level 6 - match floor color to blend in
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(660, 400, 40, 100);
+
+    // Add floor tile lines to blend with floor
+    for(let j = 0; j < 3; j++) {
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(660, 400 + j * 33, 40, 33);
+    }
+
+    if(player.x < 60) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('← CEO OFFICE', 350, 250);
+    }
+}
+
+function drawLevel6Entryway() {
+    ctx.fillStyle = '#8b0000';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#660000';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        ctx.strokeStyle = '#550000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * 35, 400, 35, 100);
+    }
+    
+    // Giant double doors
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(250, 150, 200, 250);
+    
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(255, 155, 90, 240);
+    ctx.fillRect(355, 155, 90, 240);
+    
+    // Door panels
+    for(let i = 0; i < 2; i++) {
+        const doorX = 255 + i * 100;
+        ctx.strokeStyle = '#2a1000';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(doorX + 10, 165, 70, 100);
+        ctx.strokeRect(doorX + 10, 275, 70, 110);
+    }
+    
+    // Gold handles
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(330, 300, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(370, 300, 6, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Golden placard
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(270, 120, 160, 25);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(275, 123, 150, 19);
+    
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ALDON PIPERSWORTH', 350, 137);
+    
+    if(Math.abs(player.x - 350) < 100 && player.y > 360) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('PRESS ACTION TO ENTER', 350, 420);
+    }
+}
+
+function drawLevel6CEOOffice() {
+    // Black void background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    // Room floor - circular rug
+    const rugCenterX = 350;
+    const rugCenterY = 350;
+    
+    ctx.fillStyle = '#2b1810';
+    ctx.beginPath();
+    ctx.ellipse(rugCenterX, rugCenterY, 300, 140, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#3a2416';
+    ctx.beginPath();
+    ctx.ellipse(rugCenterX, rugCenterY, 280, 120, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Earth rug pattern with pipe rings
+    const earthX = 350;
+    const earthY = 380;
+    
+    // Pipes as rings around earth
+    for(let i = 0; i < 4; i++) {
+        const radius = 50 + i * 12;
+        ctx.strokeStyle = COLORS[i].hex;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.ellipse(earthX, earthY, radius, radius * 0.3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    
+    // Earth
+    ctx.fillStyle = '#4a9eff';
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, 40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.arc(earthX - 10, earthY - 5, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(earthX + 12, earthY + 8, 12, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Mahogany desk (obstacle on floor)
+    const deskX = 350;
+    const deskY = 180;
+    
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(deskX - 80, deskY, 160, 60);
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(deskX - 75, deskY + 5, 150, 50);
+    
+    // Gold drawer handles
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(deskX - 60, deskY + 25, 8, 3);
+    ctx.fillRect(deskX - 20, deskY + 25, 8, 3);
+    ctx.fillRect(deskX + 20, deskY + 25, 8, 3);
+    ctx.fillRect(deskX + 52, deskY + 25, 8, 3);
+
+    // Safe positioned center back under "FREEDOM ISN'T FREE"
+    const safeX = 350;
+    const safeY = 130;
+    const safeOpen = level6.safeUnlocked;
+    
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(safeX - 25, safeY, 50, 45);
+    ctx.fillStyle = safeOpen ? '#1a1a1a' : '#0a0a0a';
+    ctx.fillRect(safeX - 20, safeY + 5, 40, 35);
+    
+    if(!safeOpen) {
+        // Keypad
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(safeX - 15, safeY + 10, 30, 25);
+        
+        // Lock indicator
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(safeX, safeY + 13, 2, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // Open safe showing contents
+        if(!level6.hasRevolver) {
+            // Revolver visible
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(safeX - 10, safeY + 15, 20, 8);
+        }
+        if(level6.moneyLives < 3) {
+            // Money sack visible
+            ctx.fillStyle = '#27ae60';
+            ctx.beginPath();
+            ctx.arc(safeX - 5, safeY + 32, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Crystal brandy decanter (LEFT side of desk) - dense crystal square bottle
+    const brandyX = deskX - 55;
+    const brandyY = deskY + 15;
+
+    // Square crystal bottle body
+    ctx.fillStyle = 'rgba(200,220,255,0.5)';
+    ctx.fillRect(brandyX - 8, brandyY + 10, 16, 25);
+
+    // Crystal facets/texture
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillRect(brandyX - 7, brandyY + 12, 2, 20);
+    ctx.fillRect(brandyX + 5, brandyY + 14, 2, 18);
+
+    // Bottle outline for crystal effect
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(brandyX - 8, brandyY + 10, 16, 25);
+
+    // Prism-shaped crystal stopper
+    ctx.fillStyle = 'rgba(200,220,255,0.7)';
+    ctx.beginPath();
+    ctx.moveTo(brandyX, brandyY);
+    ctx.lineTo(brandyX - 5, brandyY + 10);
+    ctx.lineTo(brandyX + 5, brandyY + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.stroke();
+
+    // Stopper neck
+    ctx.fillStyle = 'rgba(200,220,255,0.6)';
+    ctx.fillRect(brandyX - 3, brandyY + 8, 6, 4);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.strokeRect(brandyX - 3, brandyY + 8, 6, 4);
+
+    // Brandy liquid inside
+    ctx.fillStyle = 'rgba(139,69,19,0.7)';
+    ctx.fillRect(brandyX - 6, brandyY + 22, 12, 12);
+
+    // Crystal highlights on liquid
+    ctx.fillStyle = 'rgba(160,90,40,0.5)';
+    ctx.fillRect(brandyX - 5, brandyY + 23, 3, 10);
+
+    // Wooden coaster with ring stain (LEFT side)
+    ctx.fillStyle = '#8b4513';
+    ctx.beginPath();
+    ctx.arc(brandyX, brandyY + 40, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(brandyX, brandyY + 40, 7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Monitor (only active after CEO defeated) - RIGHT side of desk
+    const monX = deskX + 25;
+    const monY = deskY + 15;
+    
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(monX, monY, 30, 25);
+    ctx.fillStyle = level6.ceoDefeated ? '#1a1a1a' : '#0a0a0a';
+    ctx.fillRect(monX + 2, monY + 2, 26, 18);
+    
+    if(level6.ceoDefeated && !level6.computerUI) {
+        ctx.fillStyle = '#004a7c';
+        ctx.fillRect(monX + 2, monY + 2, 26, 18);
+    }
+    
+    // Monitor stand
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(monX + 12, monY + 27, 6, 4);
+    ctx.fillRect(monX + 8, monY + 31, 14, 2);
+    
+    // Golden trophy cabinet (right back wall) - obstacle
+    const cabinetX = 550;
+    const cabinetY = 100;
+    
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(cabinetX, cabinetY, 80, 100);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(cabinetX + 5, cabinetY + 5, 70, 90);
+    
+    // Trophy silhouette
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(cabinetX + 32, cabinetY + 25, 16, 20);
+    ctx.fillRect(cabinetX + 30, cabinetY + 45, 20, 4);
+    ctx.fillRect(cabinetX + 28, cabinetY + 49, 24, 6);
+    
+    // Dictator photo on cabinet
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(cabinetX + 10, cabinetY + 60, 60, 30);
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(cabinetX + 15, cabinetY + 65, 15, 15);
+    ctx.fillRect(cabinetX + 35, cabinetY + 65, 15, 15);
+    ctx.fillRect(cabinetX + 55, cabinetY + 65, 10, 15);
+    
+    // "YOU WIN" mirror (left back wall) - obstacle
+    const mirrorX = 150;
+    const mirrorY = 100;
+    
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(mirrorX, mirrorY, 90, 110);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(mirrorX + 5, mirrorY + 5, 80, 100);
+    
+    // Mirror surface
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(mirrorX + 10, mirrorY + 10, 70, 90);
+    
+    // "YOU WIN" text etched in glass
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOU', mirrorX + 45, mirrorY + 50);
+    ctx.fillText('WIN', mirrorX + 45, mirrorY + 75);
+    
+    // CEO reflection if admiring
+    if(ceo.state === 'admiring') {
+        ctx.fillStyle = 'rgba(245,200,154,0.4)';
+        ctx.fillRect(mirrorX + 30, mirrorY + 30, 30, 60);
+    }
+    
+    // Army propaganda portrait (center back)
+    const portraitX = 350;
+    const portraitY = 50;
+    
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(portraitX - 45, portraitY, 90, 70);
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(portraitX - 40, portraitY + 5, 80, 60);
+    
+    // Young CEO in fatigues
+    ctx.fillStyle = '#3a4a2a';
+    ctx.fillRect(portraitX - 30, portraitY + 20, 60, 40);
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(portraitX - 15, portraitY + 15, 30, 25);
+    
+    // High and tight haircut
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(portraitX - 15, portraitY + 12, 30, 8);
+    
+    // Stern eyes
+    ctx.fillStyle = '#000';
+    ctx.fillRect(portraitX - 10, portraitY + 25, 5, 3);
+    ctx.fillRect(portraitX + 5, portraitY + 25, 5, 3);
+    
+    // Caption below portrait
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('FREEDOM ISN\'T FREE', portraitX, portraitY + 75);
+    
+    // Door at bottom (can't be opened once entered)
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(325, 430, 50, 70);
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(330, 435, 40, 60);
+    
+    // Cash sacks dropped when CEO is hit
+    for(let sack of level6.cashSacks) {
+        drawCashSack(sack.x, sack.y);
+    }
+    
+    // Interaction prompts
+    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION', safeX, safeY - 15);
+    }
+    
+    if(level6.safeUnlocked && !level6.hasRevolver && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION', safeX, safeY - 15);
+    }
+    
+    if(level6.safeUnlocked && level6.moneyLives < 3 && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60 && level6.hasRevolver) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION FOR $ LIFE', safeX, safeY - 15);
+    }
+    
+    if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - (monX + 15)) < 40 && Math.abs(player.y - (monY + 15)) < 40) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS ACTION', monX + 15, monY - 10);
+    }
+}
+
+
+
+// SECTION 11: UI Drawing Functions
+function drawEmailUI(officeName) {
+    const email = OFFICE_EMAILS[officeName];
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillRect(50, 50, 600, 400);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.fillRect(60, 60, 580, 380);
+    
+    const office = level5.hallway.offices.find(o => o.name === officeName);
+    ctx.fillStyle = office.color.hex;
+    ctx.fillRect(60, 60, 580, 40);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Pmail', 80, 88);
+    
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('From: ' + email.from, 80, 130);
+    ctx.fillText('To: ' + email.to, 80, 155);
+    ctx.fillText('Subject: ' + email.subject, 80, 180);
+    
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(80, 195);
+    ctx.lineTo(620, 195);
+    ctx.stroke();
+    
+    ctx.font = '16px Arial';
+    const lines = email.body.split('\n');
+    let yPos = 220 - level5.emailScrollOffset;
+    for(let line of lines) {
+        if(yPos > 200 && yPos < 420) {
+            ctx.fillText(line, 80, yPos);
+        }
+        yPos += 25;
+    }
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 420);
+    ctx.fillText('↑↓ TO SCROLL', 350, 440);
+}
+
+function drawLetterUI() {
+    // Full-screen dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.95)';
+    ctx.fillRect(0, 0, 700, 500);
+
+    // Display the letter image (shows full desk scene with letter)
+    if(letterImg.complete && letterImg.naturalWidth > 0) {
+        const letterW = 600;
+        const letterH = 380;
+        const letterX = (700 - letterW) / 2;
+        const letterY = (500 - letterH) / 2 - 10;
+
+        ctx.drawImage(letterImg, letterX, letterY, letterW, letterH);
+    }
+
+    // Close instruction
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 480);
+}
+
+function drawSafeUI() {
+    // If selecting item after unlock
+    if(level6.selectingItem) {
+        ctx.fillStyle = 'rgba(0,0,0,0.9)';
+        ctx.fillRect(50, 50, 600, 400);
+
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(60, 60, 580, 380);
+
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(70, 70, 560, 360);
+
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('SELECT ITEM', 350, 110);
+
+        // Revolver option
+        const revolverSelected = level6.itemSelection === 0;
+        ctx.fillStyle = '#666';
+        ctx.fillRect(100, 160, 140, 120);
+        ctx.strokeStyle = revolverSelected ? '#f5f2ec' : '#444';
+        ctx.lineWidth = revolverSelected ? 5 : 2;
+        ctx.strokeRect(100, 160, 140, 120);
+
+        // Draw revolver icon
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(170, 210, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(190, 205, 30, 10);
+
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('REVOLVER', 170, 270);
+        if(level6.hasRevolver) {
+            ctx.fillStyle = '#ff0000';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText('TAKEN', 170, 255);
+        }
+
+        // Money life option
+        const moneySelected = level6.itemSelection === 1;
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(280, 160, 140, 120);
+        ctx.strokeStyle = moneySelected ? '#f5f2ec' : '#444';
+        ctx.lineWidth = moneySelected ? 5 : 2;
+        ctx.strokeRect(280, 160, 140, 120);
+
+        // Draw money icon
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 56px Arial';
+        ctx.fillText('$', 350, 230);
+
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('$ LIFE', 350, 270);
+        if(level6.moneyLives >= 3) {
+            ctx.fillStyle = '#ff0000';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText('MAX', 350, 255);
+        }
+
+        // Bullets option (unlimited)
+        const bulletsSelected = level6.itemSelection === 2;
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(460, 160, 140, 120);
+        ctx.strokeStyle = bulletsSelected ? '#f5f2ec' : '#444';
+        ctx.lineWidth = bulletsSelected ? 5 : 2;
+        ctx.strokeRect(460, 160, 140, 120);
+
+        // Draw bullets box icon
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(510, 195, 40, 30);
+        ctx.strokeStyle = '#4a3a2a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(510, 195, 40, 30);
+
+        // Bullets inside
+        for(let i = 0; i < 6; i++) {
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(515 + (i % 3) * 10, 200 + Math.floor(i / 3) * 10, 6, 8);
+        }
+
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('BULLETS', 530, 270);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText('UNLIMITED', 530, 255);
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('USE ARROWS TO SELECT, ACTION TO TAKE', 350, 380);
+        return;
+    }
+
+    // Standard code entry UI
+    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillRect(50, 50, 600, 400);
+
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(60, 60, 580, 380);
+
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(70, 70, 560, 360);
+
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ENTER ACCESS CODE', 350, 120);
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(200, 150, 300, 60);
+
+    for(let i = 0; i < 4; i++) {
+        const boxX = 220 + i * 70;
+        ctx.fillStyle = level6.codeInput[i] ? COLORS.find(c => c.name === level6.codeInput[i]).hex : '#1a1a1a';
+        ctx.fillRect(boxX, 160, 50, 40);
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxX, 160, 50, 40);
+    }
+
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('SELECT COLORS:', 350, 260);
+
+    // 2x2 color button grid with white outline on selected
+    for(let i = 0; i < 4; i++) {
+        const row = Math.floor(i / 2);
+        const col = i % 2;
+        const btnX = 250 + col * 100;
+        const btnY = 280 + row * 70;
+
+        const isSelected = level6.selectedButton === i;
+
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(btnX, btnY, 80, 50);
+
+        // White outline when selected, dark when not
+        ctx.strokeStyle = isSelected ? '#f5f2ec' : '#2b2b2b';
+        ctx.lineWidth = isSelected ? 5 : 3;
+        ctx.strokeRect(btnX, btnY, 80, 50);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(COLORS[i].name, btnX + 40, btnY + 32);
+    }
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('USE ARROWS TO SELECT, ACTION TO ENTER', 350, 440);
+
+    if(level6.codeInput.length === 4) {
+        const correct = level6.codeInput.every((color, i) => color === SAFE_CODE[i]);
+        ctx.fillStyle = correct ? '#27ae60' : '#e74c3c';
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText(correct ? 'ACCESS GRANTED!' : 'INCORRECT CODE', 350, 240);
+    }
+}
+
+function drawComputerUI() {
+    ctx.fillStyle = 'rgba(0,0,0,0.95)';
+    ctx.fillRect(50, 50, 600, 400);
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(60, 60, 580, 380);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH MAINFRAME', 350, 120);
+    
+    ctx.fillStyle = '#666';
+    ctx.font = '18px Arial';
+    ctx.fillText('SYSTEM ACCESS: EXECUTIVE', 350, 160);
+    
+    ctx.fillStyle = '#e74c3c';
+    ctx.fillRect(150, 220, 180, 100);
+    ctx.strokeStyle = '#c0392b';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(150, 220, 180, 100);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('SELF', 240, 260);
+    ctx.fillText('DESTRUCT', 240, 290);
+    
+    ctx.fillStyle = '#27ae60';
+    ctx.fillRect(370, 220, 180, 100);
+    ctx.strokeStyle = '#1e8449';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(370, 220, 180, 100);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText('DELIVER MEANS', 460, 255);
+    ctx.fillText('OF PRODUCTION', 460, 280);
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText('USE ARROWS TO SELECT, ACTION TO CONFIRM', 350, 370);
+    
+    ctx.fillStyle = '#f39c12';
+    ctx.font = '14px Arial';
+    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 400);
+}
+
+
+// SECTION 12: Main Drawing and Scene Management
+function drawCEO(x, y, facing) {
+    const s = 2;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 36, 14, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const skinColor = ceo.blinkTimer > 0 ? '#cc0000' : '#d4a882';
+    const weatheredSkin = '#c49872';
+
+    if(facing === 'left') {
+        // BODY - Dark charcoal suit
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+
+        // Suit jacket shading
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x + 5*s, y + s, 2*s, 11*s);
+
+        // Dark red tie
+        ctx.fillStyle = '#8b0000';
+        ctx.fillRect(x - 2*s, y + 2*s, 3*s, 9*s);
+
+        // White shirt collar
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(x - 3*s, y + s, 6*s, 2*s);
+
+        // Gold watch on left wrist
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x - 10*s, y + 6*s, 2*s, 2*s);
+
+        // ARMS
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+
+        // PANTS
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+
+        // SHOES
+        ctx.fillStyle = '#0a0a0a';
+        const legL = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + legL, 5*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - legL, 5*s, 2*s);
+
+        // HEAD - weathered older skin
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 6*s, y - 13*s, 12*s, 13*s);
+
+        // Gray slicked hair
+        ctx.fillStyle = '#6b6b6b';
+        ctx.fillRect(x - 6*s, y - 14*s, 12*s, 4*s);
+        ctx.fillRect(x - 7*s, y - 12*s, 2*s, 3*s);
+
+        // Darker gray hair shading
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x - 5*s, y - 14*s, 2*s, 2*s);
+
+        // Wrinkled forehead
+        ctx.fillStyle = '#b88a62';
+        ctx.fillRect(x - 5*s, y - 10*s, 10*s, s);
+        ctx.fillRect(x - 4*s, y - 8*s, 8*s, s);
+
+        // Heavy brow
+        ctx.fillStyle = '#a07852';
+        ctx.fillRect(x - 5*s, y - 7*s, 8*s, 2*s);
+
+        // Deep-set eye (left side view)
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 2*s, y - 5*s, 3*s, 2*s);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - s, y - 5*s, s, s);
+
+        // Jowls and weathered cheeks
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 5*s, y - 3*s, 10*s, 4*s);
+        ctx.fillStyle = '#b88a62';
+        ctx.fillRect(x - 5*s, y - 2*s, 2*s, 2*s);
+
+        // Nose
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 2*s, y - 4*s, 2*s, 3*s);
+
+        // Stern mouth line
+        ctx.fillStyle = '#4a2a2a';
+        ctx.fillRect(x - 3*s, y, 4*s, s);
+
+        // Jaw
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 4*s, y + s, 8*s, 2*s);
+
+        // Cigar in mouth (always present, lit)
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(x - 6*s, y, 4*s, s);
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 7*s, y, s, s);
+
+        // Lit cigar tip
+        ctx.fillStyle = '#ff4500';
+        ctx.fillRect(x - 8*s, y, s, s);
+
+        // Cigar smoke
+        if(frame % 20 < 10) {
+            ctx.fillStyle = 'rgba(200,200,200,0.4)';
+            ctx.beginPath();
+            ctx.arc(x - 10, y - 8, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+    } else if(facing === 'right') {
+        // BODY - Dark charcoal suit
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+
+        // Suit jacket shading
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
+
+        // Dark red tie
+        ctx.fillStyle = '#8b0000';
+        ctx.fillRect(x - s, y + 2*s, 3*s, 9*s);
+
+        // White shirt collar
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(x - 3*s, y + s, 6*s, 2*s);
+
+        // Gold ring on right hand
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x + 8*s, y + 6*s, 2*s, 2*s);
+
+        // ARMS
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
+        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
+
+        // PANTS
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
+
+        // SHOES
+        ctx.fillStyle = '#0a0a0a';
+        const legR = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 5*s, y + 24*s + legR, 5*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - legR, 5*s, 2*s);
+
+        // HEAD - weathered older skin
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 6*s, y - 13*s, 12*s, 13*s);
+
+        // Gray slicked hair
+        ctx.fillStyle = '#6b6b6b';
+        ctx.fillRect(x - 6*s, y - 14*s, 12*s, 4*s);
+        ctx.fillRect(x + 5*s, y - 12*s, 2*s, 3*s);
+
+        // Darker gray hair shading
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x + 3*s, y - 14*s, 2*s, 2*s);
+
+        // Wrinkled forehead
+        ctx.fillStyle = '#b88a62';
+        ctx.fillRect(x - 5*s, y - 10*s, 10*s, s);
+        ctx.fillRect(x - 4*s, y - 8*s, 8*s, s);
+
+        // Heavy brow
+        ctx.fillStyle = '#a07852';
+        ctx.fillRect(x - 3*s, y - 7*s, 8*s, 2*s);
+
+        // Deep-set eye (right side view)
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - s, y - 5*s, 3*s, 2*s);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x, y - 5*s, s, s);
+
+        // Jowls and weathered cheeks
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 5*s, y - 3*s, 10*s, 4*s);
+        ctx.fillStyle = '#b88a62';
+        ctx.fillRect(x + 3*s, y - 2*s, 2*s, 2*s);
+
+        // Nose
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x, y - 4*s, 2*s, 3*s);
+
+        // Stern mouth line
+        ctx.fillStyle = '#4a2a2a';
+        ctx.fillRect(x - s, y, 4*s, s);
+
+        // Jaw
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 4*s, y + s, 8*s, 2*s);
+
+        // Cigar in mouth (always present, lit)
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(x + 2*s, y, 4*s, s);
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x + 6*s, y, s, s);
+
+        // Lit cigar tip
+        ctx.fillStyle = '#ff4500';
+        ctx.fillRect(x + 7*s, y, s, s);
+
+        // Cigar smoke
+        if(frame % 20 < 10) {
+            ctx.fillStyle = 'rgba(200,200,200,0.4)';
+            ctx.beginPath();
+            ctx.arc(x + 20, y - 8, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+    } else {
+        // FORWARD FACING
+        // BODY - Dark charcoal suit
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 8*s, y + s, 16*s, 11*s);
+
+        // White shirt front
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(x - 3*s, y + s, 6*s, 2*s);
+
+        // Dark red tie
+        ctx.fillStyle = '#8b0000';
+        ctx.fillRect(x - 2*s, y + 2*s, 4*s, 9*s);
+        ctx.fillStyle = '#6b0000';
+        ctx.fillRect(x - s, y + 3*s, 2*s, 7*s);
+
+        // American flag lapel pin
+        ctx.fillStyle = '#003f87';
+        ctx.fillRect(x - 6*s, y + 3*s, 2*s, s);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(x - 6*s, y + 4*s, 2*s, s);
+
+        // White pocket square
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x + 4*s, y + 3*s, 2*s, 2*s);
+
+        // ARMS
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 10*s, y + 2*s, 2*s, 8*s);
+        ctx.fillRect(x + 8*s, y + 2*s, 2*s, 8*s);
+
+        // Hands visible
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 10*s, y + 9*s, 2*s, 2*s);
+        ctx.fillRect(x + 8*s, y + 9*s, 2*s, 2*s);
+
+        // Gold watch on left wrist
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x - 10*s, y + 8*s, 2*s, s);
+
+        // Gold ring on right hand
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(x + 18, y + 20, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // PANTS
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 8*s, y + 12*s, 16*s, 4*s);
+        ctx.fillRect(x - 6*s, y + 16*s, 5*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 5*s, 8*s);
+
+        // SHOES
+        ctx.fillStyle = '#0a0a0a';
+        const leg = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        ctx.fillRect(x - 6*s, y + 24*s + leg, 5*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s - leg, 5*s, 2*s);
+
+        // HEAD - weathered older skin
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 6*s, y - 13*s, 12*s, 14*s);
+
+        // Gray slicked hair - parted
+        ctx.fillStyle = '#6b6b6b';
+        ctx.fillRect(x - 6*s, y - 15*s, 5*s, 4*s);
+        ctx.fillRect(x + s, y - 15*s, 5*s, 4*s);
+        ctx.fillRect(x - 7*s, y - 12*s, 2*s, 3*s);
+        ctx.fillRect(x + 5*s, y - 12*s, 2*s, 3*s);
+
+        // Dark hair part line
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x - s, y - 14*s, 2*s, 2*s);
+
+        // Wrinkled forehead
+        ctx.fillStyle = '#b88a62';
+        ctx.fillRect(x - 5*s, y - 10*s, 10*s, s);
+        ctx.fillRect(x - 4*s, y - 8*s, 8*s, s);
+
+        // Heavy brow - menacing
+        ctx.fillStyle = '#a07852';
+        ctx.fillRect(x - 5*s, y - 7*s, 4*s, 2*s);
+        ctx.fillRect(x + s, y - 7*s, 4*s, 2*s);
+
+        // Deep-set eyes - stern expression
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 4*s, y - 5*s, 3*s, 2*s);
+        ctx.fillRect(x + s, y - 5*s, 3*s, 2*s);
+
+        // Eye whites
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 3*s, y - 5*s, s, s);
+        ctx.fillRect(x + 2*s, y - 5*s, s, s);
+
+        // Pupils - cold stare
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 3*s, y - 5*s, s, s);
+        ctx.fillRect(x + 2*s, y - 5*s, s, s);
+
+        // Bags under eyes
+        ctx.fillStyle = '#9a7252';
+        ctx.fillRect(x - 4*s, y - 3*s, 3*s, s);
+        ctx.fillRect(x + s, y - 3*s, 3*s, s);
+
+        // Nose
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - s, y - 4*s, 2*s, 4*s);
+        ctx.fillStyle = '#c49872';
+        ctx.fillRect(x - 2*s, y - 2*s, s, 2*s);
+        ctx.fillRect(x + s, y - 2*s, s, 2*s);
+
+        // Jowls - heavy
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 5*s, y - s, 3*s, 3*s);
+        ctx.fillRect(x + 2*s, y - s, 3*s, 3*s);
+
+        // Stern mouth
+        ctx.fillStyle = '#4a2a2a';
+        ctx.fillRect(x - 2*s, y + s, 4*s, s);
+
+        // Cigar in mouth (always present, centered)
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(x - 3*s, y + 2*s, 6*s, s);
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 4*s, y + 2*s, s, s);
+        ctx.fillRect(x + 3*s, y + 2*s, s, s);
+
+        // No smoke visible from front
+
+        // Weathered jaw
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 4*s, y + 3*s, 8*s, 2*s);
+        ctx.fillStyle = '#b88a62';
+        ctx.fillRect(x - 3*s, y + 3*s, 6*s, s);
+    }
+    
+    if(ceo.hasDrink && ceo.state === 'offering') {
+        const glassX = x + (facing === 'right' ? 20 : -20);
+        const glassY = y;
+        
+        ctx.fillStyle = 'rgba(200,200,255,0.4)';
+        ctx.beginPath();
+        ctx.moveTo(glassX - 4, glassY);
+        ctx.lineTo(glassX + 4, glassY);
+        ctx.lineTo(glassX + 3, glassY + 12);
+        ctx.lineTo(glassX - 3, glassY + 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        ctx.fillStyle = 'rgba(139,69,19,0.7)';
+        ctx.fillRect(glassX - 3, glassY + 6, 6, 5);
+    }
+    
+    if(ceo.state === 'offering') {
+        const sackX = x + (facing === 'left' ? 20 : -20);
+        const sackY = y + 5;
+        
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath();
+        ctx.arc(sackX, sackY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1e8449';
+        ctx.fillRect(sackX - 3, sackY - 8, 6, 4);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('$', sackX, sackY + 3);
+    }
+}
+function drawEmailUI(officeName) {
+    const email = OFFICE_EMAILS[officeName];
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillRect(50, 50, 600, 400);
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.fillRect(60, 60, 580, 380);
+    
+    const office = level5.hallway.offices.find(o => o.name === officeName);
+    ctx.fillStyle = office.color.hex;
+    ctx.fillRect(60, 60, 580, 40);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Pmail', 80, 88);
+    
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('From: ' + email.from, 80, 130);
+    ctx.fillText('To: ' + email.to, 80, 155);
+    ctx.fillText('Subject: ' + email.subject, 80, 180);
+    
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(80, 195);
+    ctx.lineTo(620, 195);
+    ctx.stroke();
+    
+    ctx.font = '16px Arial';
+    const lines = email.body.split('\n');
+    let yPos = 220 - level5.emailScrollOffset;
+    for(let line of lines) {
+        if(yPos > 200 && yPos < 420) {
+            ctx.fillText(line, 80, yPos);
+        }
+        yPos += 25;
+    }
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 420);
+    ctx.fillText('↑↓ TO SCROLL', 350, 440);
+}
+
+function drawLetterUI() {
+    // Full-screen dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.95)';
+    ctx.fillRect(0, 0, 700, 500);
+
+    // Display the letter image (shows full desk scene with letter)
+    if(letterImg.complete && letterImg.naturalWidth > 0) {
+        const letterW = 600;
+        const letterH = 380;
+        const letterX = (700 - letterW) / 2;
+        const letterY = (500 - letterH) / 2 - 10;
+
+        ctx.drawImage(letterImg, letterX, letterY, letterW, letterH);
+    }
+
+    // Close instruction
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 480);
+}
+
+function drawPortraitUI() {
+    // Full-screen dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.95)';
+    ctx.fillRect(0, 0, 700, 500);
+
+    // Display the portrait image (already includes ornate frame)
+    if(portraitImg.complete && portraitImg.naturalWidth > 0) {
+        const portraitW = 560;
+        const portraitH = 460;
+        const portraitX = (700 - portraitW) / 2;
+        const portraitY = (500 - portraitH) / 2 - 10;
+
+        ctx.drawImage(portraitImg, portraitX, portraitY, portraitW, portraitH);
+    }
+
+    // Close instruction
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 485);
+}
+
+
+
+function drawScene() {
+    if(state === 'menu') {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, 700, 500);
+        
+        const textGrad = ctx.createLinearGradient(200, 100, 500, 200);
+        textGrad.addColorStop(0, '#ff6b35');
+        textGrad.addColorStop(0.5, '#f7931e');
+        textGrad.addColorStop(1, '#ffd700');
+        
+        ctx.font = 'bold 72px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 8;
+        ctx.strokeText('MULLET PRO', 350, 150);
+        ctx.fillStyle = textGrad;
+        ctx.fillText('MULLET PRO', 350, 150);
+        
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = '22px Arial';
+        ctx.fillText('DELIVER THE DOCUMENTS', 350, 200);
+        
+        ctx.fillStyle = '#e74c3c';
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText('STOP THE CATASTROPHE!', 350, 230);
+        
+        drawMulletPro(350, 340, 'forward');
+        
+        if(Math.floor(frame / 30) % 2 === 0) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 28px Arial';
+            ctx.fillText('PRESS ANY BUTTON TO START', 350, 430);
+        }
+        return;
+    }
+    
+    if(state === 'levelCard') {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, 700, 500);
+        
+        const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
+        lvlGrad.addColorStop(0, '#ff6b35');
+        lvlGrad.addColorStop(1, '#ffd700');
+        
+        ctx.font = 'bold 80px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 8;
+        ctx.strokeText('LEVEL ' + level, 350, 200);
+        ctx.fillStyle = lvlGrad;
+        ctx.fillText('LEVEL ' + level, 350, 200);
+        
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 32px Arial';
+        const msgs = ['', 'TRAINING DAY', 'PRESSURE RISING!', 'MAXIMUM CHAOS!', '3D PRINTER UNLOCKED!', 'MANAGEMENT', 'THE CEO WANTS TO MEET YOU'];
+        ctx.fillText(msgs[level], 350, 270);
+        
+        if(cardTimer > 60) {
+            if(Math.floor(frame / 30) % 2 === 0) {
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText('GET READY!', 350, 370);
+            }
+        }
+        return;
+    }
+    
+    if(state === 'promotion') {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, 700, 500);
+        
+        const promoGrad = ctx.createLinearGradient(200, 100, 500, 200);
+        promoGrad.addColorStop(0, '#ffd700');
+        promoGrad.addColorStop(1, '#ff6b35');
+        
+        ctx.font = 'bold 56px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 8;
+        ctx.strokeText('CONGRATS!', 350, 150);
+        ctx.fillStyle = promoGrad;
+        ctx.fillText('CONGRATS!', 350, 150);
+        
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 36px Arial';
+        ctx.fillText('YOU ARE THE NEW', 350, 220);
+        
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText('PIPE BOSS', 350, 280);
+        
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = '32px Arial';
+        ctx.fillText('FINAL SCORE: ' + score, 350, 340);
+        
+        if(Math.floor(frame / 30) % 2 === 0) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('PRESS ANY BUTTON TO CONTINUE', 350, 420);
+        }
+        return;
+    }
+    
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory') {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, 700, 500);
+        
+        if(state === 'over') {
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("YOU'RE FIRED!", 350, 180);
+        } else if(state === 'win') {
+            ctx.fillStyle = '#27ae60';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("YOU'RE HIRED!", 350, 180);
+        } else if(state === 'theend') {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 72px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 8;
+            ctx.strokeText('THE END', 350, 200);
+            ctx.fillStyle = '#ffd700';
+            ctx.fillText('THE END', 350, 200);
+            
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = '28px Arial';
+            ctx.fillText('Documents Destroyed: ' + level5.docsCollected, 350, 270);
+        } else if(state === 'victory') {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 72px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 8;
+            ctx.strokeText('YOU WIN', 350, 180);
+            ctx.fillStyle = '#27ae60';
+            ctx.fillText('YOU WIN', 350, 180);
+            
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 48px Arial';
+            ctx.fillText('MULLET PRO', 350, 250);
+            
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = '24px Arial';
+            ctx.fillText('THE WORKERS OWN THE MEANS', 350, 310);
+            ctx.fillText('OF PRODUCTION', 350, 340);
+        }
+        
+        if(state !== 'victory' && state !== 'theend') {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = '32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('FINAL SCORE: ' + score, 350, 240);
+        }
+        
+        ctx.font = '24px Arial';
+        ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#999';
+        const yOffset = (state === 'theend' || state === 'victory') ? 350 : 320;
+        ctx.fillText('▶ Return to Mullet.pro', 350, yOffset);
+        ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#999';
+        ctx.fillText(state === 'victory' ? '▶ Play again' : '▶ Keep documenting!', 350, yOffset + 50);
+        return;
+    }
+    
+    if(level === 5) {
+    if(level5.room === 'pipeRoom') {
+        drawLevel5PipeRoom();
+    } else if(level5.room === 'hallway') {
+        drawLevel5Hallway();
+    } else if(level5.room === 'furnaceRoom') {
+        drawLevel5FurnaceRoom();
+    } else if(level5.currentOffice) {
+        drawOfficeRoom(level5.currentOffice);
+    }
+    
+    if(level5.viewingEmail && level5.currentOffice) {
+        drawEmailUI(level5.currentOffice);
+    } else if(level5.viewingLetter) {
+        drawLetterUI();
+    } else if(level5.viewingPortrait) {
+        drawPortraitUI();
+    }
+
+    if(!level5.viewingEmail && !level5.viewingLetter && !level5.viewingPortrait) {
+        drawBaldManager(player.x, player.y, player.facing);
+        
+        if(player.holding) {
+            drawHeldDoc(player.x, player.y, player.holding);
+        }
+    }
+    
+    if(fadeAlpha > 0) {
+        ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
+        ctx.fillRect(0, 0, 700, 500);
+    }
+    return;
+    }
+
+    if(level === 6) {
+        if(level6.room === 'pipeRoom') {
+            drawLevel6PipeRoom();
+
+            // Draw player in pipe room
+            drawBaldManager(player.x, player.y, player.facing);
+        } else if(level6.room === 'entryway') {
+            drawLevel6Entryway();
+
+            // Draw player in entryway
+            drawBaldManager(player.x, player.y, player.facing);
+        } else if(level6.room === 'ceoOffice') {
+            drawLevel6CEOOffice();
+
+            if(ceo.state !== 'dead') {
+                drawCEO(ceo.x, ceo.y, ceo.facing);
+            }
+
+            for(let npc of level6.exitingNPCs) {
+                if(npc.isMulletPro) {
+                    drawMulletPro(npc.x, npc.y, npc.facing);
+                } else {
+                    const tempNPC = {
+                        x: npc.x,
+                        y: npc.y,
+                        color: npc.color,
+                        state: 'happy',
+                        needsDoc: false
+                    };
+                    drawNPC(tempNPC);
+                }
+            }
+
+            // Draw player in CEO office (unless in UI mode)
+            if(!level6.safeUI && !level6.computerUI && !level6.endingTriggered) {
+                drawBaldManager(player.x, player.y, player.facing);
+
+                if(level6.hasRevolver && level6.revolverAmmo > 0) {
+                    drawRevolver(player.x, player.y, player.facing);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('AMMO:' + level6.revolverAmmo, player.x, player.y - 55);
+                }
+            }
+        }
+
+        if(level6.safeUI) {
+            drawSafeUI();
+        }
+
+        if(level6.computerUI) {
+            drawComputerUI();
+        }
+
+        for(let bullet of bullets) {
+            ctx.fillStyle = '#ff0000';
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        if(fadeAlpha > 0) {
+            ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+            ctx.fillRect(0, 0, 700, 500);
+        }
+        return;
+    }
+
+    
+    // Levels 1-4 standard pipe room
+    ctx.fillStyle = '#e8e6dc';
+    ctx.fillRect(0, 0, 700, 500);
+    
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 400, 700, 100);
+    
+    for(let i = 0; i < 20; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+    
+    ctx.fillStyle = '#f5f5dc';
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(100, 20, 80, 10);
+    ctx.fillRect(300, 20, 80, 10);
+    ctx.fillRect(500, 20, 80, 10);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(20, 30, 220, 110);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(25, 35, 210, 100);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(28, 38, 204, 94);
+    
+    for(let bx = 0; bx < 2; bx++) {
+        for(let by = 0; by < 2; by++) {
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8a8a8a';
+            ctx.beginPath();
+            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 130, 75);
+    
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(50, 82, 160, 1);
+    
+    ctx.fillStyle = '#d0d0d0';
+    ctx.font = '10px Arial';
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
+    
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(50, 105 + i * 5, 160, 3);
+    }
+    
+    ctx.fillStyle = '#c4bfad';
+    ctx.fillRect(0, 410, 700, 90);
+    
+    drawComputer(computer.x, computer.y);
+    
+    if(level === 4) {
+        draw3DPrinter(printer3d.x, printer3d.y);
+    }
+    
+    for(let npc of npcs) {
+        const pipeY = 240;
+        
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(npc.x, 60);
+        ctx.lineTo(npc.x, pipeY);
+        ctx.stroke();
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(npc.x - 4, 60);
+        ctx.lineTo(npc.x - 4, pipeY);
+        ctx.stroke();
+        
+        ctx.strokeStyle = npc.color.hex;
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.moveTo(npc.x, pipeY);
+        ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
+        ctx.lineTo(700, pipeY + 25);
+        ctx.stroke();
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(npc.x + 21, pipeY + 25);
+        ctx.lineTo(700, pipeY + 25);
+        ctx.stroke();
+        
+        const crack = cracks.find(c => c.npc === npc);
+        if(crack && !resetting) {
+            const pct = (Date.now() - crack.time) / crack.max;
+            ctx.fillStyle = npc.color.hex;
+            ctx.globalAlpha = 0.4 + pct * 0.6;
+            const sz = 18 + pct * 28;
+            for(let i = 0; i < 3; i++) {
+                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+            }
+            ctx.globalAlpha = 1;
+        }
+        
+        drawNPC(npc);
+    }
+    
+    for(let exp of explosions) {
+        ctx.fillStyle = `rgba(255,100,0,${exp.alpha})`;
+        ctx.beginPath();
+        ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(255,200,0,${exp.alpha * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(exp.x, exp.y, exp.radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        for(let p of exp.particles) {
+            ctx.fillStyle = `rgba(100,100,100,${p.life})`;
+            ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        }
+    }
+    
+    for(let mf of muzzleFlashes) {
+        const flashX = mf.facing === 'left' ? mf.x - 30 : mf.x + 30;
+        ctx.fillStyle = `rgba(255,200,0,${mf.life / 10})`;
+        ctx.beginPath();
+        ctx.arc(flashX, mf.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(255,255,100,${mf.life / 10})`;
+        ctx.beginPath();
+        ctx.arc(flashX, mf.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    for(let bullet of bullets) {
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    
+    if(boss.active) {
+        drawBoss(boss.x, boss.y, boss.facing);
+    }
+    
+    drawMulletPro(player.x, player.y, player.facing);
+    
+    if(player.holding) {
+        drawHeldDoc(player.x, player.y, player.holding);
+    }
+    
+    if(ghostGun.hasGun && ghostGun.ammo > 0) {
+        drawGhostGun(player.x, player.y, player.facing);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('AMMO:' + ghostGun.ammo, player.x, player.y - 55);
+    }
+
+    if(ui.show) {
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(0, 340, 700, 160);
+        
+        if(!ui.confirming) {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 22px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('SELECT COLOR:', 30, 375);
+            
+            for(let i = 0; i < 4; i++) {
+                const selected = i === ui.selectedColor;
+                ctx.strokeStyle = selected ? '#f5f2ec' : '#666';
+                ctx.lineWidth = selected ? 4 : 2;
+                ctx.fillStyle = COLORS[i].hex;
+                ctx.fillRect(30 + i * 160, 390, 140, 70);
+                ctx.strokeRect(30 + i * 160, 390, 140, 70);
+                ctx.fillStyle = '#2b2b2b';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(COLORS[i].name, 100 + i * 160, 430);
+            }
+        } else {
+            const col = COLORS[ui.selectedColor];
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PRINT ' + col.name + ' DOC?', 350, 385);
+            ctx.fillStyle = col.hex;
+            ctx.fillRect(270, 410, 160, 60);
+            ctx.fillStyle = '#2b2b2b';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('CONFIRM', 350, 445);
+        }
+    }
+    
+    if(ui.gunUI) {
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(0, 340, 700, 160);
+        
+        if(!ui.confirming) {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 22px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('SELECT ITEM:', 30, 375);
+            
+            const gunSelected = ui.gunChoice === 0;
+            ctx.strokeStyle = gunSelected ? '#f5f2ec' : '#666';
+            ctx.lineWidth = gunSelected ? 4 : 2;
+            ctx.fillStyle = '#888';
+            ctx.fillRect(30, 390, 140, 70);
+            ctx.strokeRect(30, 390, 140, 70);
+            
+            ctx.fillStyle = '#666';
+            ctx.fillRect(55, 415, 36, 12);
+            ctx.fillRect(91, 419, 12, 8);
+            ctx.fillStyle = '#555';
+            ctx.fillRect(55, 409, 10, 4);
+            
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('GHOST GUN', 100, 455);
+            
+            const heartSelected = ui.gunChoice === 1;
+            ctx.strokeStyle = heartSelected ? '#f5f2ec' : '#666';
+            ctx.lineWidth = heartSelected ? 4 : 2;
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(190, 390, 140, 70);
+            ctx.strokeRect(190, 390, 140, 70);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('♥', 260, 435);
+            
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('HEART', 260, 455);
+            
+        } else {
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            const itemName = ui.gunChoice === 0 ? 'GHOST GUN' : 'HEART';
+            ctx.fillText('PRINT ' + itemName + '?', 350, 385);
+            ctx.fillStyle = ui.gunChoice === 0 ? '#888' : '#e74c3c';
+            ctx.fillRect(270, 410, 160, 60);
+            ctx.fillStyle = '#2b2b2b';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('CONFIRM', 350, 445);
+        }
+    }
+    
+    if(fadeAlpha > 0) {
+        ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
+        ctx.fillRect(0, 0, 700, 500);
+    }
+}
+
+
+// SECTION 13: Update Function - Level 5 Logic
+function update() {
+    if(state === 'menu') {
+        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] || 
+           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] || 
+           keys['left'] || keys['right']) {
+            startGame();
+            keys = {};
+        }
+        return;
+    }
+    
+    if(state === 'levelCard') {
+        cardTimer++;
+        if(cardTimer > 120) {
+            state = 'playing';
+            if(level !== 5 && level !== 6) {
+                spawnCracks();
+            }
+        }
+        return;
+    }
+    
+    if(state === 'promotion') {
+        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] || 
+           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] || 
+           keys['left'] || keys['right']) {
+            keys = {};
+            level = 5;
+            timer = 120;
+            state = 'levelCard';
+            cardTimer = 0;
+            initLevel(5);
+        }
+        return;
+    }
+
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory') {
+        if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
+            menuChoice = 0;
+            keys.upProcessed = true;
+        }
+        if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
+            menuChoice = 1;
+            keys.downProcessed = true;
+        }
+        if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
+        if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
+        
+        if(keys[' '] || keys['action']) {
+            keys[' '] = false;
+            keys['action'] = false;
+            if(menuChoice === 0) {
+                window.location.href = '/';
+            } else {
+                // Reset to level 1
+                startGame();
+            }
+        }
+        return;
+    }
+    
+    if(state !== 'playing') return;
+    
+    if(resetting) {
+        if(fadeOut) {
+            fadeAlpha += 0.08;
+            if(fadeAlpha >= 1) {
+                fadeOut = false;
+                fadeIn = true;
+                initLevel(level);
+            }
+        }
+        if(fadeIn) {
+            fadeAlpha -= 0.08;
+            if(fadeAlpha <= 0) {
+                fadeAlpha = 0;
+                fadeIn = false;
+                resetting = false;
+            }
+        }
+        return;
+    }
+    
+    // LEVEL 5 LOGIC
+    if(level === 5) {
+        // Mullet Pro AI
+        if(level5.mulletPro.state === 'walkingToComputer') {
+            if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
+                const direction = level5.mulletPro.x < level5.computer.x ? 1 : -1;
+                level5.mulletPro.x += direction * 2;
+                level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
+            } else {
+                level5.mulletPro.hasDoc = true;
+                level5.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
+                level5.mulletPro.state = 'walkingToNPC';
+                const targetNPC = level5.npcPipes.find(n => n.color.name === level5.mulletPro.docColor.name);
+                level5.mulletPro.walkTarget = targetNPC;
+                level5.mulletPro.facing = 'forward';
+            }
+        }
+        
+        if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
+            if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
+                const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
+                level5.mulletPro.x += direction * 2;
+                level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
+            } else {
+                const targetNPC = level5.mulletPro.walkTarget;
+                targetNPC.needsDoc = false;
+                targetNPC.crackStartTime = null;
+                
+                level5.mulletPro.hasDoc = false;
+                level5.mulletPro.docColor = null;
+                level5.mulletPro.state = 'walkingToComputer';
+                level5.mulletPro.walkTarget = null;
+                level5.mulletPro.facing = 'forward';
+            }
+        }
+        
+        // NPC crack spawning
+        for(let npc of level5.npcPipes) {
+            if(!npc.needsDoc && Math.random() < 0.0003) {
+                npc.needsDoc = true;
+                npc.crackStartTime = Date.now();
+            }
+            
+            if(npc.needsDoc && npc.crackStartTime) {
+                if(Date.now() - npc.crackStartTime > 15000) {
+                    createExplosion(npc.x, 240);
+                    npc.needsDoc = false;
+                    npc.state = 'happy';
+                    npc.crackStartTime = null;
+                }
+            }
+        }
+        
+                // Handle email scrolling
+        if(level5.viewingEmail) {
+            if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
+                level5.emailScrollOffset = Math.max(0, level5.emailScrollOffset - 25);
+                keys.upProcessed = true;
+            }
+            if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
+                level5.emailScrollOffset = Math.min(200, level5.emailScrollOffset + 25);
+                keys.downProcessed = true;
+            }
+            if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
+            if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
+    
+            if(keys[' '] || keys['action']) {
+                level5.viewingEmail = false;
+                level5.emailScrollOffset = 0;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            return;
+        }
+
+        if(level5.viewingLetter) {
+            if(keys[' '] || keys['action']) {
+                level5.viewingLetter = false;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            return;
+        }
+
+        if(level5.viewingPortrait) {
+            if(keys[' '] || keys['action']) {
+                level5.viewingPortrait = false;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+            return;
+        }
+
+        // PIPE ROOM
+        if(level5.room === 'pipeRoom') {
+            player.y = 380;
+            const atRightEdge = player.x >= 630;
+            const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
+
+            // Steal doc from Mullet Pro directly
+            if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
+                player.holding = level5.mulletPro.docColor.name;
+                level5.mulletPro.hasDoc = false;
+                level5.mulletPro.docColor = null;
+                level5.mulletPro.state = 'walkingToComputer';
+                level5.mulletPro.walkTarget = null;
+                level5.mulletPro.facing = 'forward';
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+
+            // Auto-transition to hallway when walking right
+            if(atRightEdge) {
+                level5.room = 'hallway';
+                player.x = 80;
+            }
+        }
+
+        // HALLWAY
+        else if(level5.room === 'hallway') {
+            player.y = 380;
+
+            const atLeftDoor = player.x < 80;
+            const atRightDoor = player.x > 620;
+
+            if((keys[' '] || keys['action']) && atLeftDoor) {
+                level5.room = 'pipeRoom';
+                player.x = 620;
+                player.y = 380;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+
+            if((keys[' '] || keys['action']) && atRightDoor) {
+                level5.room = 'furnaceRoom';
+                player.x = 80;
+                player.y = 380;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+
+            // Office door interactions - press action in front of door at y=380
+            for(let office of level5.hallway.offices) {
+                const atOfficeDoor = Math.abs(player.x - office.x) < 40;
+                if(atOfficeDoor && (keys[' '] || keys['action'])) {
+                    level5.currentOffice = office.name;
+                    level5.room = 'office';
+                    player.x = 350;
+                    player.y = 400;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    break;
+                }
+            }
+
+            // Portrait interaction - press action near portrait (center x=350, top of hallway)
+            const nearPortrait = Math.abs(player.x - 350) < 80 && player.y < 320;
+            if(nearPortrait && (keys[' '] || keys['action'])) {
+                level5.viewingPortrait = true;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+        }
+
+        // OFFICE
+        else if(level5.room === 'office' && level5.currentOffice) {
+            // Exit office
+            if(player.y > 450 && Math.abs(player.x - 350) < 60 && (keys[' '] || keys['action'])) {
+                level5.room = 'hallway';
+                const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
+                player.x = office.x;
+                player.y = 380;
+                level5.currentOffice = null;
+                keys[' '] = false;
+                keys['action'] = false;
+            }
+    
+            // Interact with monitor - expanded range for easier access (center/right position)
+            const deskX = 350;
+            const deskY = 250;
+            const monitorX = deskX + 10;
+            if(Math.abs(player.x - monitorX) < 40 && player.y > deskY + 30 && player.y < deskY + 70) {
+                if(keys[' '] || keys['action']) {
+                    level5.viewingEmail = true;
+                    level5.emailScrollOffset = 0;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+            }
+
+            // Interact with letter (RED only) - on LEFT side of desk
+            const letterX = deskX - 25;
+            if(level5.currentOffice === 'RED' && Math.abs(player.x - letterX) < 30 && player.y > deskY + 30 && player.y < deskY + 70) {
+                if(keys[' '] || keys['action']) {
+                    level5.viewingLetter = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+            }
+    
+            // Full 2D movement in office
+            const prevX = player.x;
+            const prevY = player.y;
+    
+            if(keys['ArrowLeft'] || keys['left']) {
+                player.x = Math.max(100, player.x - 5);
+                if(player.x !== prevX) {
+                    player.facing = 'left';
+                    player.lastMove = Date.now();
+                }
+            }
+            if(keys['ArrowRight'] || keys['right']) {
+                player.x = Math.min(600, player.x + 5);
+                if(player.x !== prevX) {
+                    player.facing = 'right';
+                    player.lastMove = Date.now();
+                }
+            }
+            if(keys['ArrowUp'] || keys['up']) {
+                player.y = Math.max(100, player.y - 5);
+                if(player.y !== prevY) player.lastMove = Date.now();
+            }
+            if(keys['ArrowDown'] || keys['down']) {
+                player.y = Math.min(480, player.y + 5);
+                if(player.y !== prevY) player.lastMove = Date.now();
+            }
+    
+            // Collision with window (top wall)
+            if(player.x > 160 && player.x < 540 && player.y < 260) {
+                player.x = prevX;
+                player.y = prevY;
+            }
+
+            // Collision with desk - allow approach from bottom for monitor access
+            // Desk top blocking (can't walk through from sides/top)
+            if(player.y < deskY + 45) {
+                if(player.x > deskX - 70 && player.x < deskX + 70 && player.y > deskY - 30 && player.y < deskY + 45) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            }
+
+            // Chair collision - narrower to allow monitor access from sides
+            if(player.x > deskX - 20 && player.x < deskX + 20 && player.y > deskY + 50 && player.y < deskY + 100) {
+                player.x = prevX;
+                player.y = prevY;
+            }
+    
+            if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
+               !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
+                if(Date.now() - player.lastMove > 200) {
+                    player.facing = 'forward';
+                }
+            }
+        }
+
+        
+                // FURNACE ROOM
+                else if(level5.room === 'furnaceRoom') {
+                    player.y = 380;
+            
+                    const furnace = level5.furnaceRoom.furnace;
+                    const leftDoor = level5.furnaceRoom.leftDoor;
+            
+                    const atFurnace = Math.abs(player.x - furnace.x) < 80;
+                    const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
+            
+                    if((keys[' '] || keys['action']) && atFurnace) {
+                        if(player.holding) {
+                            player.holding = null;
+                            furnace.flameTime = Date.now();
+                            level5.docsCollected++;
+                    
+                            if(level5.docsCollected >= 6) {
+                                level = 6;
+                                timer = 180;
+                                state = 'levelCard';
+                                cardTimer = 0;
+                                initLevel(6);
+                                keys[' '] = false;
+                                keys['action'] = false;
+                                return;
+                            }
+                        } else {
+                            furnace.flameTime = Date.now();
+                            createExplosion(player.x, player.y);
+                            state = 'over';
+                            menuChoice = 0;
+                        }
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
+            
+                    if((keys[' '] || keys['action']) && atDoor) {
+                        level5.room = 'hallway';
+                        player.x = 620;
+                        player.y = 380;
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
+                }
+        
+                // Horizontal movement for pipe room, hallway, and furnace room
+                if(level5.room === 'pipeRoom' || level5.room === 'hallway' || level5.room === 'furnaceRoom') {
+                    player.y = 380;
+                    const prevX = player.x;
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        player.x = Math.max(60, player.x - 5);
+                        if(player.x !== prevX) {
+                            player.facing = 'left';
+                            player.lastMove = Date.now();
+                        }
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        player.x = Math.min(640, player.x + 5);
+                        if(player.x !== prevX) {
+                            player.facing = 'right';
+                            player.lastMove = Date.now();
+                        }
+                    }
+                    if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
+                if(Date.now() - player.lastMove > 200) {
+                    player.facing = 'forward';
+                }
+            }
+        }
+        
+        return;
+    }
+    
+    // LEVEL 6 LOGIC
+    if(level === 6) {
+            // CEO AI logic
+            if(ceo.state === 'offering') {
+                // First walk to middle rug if not there yet
+                if(ceo.walkTarget) {
+                    const dx = ceo.walkTarget.x - ceo.x;
+                    const dy = ceo.walkTarget.y - ceo.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if(dist > 5) {
+                        ceo.x += (dx / dist) * 2;
+                        ceo.y += (dy / dist) * 2;
+                        ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
+                    } else {
+                        ceo.walkTarget = null;
+                        ceo.facing = 'forward';
+                    }
+                } else {
+                    // Once at rug, follow player horizontally
+                    if(Math.abs(ceo.x - player.x) > 60) {
+                        const direction = ceo.x < player.x ? 1 : -1;
+                        ceo.x += direction * 1.5;
+                        ceo.facing = direction > 0 ? 'right' : 'left';
+                    } else {
+                        ceo.facing = 'forward';
+                    }
+                }
+            }
+        
+            if(ceo.state === 'admiring') {
+                const mirrorX = 150;
+                const mirrorTargetX = mirrorX + 45;
+                const mirrorTargetY = 160;
+
+                const dx = mirrorTargetX - ceo.x;
+                const dy = mirrorTargetY - ceo.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if(dist > 5) {
+                    ceo.x += (dx / dist) * 2;
+                    ceo.y += (dy / dist) * 2;
+                    ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
+                } else {
+                    ceo.x = mirrorTargetX;
+                    ceo.y = mirrorTargetY;
+                    ceo.facing = 'forward';
+                }
+            }
+        
+            if(ceo.state === 'hunting') {
+                ceo.moveTimer++;
+            
+                const dx = player.x - ceo.x;
+                const dy = player.y - ceo.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+            
+                if(dist > 10) {
+                    ceo.x += (dx / dist) * 2;
+                    ceo.y += (dy / dist) * 2;
+                
+                    if(Math.abs(dx) > Math.abs(dy)) {
+                        ceo.facing = dx > 0 ? 'right' : 'left';
+                    } else {
+                        ceo.facing = 'forward';
+                    }
+                }
+            
+                ceo.shootTimer++;
+                if(ceo.shootTimer > 120 && Date.now() - ceo.lastShot > 2000) {
+                    const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
+                    bullets.push({
+                        x: ceo.x,
+                        y: ceo.y,
+                        vx: Math.cos(angle) * 8,
+                        vy: Math.sin(angle) * 8,
+                        fromCEO: true
+                    });
+                    ceo.lastShot = Date.now();
+                    ceo.shootTimer = 0;
+                }
+            }
+        
+            if(ceo.blinkTimer > 0) {
+                ceo.blinkTimer--;
+            }
+
+
+            // NPC exit sequence
+            if(level6.npcExitSequence) {
+                level6.npcExitTimer++;
+            
+                for(let npc of level6.exitingNPCs) {
+                    if(!npc.hasSack && !npc.exiting) {
+                        let nearestSack = null;
+                        let nearestDist = Infinity;
+                    
+                        for(let sack of level6.cashSacks) {
+                            if(!sack.claimed) {
+                                const dist = Math.sqrt((npc.x - sack.x)**2 + (npc.y - sack.y)**2);
+                                if(dist < nearestDist) {
+                                    nearestDist = dist;
+                                    nearestSack = sack;
+                                }
+                            }
+                        }
+                    
+                        if(nearestSack) {
+                            const dx = nearestSack.x - npc.x;
+                            const dy = nearestSack.y - npc.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                        
+                            if(dist > 5) {
+                                npc.x += (dx / dist) * 2;
+                                npc.y += (dy / dist) * 2;
+                                npc.facing = dx > 0 ? 'right' : dx < 0 ? 'left' : 'forward';
+                            } else {
+                                npc.hasSack = true;
+                                nearestSack.claimed = true;
+                            }
+                        }
+                    } else if(npc.hasSack && !npc.exiting) {
+                        const exitY = 460;
+                        const dy = exitY - npc.y;
+                    
+                        if(Math.abs(dy) > 5) {
+                            npc.y += dy > 0 ? 2 : -2;
+                            npc.facing = 'forward';
+                        } else {
+                            npc.exiting = true;
+                        }
+                    }
+                }
+            
+                const allExited = level6.exitingNPCs.every(npc => npc.exiting);
+                if(allExited && level6.npcExitTimer > 180) {
+                    const unclaimedSack = level6.cashSacks.find(s => !s.claimed);
+                    if(unclaimedSack && !level6.endingTriggered) {
+                        if(Math.abs(player.x - unclaimedSack.x) < 30 && Math.abs(player.y - unclaimedSack.y) < 30) {
+                            if(keys[' '] || keys['action']) {
+                                level6.endingTriggered = true;
+                                state = 'victory';
+                                menuChoice = 0;
+                                keys[' '] = false;
+                                keys['action'] = false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Movement for pipeRoom and entryway
+            if(level6.room === 'pipeRoom' || level6.room === 'entryway') {
+                const prevX = player.x;
+                if(keys['ArrowLeft'] || keys['left']) {
+                    player.x = Math.max(20, player.x - 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'left';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(keys['ArrowRight'] || keys['right']) {
+                    player.x = Math.min(680, player.x + 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'right';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
+                    if(Date.now() - player.lastMove > 200) {
+                        player.facing = 'forward';
+                    }
+                }
+            }
+
+            // Room transitions
+            if(level6.room === 'pipeRoom') {
+                player.y = 380;
+
+                if(player.x < 40) {
+                    level6.room = 'entryway';
+                    player.x = 640;
+                    player.y = 400;
+                }
+            } 
+        
+            else if(level6.room === 'entryway') {
+                player.y = 400;
+            
+                if(player.x > 660) {
+                    level6.room = 'pipeRoom';
+                    player.x = 80;
+                    player.y = 380;
+                }
+            
+                if(Math.abs(player.x - 350) < 100 && (keys[' '] || keys['action'])) {
+                    level6.room = 'ceoOffice';
+                    player.x = 350;
+                    player.y = 420;
+                    keys[' '] = false;
+                    keys['action'] = false;
+
+                    // Set CEO to walk to middle rug on entry
+                    ceo.walkTarget = {x: 350, y: 340};
+                }
+            } 
+        
+            else if(level6.room === 'ceoOffice') {
+                // Handle safe UI
+                if(level6.safeUI) {
+                    // Item selection mode (after unlock)
+                    if(level6.selectingItem) {
+                        if(keys['ArrowLeft'] || keys['left']) {
+                            level6.itemSelection = Math.max(0, level6.itemSelection - 1);
+                            keys['ArrowLeft'] = false;
+                            keys['left'] = false;
+                        }
+                        if(keys['ArrowRight'] || keys['right']) {
+                            level6.itemSelection = Math.min(2, level6.itemSelection + 1);
+                            keys['ArrowRight'] = false;
+                            keys['right'] = false;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false;
+                            keys['action'] = false;
+
+                            if(level6.itemSelection === 0 && !level6.hasRevolver) {
+                                // Take revolver
+                                level6.hasRevolver = true;
+                                level6.revolverAmmo = 6;
+                                level6.selectingItem = false;
+                                level6.safeUI = false;
+                            } else if(level6.itemSelection === 1 && level6.moneyLives < 3) {
+                                // Take $ life
+                                level6.moneyLives++;
+                                updateLives();
+                                level6.selectingItem = false;
+                                level6.safeUI = false;
+                            } else if(level6.itemSelection === 2) {
+                                // Take bullets (unlimited, adds 6 bullets)
+                                level6.revolverAmmo = Math.min(level6.revolverAmmo + 6, 99);
+                                level6.selectingItem = false;
+                                level6.safeUI = false;
+                            }
+                        }
+                        return;
+                    }
+
+                    // Code entry mode
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        const col = level6.selectedButton % 2;
+                        if(col > 0) {
+                            level6.selectedButton--;
+                        }
+                        keys['ArrowLeft'] = false;
+                        keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        const col = level6.selectedButton % 2;
+                        if(col < 1) {
+                            level6.selectedButton++;
+                        }
+                        keys['ArrowRight'] = false;
+                        keys['right'] = false;
+                    }
+                    if(keys['ArrowUp'] || keys['up']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        if(row > 0) {
+                            level6.selectedButton -= 2;
+                        }
+                        keys['ArrowUp'] = false;
+                        keys['up'] = false;
+                    }
+                    if(keys['ArrowDown'] || keys['down']) {
+                        const row = Math.floor(level6.selectedButton / 2);
+                        if(row < 1) {
+                            level6.selectedButton += 2;
+                        }
+                        keys['ArrowDown'] = false;
+                        keys['down'] = false;
+                    }
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+
+                        if(level6.codeInput.length < 4) {
+                            const selectedColor = COLORS[level6.selectedButton].name;
+                            level6.codeInput.push(selectedColor);
+
+                            if(level6.codeInput.length === 4) {
+                                const correct = level6.codeInput.every((color, i) => color === SAFE_CODE[i]);
+                                if(correct) {
+                                    setTimeout(() => {
+                                        level6.safeUnlocked = true;
+                                        level6.safeUI = false;
+                                        level6.codeInput = [];
+                                        level6.selectedButton = 0;
+                                    }, 1000);
+                                } else {
+                                    setTimeout(() => {
+                                        level6.codeInput = [];
+                                        level6.selectedButton = 0;
+                                    }, 1000);
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
+            
+                // Handle computer UI
+                if(level6.computerUI) {
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    
+                        const choice = 'deliver';
+                    
+                        if(choice === 'destruct') {
+                            state = 'over';
+                            menuChoice = 0;
+                        } else {
+                            level6.npcExitSequence = true;
+                            level6.computerUI = false;
+                        
+                            level6.exitingNPCs = [
+                                {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 330, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 390, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
+                                {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, exiting: false, isMulletPro: true}
+                            ];
+                        }
+                    }
+                    return;
+                }
+            
+                // CEO office interactions
+                if(keys[' '] || keys['action']) {
+                    keys[' '] = false;
+                    keys['action'] = false;
+                
+                    const safeX = 350;
+                    const safeY = 130;
+                
+                    if(ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
+                        level6.moneyLives++;
+                        updateLives();
+                        ceo.hasDrink = true;
+                        ceo.state = 'admiring';
+                    }
+                
+                    // Open safe code entry UI if locked
+                    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
+                        level6.safeUI = true;
+                        level6.selectedButton = 0;
+                    }
+
+                    // Open safe item selection UI if unlocked (always accessible for bullets)
+                    if(level6.safeUnlocked && Math.abs(player.x - safeX) < 50 && Math.abs(player.y - (safeY + 25)) < 60) {
+                        level6.safeUI = true;
+                        level6.selectingItem = true;
+                        level6.itemSelection = 0;
+                    }
+                
+                    const monX = 375;
+                    const monY = 195;
+                    if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 40 && Math.abs(player.y - (monY + 15)) < 40) {
+                        level6.computerUI = true;
+                    }
+                
+                    if(level6.hasRevolver && level6.revolverAmmo > 0) {
+                        const direction = player.facing === 'left' ? -1 : player.facing === 'right' ? 1 : 0;
+                        const vertDir = player.facing === 'forward' ? -1 : 0;
+                    
+                        if(direction !== 0 || vertDir !== 0) {
+                            bullets.push({
+                                x: player.x,
+                                y: player.y - 25,
+                                vx: direction * 12,
+                                vy: vertDir * 12,
+                                fromCEO: false
+                            });
+                            level6.revolverAmmo--;
+                        
+                            if(ceo.state !== 'dead' && Math.abs(bullets[bullets.length-1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length-1].y - ceo.y) < 50) {
+                                ceo.health--;
+                                ceo.blinkTimer = 10;
+
+                                // Spread cash sacks in a circle pattern for visibility
+                                const sackIndex = 6 - ceo.health;
+                                const angle = (sackIndex / 6) * Math.PI * 2;
+                                const radius = 40;
+                                level6.cashSacks.push({
+                                    x: ceo.x + Math.cos(angle) * radius,
+                                    y: ceo.y + Math.sin(angle) * radius,
+                                    claimed: false
+                                });
+
+                                if(ceo.health <= 0) {
+                                    ceo.state = 'dead';
+                                    level6.ceoDefeated = true;
+                                } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
+                                    ceo.state = 'hunting';
+                                }
+                            }
+                        }
+                    }
+                }
+            
+                // Full 2D movement in CEO office
+                const prevX = player.x;
+                const prevY = player.y;
+            
+                if(keys['ArrowLeft'] || keys['left']) {
+                    player.x = Math.max(100, player.x - 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'left';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(keys['ArrowRight'] || keys['right']) {
+                    player.x = Math.min(600, player.x + 5);
+                    if(player.x !== prevX) {
+                        player.facing = 'right';
+                        player.lastMove = Date.now();
+                    }
+                }
+                if(keys['ArrowUp'] || keys['up']) {
+                    player.y = Math.max(100, player.y - 5);
+                    if(player.y !== prevY) player.lastMove = Date.now();
+                }
+                if(keys['ArrowDown'] || keys['down']) {
+                    player.y = Math.min(450, player.y + 5);
+                    if(player.y !== prevY) player.lastMove = Date.now();
+                }
+            
+                // Collision with desk - more precise, only desk surface
+                const deskX = 350;
+                const deskY = 180;
+                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 5 && player.y < deskY + 65) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            
+                // Collision with trophy cabinet
+                const cabinetX = 550;
+                const cabinetY = 100;
+                if(player.x > cabinetX - 20 && player.x < cabinetX + 100 && player.y < cabinetY + 120) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            
+                // Collision with mirror
+                const mirrorX = 150;
+                const mirrorY = 100;
+                if(player.x > mirrorX - 20 && player.x < mirrorX + 110 && player.y < mirrorY + 130) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+            
+                if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
+                   !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
+                    if(Date.now() - player.lastMove > 200) {
+                        player.facing = 'forward';
+                    }
+                }
+            }
+        
+            // Bullet collision
+            for(let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].vx;
+                bullets[i].y += bullets[i].vy;
+            
+                if(bullets[i].x < 0 || bullets[i].x > 700 || bullets[i].y < 0 || bullets[i].y > 500) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+            
+                if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
+                    level6.moneyLives--;
+                    updateLives();
+                    bullets.splice(i, 1);
+                
+                    if(level6.moneyLives <= 0) {
+                        state = 'over';
+                        menuChoice = 0;
+                    }
+                    continue;
+                }
+            
+                if(!bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
+                    ceo.health--;
+                    ceo.blinkTimer = 10;
+
+                    // Spread cash sacks in a circle pattern for visibility
+                    const sackIndex = 6 - ceo.health;
+                    const angle = (sackIndex / 6) * Math.PI * 2;
+                    const radius = 40;
+                    level6.cashSacks.push({
+                        x: ceo.x + Math.cos(angle) * radius,
+                        y: ceo.y + Math.sin(angle) * radius,
+                        claimed: false
+                    });
+
+                    bullets.splice(i, 1);
+
+                    if(ceo.health <= 0) {
+                        ceo.state = 'dead';
+                        level6.ceoDefeated = true;
+                    } else if(ceo.state === 'admiring') {
+                        ceo.state = 'hunting';
+                    }
+                    continue;
+                }
+            }
+        
+            return;
+        }
+
+    
+    // LEVELS 1-4 LOGIC
+    if(!ui.show && !ui.gunUI) {
+        const prevX = player.x;
+        if(keys['ArrowLeft'] || keys['left']) {
+            player.x = Math.max(60, player.x - 5);
+            if(player.x !== prevX) {
+                player.facing = 'left';
+                player.lastMove = Date.now();
+            }
+        }
+        if(keys['ArrowRight'] || keys['right']) {
+            player.x = Math.min(640, player.x + 5);
+            if(player.x !== prevX) {
+                player.facing = 'right';
+                player.lastMove = Date.now();
+            }
+        }
+        if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right']) {
+            if(Date.now() - player.lastMove > 200) {
+                player.facing = 'forward';
+            }
+        }
+    }
+
+    if(boss.active && boss.walking) {
+        if(boss.angry) {
+            boss.x += 5;
+            boss.facing = 'right';
+            if(boss.x > 750) {
+                boss.active = false;
+                boss.needsColor = null;
+                boss.angry = false;
+            }
+        } else if(boss.needsColor === null) {
+            boss.x += 3;
+            boss.facing = 'right';
+            if(boss.x > 750) {
+                boss.active = false;
+            }
+        } else {
+            boss.x -= 2;
+            boss.facing = 'left';
+            if(boss.x <= 200) {
+                boss.walking = false;
+                boss.spawnTime = Date.now();
+            }
+        }
+    }
+    
+    if(boss.active && !boss.walking && !boss.angry && boss.needsColor) {
+        if(Date.now() - boss.spawnTime > 6000) {
+            boss.angry = true;
+            boss.walking = true;
+            boss.needsColor = null;
+            lives--;
+            score = Math.floor(score / 2);
+            updateLives();
+            if(lives <= 0) {
+                state = 'over';
+                menuChoice = 0;
+            }
+        }
+    }
+    
+    if(ghostGun.printing) {
+        ghostGun.printProgress += 0.02;
+        if(ghostGun.printProgress >= 1) {
+            ghostGun.printing = false;
+            ghostGun.printProgress = 0;
+            if(ghostGun.printingHeart) {
+                lives = Math.min(3, lives + 1);
+                updateLives();
+                ghostGun.printingHeart = false;
+            } else {
+                ghostGun.hasGun = true;
+                ghostGun.ammo = 1;
+            }
+        }
+    }
+
+    for(let i = explosions.length - 1; i >= 0; i--) {
+        let exp = explosions[i];
+        exp.radius += 3;
+        exp.alpha -= 0.03;
+        for(let p of exp.particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.3;
+            p.life -= 0.02;
+        }
+        if(exp.alpha <= 0) {
+            explosions.splice(i, 1);
+        }
+    }
+    
+    for(let i = muzzleFlashes.length - 1; i >= 0; i--) {
+        muzzleFlashes[i].life--;
+        if(muzzleFlashes[i].life <= 0) {
+            muzzleFlashes.splice(i, 1);
+        }
+    }
+    
+    for(let i = bullets.length - 1; i >= 0; i--) {
+        bullets[i].x += bullets[i].vx;
+        if(bullets[i].x > 750 || bullets[i].x < 0) {
+            bullets.splice(i, 1);
+            continue;
+        }
+        if(boss.active && Math.abs(bullets[i].x - boss.x) < 50 && Math.abs(bullets[i].y - boss.y) < 50) {
+            boss.active = false;
+            boss.needsColor = null;
+            boss.walking = false;
+            boss.angry = false;
+            boss.bossKills++;
+            score += 500 * level;
+            bullets.splice(i, 1);
+            createExplosion(boss.x, boss.y);
+            lives = Math.min(3, lives + 1);
+            updateLives();
+            checkPromotion();
+        }
+    }
+
+    if(keys[' '] || keys['action']) {
+        keys[' '] = false;
+        keys['action'] = false;
+        
+        const atComputer = Math.abs(player.x - computer.x) < 60;
+        const at3DPrinter = level === 4 && Math.abs(player.x - printer3d.x) < 60;
+        
+        if(ghostGun.hasGun && ghostGun.ammo > 0 && !ui.show && !ui.gunUI) {
+            const direction = player.facing === 'left' ? -1 : player.facing === 'right' ? 1 : 0;
+            if(direction !== 0) {
+                bullets.push({x: player.x, y: player.y - 25, vx: direction * 12});
+                createMuzzleFlash(player.x, player.y - 25, player.facing);
+                ghostGun.ammo = 0;
+                ghostGun.hasGun = false;
+            }
+            return;
+        }
+        
+        if(at3DPrinter && !player.holding && !ui.show && !ui.gunUI && !ghostGun.hasGun && !ghostGun.printing) {
+            ui.gunUI = true;
+            return;
+        }
+        
+        if(atComputer && !player.holding && !ui.show && !ui.gunUI && !ghostGun.hasGun) {
+            ui.show = true;
+            return;
+        }
+        
+        if(ui.show && !ui.confirming) {
+            ui.confirming = true;
+            return;
+        }
+        
+        if(ui.show && ui.confirming) {
+            player.holding = COLORS[ui.selectedColor].name;
+            ui.show = false;
+            ui.confirming = false;
+            ui.selectedColor = 0;
+            return;
+        }
+        
+        if(ui.gunUI && !ui.confirming) {
+            ui.confirming = true;
+            return;
+        }
+        
+        if(ui.gunUI && ui.confirming) {
+            ui.gunUI = false;
+            ui.confirming = false;
+            ghostGun.printing = true;
+            ghostGun.printProgress = 0;
+            ghostGun.printingHeart = (ui.gunChoice === 1);
+            ui.gunChoice = 0;
+            return;
+        }
+        
+        if(player.holding) {
+            if(boss.active && !boss.angry && Math.abs(player.x - boss.x) < 50 && boss.needsColor === player.holding) {
+                score += 300 * level;
+                boss.needsColor = null;
+                boss.walking = true;
+                boss.angry = false;
+                player.holding = null;
+                return;
+            }
+            
+            for(let npc of npcs) {
+                if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && npc.color.name === player.holding) {
+                    npc.needsDoc = false;
+                    npc.state = 'fixing';
+                    npc.fixAnim = 0;
+                    player.holding = null;
+                    score += 150 * level;
+                    
+                    const fixInterval = setInterval(() => {
+                        npc.fixAnim += 0.3;
+                    }, 50);
+                    
+                    setTimeout(() => {
+                        clearInterval(fixInterval);
+                        cracks = cracks.filter(c => c.npc !== npc);
+                        npc.state = 'happy';
+                    }, 2000);
+                    break;
+                }
+            }
+        }
+    }
+    
+    if(ui.show && !ui.confirming) {
+        if((keys['ArrowLeft'] || keys['left']) && !keys.leftProcessed) {
+            ui.selectedColor = Math.max(0, ui.selectedColor - 1);
+            keys.leftProcessed = true;
+        }
+        if((keys['ArrowRight'] || keys['right']) && !keys.rightProcessed) {
+            ui.selectedColor = Math.min(3, ui.selectedColor + 1);
+            keys.rightProcessed = true;
+        }
+        if(!keys['ArrowLeft'] && !keys['left']) keys.leftProcessed = false;
+        if(!keys['ArrowRight'] && !keys['right']) keys.rightProcessed = false;
+    }
+
+    if(ui.gunUI && !ui.confirming) {
+        if((keys['ArrowLeft'] || keys['left']) && !keys.leftProcessed) {
+            ui.gunChoice = Math.max(0, ui.gunChoice - 1);
+            keys.leftProcessed = true;
+        }
+        if((keys['ArrowRight'] || keys['right']) && !keys.rightProcessed) {
+            ui.gunChoice = Math.min(1, ui.gunChoice + 1);
+            keys.rightProcessed = true;
+        }
+        if(!keys['ArrowLeft'] && !keys['left']) keys.leftProcessed = false;
+        if(!keys['ArrowRight'] && !keys['right']) keys.rightProcessed = false;
+    }
+    
+    for(let i = cracks.length - 1; i >= 0; i--) {
+        let crack = cracks[i];
+        if(Date.now() - crack.time > crack.max) {
+            createExplosion(crack.npc.x, 240);
+            cracks.splice(i, 1);
+            lives--;
+            updateLives();
+            resetting = true;
+            fadeOut = true;
+            fadeAlpha = 0;
+            if(lives <= 0) {
+                state = 'over';
+                menuChoice = 0;
+            }
+            return;
+        }
+    }
+}
+
+
+// SECTION 14: Game Loop and Event Handlers
+function winGame() {
+    state = 'win';
+    menuChoice = 0;
+}
+
+function nextLevel() {
+    if(level < 4) {
+        level++;
+        timer = 60;
+        state = 'levelCard';
+        cardTimer = 0;
+        initLevel(level);
+    } else {
+        winGame();
+    }
+}
+
+let lastTime = Date.now();
+let counter = 0;
+
+function gameLoop() {
+    if(state !== 'playing' && state !== 'levelCard' && state !== 'over' && 
+       state !== 'win' && state !== 'menu' && state !== 'promotion' && 
+       state !== 'theend' && state !== 'victory') return;
+    
+    frame++;
+    const now = Date.now();
+    counter += now - lastTime;
+    lastTime = now;
+    
+    if(state === 'playing' && !resetting && counter >= 1000) {
+        timer--;
+        counter = 0;
+        document.getElementById('timer').textContent = timer;
+        if(timer <= 0) {
+            if(level === 5) {
+                state = 'theend';
+                menuChoice = 0;
+            } else if(level === 6) {
+                state = 'over';
+                menuChoice = 0;
+            } else {
+                nextLevel();
+            }
+        }
+    }
+    
+    update();
+    drawScene();
+    document.getElementById('level').textContent = level;
+    document.getElementById('score').textContent = score;
+    requestAnimationFrame(gameLoop);
+}
+
+drawScene();
+gameLoop();
+
+document.addEventListener('keydown', e => {
+    keys[e.key] = true;
+});
+
+document.addEventListener('keyup', e => {
+    keys[e.key] = false;
+});
+
+document.querySelectorAll('.control-btn').forEach(btn => {
+    btn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        keys[btn.dataset.dir] = true;
+    }, {passive: false});
+    
+    btn.addEventListener('touchend', e => {
+        e.preventDefault();
+        keys[btn.dataset.dir] = false;
+    }, {passive: false});
+    
+    btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        keys[btn.dataset.dir] = true;
+    });
+    
+    btn.addEventListener('mouseup', e => {
+        e.preventDefault();
+        keys[btn.dataset.dir] = false;
+    });
+});
+
+document.getElementById('action-btn').addEventListener('touchstart', e => {
+    e.preventDefault();
+    keys['action'] = true;
+}, {passive: false});
+
+document.getElementById('action-btn').addEventListener('touchend', e => {
+    e.preventDefault();
+    keys['action'] = false;
+}, {passive: false});
+
+document.getElementById('action-btn').addEventListener('mousedown', e => {
+    e.preventDefault();
+    keys['action'] = true;
+});
+
+document.getElementById('action-btn').addEventListener('mouseup', e => {
+    e.preventDefault();
+    keys['action'] = false;
+});
+</script>
+</body>
+</html>
