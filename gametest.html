@@ -423,6 +423,8 @@ function initLevel(lv) {
         level6.moneyLives = 3;
         level6.ceoDefeated = false;
         level6.computerUI = false;
+        level6.computerChoice = 0; // 0 = self-destruct, 1 = deliver means
+        level6.computerCompleted = false;
         level6.endingTriggered = false;
         level6.npcExitSequence = false;
         level6.npcExitTimer = 0;
@@ -1092,9 +1094,34 @@ function drawGhostGun(x, y, facing) {
 }
 
 function drawRevolver(x, y, facing) {
-    const offsetX = facing === 'left' ? -20 : facing === 'right' ? 20 : 0;
+    // Draw raised arm holding gun
+    const s = 2;
+    const armX = facing === 'left' ? x - 12 : facing === 'right' ? x + 12 : x + 10;
+    const armY = y;
+
+    // Arm (raised outward)
+    ctx.fillStyle = '#2b2b2b';
+    if(facing === 'left') {
+        ctx.fillRect(armX, armY - 8, 3*s, 6*s); // Raised left arm
+    } else if(facing === 'right') {
+        ctx.fillRect(armX - 3*s, armY - 8, 3*s, 6*s); // Raised right arm
+    } else {
+        ctx.fillRect(armX - 2*s, armY - 8, 3*s, 6*s); // Forward facing raised arm
+    }
+
+    // Hand/fist holding gun
+    ctx.fillStyle = '#d4a882';
+    if(facing === 'left') {
+        ctx.fillRect(armX - 4, armY - 10, 6, 6);
+    } else if(facing === 'right') {
+        ctx.fillRect(armX - 2, armY - 10, 6, 6);
+    } else {
+        ctx.fillRect(armX - 3, armY - 10, 6, 6);
+    }
+
+    const offsetX = facing === 'left' ? -18 : facing === 'right' ? 18 : 12;
     const gunX = x + offsetX;
-    const gunY = y - 25;
+    const gunY = y - 12; // In hand, not above head
 
     if(facing === 'right') {
         ctx.save();
@@ -2865,50 +2892,92 @@ function drawSafeUI() {
 }
 
 function drawComputerUI() {
+    // Post-selection completed state
+    if(level6.computerCompleted) {
+        ctx.fillStyle = 'rgba(0,0,0,0.95)';
+        ctx.fillRect(50, 50, 600, 400);
+
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(60, 60, 580, 380);
+
+        ctx.fillStyle = '#27ae60';
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('COMMAND EXECUTED', 350, 120);
+
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 28px Arial';
+        ctx.fillText('Take the means of production', 350, 200);
+
+        // Blinking cash sack
+        if(frame % 30 < 15) {
+            ctx.save();
+            ctx.translate(350, 280);
+            ctx.scale(2, 2);
+            drawCashSack(0, 0);
+            ctx.restore();
+
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('COLLECT THE SACKS', 350, 350);
+        }
+
+        return;
+    }
+
+    // Interactive selection UI
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
     ctx.fillRect(50, 50, 600, 400);
-    
+
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(60, 60, 580, 380);
-    
+
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 36px Arial';
+    ctx.font = 'bold 32px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH MAINFRAME', 350, 120);
-    
-    ctx.fillStyle = '#666';
-    ctx.font = '18px Arial';
-    ctx.fillText('SYSTEM ACCESS: EXECUTIVE', 350, 160);
-    
+    ctx.fillText('PIPETECH MAINFRAME', 350, 110);
+
+    ctx.fillStyle = '#27ae60';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText('SYSTEM ACCESS: EXECUTIVE', 350, 150);
+
+    // Self-destruct option (left)
+    const destructSelected = level6.computerChoice === 0;
     ctx.fillStyle = '#e74c3c';
-    ctx.fillRect(150, 220, 180, 100);
-    ctx.strokeStyle = '#c0392b';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(150, 220, 180, 100);
-    
+    ctx.fillRect(120, 200, 180, 110);
+
+    // White outline if selected
+    ctx.strokeStyle = destructSelected ? '#ffffff' : '#c0392b';
+    ctx.lineWidth = destructSelected ? 6 : 3;
+    ctx.strokeRect(120, 200, 180, 110);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText('SELF', 210, 245);
+    ctx.fillText('DESTRUCT', 210, 275);
+
+    // Deliver means option (right)
+    const deliverSelected = level6.computerChoice === 1;
+    ctx.fillStyle = '#27ae60';
+    ctx.fillRect(400, 200, 180, 110);
+
+    // White outline if selected
+    ctx.strokeStyle = deliverSelected ? '#ffffff' : '#1e8449';
+    ctx.lineWidth = deliverSelected ? 6 : 3;
+    ctx.strokeRect(400, 200, 180, 110);
+
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 20px Arial';
-    ctx.fillText('SELF', 240, 260);
-    ctx.fillText('DESTRUCT', 240, 290);
-    
-    ctx.fillStyle = '#27ae60';
-    ctx.fillRect(370, 220, 180, 100);
-    ctx.strokeStyle = '#1e8449';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(370, 220, 180, 100);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText('DELIVER MEANS', 460, 255);
-    ctx.fillText('OF PRODUCTION', 460, 280);
-    
+    ctx.fillText('DELIVER MEANS', 490, 240);
+    ctx.fillText('OF PRODUCTION', 490, 270);
+
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 16px Arial';
-    ctx.fillText('USE ARROWS TO SELECT, ACTION TO CONFIRM', 350, 370);
-    
+    ctx.fillText('USE ARROWS TO SELECT, ACTION TO CONFIRM', 350, 360);
+
     ctx.fillStyle = '#f39c12';
     ctx.font = '14px Arial';
-    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 400);
+    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 390);
 }
 
 
@@ -4743,19 +4812,32 @@ function update() {
             
                 // Handle computer UI
                 if(level6.computerUI) {
+                    // Arrow navigation
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.computerChoice = 0; // Self-destruct
+                        keys['ArrowLeft'] = false;
+                        keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.computerChoice = 1; // Deliver means
+                        keys['ArrowRight'] = false;
+                        keys['right'] = false;
+                    }
+
+                    // Confirm selection
                     if(keys[' '] || keys['action']) {
                         keys[' '] = false;
                         keys['action'] = false;
-                    
-                        const choice = 'deliver';
-                    
-                        if(choice === 'destruct') {
+
+                        if(level6.computerChoice === 0) {
+                            // Self-destruct
                             state = 'over';
                             menuChoice = 0;
                         } else {
+                            // Deliver means of production
+                            level6.computerCompleted = true;
                             level6.npcExitSequence = true;
-                            level6.computerUI = false;
-                        
+
                             level6.exitingNPCs = [
                                 {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
                                 {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
