@@ -266,7 +266,8 @@ let level6 = {
     npcExitSequence: false,
     npcExitTimer: 0,
     exitingNPCs: [],
-    npcPipes: []
+    npcPipes: [],
+    radiationTimer: 0
 };
 
 let ghostGun = {
@@ -423,6 +424,8 @@ function initLevel(lv) {
         level6.moneyLives = 3;
         level6.ceoDefeated = false;
         level6.computerUI = false;
+        level6.computerChoice = 0; // 0 = self-destruct, 1 = deliver means
+        level6.computerCompleted = false;
         level6.endingTriggered = false;
         level6.npcExitSequence = false;
         level6.npcExitTimer = 0;
@@ -801,6 +804,68 @@ function drawBaldManager(x, y, facing) {
     }
 }
 
+// Draw pipe manager from back - colored jumpsuit with white sneakers
+function drawPipeManagerBack(x, y, color, animOffset) {
+    const s = 2;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 32, 10, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hood (back of head) - colored
+    ctx.fillStyle = color.hex;
+    ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+
+    // Hood shadow/depth at top
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(x - 5*s, y - 12*s, 10*s, 2*s);
+
+    // Colored jumpsuit torso
+    ctx.fillStyle = color.hex;
+    ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+
+    // Darker stripe down center (back seam)
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x - s, y - 2*s, 2*s, 10*s);
+
+    // Arms - animated turning motion
+    const armSwing = Math.sin(animOffset) * 3;
+
+    // Left arm
+    ctx.fillStyle = color.hex;
+    ctx.fillRect(x - 9*s, y + armSwing, 2*s, 7*s);
+    // Left hand/glove
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(x - 9*s, y + 6*s + armSwing, 2*s, 2*s);
+
+    // Right arm
+    ctx.fillStyle = color.hex;
+    ctx.fillRect(x + 7*s, y - armSwing, 2*s, 7*s);
+    // Right hand/glove
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(x + 7*s, y + 6*s - armSwing, 2*s, 2*s);
+
+    // Pants (darker shade of jumpsuit color)
+    ctx.fillStyle = color.hex;
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
+    ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
+    ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
+    ctx.globalAlpha = 1;
+
+    // White sneakers
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 5*s, y + 20*s, 4*s, 2*s);
+    ctx.fillRect(x + s, y + 20*s, 4*s, 2*s);
+
+    // Sneaker soles (gray)
+    ctx.fillStyle = '#999';
+    ctx.fillRect(x - 5*s, y + 22*s, 4*s, 1);
+    ctx.fillRect(x + s, y + 22*s, 4*s, 1);
+}
+
 
 // SECTION 7: Boss and NPC Drawing Functions
 function drawBoss(x, y, facing) {
@@ -1092,9 +1157,34 @@ function drawGhostGun(x, y, facing) {
 }
 
 function drawRevolver(x, y, facing) {
-    const offsetX = facing === 'left' ? -20 : facing === 'right' ? 20 : 0;
+    // Draw raised arm holding gun
+    const s = 2;
+    const armX = facing === 'left' ? x - 12 : facing === 'right' ? x + 12 : x + 10;
+    const armY = y;
+
+    // Arm (raised outward)
+    ctx.fillStyle = '#2b2b2b';
+    if(facing === 'left') {
+        ctx.fillRect(armX, armY - 8, 3*s, 6*s); // Raised left arm
+    } else if(facing === 'right') {
+        ctx.fillRect(armX - 3*s, armY - 8, 3*s, 6*s); // Raised right arm
+    } else {
+        ctx.fillRect(armX - 2*s, armY - 8, 3*s, 6*s); // Forward facing raised arm
+    }
+
+    // Hand/fist holding gun
+    ctx.fillStyle = '#d4a882';
+    if(facing === 'left') {
+        ctx.fillRect(armX - 4, armY - 10, 6, 6);
+    } else if(facing === 'right') {
+        ctx.fillRect(armX - 2, armY - 10, 6, 6);
+    } else {
+        ctx.fillRect(armX - 3, armY - 10, 6, 6);
+    }
+
+    const offsetX = facing === 'left' ? -18 : facing === 'right' ? 18 : 12;
     const gunX = x + offsetX;
-    const gunY = y - 25;
+    const gunY = y - 12; // In hand, not above head
 
     if(facing === 'right') {
         ctx.save();
@@ -1175,42 +1265,54 @@ function drawRevolver(x, y, facing) {
 }
 
 function drawCashSack(x, y) {
-    // Cloth sack body - bulging bottom
+    // Cloth sack body - proper knotted sack shape with bulging bottom
     ctx.fillStyle = '#27ae60';
     ctx.beginPath();
-    ctx.ellipse(x, y + 4, 14, 16, 0, 0, Math.PI * 2);
+    // Bottom bulge
+    ctx.ellipse(x, y + 8, 13, 14, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Middle section (slightly narrower)
+    ctx.fillStyle = '#2ecc71';
+    ctx.beginPath();
+    ctx.ellipse(x, y, 11, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Gathered neck section
+    ctx.fillStyle = '#27ae60';
+    ctx.fillRect(x - 7, y - 8, 14, 8);
 
     // Sack texture/wrinkles
     ctx.strokeStyle = '#1e8449';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(x - 10, y);
-    ctx.lineTo(x - 8, y + 10);
+    ctx.moveTo(x - 9, y - 2);
+    ctx.lineTo(x - 7, y + 12);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(x + 10, y + 2);
-    ctx.lineTo(x + 8, y + 12);
+    ctx.moveTo(x + 9, y);
+    ctx.lineTo(x + 7, y + 14);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 3, y + 2);
+    ctx.lineTo(x - 2, y + 16);
     ctx.stroke();
 
-    // Tied rope at neck
+    // Tied rope/knot at neck
     ctx.fillStyle = '#8b6914';
-    ctx.fillRect(x - 8, y - 8, 16, 4);
+    ctx.fillRect(x - 8, y - 10, 16, 3);
 
-    // Rope knot
+    // Prominent rope knot
     ctx.fillStyle = '#6b4904';
     ctx.beginPath();
-    ctx.arc(x, y - 6, 3, 0, Math.PI * 2);
+    ctx.arc(x, y - 9, 4, 0, Math.PI * 2);
     ctx.fill();
-
-    // Rope ends
-    ctx.fillStyle = '#8b6914';
-    ctx.fillRect(x - 10, y - 10, 4, 6);
-    ctx.fillRect(x + 6, y - 10, 4, 6);
-
-    // Gathered cloth at neck
-    ctx.fillStyle = '#1e8449';
-    ctx.fillRect(x - 6, y - 6, 12, 6);
+    ctx.beginPath();
+    ctx.arc(x - 2, y - 9, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 2, y - 9, 2, 0, Math.PI * 2);
+    ctx.fill();
 
     // Large $ symbol
     ctx.fillStyle = '#ffd700';
@@ -1968,10 +2070,10 @@ function drawOfficeRoom(officeName) {
 function drawLevel6PipeRoom() {
     ctx.fillStyle = '#e8e6dc';
     ctx.fillRect(0, 0, 700, 500);
-    
+
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 400, 700, 100);
-    
+
     for(let i = 0; i < 20; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#666';
@@ -1979,143 +2081,346 @@ function drawLevel6PipeRoom() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
-    
-    ctx.fillStyle = '#7a7a7a';
-    ctx.fillRect(20, 30, 220, 110);
-    ctx.fillStyle = '#6a6a6a';
-    ctx.fillRect(25, 35, 210, 100);
-    ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(28, 38, 204, 94);
-    
-    for(let bx = 0; bx < 2; bx++) {
-        for(let by = 0; by < 2; by++) {
-            ctx.fillStyle = '#3a3a3a';
-            ctx.beginPath();
-            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#8a8a8a';
-            ctx.beginPath();
-            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-    
-    ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 36px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', 130, 75);
-    
-    ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(50, 82, 160, 1);
-    
-    ctx.fillStyle = '#d0d0d0';
-    ctx.font = '10px Arial';
-    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
-    
-    for(let i = 0; i < 4; i++) {
-        ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(50, 105 + i * 5, 160, 3);
-    }
-    
+
     ctx.fillStyle = '#c4bfad';
     ctx.fillRect(0, 410, 700, 90);
 
-    // Computer / DOC PRINTER (same as Level 5)
-    const compX = 180;
-    const compY = 350;
-    ctx.fillStyle = '#2b2b2b';
-    ctx.fillRect(compX - 30, compY, 60, 35);
-
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(compX - 25, compY - 30, 50, 30);
-
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(compX - 22, compY - 27, 44, 24);
-
-    ctx.fillStyle = '#004a7c';
-    ctx.fillRect(compX - 20, compY - 25, 40, 20);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(compX - 20, compY - 25, 40, 5);
-
-    ctx.fillStyle = '#444';
-    ctx.fillRect(compX - 5, compY, 10, 3);
-
-    ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 7px Arial';
+    // Wall-mounted PipeTech signage (brutalist painted text)
+    ctx.fillStyle = '#3a3a3a';
+    ctx.font = 'bold 48px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('DOC PRINTER', compX, compY + 30);
+    ctx.fillText('PIPETECH', 350, 80);
 
-    // Draw animated pipe NPCs (matching Level 5 style)
-    for(let npc of level6.npcPipes) {
-        const pipeY = 240;
+    // Four colored stripe lines running wall to wall underneath
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(0, 90 + i * 6, 700, 4);
+    }
 
-        // Vertical pipe from top
+    // Draw pipes running from top wall gaskets to floor gaskets with managers
+    // Inverted positions from previous levels (opposite side of wall)
+    const pipePositions = [280, 380, 480, 580]; // Inverted from typical positions
+
+    for(let i = 0; i < level6.npcPipes.length; i++) {
+        const npc = level6.npcPipes[i];
+        const pipeX = pipePositions[i];
+
+        // Wall gasket at top
+        ctx.fillStyle = '#888';
+        ctx.fillRect(pipeX - 12, 50, 24, 8);
+        ctx.fillStyle = '#666';
+        ctx.fillRect(pipeX - 10, 52, 20, 4);
+
+        // Bolts on gasket
+        for(let b = 0; b < 3; b++) {
+            ctx.fillStyle = '#444';
+            ctx.beginPath();
+            ctx.arc(pipeX - 8 + b * 8, 54, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Vertical pipe from top gasket to floor gasket
         ctx.strokeStyle = npc.color.hex;
         ctx.lineWidth = 14;
         ctx.beginPath();
-        ctx.moveTo(npc.x, 60);
-        ctx.lineTo(npc.x, pipeY);
+        ctx.moveTo(pipeX, 58);
+        ctx.lineTo(pipeX, 400);
         ctx.stroke();
 
         // Vertical pipe shine
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(npc.x - 4, 60);
-        ctx.lineTo(npc.x - 4, pipeY);
+        ctx.moveTo(pipeX - 4, 58);
+        ctx.lineTo(pipeX - 4, 400);
         ctx.stroke();
 
-        // Horizontal pipe to right (matching Level 5)
-        ctx.strokeStyle = npc.color.hex;
-        ctx.lineWidth = 14;
+        // Floor gasket at bottom
+        ctx.fillStyle = '#888';
+        ctx.fillRect(pipeX - 12, 398, 24, 8);
+        ctx.fillStyle = '#666';
+        ctx.fillRect(pipeX - 10, 400, 20, 4);
+
+        // Turn-valve at floor level
+        const valveY = 370;
+
+        // Valve wheel
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(npc.x, pipeY);
-        ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
-        ctx.lineTo(700, pipeY + 25);
+        ctx.arc(pipeX, valveY, 12, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Horizontal pipe shine
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(npc.x + 21, pipeY + 25);
-        ctx.lineTo(700, pipeY + 25);
-        ctx.stroke();
-
-        // Crack animation (matching Level 5 style)
-        if(npc.needsDoc && npc.crackStartTime) {
-            const crackTime = Date.now() - npc.crackStartTime;
-            const pct = Math.min(crackTime / 15000, 1);
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.4 + pct * 0.6;
-            const sz = 18 + pct * 28;
-            for(let i = 0; i < 3; i++) {
-                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
-            }
-            ctx.globalAlpha = 1;
+        // Valve spokes (animated rotation)
+        const valveAnim = (Date.now() / 800 + i) % (Math.PI * 2);
+        for(let s = 0; s < 6; s++) {
+            const angle = valveAnim + (s * Math.PI / 3);
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(pipeX, valveY);
+            ctx.lineTo(pipeX + Math.cos(angle) * 10, valveY + Math.sin(angle) * 10);
+            ctx.stroke();
         }
 
-        // Draw NPC face (using standard drawNPC function)
-        drawNPC(npc);
+        // Valve center hub
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(pipeX, valveY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Smoke/steam coming from unstable valve
+        const smokeTime = Date.now() / 1000;
+        for(let s = 0; s < 3; s++) {
+            const smokeY = valveY - 20 - s * 15 - (smokeTime * 10) % 30;
+            if(smokeY > valveY - 80) {
+                ctx.fillStyle = `rgba(200, 200, 200, ${0.4 - s * 0.1})`;
+                ctx.beginPath();
+                ctx.arc(pipeX + Math.sin(smokeTime + s) * 5, smokeY, 6 + s * 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Draw pipe manager with back view, operating the valve
+        const managerY = 340;
+        const armAnim = (Date.now() / 400 + i) % (Math.PI * 2);
+        drawPipeManagerBack(pipeX, managerY, npc.color, armAnim);
     }
 
-    // Right door is CLOSED on level 6 - match floor color to blend in
-    ctx.fillStyle = '#808080';
+    // Right door is now VISIBLE and accessible (to megacomputer room)
+    ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(660, 400, 40, 100);
 
-    // Add floor tile lines to blend with floor
-    for(let j = 0; j < 3; j++) {
-        ctx.strokeStyle = '#666';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(660, 400 + j * 33, 40, 33);
-    }
+    // Door frame
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(660, 400, 40, 100);
+
+    // Door handle
+    ctx.fillStyle = '#888';
+    ctx.fillRect(665, 445, 8, 3);
 
     if(player.x < 60) {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('← CEO OFFICE', 350, 250);
+    }
+
+    if(player.x > 640) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('MEGACOMPUTER →', 350, 250);
+    }
+}
+
+function drawLevel6MegacomputerRoom() {
+    // Dark room background
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, 700, 500);
+
+    // Floor
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(0, 400, 700, 100);
+
+    for(let i = 0; i < 20; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+
+    // Wall-mounted brutalist slogan painted wall to wall
+    ctx.fillStyle = '#3a3a3a';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Creating a new fission of the future.', 350, 60);
+
+    // Yellow pipe running from left wall gasket to center
+    const pipeY = 180; // Same relative height as Level 5 hallway
+
+    // Left wall gasket
+    ctx.fillStyle = '#888';
+    ctx.fillRect(5, pipeY - 4, 12, 8);
+    ctx.fillStyle = '#666';
+    ctx.fillRect(7, pipeY - 2, 8, 4);
+
+    // Yellow pipe from left to center
+    ctx.strokeStyle = COLORS[3].hex; // Yellow
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(17, pipeY);
+    ctx.lineTo(350, pipeY);
+    ctx.stroke();
+
+    // Pipe shine
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(17, pipeY - 4);
+    ctx.lineTo(350, pipeY - 4);
+    ctx.stroke();
+
+    // Pipe turns down to megacomputer
+    ctx.strokeStyle = COLORS[3].hex;
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(350, pipeY);
+    ctx.lineTo(350, 280);
+    ctx.stroke();
+
+    // Vertical pipe shine
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(346, pipeY);
+    ctx.lineTo(346, 280);
+    ctx.stroke();
+
+    // Nuclear-powered AI Megacomputer
+    const compX = 350;
+    const compY = 350;
+
+    // Main computer body (bulky 80s sci-fi style)
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(compX - 80, compY - 80, 160, 100);
+
+    // Darker panels
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(compX - 75, compY - 75, 70, 90);
+    ctx.fillRect(compX + 5, compY - 75, 70, 90);
+
+    // Nuclear reactor reservoir with glowing green liquid
+    const reservoirX = compX - 50;
+    const reservoirY = compY - 60;
+    const reservoirW = 40;
+    const reservoirH = 70;
+
+    // Glass container outline
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(reservoirX, reservoirY, reservoirW, reservoirH);
+
+    // Glowing green bubbling liquid
+    const liquidLevel = reservoirH - 10;
+    const bubbleTime = Date.now() / 300;
+    ctx.fillStyle = '#00ff00';
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(reservoirX + 2, reservoirY + (reservoirH - liquidLevel), reservoirW - 4, liquidLevel);
+    ctx.globalAlpha = 1;
+
+    // Glow effect around liquid
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.fillRect(reservoirX - 5, reservoirY, reservoirW + 10, reservoirH);
+
+    // Bubbles rising in liquid
+    for(let b = 0; b < 3; b++) {
+        const bubbleY = reservoirY + reservoirH - ((bubbleTime + b * 30) % liquidLevel);
+        const bubbleX = reservoirX + 10 + Math.sin(bubbleTime / 10 + b) * 10;
+        ctx.fillStyle = 'rgba(150, 255, 150, 0.5)';
+        ctx.beginPath();
+        ctx.arc(bubbleX, bubbleY, 3 + b, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Biohazard symbol on front panel
+    ctx.fillStyle = '#ffff00';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('☢', compX + 30, compY - 35);
+
+    // Warning text
+    ctx.fillStyle = '#ff0000';
+    ctx.font = 'bold 10px Arial';
+    ctx.fillText('WARNING: HAZARDOUS TO HUMANS', compX + 30, compY - 10);
+    ctx.font = '8px Arial';
+    ctx.fillText('Wear protective gear when approaching', compX + 30, compY);
+
+    // Bundled coils of colored tubing
+    const coilColors = ['#e74c3c', '#27ae60', '#005f99', '#f39c12'];
+    for(let i = 0; i < 4; i++) {
+        const coilX = compX - 60 + i * 15;
+        const coilY = compY - 20;
+        ctx.strokeStyle = coilColors[i];
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for(let t = 0; t < Math.PI * 4; t += 0.2) {
+            const x = coilX + Math.cos(t) * 5;
+            const y = coilY + t * 2;
+            if(t === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    // Vintage Star Trek style blinking buttons
+    const buttonTime = Date.now() / 500;
+    const buttonColors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+    for(let i = 0; i < 12; i++) {
+        const btnX = compX - 70 + (i % 6) * 12;
+        const btnY = compY + 25 + Math.floor(i / 6) * 12;
+        const blinkState = Math.floor(buttonTime + i) % 2;
+        ctx.fillStyle = blinkState ? buttonColors[i % buttonColors.length] : '#333';
+        ctx.beginPath();
+        ctx.arc(btnX, btnY, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Monitor screen with blinking green prompt
+    const screenX = compX + 30;
+    const screenY = compY - 60;
+    const screenW = 60;
+    const screenH = 40;
+
+    // Screen bezel
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(screenX - 5, screenY - 5, screenW + 10, screenH + 10);
+
+    // Screen display
+    ctx.fillStyle = '#001a00';
+    ctx.fillRect(screenX, screenY, screenW, screenH);
+
+    // Blinking green text
+    const textBlink = Math.floor(Date.now() / 700) % 2;
+    if(textBlink) {
+        ctx.fillStyle = '#00ff00';
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Awaiting', screenX + screenW / 2, screenY + 15);
+        ctx.fillText('executive', screenX + screenW / 2, screenY + 23);
+        ctx.fillText('command...', screenX + screenW / 2, screenY + 31);
+    }
+
+    // Radiation glow zone indicator (where player takes damage)
+    if(player.x > 233 && player.x < 467) {
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.1)';
+        ctx.fillRect(233, 0, 234, 500);
+
+        // Show radiation warning overlay on player
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 30, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Left door (back to pipe room)
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 400, 40, 100);
+
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 400, 40, 100);
+
+    ctx.fillStyle = '#888';
+    ctx.fillRect(27, 445, 8, 3);
+
+    if(player.x < 60) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('← PIPE ROOM', 350, 250);
     }
 }
 
@@ -2261,114 +2566,224 @@ function drawLevel6CEOOffice() {
     } else {
         // Open safe showing contents
         if(!level6.hasRevolver) {
-            // Revolver visible
+            // Realistic revolver with wooden handle
+            const revX = safeX - 8;
+            const revY = safeY + 15;
+
+            // Wooden grip
+            ctx.fillStyle = '#8b4513';
+            ctx.fillRect(revX - 4, revY, 5, 8);
+
+            // Metal barrel and cylinder
+            ctx.fillStyle = '#505050';
+            ctx.fillRect(revX + 1, revY + 2, 12, 3);
+
+            // Revolving chamber
+            ctx.fillStyle = '#606060';
+            ctx.beginPath();
+            ctx.arc(revX + 3, revY + 3, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hammer
+            ctx.fillStyle = '#404040';
+            ctx.fillRect(revX + 1, revY - 1, 2, 3);
+
+            // Dead-eye sight
             ctx.fillStyle = '#ffd700';
-            ctx.fillRect(safeX - 10, safeY + 15, 20, 8);
+            ctx.fillRect(revX + 12, revY + 2, 1, 2);
         }
         if(level6.moneyLives < 3) {
             // Money sack visible
             ctx.fillStyle = '#27ae60';
             ctx.beginPath();
-            ctx.arc(safeX - 5, safeY + 32, 6, 0, Math.PI * 2);
+            ctx.arc(safeX + 8, safeY + 32, 6, 0, Math.PI * 2);
             ctx.fill();
         }
     }
     
     // Crystal brandy decanter (LEFT side of desk) - dense crystal square bottle
     const brandyX = deskX - 55;
-    const brandyY = deskY + 15;
+    const brandyY = deskY + 10;
 
     // Square crystal bottle body
     ctx.fillStyle = 'rgba(200,220,255,0.5)';
-    ctx.fillRect(brandyX - 8, brandyY + 10, 16, 25);
+    ctx.fillRect(brandyX - 8, brandyY + 12, 16, 22);
 
     // Crystal facets/texture
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillRect(brandyX - 7, brandyY + 12, 2, 20);
-    ctx.fillRect(brandyX + 5, brandyY + 14, 2, 18);
+    ctx.fillRect(brandyX - 7, brandyY + 14, 2, 18);
+    ctx.fillRect(brandyX + 5, brandyY + 16, 2, 16);
 
     // Bottle outline for crystal effect
     ctx.strokeStyle = 'rgba(255,255,255,0.9)';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(brandyX - 8, brandyY + 10, 16, 25);
+    ctx.strokeRect(brandyX - 8, brandyY + 12, 16, 22);
 
-    // Prism-shaped crystal stopper
-    ctx.fillStyle = 'rgba(200,220,255,0.7)';
-    ctx.beginPath();
-    ctx.moveTo(brandyX, brandyY);
-    ctx.lineTo(brandyX - 5, brandyY + 10);
-    ctx.lineTo(brandyX + 5, brandyY + 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.stroke();
+    // Brandy liquid inside
+    ctx.fillStyle = 'rgba(139,69,19,0.7)';
+    ctx.fillRect(brandyX - 6, brandyY + 22, 12, 11);
+
+    // Crystal highlights on liquid
+    ctx.fillStyle = 'rgba(160,90,40,0.5)';
+    ctx.fillRect(brandyX - 5, brandyY + 23, 3, 9);
 
     // Stopper neck
     ctx.fillStyle = 'rgba(200,220,255,0.6)';
     ctx.fillRect(brandyX - 3, brandyY + 8, 6, 4);
     ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1;
     ctx.strokeRect(brandyX - 3, brandyY + 8, 6, 4);
 
-    // Brandy liquid inside
-    ctx.fillStyle = 'rgba(139,69,19,0.7)';
-    ctx.fillRect(brandyX - 6, brandyY + 22, 12, 12);
-
-    // Crystal highlights on liquid
-    ctx.fillStyle = 'rgba(160,90,40,0.5)';
-    ctx.fillRect(brandyX - 5, brandyY + 23, 3, 10);
-
-    // Wooden coaster with ring stain (LEFT side)
-    ctx.fillStyle = '#8b4513';
+    // Crystal stopper (RIGHT-SIDE UP)
+    ctx.fillStyle = 'rgba(200,220,255,0.7)';
     ctx.beginPath();
-    ctx.arc(brandyX, brandyY + 40, 10, 0, Math.PI * 2);
+    ctx.moveTo(brandyX - 4, brandyY + 8);
+    ctx.lineTo(brandyX + 4, brandyY + 8);
+    ctx.lineTo(brandyX, brandyY + 2);
+    ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#654321';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(brandyX, brandyY + 40, 7, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
     ctx.stroke();
 
-    // Monitor (only active after CEO defeated) - RIGHT side of desk
+    // Control console monitor (only active after CEO defeated) - RIGHT side of desk
     const monX = deskX + 25;
     const monY = deskY + 15;
-    
-    ctx.fillStyle = '#2b2b2b';
-    ctx.fillRect(monX, monY, 30, 25);
-    ctx.fillStyle = level6.ceoDefeated ? '#1a1a1a' : '#0a0a0a';
-    ctx.fillRect(monX + 2, monY + 2, 26, 18);
-    
+
+    // Monitor frame - sleeker design
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(monX, monY, 32, 27);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(monX + 1, monY + 1, 30, 24);
+
+    // Screen
     if(level6.ceoDefeated && !level6.computerUI) {
-        ctx.fillStyle = '#004a7c';
-        ctx.fillRect(monX + 2, monY + 2, 26, 18);
+        // Active screen with cash green glow
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(monX + 2, monY + 2, 28, 21);
+
+        // Glowing effect
+        ctx.shadowColor = '#27ae60';
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = '#2ecc71';
+        ctx.fillRect(monX + 3, monY + 3, 26, 19);
+        ctx.shadowBlur = 0;
+
+        // Terminal-style text
+        ctx.fillStyle = '#0a0a0a';
+        ctx.font = 'bold 6px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('SYSTEM', monX + 16, monY + 10);
+        ctx.fillText('READY', monX + 16, monY + 17);
+    } else if(level6.ceoDefeated) {
+        // Screen off but available
+        ctx.fillStyle = '#1a3a1a';
+        ctx.fillRect(monX + 2, monY + 2, 28, 21);
+    } else {
+        // Inactive/dark screen
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(monX + 2, monY + 2, 28, 21);
     }
-    
+
     // Monitor stand
-    ctx.fillStyle = '#2b2b2b';
-    ctx.fillRect(monX + 12, monY + 27, 6, 4);
-    ctx.fillRect(monX + 8, monY + 31, 14, 2);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(monX + 13, monY + 27, 6, 4);
+    ctx.fillRect(monX + 9, monY + 31, 14, 2);
     
     // Golden trophy cabinet (right back wall) - obstacle
     const cabinetX = 550;
     const cabinetY = 100;
-    
+
+    // Cabinet frame - golden wood
     ctx.fillStyle = '#d4af37';
-    ctx.fillRect(cabinetX, cabinetY, 80, 100);
-    ctx.fillStyle = '#b8941e';
-    ctx.fillRect(cabinetX + 5, cabinetY + 5, 70, 90);
-    
-    // Trophy silhouette
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(cabinetX + 32, cabinetY + 25, 16, 20);
-    ctx.fillRect(cabinetX + 30, cabinetY + 45, 20, 4);
-    ctx.fillRect(cabinetX + 28, cabinetY + 49, 24, 6);
-    
-    // Dictator photo on cabinet
+    ctx.fillRect(cabinetX, cabinetY, 80, 110);
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(cabinetX + 10, cabinetY + 60, 60, 30);
-    ctx.fillStyle = '#f5c89a';
-    ctx.fillRect(cabinetX + 15, cabinetY + 65, 15, 15);
-    ctx.fillRect(cabinetX + 35, cabinetY + 65, 15, 15);
-    ctx.fillRect(cabinetX + 55, cabinetY + 65, 10, 15);
+    ctx.fillRect(cabinetX + 4, cabinetY + 4, 72, 102);
+
+    // Glass shelves (3 shelves for 3 awards)
+    ctx.strokeStyle = 'rgba(200,220,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cabinetX + 6, cabinetY + 36);
+    ctx.lineTo(cabinetX + 74, cabinetY + 36);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cabinetX + 6, cabinetY + 68);
+    ctx.lineTo(cabinetX + 74, cabinetY + 68);
+    ctx.stroke();
+
+    // Award 1: Rhombus-shaped glass on cobalt base (top shelf)
+    // Cobalt blue base
+    ctx.fillStyle = '#0047ab';
+    ctx.fillRect(cabinetX + 28, cabinetY + 28, 24, 4);
+    // Glass rhombus
+    ctx.fillStyle = 'rgba(200,220,255,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(cabinetX + 40, cabinetY + 12);
+    ctx.lineTo(cabinetX + 48, cabinetY + 24);
+    ctx.lineTo(cabinetX + 40, cabinetY + 28);
+    ctx.lineTo(cabinetX + 32, cabinetY + 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Award 2: Golden trophy cup with mahogany base (middle shelf)
+    // Mahogany base
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(cabinetX + 28, cabinetY + 60, 24, 5);
+    // Gold plate
+    ctx.fillStyle = '#ffd700';
+    ctx.font = '5px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('CEO OF', cabinetX + 40, cabinetY + 62);
+    ctx.fillText('THE YEAR', cabinetX + 40, cabinetY + 67);
+    // Golden cup
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.moveTo(cabinetX + 34, cabinetY + 60);
+    ctx.lineTo(cabinetX + 32, cabinetY + 48);
+    ctx.lineTo(cabinetX + 36, cabinetY + 44);
+    ctx.lineTo(cabinetX + 44, cabinetY + 44);
+    ctx.lineTo(cabinetX + 48, cabinetY + 48);
+    ctx.lineTo(cabinetX + 46, cabinetY + 60);
+    ctx.closePath();
+    ctx.fill();
+    // Cup handles
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cabinetX + 30, cabinetY + 52, 3, 0, Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cabinetX + 50, cabinetY + 52, 3, 0, Math.PI);
+    ctx.stroke();
+
+    // Award 3: Saturn-Pipe-Earth statuette (bottom shelf)
+    // Black marble base
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(cabinetX + 28, cabinetY + 98, 24, 4);
+    ctx.strokeStyle = '#333';
+    ctx.strokeRect(cabinetX + 28, cabinetY + 98, 24, 4);
+    // Mini Saturn
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(cabinetX + 35, cabinetY + 88, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Colored pipes (vertical stack)
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(cabinetX + 38, cabinetY + 86 + i * 2, 4, 2);
+    }
+    // Mini Earth
+    ctx.fillStyle = '#4a9eff';
+    ctx.beginPath();
+    ctx.arc(cabinetX + 45, cabinetY + 88, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.arc(cabinetX + 44, cabinetY + 87, 1.5, 0, Math.PI * 2);
+    ctx.fill();
     
     // "YOU WIN" mirror (left back wall) - obstacle
     const mirrorX = 150;
@@ -2396,41 +2811,71 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(mirrorX + 30, mirrorY + 30, 30, 60);
     }
     
-    // Army propaganda portrait (center back)
+    // Saturn-Pipe-Earth portrait (center back, above safe)
     const portraitX = 350;
     const portraitY = 50;
-    
+
+    // Mahogany frame
     ctx.fillStyle = '#4a2a0a';
-    ctx.fillRect(portraitX - 45, portraitY, 90, 70);
+    ctx.fillRect(portraitX - 50, portraitY, 100, 75);
     ctx.fillStyle = '#3a1a00';
-    ctx.fillRect(portraitX - 40, portraitY + 5, 80, 60);
+    ctx.fillRect(portraitX - 45, portraitY + 5, 90, 65);
+
+    // Black background
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(portraitX - 42, portraitY + 8, 84, 59);
+
+    // Saturn (left side)
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(portraitX - 15, portraitY + 37, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Saturn rings
+    ctx.strokeStyle = '#e8d6bc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(portraitX - 15, portraitY + 37, 18, 6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Pipe connecting (horizontal)
+    for(let i = 0; i < 4; i++) {
+        ctx.strokeStyle = COLORS[i].hex;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(portraitX - 3, portraitY + 33 + i * 3);
+        ctx.lineTo(portraitX + 20, portraitY + 33 + i * 3);
+        ctx.stroke();
+    }
+
+    // Earth (right side)
+    ctx.fillStyle = '#4a9eff';
+    ctx.beginPath();
+    ctx.arc(portraitX + 25, portraitY + 37, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#27ae60';
+    ctx.beginPath();
+    ctx.arc(portraitX + 22, portraitY + 35, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(portraitX + 27, portraitY + 39, 3, 0, Math.PI * 2);
+    ctx.fill();
     
-    // Young CEO in fatigues
-    ctx.fillStyle = '#3a4a2a';
-    ctx.fillRect(portraitX - 30, portraitY + 20, 60, 40);
-    ctx.fillStyle = '#f5c89a';
-    ctx.fillRect(portraitX - 15, portraitY + 15, 30, 25);
-    
-    // High and tight haircut
-    ctx.fillStyle = '#2a1a0a';
-    ctx.fillRect(portraitX - 15, portraitY + 12, 30, 8);
-    
-    // Stern eyes
-    ctx.fillStyle = '#000';
-    ctx.fillRect(portraitX - 10, portraitY + 25, 5, 3);
-    ctx.fillRect(portraitX + 5, portraitY + 25, 5, 3);
-    
-    // Caption below portrait
+    // Double-width office door at bottom (can't be opened once entered)
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(300, 430, 100, 70);
+    ctx.fillStyle = '#3a1a00';
+    ctx.fillRect(305, 435, 45, 60);
+    ctx.fillRect(350, 435, 45, 60);
+
+    // Door handles
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('FREEDOM ISN\'T FREE', portraitX, portraitY + 75);
-    
-    // Door at bottom (can't be opened once entered)
-    ctx.fillStyle = '#4a2a0a';
-    ctx.fillRect(325, 430, 50, 70);
-    ctx.fillStyle = '#3a1a00';
-    ctx.fillRect(330, 435, 40, 60);
+    ctx.beginPath();
+    ctx.arc(340, 465, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(360, 465, 3, 0, Math.PI * 2);
+    ctx.fill();
     
     // Cash sacks dropped when CEO is hit
     for(let sack of level6.cashSacks) {
@@ -2603,7 +3048,7 @@ function drawSafeUI() {
             ctx.fillText('MAX', 350, 255);
         }
 
-        // Bullets option (unlimited)
+        // Bullets option
         const bulletsSelected = level6.itemSelection === 2;
         ctx.fillStyle = '#8b4513';
         ctx.fillRect(460, 160, 140, 120);
@@ -2611,25 +3056,33 @@ function drawSafeUI() {
         ctx.lineWidth = bulletsSelected ? 5 : 2;
         ctx.strokeRect(460, 160, 140, 120);
 
-        // Draw bullets box icon
+        // Draw ammo box with label
         ctx.fillStyle = '#654321';
-        ctx.fillRect(510, 195, 40, 30);
+        ctx.fillRect(505, 190, 50, 35);
         ctx.strokeStyle = '#4a3a2a';
         ctx.lineWidth = 2;
-        ctx.strokeRect(510, 195, 40, 30);
+        ctx.strokeRect(505, 190, 50, 35);
 
-        // Bullets inside
+        // Ammo box label area
+        ctx.fillStyle = '#d4a574';
+        ctx.fillRect(507, 192, 46, 12);
+
+        // Lead bullets pictured on box
         for(let i = 0; i < 6; i++) {
-            ctx.fillStyle = '#ffd700';
-            ctx.fillRect(515 + (i % 3) * 10, 200 + Math.floor(i / 3) * 10, 6, 8);
+            ctx.fillStyle = '#909090';
+            const bx = 512 + (i % 3) * 13;
+            const by = 207 + Math.floor(i / 3) * 8;
+            ctx.fillRect(bx, by, 4, 7);
+            ctx.fillStyle = '#606060';
+            ctx.fillRect(bx, by, 4, 3);
         }
 
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 16px Arial';
-        ctx.fillText('BULLETS', 530, 270);
+        ctx.fillText('AMMO', 530, 270);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 12px Arial';
-        ctx.fillText('UNLIMITED', 530, 255);
+        ctx.fillText('Rounds (x6)', 530, 255);
 
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 14px Arial';
@@ -2705,50 +3158,92 @@ function drawSafeUI() {
 }
 
 function drawComputerUI() {
+    // Post-selection completed state
+    if(level6.computerCompleted) {
+        ctx.fillStyle = 'rgba(0,0,0,0.95)';
+        ctx.fillRect(50, 50, 600, 400);
+
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(60, 60, 580, 380);
+
+        ctx.fillStyle = '#27ae60';
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('COMMAND EXECUTED', 350, 120);
+
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 28px Arial';
+        ctx.fillText('Take the means of production', 350, 200);
+
+        // Blinking cash sack
+        if(frame % 30 < 15) {
+            ctx.save();
+            ctx.translate(350, 280);
+            ctx.scale(2, 2);
+            drawCashSack(0, 0);
+            ctx.restore();
+
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('COLLECT THE SACKS', 350, 350);
+        }
+
+        return;
+    }
+
+    // Interactive selection UI
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
     ctx.fillRect(50, 50, 600, 400);
-    
+
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(60, 60, 580, 380);
-    
+
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 36px Arial';
+    ctx.font = 'bold 32px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH MAINFRAME', 350, 120);
-    
-    ctx.fillStyle = '#666';
-    ctx.font = '18px Arial';
-    ctx.fillText('SYSTEM ACCESS: EXECUTIVE', 350, 160);
-    
+    ctx.fillText('PIPETECH MAINFRAME', 350, 110);
+
+    ctx.fillStyle = '#27ae60';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText('SYSTEM ACCESS: EXECUTIVE', 350, 150);
+
+    // Self-destruct option (left)
+    const destructSelected = level6.computerChoice === 0;
     ctx.fillStyle = '#e74c3c';
-    ctx.fillRect(150, 220, 180, 100);
-    ctx.strokeStyle = '#c0392b';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(150, 220, 180, 100);
-    
+    ctx.fillRect(120, 200, 180, 110);
+
+    // White outline if selected
+    ctx.strokeStyle = destructSelected ? '#ffffff' : '#c0392b';
+    ctx.lineWidth = destructSelected ? 6 : 3;
+    ctx.strokeRect(120, 200, 180, 110);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText('SELF', 210, 245);
+    ctx.fillText('DESTRUCT', 210, 275);
+
+    // Deliver means option (right)
+    const deliverSelected = level6.computerChoice === 1;
+    ctx.fillStyle = '#27ae60';
+    ctx.fillRect(400, 200, 180, 110);
+
+    // White outline if selected
+    ctx.strokeStyle = deliverSelected ? '#ffffff' : '#1e8449';
+    ctx.lineWidth = deliverSelected ? 6 : 3;
+    ctx.strokeRect(400, 200, 180, 110);
+
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 20px Arial';
-    ctx.fillText('SELF', 240, 260);
-    ctx.fillText('DESTRUCT', 240, 290);
-    
-    ctx.fillStyle = '#27ae60';
-    ctx.fillRect(370, 220, 180, 100);
-    ctx.strokeStyle = '#1e8449';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(370, 220, 180, 100);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText('DELIVER MEANS', 460, 255);
-    ctx.fillText('OF PRODUCTION', 460, 280);
-    
+    ctx.fillText('DELIVER MEANS', 490, 240);
+    ctx.fillText('OF PRODUCTION', 490, 270);
+
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 16px Arial';
-    ctx.fillText('USE ARROWS TO SELECT, ACTION TO CONFIRM', 350, 370);
-    
+    ctx.fillText('USE ARROWS TO SELECT, ACTION TO CONFIRM', 350, 360);
+
     ctx.fillStyle = '#f39c12';
     ctx.font = '14px Arial';
-    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 400);
+    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 390);
 }
 
 
@@ -2849,21 +3344,24 @@ function drawCEO(x, y, facing) {
         ctx.fillStyle = weatheredSkin;
         ctx.fillRect(x - 4*s, y + s, 8*s, 2*s);
 
-        // Cigar in mouth (always present, lit)
+        // Cigar in mouth (sticking out at angle, left side)
+        ctx.save();
+        ctx.translate(x - 4*s, y + s);
+        ctx.rotate(-0.3); // Angled downward
         ctx.fillStyle = '#8b4513';
-        ctx.fillRect(x - 6*s, y, 4*s, s);
+        ctx.fillRect(0, 0, 6*s, s);
         ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 7*s, y, s, s);
-
+        ctx.fillRect(5*s, 0, 2*s, s);
         // Lit cigar tip
         ctx.fillStyle = '#ff4500';
-        ctx.fillRect(x - 8*s, y, s, s);
+        ctx.fillRect(7*s, 0, s, s);
+        ctx.restore();
 
         // Cigar smoke
         if(frame % 20 < 10) {
             ctx.fillStyle = 'rgba(200,200,200,0.4)';
             ctx.beginPath();
-            ctx.arc(x - 10, y - 8, 3, 0, Math.PI * 2);
+            ctx.arc(x - 16, y - 2, 3, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -2951,21 +3449,24 @@ function drawCEO(x, y, facing) {
         ctx.fillStyle = weatheredSkin;
         ctx.fillRect(x - 4*s, y + s, 8*s, 2*s);
 
-        // Cigar in mouth (always present, lit)
+        // Cigar in mouth (sticking out at angle, right side)
+        ctx.save();
+        ctx.translate(x + 4*s, y + s);
+        ctx.rotate(0.3); // Angled downward
         ctx.fillStyle = '#8b4513';
-        ctx.fillRect(x + 2*s, y, 4*s, s);
+        ctx.fillRect(0, 0, 6*s, s);
         ctx.fillStyle = '#654321';
-        ctx.fillRect(x + 6*s, y, s, s);
-
+        ctx.fillRect(-2*s, 0, 2*s, s);
         // Lit cigar tip
         ctx.fillStyle = '#ff4500';
-        ctx.fillRect(x + 7*s, y, s, s);
+        ctx.fillRect(-3*s, 0, s, s);
+        ctx.restore();
 
         // Cigar smoke
         if(frame % 20 < 10) {
             ctx.fillStyle = 'rgba(200,200,200,0.4)';
             ctx.beginPath();
-            ctx.arc(x + 20, y - 8, 3, 0, Math.PI * 2);
+            ctx.arc(x + 16, y - 2, 3, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -3088,22 +3589,90 @@ function drawCEO(x, y, facing) {
         ctx.fillStyle = '#4a2a2a';
         ctx.fillRect(x - 2*s, y + s, 4*s, s);
 
-        // Cigar in mouth (always present, centered)
+        // Cigar in mouth (slightly angled, centered in mouth)
         ctx.fillStyle = '#8b4513';
-        ctx.fillRect(x - 3*s, y + 2*s, 6*s, s);
+        ctx.fillRect(x - s, y + 2*s, 4*s, s);
         ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 4*s, y + 2*s, s, s);
-        ctx.fillRect(x + 3*s, y + 2*s, s, s);
+        ctx.fillRect(x + 3*s, y + 2*s, 2*s, s);
+        // Lit tip on right
+        ctx.fillStyle = '#ff4500';
+        ctx.fillRect(x + 5*s, y + 2*s, s, s);
 
-        // No smoke visible from front
+        // Faint smoke visible from front
+        if(frame % 20 < 10) {
+            ctx.fillStyle = 'rgba(200,200,200,0.3)';
+            ctx.beginPath();
+            ctx.arc(x + 14, y - 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         // Weathered jaw
         ctx.fillStyle = weatheredSkin;
         ctx.fillRect(x - 4*s, y + 3*s, 8*s, 2*s);
         ctx.fillStyle = '#b88a62';
         ctx.fillRect(x - 3*s, y + 3*s, 6*s, s);
+    } else if(facing === 'back') {
+        // BACK VIEW - CEO facing mirror with back to player
+        // BODY - Dark charcoal suit from behind
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 8*s, y + s, 16*s, 11*s);
+
+        // Suit jacket back shading
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 6*s, y + 2*s, 12*s, 9*s);
+
+        // Collar from behind
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(x - 4*s, y, 8*s, 2*s);
+
+        // ARMS from behind - one holding drink
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 10*s, y + 2*s, 3*s, 8*s); // Left arm down
+        ctx.fillRect(x + 7*s, y + 2*s, 3*s, 6*s); // Right arm raised
+
+        // PANTS from behind
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 8*s, y + 12*s, 16*s, 4*s);
+        ctx.fillRect(x - 6*s, y + 16*s, 5*s, 8*s);
+        ctx.fillRect(x + s, y + 16*s, 5*s, 8*s);
+
+        // SHOES from behind
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(x - 6*s, y + 24*s, 6*s, 2*s);
+        ctx.fillRect(x + s, y + 24*s, 6*s, 2*s);
+
+        // HEAD from behind - bald head
+        ctx.fillStyle = weatheredSkin;
+        ctx.fillRect(x - 4*s, y - 5*s, 8*s, 6*s);
+
+        // Bald shine
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x - 2*s, y - 4*s, 4*s, 2*s);
+
+        // Drink in raised right hand
+        if(ceo.hasDrink) {
+            const glassX = x + 10*s;
+            const glassY = y - 2*s;
+
+            // Crystal glass
+            ctx.fillStyle = 'rgba(200,220,255,0.4)';
+            ctx.beginPath();
+            ctx.moveTo(glassX - 3, glassY);
+            ctx.lineTo(glassX + 3, glassY);
+            ctx.lineTo(glassX + 2, glassY + 10);
+            ctx.lineTo(glassX - 2, glassY + 10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Brandy liquid
+            ctx.fillStyle = 'rgba(139,69,19,0.7)';
+            ctx.fillRect(glassX - 2, glassY + 5, 4, 4);
+        }
     }
-    
+
     if(ceo.hasDrink && ceo.state === 'offering') {
         const glassX = x + (facing === 'right' ? 20 : -20);
         const glassY = y;
@@ -3138,6 +3707,55 @@ function drawCEO(x, y, facing) {
         ctx.font = 'bold 10px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('$', sackX, sackY + 3);
+    }
+
+    // CEO holding gun when in hunting mode
+    if(ceo.state === 'hunting') {
+        const s = 2;
+        const armOffsetX = facing === 'left' ? -14 : facing === 'right' ? 14 : 0;
+        const gunArmX = x + armOffsetX;
+        const gunArmY = y - 5;
+
+        // Outstretched arm
+        ctx.fillStyle = '#2b2b2b';
+        if(facing === 'left') {
+            ctx.fillRect(gunArmX, gunArmY, 8, 4*s);
+        } else if(facing === 'right') {
+            ctx.fillRect(gunArmX - 8, gunArmY, 8, 4*s);
+        } else {
+            ctx.fillRect(gunArmX - 3, gunArmY, 6, 4*s);
+        }
+
+        // Hand holding gun
+        ctx.fillStyle = '#d4a882';
+        if(facing === 'left') {
+            ctx.fillRect(gunArmX, gunArmY + 3, 5, 5);
+        } else if(facing === 'right') {
+            ctx.fillRect(gunArmX - 5, gunArmY + 3, 5, 5);
+        } else {
+            ctx.fillRect(gunArmX - 2, gunArmY + 5, 5, 5);
+        }
+
+        // Simple revolver in hand
+        const gunOffsetX = facing === 'left' ? -20 : facing === 'right' ? 20 : 2;
+        const rX = x + gunOffsetX;
+        const rY = y - 2;
+
+        // Gun barrel
+        ctx.fillStyle = '#4a4a4a';
+        if(facing === 'left') {
+            ctx.fillRect(rX - 12, rY, 14, 4);
+        } else if(facing === 'right') {
+            ctx.fillRect(rX - 2, rY, 14, 4);
+        } else {
+            ctx.fillRect(rX, rY, 10, 3);
+        }
+
+        // Gun cylinder
+        ctx.fillStyle = '#5a5a5a';
+        ctx.beginPath();
+        ctx.arc(facing === 'left' ? rX - 2 : facing === 'right' ? rX : rX + 4, rY + 2, 3, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 function drawEmailUI(officeName) {
@@ -3439,6 +4057,11 @@ function drawScene() {
             drawLevel6PipeRoom();
 
             // Draw player in pipe room
+            drawBaldManager(player.x, player.y, player.facing);
+        } else if(level6.room === 'megacomputer') {
+            drawLevel6MegacomputerRoom();
+
+            // Draw player in megacomputer room
             drawBaldManager(player.x, player.y, player.facing);
         } else if(level6.room === 'entryway') {
             drawLevel6Entryway();
@@ -4227,7 +4850,7 @@ function update() {
         
             if(ceo.state === 'admiring') {
                 const mirrorX = 150;
-                const mirrorTargetX = mirrorX + 45;
+                const mirrorTargetX = mirrorX + 65; // Position him slightly further from mirror
                 const mirrorTargetY = 160;
 
                 const dx = mirrorTargetX - ceo.x;
@@ -4241,7 +4864,7 @@ function update() {
                 } else {
                     ceo.x = mirrorTargetX;
                     ceo.y = mirrorTargetY;
-                    ceo.facing = 'forward';
+                    ceo.facing = 'back'; // Face mirror with back to player
                 }
             }
         
@@ -4346,8 +4969,8 @@ function update() {
                 }
             }
 
-            // Movement for pipeRoom and entryway
-            if(level6.room === 'pipeRoom' || level6.room === 'entryway') {
+            // Movement for pipeRoom, megacomputer, and entryway
+            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
                     player.x = Math.max(20, player.x - 5);
@@ -4378,6 +5001,37 @@ function update() {
                     level6.room = 'entryway';
                     player.x = 640;
                     player.y = 400;
+                }
+
+                if(player.x > 660) {
+                    level6.room = 'megacomputer';
+                    player.x = 80;
+                    player.y = 380;
+                }
+            }
+
+            else if(level6.room === 'megacomputer') {
+                player.y = 380;
+
+                if(player.x < 40) {
+                    level6.room = 'pipeRoom';
+                    player.x = 640;
+                    player.y = 380;
+                }
+
+                // Radiation damage - lose $ life every 5 seconds in center zone
+                if(player.x > 233 && player.x < 467) {
+                    level6.radiationTimer++;
+                    // 60 frames per second * 5 seconds = 300 frames
+                    if(level6.radiationTimer >= 300) {
+                        if(lives > 0) {
+                            lives--;
+                            updateLives();
+                        }
+                        level6.radiationTimer = 0;
+                    }
+                } else {
+                    level6.radiationTimer = 0;
                 }
             } 
         
@@ -4509,19 +5163,32 @@ function update() {
             
                 // Handle computer UI
                 if(level6.computerUI) {
+                    // Arrow navigation
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.computerChoice = 0; // Self-destruct
+                        keys['ArrowLeft'] = false;
+                        keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.computerChoice = 1; // Deliver means
+                        keys['ArrowRight'] = false;
+                        keys['right'] = false;
+                    }
+
+                    // Confirm selection
                     if(keys[' '] || keys['action']) {
                         keys[' '] = false;
                         keys['action'] = false;
-                    
-                        const choice = 'deliver';
-                    
-                        if(choice === 'destruct') {
+
+                        if(level6.computerChoice === 0) {
+                            // Self-destruct
                             state = 'over';
                             menuChoice = 0;
                         } else {
+                            // Deliver means of production
+                            level6.computerCompleted = true;
                             level6.npcExitSequence = true;
-                            level6.computerUI = false;
-                        
+
                             level6.exitingNPCs = [
                                 {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
                                 {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
@@ -4586,13 +5253,23 @@ function update() {
                                 ceo.health--;
                                 ceo.blinkTimer = 10;
 
-                                // Spread cash sacks in a circle pattern for visibility
-                                const sackIndex = 6 - ceo.health;
-                                const angle = (sackIndex / 6) * Math.PI * 2;
-                                const radius = 40;
+                                // Drop cash sacks - behind CEO if at mirror, otherwise in circle pattern
+                                let sackX, sackY;
+                                if(ceo.state === 'admiring') {
+                                    // Drop behind CEO at mirror for accessibility
+                                    sackX = ceo.x + 10;
+                                    sackY = ceo.y + 50; // Behind and below
+                                } else {
+                                    // Spread in circle pattern
+                                    const sackIndex = 6 - ceo.health;
+                                    const angle = (sackIndex / 6) * Math.PI * 2;
+                                    const radius = 40;
+                                    sackX = ceo.x + Math.cos(angle) * radius;
+                                    sackY = ceo.y + Math.sin(angle) * radius;
+                                }
                                 level6.cashSacks.push({
-                                    x: ceo.x + Math.cos(angle) * radius,
-                                    y: ceo.y + Math.sin(angle) * radius,
+                                    x: sackX,
+                                    y: sackY,
                                     claimed: false
                                 });
 
@@ -4657,7 +5334,23 @@ function update() {
                     player.x = prevX;
                     player.y = prevY;
                 }
-            
+
+                // Collision with CEO character (when not dead)
+                if(ceo.state !== 'dead') {
+                    if(Math.abs(player.x - ceo.x) < 40 && Math.abs(player.y - ceo.y) < 50) {
+                        player.x = prevX;
+                        player.y = prevY;
+                    }
+                }
+
+                // Collision with safe and portrait wall
+                const safeX = 350;
+                const safeY = 130;
+                if(player.x > safeX - 60 && player.x < safeX + 60 && player.y < safeY + 80) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+
                 if(!keys['ArrowLeft'] && !keys['left'] && !keys['ArrowRight'] && !keys['right'] &&
                    !keys['ArrowUp'] && !keys['up'] && !keys['ArrowDown'] && !keys['down']) {
                     if(Date.now() - player.lastMove > 200) {
@@ -4692,13 +5385,23 @@ function update() {
                     ceo.health--;
                     ceo.blinkTimer = 10;
 
-                    // Spread cash sacks in a circle pattern for visibility
-                    const sackIndex = 6 - ceo.health;
-                    const angle = (sackIndex / 6) * Math.PI * 2;
-                    const radius = 40;
+                    // Drop cash sacks - behind CEO if at mirror, otherwise in circle pattern
+                    let sackX, sackY;
+                    if(ceo.state === 'admiring') {
+                        // Drop behind CEO at mirror for accessibility
+                        sackX = ceo.x + 10;
+                        sackY = ceo.y + 50; // Behind and below
+                    } else {
+                        // Spread in circle pattern
+                        const sackIndex = 6 - ceo.health;
+                        const angle = (sackIndex / 6) * Math.PI * 2;
+                        const radius = 40;
+                        sackX = ceo.x + Math.cos(angle) * radius;
+                        sackY = ceo.y + Math.sin(angle) * radius;
+                    }
                     level6.cashSacks.push({
-                        x: ceo.x + Math.cos(angle) * radius,
-                        y: ceo.y + Math.sin(angle) * radius,
+                        x: sackX,
+                        y: sackY,
                         claimed: false
                     });
 
@@ -5086,3 +5789,4 @@ document.getElementById('action-btn').addEventListener('mouseup', e => {
 </script>
 </body>
 </html>
+
