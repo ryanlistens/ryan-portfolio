@@ -166,6 +166,61 @@ ceoPortraitImg.src = 'images/30802F71-C0D0-4774-87C8-F92C80CD8A18.png'; // Satur
 const titleScreenImg = new Image();
 titleScreenImg.src = 'images/mullet-pro-title.png'; // Photorealistic Mullet Pro cover art
 
+// Audio/Music System
+const levelMusic = {
+    menu: new Audio('music/menu.mp3'),
+    level1: new Audio('music/level1.mp3'),
+    level2: new Audio('music/level2.mp3'),
+    level3: new Audio('music/level3.mp3'),
+    level4: new Audio('music/level4.mp3'),
+    level5: new Audio('music/level5.mp3'),
+    level6: new Audio('music/level6.mp3')
+};
+
+// Set all music to loop
+Object.values(levelMusic).forEach(audio => {
+    audio.loop = true;
+    audio.volume = 0.5; // 50% volume by default
+});
+
+let currentMusic = null;
+let musicMuted = false;
+
+// Music control functions
+function playMusic(musicKey) {
+    // Stop current music
+    if(currentMusic) {
+        currentMusic.pause();
+        currentMusic.currentTime = 0;
+    }
+
+    // Play new music if not muted
+    if(!musicMuted && levelMusic[musicKey]) {
+        currentMusic = levelMusic[musicKey];
+        currentMusic.play().catch(err => {
+            console.log('Audio playback prevented:', err);
+        });
+    }
+}
+
+function stopMusic() {
+    if(currentMusic) {
+        currentMusic.pause();
+        currentMusic.currentTime = 0;
+    }
+}
+
+function toggleMute() {
+    musicMuted = !musicMuted;
+    if(musicMuted && currentMusic) {
+        currentMusic.pause();
+    } else if(!musicMuted && currentMusic) {
+        currentMusic.play().catch(err => {
+            console.log('Audio playback prevented:', err);
+        });
+    }
+}
+
 const COLORS = [
     {name:'RED', hex:'#e74c3c'},
     {name:'GREEN', hex:'#27ae60'},
@@ -501,6 +556,9 @@ function startGame() {
     ghostGun = {hasGun: false, ammo: 0, printing: false, printProgress: 0, printingHeart: false};
     initLevel(1);
     updateLives();
+
+    // Start level 1 music
+    playMusic('level1');
 }
 
 
@@ -4491,6 +4549,38 @@ function drawPortraitUI() {
 
 
 
+function drawMuteIndicator() {
+    if(musicMuted) {
+        // Draw mute icon in top-right corner
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(640, 10, 50, 30);
+
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔇', 665, 32);
+    } else {
+        // Draw sound icon when not muted (subtle)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(640, 10, 50, 30);
+
+        ctx.fillStyle = '#4a4a4a';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔊', 665, 32);
+    }
+
+    // Show 'M to mute/unmute' hint on menu
+    if(state === 'menu') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(610, 45, 85, 20);
+        ctx.fillStyle = '#aaa';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('M: MUTE', 652, 58);
+    }
+}
+
 function drawScene() {
     if(state === 'menu') {
         // Photorealistic title screen - "Mullet Pro" cover art
@@ -4527,9 +4617,12 @@ function drawScene() {
             ctx.strokeText('PRESS ANY BUTTON', 350, 460);
             ctx.fillText('PRESS ANY BUTTON', 350, 460);
         }
+
+        // Draw mute indicator
+        drawMuteIndicator();
         return;
     }
-    
+
     if(state === 'levelCard') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, 700, 500);
@@ -5089,6 +5182,11 @@ function drawScene() {
         ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
         ctx.fillRect(0, 0, 700, 500);
     }
+
+    // Draw mute indicator (always on top during gameplay)
+    if(state === 'playing') {
+        drawMuteIndicator();
+    }
 }
 
 
@@ -5116,8 +5214,8 @@ function update() {
     }
     
     if(state === 'promotion') {
-        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] || 
-           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] || 
+        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] ||
+           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] ||
            keys['left'] || keys['right']) {
             keys = {};
             level = 5;
@@ -5125,6 +5223,9 @@ function update() {
             state = 'levelCard';
             cardTimer = 0;
             initLevel(5);
+
+            // Play level 5 music
+            playMusic('level5');
         }
         return;
     }
@@ -5455,6 +5556,10 @@ function update() {
                                 state = 'levelCard';
                                 cardTimer = 0;
                                 initLevel(6);
+
+                                // Play level 6 music
+                                playMusic('level6');
+
                                 keys[' '] = false;
                                 keys['action'] = false;
                                 return;
@@ -6393,6 +6498,9 @@ function nextLevel() {
         state = 'levelCard';
         cardTimer = 0;
         initLevel(level);
+
+        // Play music for new level
+        playMusic('level' + level);
     } else {
         winGame();
     }
@@ -6435,11 +6543,19 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+// Start menu music on page load
+playMusic('menu');
+
 drawScene();
 gameLoop();
 
 document.addEventListener('keydown', e => {
     keys[e.key] = true;
+
+    // Toggle mute with 'M' key
+    if(e.key === 'm' || e.key === 'M') {
+        toggleMute();
+    }
 });
 
 document.addEventListener('keyup', e => {
