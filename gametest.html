@@ -187,6 +187,8 @@ let currentMusic = null;
 let musicMuted = false;
 
 // Music control functions
+let pendingMusicKey = null; // Track music that should play after user interaction
+
 function playMusic(musicKey) {
     // Stop current music
     if(currentMusic) {
@@ -198,8 +200,24 @@ function playMusic(musicKey) {
     if(!musicMuted && levelMusic[musicKey]) {
         currentMusic = levelMusic[musicKey];
         currentMusic.play().catch(err => {
-            console.log('Audio playback prevented:', err);
+            console.log('Audio playback prevented (autoplay policy):', err);
+            // Store the pending music to play after user interaction
+            pendingMusicKey = musicKey;
         });
+    } else {
+        // Store pending music key if muted
+        pendingMusicKey = musicKey;
+    }
+}
+
+// Function to resume pending music after user interaction
+function resumePendingMusic() {
+    if(pendingMusicKey && !musicMuted && levelMusic[pendingMusicKey]) {
+        currentMusic = levelMusic[pendingMusicKey];
+        currentMusic.play().catch(err => {
+            console.log('Audio playback still prevented:', err);
+        });
+        pendingMusicKey = null;
     }
 }
 
@@ -214,10 +232,15 @@ function toggleMute() {
     musicMuted = !musicMuted;
     if(musicMuted && currentMusic) {
         currentMusic.pause();
-    } else if(!musicMuted && currentMusic) {
-        currentMusic.play().catch(err => {
-            console.log('Audio playback prevented:', err);
-        });
+    } else if(!musicMuted) {
+        // Resume current music or pending music
+        if(currentMusic) {
+            currentMusic.play().catch(err => {
+                console.log('Audio playback prevented:', err);
+            });
+        } else if(pendingMusicKey) {
+            resumePendingMusic();
+        }
     }
 }
 
@@ -4657,11 +4680,11 @@ function drawScene() {
     if(state === 'levelCard') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, 700, 500);
-        
+
         const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
         lvlGrad.addColorStop(0, '#ff6b35');
         lvlGrad.addColorStop(1, '#ffd700');
-        
+
         ctx.font = 'bold 80px Arial';
         ctx.textAlign = 'center';
         ctx.strokeStyle = '#000';
@@ -4669,12 +4692,12 @@ function drawScene() {
         ctx.strokeText('LEVEL ' + level, 350, 200);
         ctx.fillStyle = lvlGrad;
         ctx.fillText('LEVEL ' + level, 350, 200);
-        
+
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 32px Arial';
         const msgs = ['', 'TRAINING DAY', 'PRESSURE RISING!', 'MAXIMUM CHAOS!', '3D PRINTER UNLOCKED!', 'MANAGEMENT', 'THE CEO WANTS TO MEET YOU'];
         ctx.fillText(msgs[level], 350, 270);
-        
+
         if(cardTimer > 60) {
             if(Math.floor(frame / 30) % 2 === 0) {
                 ctx.fillStyle = '#ffd700';
@@ -4682,17 +4705,20 @@ function drawScene() {
                 ctx.fillText('GET READY!', 350, 370);
             }
         }
+
+        // Draw mute indicator on level cards
+        drawMuteIndicator();
         return;
     }
     
     if(state === 'promotion') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, 700, 500);
-        
+
         const promoGrad = ctx.createLinearGradient(200, 100, 500, 200);
         promoGrad.addColorStop(0, '#ffd700');
         promoGrad.addColorStop(1, '#ff6b35');
-        
+
         ctx.font = 'bold 56px Arial';
         ctx.textAlign = 'center';
         ctx.strokeStyle = '#000';
@@ -4700,24 +4726,27 @@ function drawScene() {
         ctx.strokeText('CONGRATS!', 350, 150);
         ctx.fillStyle = promoGrad;
         ctx.fillText('CONGRATS!', 350, 150);
-        
+
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 36px Arial';
         ctx.fillText('YOU ARE THE NEW', 350, 220);
-        
+
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 48px Arial';
         ctx.fillText('PIPE BOSS', 350, 280);
-        
+
         ctx.fillStyle = '#f5f2ec';
         ctx.font = '32px Arial';
         ctx.fillText('FINAL SCORE: ' + score, 350, 340);
-        
+
         if(Math.floor(frame / 30) % 2 === 0) {
             ctx.fillStyle = '#ffd700';
             ctx.font = 'bold 24px Arial';
             ctx.fillText('PRESS ANY BUTTON TO CONTINUE', 350, 420);
         }
+
+        // Draw mute indicator on promotion screen
+        drawMuteIndicator();
         return;
     }
     
@@ -4781,6 +4810,9 @@ function drawScene() {
         ctx.fillText('▶ Return to Menu', 350, yOffset);
         ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#999';
         ctx.fillText(state === 'victory' ? '▶ Play again' : '▶ Keep documenting!', 350, yOffset + 50);
+
+        // Draw mute indicator on end screens
+        drawMuteIndicator();
         return;
     }
     
@@ -4815,6 +4847,9 @@ function drawScene() {
         ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
         ctx.fillRect(0, 0, 700, 500);
     }
+
+    // Draw mute indicator for level 5
+    drawMuteIndicator();
     return;
     }
 
@@ -4891,6 +4926,9 @@ function drawScene() {
             ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
             ctx.fillRect(0, 0, 700, 500);
         }
+
+        // Draw mute indicator for level 6
+        drawMuteIndicator();
         return;
     }
 
@@ -5224,9 +5262,11 @@ function drawScene() {
 // SECTION 13: Update Function - Level 5 Logic
 function update() {
     if(state === 'menu') {
-        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] || 
-           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] || 
+        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] ||
+           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] ||
            keys['left'] || keys['right']) {
+            // Resume pending music on user interaction
+            resumePendingMusic();
             startGame();
             keys = {};
         }
@@ -6583,6 +6623,9 @@ gameLoop();
 document.addEventListener('keydown', e => {
     keys[e.key] = true;
 
+    // Try to resume pending music on any key press
+    resumePendingMusic();
+
     // Toggle mute with 'M' key
     if(e.key === 'm' || e.key === 'M') {
         toggleMute();
@@ -6595,6 +6638,9 @@ document.addEventListener('keyup', e => {
 
 // Touch/click support for mute button
 function handleMuteClick(e) {
+    // Try to resume pending music on any canvas interaction
+    resumePendingMusic();
+
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
