@@ -200,11 +200,20 @@ function playMusic(musicKey) {
     // Play new music if not muted
     if(!musicMuted && levelMusic[musicKey]) {
         currentMusic = levelMusic[musicKey];
-        currentMusic.play().catch(err => {
-            console.log('Audio playback prevented (autoplay policy):', err);
-            // Store the pending music to play after user interaction
-            pendingMusicKey = musicKey;
-        });
+
+        // If audio has been unlocked by user interaction, play immediately
+        if(audioUnlocked) {
+            currentMusic.play().catch(err => {
+                console.log('Audio playback error:', err);
+            });
+        } else {
+            // Try to play, but if blocked, store for later
+            currentMusic.play().catch(err => {
+                console.log('Audio playback prevented (autoplay policy):', err);
+                // Store the pending music to play after user interaction
+                pendingMusicKey = musicKey;
+            });
+        }
     } else {
         // Store pending music key if muted
         pendingMusicKey = musicKey;
@@ -6722,6 +6731,12 @@ gameLoop();
 document.addEventListener('keydown', e => {
     keys[e.key] = true;
 
+    // Unlock audio on first keyboard interaction
+    if(!audioUnlocked) {
+        audioUnlocked = true;
+        console.log('Audio unlocked by keyboard interaction');
+    }
+
     // Try to resume pending music on any key press
     resumePendingMusic();
 
@@ -6737,12 +6752,14 @@ document.addEventListener('keyup', e => {
 
 // Touch/click support for mute button
 function handleMuteClick(e) {
-    // Unlock audio on first interaction (menu screen)
-    if(!audioUnlocked && state === 'menu') {
+    // Unlock audio on first interaction anywhere (not just menu)
+    if(!audioUnlocked) {
         audioUnlocked = true;
-        playMusic('menu');
-        e.preventDefault();
-        return;
+        console.log('Audio unlocked by user interaction');
+        // Try to play or resume pending music
+        if(pendingMusicKey) {
+            resumePendingMusic();
+        }
     }
 
     // Try to resume pending music on any canvas interaction
