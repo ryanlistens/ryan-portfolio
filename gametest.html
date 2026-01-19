@@ -1391,18 +1391,18 @@ function draw3DPrinter(x, y) {
 
 function drawGhostGun(x, y, facing) {
     // Draw only the gun (arms already drawn in drawBaldManager)
-    // Position gun at chest/arm level extended outward
+    // Position gun at hand level where arms are extended
     let gunX, gunY;
 
     if(facing === 'left') {
         gunX = x - 26;
-        gunY = y + 5; // Arm level, not floating on face
+        gunY = y - 12; // Match hand position at arm extension level
     } else if(facing === 'right') {
         gunX = x + 26;
-        gunY = y + 5; // Arm level, not floating on face
+        gunY = y - 12; // Match hand position at arm extension level
     } else { // forward or default
         gunX = x;
-        gunY = y + 5; // Arm level, not floating on face
+        gunY = y - 12; // Match hand position at arm extension level
     }
 
     // Draw gun - use horizontal flip for left, not rotation
@@ -1439,18 +1439,18 @@ function drawGhostGun(x, y, facing) {
 
 function drawRevolver(x, y, facing) {
     // Draw only the gun (arms already drawn in drawBaldManager)
-    // Position gun at chest/arm level extended outward
+    // Position gun at hand level where arms are extended
     let gunX, gunY;
 
     if(facing === 'left') {
         gunX = x - 26;
-        gunY = y + 5; // Arm level, not floating
+        gunY = y - 12; // Match hand position at arm extension level
     } else if(facing === 'right') {
         gunX = x + 26;
-        gunY = y + 5; // Arm level, not floating
+        gunY = y - 12; // Match hand position at arm extension level
     } else { // forward or default
         gunX = x;
-        gunY = y + 5; // Arm level, not floating
+        gunY = y - 12; // Match hand position at arm extension level
     }
 
     // Draw revolver - use horizontal flip for left, not rotation
@@ -2677,9 +2677,11 @@ function drawLevel6MegacomputerRoom() {
     const reservoirY = compY - 60; // 290
     const reservoirX = compX - 50;
 
-    // Single straight yellow pipe from gasket to reservoir top
+    // Right-angle yellow pipe from gasket to reservoir top (L-shape: horizontal then vertical)
     const endX = reservoirX + 20; // Pipe connects to reservoir
     const endY = reservoirY;
+    const cornerX = endX; // Corner point for right angle
+    const cornerY = pipeY; // Keep same Y until corner
 
     ctx.strokeStyle = COLORS[3].hex; // Yellow
     ctx.lineWidth = 14;
@@ -2688,17 +2690,19 @@ function drawLevel6MegacomputerRoom() {
     ctx.beginPath();
     ctx.moveTo(gasketX, pipeY);
 
-    // Straight line from gasket to reservoir top
-    ctx.lineTo(endX, endY);
+    // Right angle: horizontal from gasket, then vertical down to reservoir
+    ctx.lineTo(cornerX, cornerY); // Horizontal segment
+    ctx.lineTo(endX, endY); // Vertical segment down
     ctx.stroke();
 
-    // Pipe shine following the straight line
+    // Pipe shine following the right-angle path
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(gasketX, pipeY - 4);
-    ctx.lineTo(endX, endY - 4);
+    ctx.lineTo(cornerX, cornerY - 4); // Horizontal segment
+    ctx.lineTo(endX, endY - 4); // Vertical segment down
     ctx.stroke();
 
     ctx.lineCap = 'butt';
@@ -3334,7 +3338,7 @@ function drawLevel6CEOOffice() {
 
     // Crystal brandy decanter (LEFT side of desk) - 3D solid object sitting ON desk top surface
     const brandyX = deskX - 55;
-    const brandyY = deskY - 50; // Sitting on horizontal desk top, same level as monitor
+    const brandyY = deskY - 15; // Sitting on horizontal desk top surface (deskY - 20 is top surface)
 
     // Shadow beneath brandy decanter base (grounding it on desk top)
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -3434,7 +3438,7 @@ function drawLevel6CEOOffice() {
 
     // Control console monitor - RIGHT side of desk, sitting ON desk top surface (3D solid)
     const monX = deskX + 40;
-    const monY = deskY - 45; // Sitting on horizontal desk top
+    const monY = deskY - 10; // Sitting on horizontal desk top surface (deskY - 20 is top surface)
 
     // Shadow beneath monitor base (grounding it on desk)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -5827,8 +5831,34 @@ function update() {
                 const mirrorTargetX = mirrorX + 65; // Position him slightly further from mirror
                 const mirrorTargetY = 160;
 
-                const dx = mirrorTargetX - ceo.x;
-                const dy = mirrorTargetY - ceo.y;
+                // Waypoint-based pathfinding around desk to avoid floating through it
+                // Desk is at (350, 250), CEO needs to go around left side
+                const waypointX = 250; // Left side of desk
+                const waypointY = 240; // Slightly above desk center
+
+                // Initialize waypoint tracking if not set
+                if(ceo.reachedWaypoint === undefined) {
+                    ceo.reachedWaypoint = false;
+                }
+
+                let targetX, targetY;
+                if(!ceo.reachedWaypoint) {
+                    // Move to waypoint first (left of desk)
+                    targetX = waypointX;
+                    targetY = waypointY;
+
+                    const waypointDist = Math.sqrt((targetX - ceo.x) ** 2 + (targetY - ceo.y) ** 2);
+                    if(waypointDist < 10) {
+                        ceo.reachedWaypoint = true;
+                    }
+                } else {
+                    // Move to final mirror position
+                    targetX = mirrorTargetX;
+                    targetY = mirrorTargetY;
+                }
+
+                const dx = targetX - ceo.x;
+                const dy = targetY - ceo.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if(dist > 5) {
@@ -5836,9 +5866,11 @@ function update() {
                     ceo.y += (dy / dist) * 2;
                     ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                 } else {
-                    ceo.x = mirrorTargetX;
-                    ceo.y = mirrorTargetY;
-                    ceo.facing = 'back'; // Face mirror with back to player
+                    ceo.x = targetX;
+                    ceo.y = targetY;
+                    if(ceo.reachedWaypoint) {
+                        ceo.facing = 'back'; // Face mirror with back to player
+                    }
                 }
             }
         
@@ -6291,8 +6323,8 @@ function update() {
                 // Collision with desk - adjusted for front-facing perspective
                 const deskX = 350;
                 const deskY = 250; // Matches actual drawn position
-                // Desk collision covers entire desk including top surface
-                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 25 && player.y < deskY + 70) {
+                // Desk collision for front/sides only (not top surface) - prevents walking through/on desk
+                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 5 && player.y < deskY + 70) {
                     player.x = prevX;
                     player.y = prevY;
                 }
