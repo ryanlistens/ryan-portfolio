@@ -185,6 +185,7 @@ Object.values(levelMusic).forEach(audio => {
 
 let currentMusic = null;
 let musicMuted = false;
+let audioUnlocked = false;
 
 // Music control functions
 let pendingMusicKey = null; // Track music that should play after user interaction
@@ -199,11 +200,22 @@ function playMusic(musicKey) {
     // Play new music if not muted
     if(!musicMuted && levelMusic[musicKey]) {
         currentMusic = levelMusic[musicKey];
-        currentMusic.play().catch(err => {
-            console.log('Audio playback prevented (autoplay policy):', err);
-            // Store the pending music to play after user interaction
-            pendingMusicKey = musicKey;
-        });
+
+        // If audio has been unlocked by user interaction, play immediately
+        if(audioUnlocked) {
+            currentMusic.play().catch(err => {
+                console.log('Audio playback error:', err);
+                // Store as pending so it can be retried on next interaction
+                pendingMusicKey = musicKey;
+            });
+        } else {
+            // Try to play, but if blocked, store for later
+            currentMusic.play().catch(err => {
+                console.log('Audio playback prevented (autoplay policy):', err);
+                // Store the pending music to play after user interaction
+                pendingMusicKey = musicKey;
+            });
+        }
     } else {
         // Store pending music key if muted
         pendingMusicKey = musicKey;
@@ -640,7 +652,7 @@ function createMuzzleFlash(x, y, facing) {
 }
 
 function checkPromotion() {
-    if(boss.bossKills >= 3) {
+    if(boss.bossKills >= 6) {
         state = 'promotion';
         menuChoice = 0;
     }
@@ -1378,171 +1390,121 @@ function draw3DPrinter(x, y) {
 }
 
 function drawGhostGun(x, y, facing) {
-    // Draw raised arm holding gun
-    const s = 2;
-    const skinColor = '#f5c89a';
+    // Draw only the gun (arms already drawn in drawBaldManager)
+    let gunX, gunY, gunRotation = 0;
 
     if(facing === 'left') {
-        // Raised left arm
-        ctx.fillStyle = '#800020'; // Mullet Pro's burgundy
-        ctx.fillRect(x - 18, y - 8, 3*s, 6*s);
-        // Hand holding gun
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 22, y - 10, 6, 6);
+        gunX = x - 26;
+        gunY = y - 4;
+        gunRotation = Math.PI; // Gun points left
     } else if(facing === 'right') {
-        // Raised right arm
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x + 12, y - 8, 3*s, 6*s);
-        // Hand holding gun
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x + 16, y - 10, 6, 6);
-    } else {
-        // Forward facing raised arm
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x + 8, y - 8, 3*s, 6*s);
-        // Hand holding gun
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x + 7, y - 10, 6, 6);
+        gunX = x + 26;
+        gunY = y - 4;
+        gunRotation = 0; // Gun points right
+    } else { // forward or default
+        gunX = x;
+        gunY = y - 2;
+        gunRotation = 0; // Gun points forward
     }
 
-    // Draw gun aligned with raised arm
-    const offsetX = facing === 'left' ? -22 : facing === 'right' ? 22 : 16;
-    const gunX = x + offsetX;
-    const gunY = y - 16;
+    // Draw gun with rotation
+    ctx.save();
+    ctx.translate(gunX, gunY);
+    ctx.rotate(gunRotation);
 
-    if(facing === 'right') {
-        ctx.save();
-        ctx.translate(gunX, gunY);
-        ctx.scale(-1, 1);
-        ctx.translate(-gunX, -gunY);
-    }
-
-    // Ghost gun barrel
+    // Ghost gun barrel (pointing right in local coords)
     ctx.fillStyle = '#999';
-    ctx.fillRect(gunX - 12, gunY - 2, 20, 5);
+    ctx.fillRect(-2, -2, 20, 5);
 
     // Barrel detail
     ctx.fillStyle = '#777';
-    ctx.fillRect(gunX - 12, gunY, 20, 1);
+    ctx.fillRect(-2, 0, 20, 1);
 
-    // Grip
+    // Grip (pointing down in local coords)
     ctx.fillStyle = '#888';
-    ctx.fillRect(gunX + 8, gunY - 1, 5, 8);
+    ctx.fillRect(8, -1, 5, 8);
 
     // Grip detail
     ctx.fillStyle = '#666';
-    ctx.fillRect(gunX + 8, gunY + 7, 5, 1);
+    ctx.fillRect(8, 7, 5, 1);
 
     // Trigger guard
     ctx.fillStyle = '#777';
-    ctx.fillRect(gunX + 3, gunY + 3, 5, 2);
+    ctx.fillRect(3, 3, 5, 2);
 
-    if(facing === 'right') {
-        ctx.restore();
-    }
+    ctx.restore();
 }
 
 function drawRevolver(x, y, facing) {
-    // Draw gun aligned with horizontally extended arm position
-    const offsetX = facing === 'left' ? -26 : facing === 'right' ? 18 : 18;
-    const gunX = x + offsetX;
-    const gunY = y - 12;
+    // Draw only the gun (arms already drawn in drawBaldManager)
+    let gunX, gunY, gunRotation = 0;
 
-    if(facing === 'right' || facing === 'forward') {
-        // Gun points right for right/forward facing
-        // Frame/body
-        ctx.fillStyle = '#3a3a3a';
-        ctx.fillRect(gunX - 2, gunY - 2, 10, 5);
-
-        // Barrel (pointing right)
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(gunX + 8, gunY - 1, 12, 3);
-
-        // Barrel highlight
-        ctx.fillStyle = '#404040';
-        ctx.fillRect(gunX + 8, gunY - 1, 12, 1);
-
-        // Front sight
-        ctx.fillStyle = '#e74c3c';
-        ctx.fillRect(gunX + 18, gunY - 2, 2, 2);
-
-        // Cylinder
-        ctx.fillStyle = '#4a4a4a';
-        ctx.beginPath();
-        ctx.arc(gunX + 2, gunY, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#2a2a2a';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Hammer
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(gunX - 3, gunY - 3, 3, 4);
-
-        // Trigger
-        ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath();
-        ctx.arc(gunX, gunY + 2, 1.5, 0, Math.PI);
-        ctx.fill();
-
-        // Grip (pointing down)
-        ctx.fillStyle = '#654321';
-        ctx.beginPath();
-        ctx.moveTo(gunX - 2, gunY + 1);
-        ctx.lineTo(gunX + 2, gunY + 1);
-        ctx.lineTo(gunX + 3, gunY + 8);
-        ctx.lineTo(gunX - 1, gunY + 9);
-        ctx.lineTo(gunX - 3, gunY + 6);
-        ctx.closePath();
-        ctx.fill();
-    } else {
-        // Gun points left for left facing
-        // Frame/body
-        ctx.fillStyle = '#3a3a3a';
-        ctx.fillRect(gunX - 8, gunY - 2, 10, 5);
-
-        // Barrel (pointing left)
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(gunX - 20, gunY - 1, 12, 3);
-
-        // Barrel highlight
-        ctx.fillStyle = '#404040';
-        ctx.fillRect(gunX - 20, gunY - 1, 12, 1);
-
-        // Front sight
-        ctx.fillStyle = '#e74c3c';
-        ctx.fillRect(gunX - 20, gunY - 2, 2, 2);
-
-        // Cylinder
-        ctx.fillStyle = '#4a4a4a';
-        ctx.beginPath();
-        ctx.arc(gunX - 2, gunY, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#2a2a2a';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Hammer
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(gunX, gunY - 3, 3, 4);
-
-        // Trigger
-        ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath();
-        ctx.arc(gunX - 4, gunY + 2, 1.5, 0, Math.PI);
-        ctx.fill();
-
-        // Grip (pointing down)
-        ctx.fillStyle = '#654321';
-        ctx.beginPath();
-        ctx.moveTo(gunX - 2, gunY + 1);
-        ctx.lineTo(gunX + 2, gunY + 1);
-        ctx.lineTo(gunX + 3, gunY + 8);
-        ctx.lineTo(gunX + 1, gunY + 9);
-        ctx.lineTo(gunX - 1, gunY + 6);
-        ctx.closePath();
-        ctx.fill();
+    if(facing === 'left') {
+        gunX = x - 26;
+        gunY = y - 4;
+        gunRotation = Math.PI; // Gun points left
+    } else if(facing === 'right') {
+        gunX = x + 26;
+        gunY = y - 4;
+        gunRotation = 0; // Gun points right
+    } else { // forward or default
+        gunX = x;
+        gunY = y - 2;
+        gunRotation = 0; // Gun points forward
     }
+
+    // Draw revolver with rotation
+    ctx.save();
+    ctx.translate(gunX, gunY);
+    ctx.rotate(gunRotation);
+
+    // Frame/body (pointing right in local coords)
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(-2, -2, 10, 5);
+
+    // Barrel (pointing right)
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(8, -1, 12, 3);
+
+    // Barrel highlight
+    ctx.fillStyle = '#404040';
+    ctx.fillRect(8, -1, 12, 1);
+
+    // Front sight
+    ctx.fillStyle = '#e74c3c';
+    ctx.fillRect(18, -2, 2, 2);
+
+    // Cylinder
+    ctx.fillStyle = '#4a4a4a';
+    ctx.beginPath();
+    ctx.arc(2, 0, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Hammer
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-3, -3, 3, 4);
+
+    // Trigger
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(0, 2, 1.5, 0, Math.PI);
+    ctx.fill();
+
+    // Grip (pointing down in local coords)
+    ctx.fillStyle = '#654321';
+    ctx.beginPath();
+    ctx.moveTo(-2, 1);
+    ctx.lineTo(2, 1);
+    ctx.lineTo(3, 8);
+    ctx.lineTo(-1, 9);
+    ctx.lineTo(-3, 6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
 }
 
 function drawCashSack(x, y) {
@@ -2705,69 +2667,37 @@ function drawLevel6MegacomputerRoom() {
         ctx.fill();
     }
 
-    // Yellow pipe from left gasket with front-facing elbow curve
-    const elbowRadius = 25;
-    const elbowCenterX = 350;
-    const elbowCenterY = pipeY;
+    // Nuclear-powered AI Megacomputer
+    const compX = 350;
+    const compY = 350;
+    const reservoirY = compY - 60; // 290
+    const reservoirX = compX - 50;
 
-    // Horizontal pipe from gasket center to elbow start
+    // Single smooth curved yellow pipe from gasket to reservoir top
+    // Using quadratic curve for smooth transition
+    const endX = reservoirX + 20; // Pipe connects to reservoir
+    const endY = reservoirY;
+
     ctx.strokeStyle = COLORS[3].hex; // Yellow
     ctx.lineWidth = 14;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(gasketX, pipeY);
-    ctx.lineTo(elbowCenterX - elbowRadius, pipeY);
+
+    // Smooth quadratic curve from gasket to reservoir top
+    const controlX = (gasketX + endX) / 2 + 60; // Control point for curve
+    const controlY = (pipeY + endY) / 2;
+    ctx.quadraticCurveTo(controlX, controlY, endX, endY);
     ctx.stroke();
 
-    // Pipe shine on horizontal section
+    // Pipe shine following the curve
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(gasketX, pipeY - 4);
-    ctx.lineTo(elbowCenterX - elbowRadius, pipeY - 4);
-    ctx.stroke();
-
-    // Curved elbow (90-degree turn) connecting horizontal to vertical - smooth continuous curve
-    ctx.strokeStyle = COLORS[3].hex;
-    ctx.lineWidth = 14;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.arc(elbowCenterX - elbowRadius, pipeY, elbowRadius, 0, Math.PI * 0.5);
-    ctx.stroke();
-
-    // Elbow shine
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(elbowCenterX - elbowRadius - 4, pipeY, elbowRadius - 2, 0, Math.PI * 0.5);
-    ctx.stroke();
-
-    // Nuclear-powered AI Megacomputer
-    const compX = 350;
-    const compY = 350;
-    const reservoirY = compY - 60; // 290
-
-    // Vertical pipe from elbow down to megacomputer - properly aligned
-    ctx.strokeStyle = COLORS[3].hex;
-    ctx.lineWidth = 14;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(elbowCenterX - elbowRadius, pipeY + elbowRadius);
-    ctx.lineTo(elbowCenterX - elbowRadius, reservoirY); // Connect to reservoir top
-    ctx.stroke();
-
-    // Vertical pipe shine
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(elbowCenterX - elbowRadius - 4, pipeY + elbowRadius);
-    ctx.lineTo(elbowCenterX - elbowRadius - 4, reservoirY);
+    ctx.quadraticCurveTo(controlX - 2, controlY - 4, endX, endY - 4);
     ctx.stroke();
 
     ctx.lineCap = 'butt';
@@ -2783,8 +2713,7 @@ function drawLevel6MegacomputerRoom() {
     ctx.fillRect(compX + 5, compY - 75, 70, 90);
 
     // Nuclear reactor reservoir with glowing green liquid
-    const reservoirX = compX - 50;
-    // reservoirY already declared above at line 2611
+    // reservoirX and reservoirY already declared above at lines 2662 and 2661
     const reservoirW = 40;
     const reservoirH = 70;
 
@@ -3071,48 +3000,183 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(portraitX - portraitWidth/2, portraitY, portraitWidth, portraitHeight);
     }
 
-    // Safe positioned behind desk against back wall (below portrait) - 3D perspective
+    // Mahogany executive desk - proper 3D isometric view
+    const deskX = 350;
+    const deskY = 250; // Lower position for better visibility
+
+    // Large shadow beneath entire desk (grounding it on floor)
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.ellipse(deskX, deskY + 70, 110, 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Desk legs - four sturdy 3D legs with proper depth
+    const legWidth = 6;
+    const legDepth = 4;
+    const legHeight = 65;
+    const legs = [
+        {x: deskX - 75, y: deskY - 15}, // Back left
+        {x: deskX + 75, y: deskY - 15}, // Back right
+        {x: deskX - 75, y: deskY + 5},  // Front left
+        {x: deskX + 75, y: deskY + 5}   // Front right
+    ];
+
+    legs.forEach((leg) => {
+        // Leg left side (darker)
+        ctx.fillStyle = '#3a1a00';
+        ctx.beginPath();
+        ctx.moveTo(leg.x - legDepth, leg.y);
+        ctx.lineTo(leg.x, leg.y - 2);
+        ctx.lineTo(leg.x, leg.y + legHeight - 2);
+        ctx.lineTo(leg.x - legDepth, leg.y + legHeight);
+        ctx.closePath();
+        ctx.fill();
+
+        // Leg front face
+        ctx.fillStyle = '#4a2a0a';
+        ctx.fillRect(leg.x - legDepth, leg.y, legWidth, legHeight);
+
+        // Leg highlight
+        ctx.fillStyle = '#5a3a1a';
+        ctx.fillRect(leg.x - legDepth + 1, leg.y, 1, legHeight);
+    });
+
+    // Desk body/pedestal (back section, darker - recessed depth)
+    ctx.fillStyle = '#2a1a00';
+    ctx.beginPath();
+    ctx.moveTo(deskX - 85, deskY - 20);
+    ctx.lineTo(deskX + 85, deskY - 20);
+    ctx.lineTo(deskX + 85, deskY + 60);
+    ctx.lineTo(deskX - 85, deskY + 60);
+    ctx.closePath();
+    ctx.fill();
+
+    // Left side panel (3D depth visible from angle)
+    ctx.fillStyle = '#3a1a00';
+    ctx.beginPath();
+    ctx.moveTo(deskX - 85, deskY - 20);
+    ctx.lineTo(deskX - 90, deskY - 25);
+    ctx.lineTo(deskX - 90, deskY + 55);
+    ctx.lineTo(deskX - 85, deskY + 60);
+    ctx.closePath();
+    ctx.fill();
+
+    // Right side panel (3D depth, slightly lighter)
+    ctx.fillStyle = '#4a2a0a';
+    ctx.beginPath();
+    ctx.moveTo(deskX + 85, deskY - 20);
+    ctx.lineTo(deskX + 90, deskY - 25);
+    ctx.lineTo(deskX + 90, deskY + 55);
+    ctx.lineTo(deskX + 85, deskY + 60);
+    ctx.closePath();
+    ctx.fill();
+
+    // Desk TOP surface - horizontal plane visible from above (key for 3D effect)
+    // Back edge (darker depth)
+    ctx.fillStyle = '#3a1a00';
+    ctx.beginPath();
+    ctx.moveTo(deskX - 90, deskY - 25);
+    ctx.lineTo(deskX + 90, deskY - 25);
+    ctx.lineTo(deskX + 85, deskY - 20);
+    ctx.lineTo(deskX - 85, deskY - 20);
+    ctx.closePath();
+    ctx.fill();
+
+    // Main top surface (mahogany, visible from above)
+    ctx.fillStyle = '#5a3a1a';
+    ctx.beginPath();
+    ctx.moveTo(deskX - 85, deskY - 20);
+    ctx.lineTo(deskX + 85, deskY - 20);
+    ctx.lineTo(deskX + 80, deskY - 10);
+    ctx.lineTo(deskX - 80, deskY - 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wood grain on top surface
+    ctx.strokeStyle = '#6a4a2a';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.4;
+    for(let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.moveTo(deskX - 80 + i * 26, deskY - 20);
+        ctx.lineTo(deskX - 80 + i * 26, deskY - 10);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Front edge lip (visible thickness)
+    ctx.fillStyle = '#4a2a0a';
+    ctx.fillRect(deskX - 80, deskY - 10, 160, 3);
+
+    // Desk front face (drawers)
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(deskX - 80, deskY - 7, 160, 67);
+
+    // Drawer dividing lines
+    ctx.strokeStyle = '#2a1a00';
+    ctx.lineWidth = 2;
+    for(let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(deskX - 80, deskY - 7 + i * 22);
+        ctx.lineTo(deskX + 80, deskY - 7 + i * 22);
+        ctx.stroke();
+    }
+
+    // Drawer handles (golden brass)
+    ctx.fillStyle = '#d4af37';
+    for(let row = 0; row < 3; row++) {
+        const handleY = deskY - 7 + row * 22 + 8;
+        // Left handle
+        ctx.fillRect(deskX - 25, handleY, 30, 4);
+        // Right handle
+        ctx.fillRect(deskX - 5, handleY, 30, 4);
+    }
+
+    // Safe positioned IN FRONT of earth portrait on back wall - volumetric 3D
     const safeX = 350;
-    const safeY = portraitY + portraitHeight + 15;
+    const safeY = 100; // Positioned on floor in front of portrait
     const safeOpen = level6.safeUnlocked;
 
-    // Safe back panel (shows depth)
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(safeX - 28, safeY - 3, 56, 51);
+    // Safe shadow on floor
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(safeX - 32, safeY + 60, 64, 8);
 
-    // Safe left side (3D depth)
+    // Safe back panel (depth)
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(safeX - 28, safeY - 4, 56, 62);
+
+    // Safe left side (3D volume)
     ctx.fillStyle = '#252525';
     ctx.beginPath();
     ctx.moveTo(safeX - 25, safeY);
-    ctx.lineTo(safeX - 28, safeY - 3);
-    ctx.lineTo(safeX - 28, safeY + 45);
-    ctx.lineTo(safeX - 25, safeY + 45);
+    ctx.lineTo(safeX - 28, safeY - 4);
+    ctx.lineTo(safeX - 28, safeY + 54);
+    ctx.lineTo(safeX - 25, safeY + 60);
     ctx.closePath();
     ctx.fill();
 
-    // Safe right side (3D depth - slightly lighter)
+    // Safe right side (3D volume - lighter for depth)
     ctx.fillStyle = '#2f2f2f';
     ctx.beginPath();
     ctx.moveTo(safeX + 25, safeY);
-    ctx.lineTo(safeX + 28, safeY - 3);
-    ctx.lineTo(safeX + 28, safeY + 45);
-    ctx.lineTo(safeX + 25, safeY + 45);
+    ctx.lineTo(safeX + 28, safeY - 4);
+    ctx.lineTo(safeX + 28, safeY + 54);
+    ctx.lineTo(safeX + 25, safeY + 60);
     ctx.closePath();
     ctx.fill();
 
-    // Safe top (3D depth)
+    // Safe top (3D volume - visible from angle)
     ctx.fillStyle = '#303030';
     ctx.beginPath();
     ctx.moveTo(safeX - 25, safeY);
-    ctx.lineTo(safeX - 28, safeY - 3);
-    ctx.lineTo(safeX + 28, safeY - 3);
+    ctx.lineTo(safeX - 28, safeY - 4);
+    ctx.lineTo(safeX + 28, safeY - 4);
     ctx.lineTo(safeX + 25, safeY);
     ctx.closePath();
     ctx.fill();
 
-    // Safe main body front
+    // Safe main body front (larger, solid)
     ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(safeX - 25, safeY, 50, 45);
+    ctx.fillRect(safeX - 25, safeY, 50, 60);
 
     // Safe door/interior
     ctx.fillStyle = safeOpen ? '#1a1a1a' : '#0a0a0a';
@@ -3266,74 +3330,14 @@ function drawLevel6CEOOffice() {
         }
     }
 
-    // Mahogany desk (front-facing perspective) - moved forward to make safe visible
-    const deskX = 350;
-    const deskY = 300;
-
-    // Shadow beneath desk (to ground it on the rug)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(deskX - 85, deskY + 35, 170, 8);
-
-    // 3D Desk - back edge visible
-    ctx.fillStyle = '#3a1a00';
-    ctx.fillRect(deskX - 90, deskY - 20, 180, 5);
-
-    // Desk top surface (visible from front, perspective with depth)
-    ctx.fillStyle = '#4a2a0a';
-    ctx.beginPath();
-    ctx.moveTo(deskX - 80, deskY);
-    ctx.lineTo(deskX - 90, deskY - 15);
-    ctx.lineTo(deskX + 90, deskY - 15);
-    ctx.lineTo(deskX + 80, deskY);
-    ctx.closePath();
-    ctx.fill();
-
-    // Desk top edge highlight (wood grain effect)
-    ctx.fillStyle = '#5a3a1a';
-    ctx.beginPath();
-    ctx.moveTo(deskX - 80, deskY);
-    ctx.lineTo(deskX + 80, deskY);
-    ctx.lineTo(deskX + 80, deskY + 2);
-    ctx.lineTo(deskX - 80, deskY + 2);
-    ctx.closePath();
-    ctx.fill();
-
-    // Desk main body (lighter mahogany) - no drawers on front
-    ctx.fillStyle = '#5a3a1a';
-    ctx.fillRect(deskX - 80, deskY, 160, 35);
-
-    // Left side panel (3D depth visible from angle)
-    ctx.fillStyle = '#3a1a00';
-    ctx.beginPath();
-    ctx.moveTo(deskX - 80, deskY);
-    ctx.lineTo(deskX - 90, deskY - 15);
-    ctx.lineTo(deskX - 90, deskY + 20);
-    ctx.lineTo(deskX - 80, deskY + 35);
-    ctx.closePath();
-    ctx.fill();
-
-    // Right side panel (3D depth)
-    ctx.fillStyle = '#4a2a0a';
-    ctx.beginPath();
-    ctx.moveTo(deskX + 80, deskY);
-    ctx.lineTo(deskX + 90, deskY - 15);
-    ctx.lineTo(deskX + 90, deskY + 20);
-    ctx.lineTo(deskX + 80, deskY + 35);
-    ctx.closePath();
-    ctx.fill();
-
-    // Front panel detail lines
-    ctx.fillStyle = '#4a2a0a';
-    ctx.fillRect(deskX - 80, deskY, 160, 2);
-    ctx.fillRect(deskX - 80, deskY + 33, 160, 2);
-
-    // Crystal brandy decanter (LEFT side of desk) - 3D solid object on desk top surface
+    // Crystal brandy decanter (LEFT side of desk) - 3D solid object sitting ON desk top surface
     const brandyX = deskX - 55;
-    const brandyY = deskY - 10; // Positioned visibly on top of desk surface
+    const brandyY = deskY - 35; // Sitting on horizontal desk top
 
-    // Shadow beneath brandy decanter (grounding it on desk)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(brandyX - 10, brandyY + 34, 20, 4);
+    // Shadow beneath brandy decanter base (grounding it on desk top)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.ellipse(brandyX, brandyY + 37, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     // Bottle back edge (3D depth)
     ctx.fillStyle = 'rgba(150,180,220,0.3)';
@@ -3344,8 +3348,8 @@ function drawLevel6CEOOffice() {
     ctx.beginPath();
     ctx.moveTo(brandyX - 8, brandyY + 12);
     ctx.lineTo(brandyX - 9, brandyY + 11);
-    ctx.lineTo(brandyX - 9, brandyY + 34);
-    ctx.lineTo(brandyX - 8, brandyY + 34);
+    ctx.lineTo(brandyX - 9, brandyY + 35);
+    ctx.lineTo(brandyX - 8, brandyY + 35);
     ctx.closePath();
     ctx.fill();
 
@@ -3354,14 +3358,14 @@ function drawLevel6CEOOffice() {
     ctx.beginPath();
     ctx.moveTo(brandyX + 8, brandyY + 12);
     ctx.lineTo(brandyX + 9, brandyY + 11);
-    ctx.lineTo(brandyX + 9, brandyY + 34);
-    ctx.lineTo(brandyX + 8, brandyY + 34);
+    ctx.lineTo(brandyX + 9, brandyY + 35);
+    ctx.lineTo(brandyX + 8, brandyY + 35);
     ctx.closePath();
     ctx.fill();
 
     // Square crystal bottle body front
     ctx.fillStyle = 'rgba(200,220,255,0.5)';
-    ctx.fillRect(brandyX - 8, brandyY + 12, 16, 22);
+    ctx.fillRect(brandyX - 8, brandyY + 12, 16, 23);
 
     // Crystal facets/texture
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
@@ -3371,19 +3375,19 @@ function drawLevel6CEOOffice() {
     // Bottle outline for crystal effect
     ctx.strokeStyle = 'rgba(255,255,255,0.9)';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(brandyX - 8, brandyY + 12, 16, 22);
+    ctx.strokeRect(brandyX - 8, brandyY + 12, 16, 23);
 
     // Brandy liquid inside (3D - shows through glass)
     ctx.fillStyle = 'rgba(139,69,19,0.7)';
-    ctx.fillRect(brandyX - 6, brandyY + 22, 12, 11);
+    ctx.fillRect(brandyX - 6, brandyY + 23, 12, 11);
 
     // Liquid depth on right side
     ctx.fillStyle = 'rgba(100,50,15,0.5)';
-    ctx.fillRect(brandyX + 4, brandyY + 23, 2, 9);
+    ctx.fillRect(brandyX + 4, brandyY + 24, 2, 9);
 
     // Crystal highlights on liquid
     ctx.fillStyle = 'rgba(180,110,50,0.6)';
-    ctx.fillRect(brandyX - 5, brandyY + 23, 3, 9);
+    ctx.fillRect(brandyX - 5, brandyY + 24, 3, 9);
 
     // Stopper neck (3D)
     ctx.fillStyle = 'rgba(180,200,240,0.5)';
@@ -3426,9 +3430,9 @@ function drawLevel6CEOOffice() {
     ctx.closePath();
     ctx.fill();
 
-    // Control console monitor - RIGHT side of desk on top surface (3D solid)
-    const monX = deskX + 35;
-    const monY = deskY - 35;
+    // Control console monitor - RIGHT side of desk, sitting ON desk top surface (3D solid)
+    const monX = deskX + 40;
+    const monY = deskY - 45; // Sitting on horizontal desk top
 
     // Shadow beneath monitor base (grounding it on desk)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -3817,12 +3821,39 @@ function drawSafeUI() {
         ctx.lineWidth = revolverSelected ? 5 : 2;
         ctx.strokeRect(100, 160, 140, 120);
 
-        // Draw revolver icon
-        ctx.fillStyle = '#ffd700';
+        // Draw golden revolver icon (ghost gun style design)
+        const revIconX = 170;
+        const revIconY = 210;
+
+        // Barrel (pointing right)
+        ctx.fillStyle = '#d4af37'; // Dark gold
+        ctx.fillRect(revIconX - 5, revIconY - 4, 22, 8);
+
+        // Barrel highlight
+        ctx.fillStyle = '#ffd700'; // Bright gold
+        ctx.fillRect(revIconX - 5, revIconY - 3, 22, 2);
+
+        // Barrel detail line
+        ctx.fillStyle = '#b8941e';
+        ctx.fillRect(revIconX - 5, revIconY, 22, 1);
+
+        // Grip (pointing down)
+        ctx.fillStyle = '#c9a637'; // Medium gold
+        ctx.fillRect(revIconX + 10, revIconY - 2, 6, 10);
+
+        // Grip detail
+        ctx.fillStyle = '#b8941e';
+        ctx.fillRect(revIconX + 10, revIconY + 7, 6, 1);
+
+        // Trigger guard
+        ctx.fillStyle = '#d4af37';
+        ctx.fillRect(revIconX + 5, revIconY + 3, 6, 2);
+
+        // Cylinder/chamber (small circle for detail)
+        ctx.fillStyle = '#c9a637';
         ctx.beginPath();
-        ctx.arc(170, 210, 20, 0, Math.PI * 2);
+        ctx.arc(revIconX + 3, revIconY, 3, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillRect(190, 205, 30, 10);
 
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 16px Arial';
@@ -4573,34 +4604,50 @@ function drawPortraitUI() {
 
 
 function drawMuteIndicator() {
+    // Larger, more accessible mute button in top-right corner
+    const btnX = 610;
+    const btnY = 10;
+    const btnW = 80;
+    const btnH = 50;
+
     if(musicMuted) {
-        // Draw mute icon in top-right corner
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(640, 10, 50, 30);
+        // Draw mute icon - larger and more visible
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(btnX, btnY, btnW, btnH);
+
+        // Border for visibility
+        ctx.strokeStyle = '#ff4444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(btnX, btnY, btnW, btnH);
 
         ctx.fillStyle = '#ff4444';
-        ctx.font = 'bold 20px Arial';
+        ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🔇', 665, 32);
+        ctx.fillText('🔇', btnX + btnW/2, btnY + 38);
     } else {
-        // Draw sound icon when not muted (subtle)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(640, 10, 50, 30);
+        // Draw sound icon when not muted
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(btnX, btnY, btnW, btnH);
 
-        ctx.fillStyle = '#4a4a4a';
-        ctx.font = 'bold 20px Arial';
+        // Border for visibility
+        ctx.strokeStyle = '#4a4a4a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(btnX, btnY, btnW, btnH);
+
+        ctx.fillStyle = '#27ae60';
+        ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('🔊', 665, 32);
+        ctx.fillText('🔊', btnX + btnW/2, btnY + 38);
     }
 
-    // Show 'TAP/M to mute' hint on menu
-    if(state === 'menu') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(600, 45, 95, 20);
-        ctx.fillStyle = '#aaa';
-        ctx.font = '12px Arial';
+    // Show helper text on menu and end screens
+    if(state === 'menu' || state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(btnX - 10, btnY + btnH + 5, btnW + 20, 22);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('TAP/M: MUTE', 647, 58);
+        ctx.fillText('TAP/CLICK TO MUTE', btnX + btnW/2, btnY + btnH + 18);
     }
 }
 
@@ -4674,6 +4721,38 @@ function drawScene() {
 
         // Draw mute indicator
         drawMuteIndicator();
+
+        // Draw prominent "TAP TO START" overlay if audio not unlocked
+        if(!audioUnlocked) {
+            // Semi-transparent dark overlay
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(0, 0, 700, 500);
+
+            // Pulsing "TAP TO START" message
+            const pulseAlpha = 0.7 + Math.sin(Date.now() / 400) * 0.3;
+            ctx.globalAlpha = pulseAlpha;
+
+            // Outer glow
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 64px Arial';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 30;
+            ctx.fillText('TAP TO START', 350, 220);
+            ctx.shadowBlur = 0;
+
+            ctx.globalAlpha = 1;
+
+            // Instruction text
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('Click or tap anywhere to enable sound', 350, 300);
+
+            // Speaker icon
+            ctx.font = 'bold 72px Arial';
+            ctx.fillText('🔊', 350, 400);
+        }
+
         return;
     }
 
@@ -4750,15 +4829,27 @@ function drawScene() {
         return;
     }
     
-    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory') {
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, 700, 500);
-        
+
         if(state === 'over') {
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
+        } else if(state === 'fired') {
+            // Level 5: Killed yourself in furnace
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("YOU'RE FIRED!", 350, 180);
+        } else if(state === 'gameover') {
+            // Level 5: Didn't burn 6 documents in time
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("GAME OVER", 350, 180);
         } else if(state === 'win') {
             ctx.fillStyle = '#27ae60';
             ctx.font = 'bold 56px Arial';
@@ -4778,38 +4869,50 @@ function drawScene() {
             ctx.font = '28px Arial';
             ctx.fillText('Documents Destroyed: ' + level5.docsCollected, 350, 270);
         } else if(state === 'victory') {
+            // Simplified victory screen - less crowded
             ctx.fillStyle = '#f5f2ec';
-            ctx.font = 'bold 72px Arial';
+            ctx.font = 'bold 80px Arial';
             ctx.textAlign = 'center';
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 8;
-            ctx.strokeText('YOU WIN', 350, 180);
+            ctx.strokeText('YOU WIN!', 350, 220);
             ctx.fillStyle = '#27ae60';
-            ctx.fillText('YOU WIN', 350, 180);
-
-            ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 48px Arial';
-            ctx.fillText('MULLET PRO', 350, 250);
-
-            ctx.fillStyle = '#f5f2ec';
-            ctx.font = '24px Arial';
-            ctx.fillText('THE WORKERS OWN', 350, 290);
-            ctx.fillText('THE MEANS OF PRODUCTION', 350, 315);
+            ctx.fillText('YOU WIN!', 350, 220);
         }
         
-        if(state !== 'victory' && state !== 'theend') {
+        if(state !== 'victory' && state !== 'theend' && state !== 'gameover' && state !== 'fired') {
             ctx.fillStyle = '#f5f2ec';
             ctx.font = '32px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('FINAL SCORE: ' + score, 350, 240);
         }
-        
+
         ctx.font = '24px Arial';
-        ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#999';
-        const yOffset = (state === 'theend' || state === 'victory') ? 350 : 320;
-        ctx.fillText('▶ Return to Menu', 350, yOffset);
-        ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#999';
-        ctx.fillText(state === 'victory' ? '▶ Play again' : '▶ Keep documenting!', 350, yOffset + 50);
+        const yOffset = (state === 'theend' || state === 'victory' || state === 'gameover' || state === 'fired') ? 350 : 320;
+
+        if(state === 'victory') {
+            // Victory screen: only "Play again?"
+            ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Play again?', 350, yOffset);
+        } else if(state === 'theend') {
+            // The End screen: "Start over?" and "Visit Mullet.pro"
+            ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Start over?', 350, yOffset);
+            ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Visit Mullet.pro', 350, yOffset + 50);
+        } else if(state === 'gameover' || state === 'fired') {
+            // Level 5 failure screens: "Keep documenting!" and "Visit Mullet.pro"
+            ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Keep documenting!', 350, yOffset);
+            ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Visit Mullet.pro', 350, yOffset + 50);
+        } else {
+            // Regular end screens (over, win): "Keep documenting!" and "Visit Mullet.pro"
+            ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Keep documenting!', 350, yOffset);
+            ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#999';
+            ctx.fillText('▶ Visit Mullet.pro', 350, yOffset + 50);
+        }
 
         // Draw mute indicator on end screens
         drawMuteIndicator();
@@ -5301,26 +5404,30 @@ function update() {
         return;
     }
 
-    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory') {
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+        // Victory screen only has one option, limit menuChoice to 0
+        const maxChoice = state === 'victory' ? 0 : 1;
+
         if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
             menuChoice = 0;
             keys.upProcessed = true;
         }
         if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-            menuChoice = 1;
+            menuChoice = Math.min(1, maxChoice);
             keys.downProcessed = true;
         }
         if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
         if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
-        
+
         if(keys[' '] || keys['action']) {
             keys[' '] = false;
             keys['action'] = false;
             if(menuChoice === 0) {
-                window.location.href = '/';
-            } else {
-                // Reset to level 1
+                // Option 0: Keep documenting! / Play again? / Start over?
                 startGame();
+            } else {
+                // Option 1: Visit Mullet.pro
+                window.location.href = 'https://mullet.pro';
             }
         }
         return;
@@ -5636,9 +5743,10 @@ function update() {
                                 return;
                             }
                         } else {
+                            // Player walked into furnace without holding document
                             furnace.flameTime = Date.now();
                             createExplosion(player.x, player.y);
-                            state = 'over';
+                            state = 'fired'; // Special state for furnace death
                             menuChoice = 0;
                         }
                         keys[' '] = false;
@@ -5826,6 +5934,7 @@ function update() {
                                 level6.endingTriggered = true;
                                 state = 'victory';
                                 menuChoice = 0;
+                                playMusic('menu'); // Play menu music on victory
                                 keys[' '] = false;
                                 keys['action'] = false;
                             }
@@ -6046,11 +6155,11 @@ function update() {
                         keys['action'] = false;
 
                         if(level6.computerChoice === 0) {
-                            // Self-destruct
-                            state = 'over';
+                            // Self-destruct - "The End"
+                            state = 'theend';
                             menuChoice = 0;
                         } else {
-                            // Deliver means of production
+                            // Deliver means of production - leads to "You Win!"
                             level6.computerCompleted = true;
                             level6.computerUI = false;
                             level6.npcExitSequence = true;
@@ -6079,11 +6188,9 @@ function update() {
                         ceo.state = 'admiring';
                     }
 
-                    // Open safe code entry UI if locked (safe is behind desk)
+                    // Open safe code entry UI if locked (safe is on floor in front of portrait)
                     const safeX = 350;
-                    const portraitY = 40;
-                    const portraitHeight = 90; // Matches the drawn portrait height
-                    const safeY = portraitY + portraitHeight + 15; // 145
+                    const safeY = 100; // Matches actual drawn position
                     if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 60 && Math.abs(player.y - safeY) < 80) {
                         level6.safeUI = true;
                         level6.selectedButton = 0;
@@ -6096,9 +6203,9 @@ function update() {
                         level6.itemSelection = 0;
                     }
 
-                    // Computer monitor on desk
-                    const monX = 380;
-                    const monY = 210;
+                    // Computer monitor on desk (matches actual drawn position)
+                    const monX = 390; // deskX + 40
+                    const monY = 205; // deskY - 45
                     if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 50 && Math.abs(player.y - monY) < 60) {
                         level6.computerUI = true;
                     }
@@ -6181,9 +6288,9 @@ function update() {
             
                 // Collision with desk - adjusted for front-facing perspective
                 const deskX = 350;
-                const deskY = 180;
-                // Desk collision covers entire desk including top surface (from -15 to +35)
-                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 20 && player.y < deskY + 40) {
+                const deskY = 250; // Matches actual drawn position
+                // Desk collision covers entire desk including top surface
+                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 25 && player.y < deskY + 70) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -6220,10 +6327,12 @@ function update() {
                     player.y = prevY;
                 }
 
-                // Collision with safe (now on right side at floor level)
-                const safeX = 490;
-                const safeY = 280;
-                if(player.x > safeX - 30 && player.x < safeX + 30 && player.y > safeY && player.y < safeY + 50) {
+                // Collision with safe (on floor in front of portrait)
+                const safeCollisionX = 350;
+                const safeCollisionY = 100;
+                // Safe is 50px wide, 60px tall (from drawing code)
+                if(player.x > safeCollisionX - 30 && player.x < safeCollisionX + 30 &&
+                   player.y > safeCollisionY - 10 && player.y < safeCollisionY + 70) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -6560,12 +6669,13 @@ function update() {
 function winGame() {
     state = 'win';
     menuChoice = 0;
+    playMusic('menu'); // Play menu music on win
 }
 
 function nextLevel() {
     if(level < 4) {
         level++;
-        timer = 60;
+        timer = level === 4 ? 120 : 60; // Level 4 gets 120 seconds
         state = 'levelCard';
         cardTimer = 0;
         initLevel(level);
@@ -6596,7 +6706,7 @@ function gameLoop() {
         document.getElementById('timer').textContent = timer;
         if(timer <= 0) {
             if(level === 5) {
-                state = 'theend';
+                state = 'gameover'; // Didn't burn 6 documents in time
                 menuChoice = 0;
             } else if(level === 6) {
                 state = 'over';
@@ -6623,6 +6733,12 @@ gameLoop();
 document.addEventListener('keydown', e => {
     keys[e.key] = true;
 
+    // Unlock audio on first keyboard interaction
+    if(!audioUnlocked) {
+        audioUnlocked = true;
+        console.log('Audio unlocked by keyboard interaction');
+    }
+
     // Try to resume pending music on any key press
     resumePendingMusic();
 
@@ -6638,6 +6754,16 @@ document.addEventListener('keyup', e => {
 
 // Touch/click support for mute button
 function handleMuteClick(e) {
+    // Unlock audio on first interaction anywhere (not just menu)
+    if(!audioUnlocked) {
+        audioUnlocked = true;
+        console.log('Audio unlocked by user interaction');
+        // Try to play or resume pending music
+        if(pendingMusicKey) {
+            resumePendingMusic();
+        }
+    }
+
     // Try to resume pending music on any canvas interaction
     resumePendingMusic();
 
@@ -6664,8 +6790,8 @@ function handleMuteClick(e) {
     const x = (clientX - rect.left) * scaleX;
     const y = (clientY - rect.top) * scaleY;
 
-    // Check if click/touch is within mute button area (640, 10, 50, 30)
-    if(x >= 640 && x <= 690 && y >= 10 && y <= 40) {
+    // Check if click/touch is within larger mute button area (610, 10, 80, 50)
+    if(x >= 610 && x <= 690 && y >= 10 && y <= 60) {
         toggleMute();
         e.preventDefault();
     }
@@ -6677,16 +6803,30 @@ canvas.addEventListener('touchstart', handleMuteClick, {passive: false});
 document.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('touchstart', e => {
         e.preventDefault();
+        // Unlock audio on first touch
+        if(!audioUnlocked) {
+            audioUnlocked = true;
+            console.log('Audio unlocked by touch control');
+        }
+        // Resume pending music
+        resumePendingMusic();
         keys[btn.dataset.dir] = true;
     }, {passive: false});
-    
+
     btn.addEventListener('touchend', e => {
         e.preventDefault();
         keys[btn.dataset.dir] = false;
     }, {passive: false});
-    
+
     btn.addEventListener('mousedown', e => {
         e.preventDefault();
+        // Unlock audio on first mouse interaction
+        if(!audioUnlocked) {
+            audioUnlocked = true;
+            console.log('Audio unlocked by mouse control');
+        }
+        // Resume pending music
+        resumePendingMusic();
         keys[btn.dataset.dir] = true;
     });
     
@@ -6698,6 +6838,13 @@ document.querySelectorAll('.control-btn').forEach(btn => {
 
 document.getElementById('action-btn').addEventListener('touchstart', e => {
     e.preventDefault();
+    // Unlock audio on first touch
+    if(!audioUnlocked) {
+        audioUnlocked = true;
+        console.log('Audio unlocked by action button touch');
+    }
+    // Resume pending music
+    resumePendingMusic();
     keys['action'] = true;
 }, {passive: false});
 
@@ -6708,6 +6855,13 @@ document.getElementById('action-btn').addEventListener('touchend', e => {
 
 document.getElementById('action-btn').addEventListener('mousedown', e => {
     e.preventDefault();
+    // Unlock audio on first mouse interaction
+    if(!audioUnlocked) {
+        audioUnlocked = true;
+        console.log('Audio unlocked by action button mouse');
+    }
+    // Resume pending music
+    resumePendingMusic();
     keys['action'] = true;
 });
 
