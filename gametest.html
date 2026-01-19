@@ -3411,9 +3411,9 @@ function drawLevel6CEOOffice() {
     ctx.arc(earthX + 12, earthY + 8, 12, 0, Math.PI * 2);
     ctx.fill();
     
-    // Saturn-Pipe-Earth portrait on back wall (above safe)
+    // Saturn-Pipe-Earth portrait on back wall (pushed against back wall)
     const portraitX = 350;
-    const portraitY = 40;
+    const portraitY = 20;
 
     // Use image's actual aspect ratio, no frame needed (frame already in image)
     let portraitWidth = 120;
@@ -3564,9 +3564,9 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(deskX - 5, handleY, 30, 4);
     }
 
-    // Safe positioned BELOW earth portrait on back wall - volumetric 3D
+    // Safe positioned BELOW earth portrait on back wall - volumetric 3D, separated from desk
     const safeX = 350;
-    const safeY = 165; // Positioned clearly below portrait with visible separation
+    const safeY = 140; // Positioned with clear separation from desk below
     const safeOpen = level6.safeUnlocked;
 
     // Safe shadow on floor
@@ -3924,8 +3924,8 @@ function drawLevel6CEOOffice() {
     ctx.fillRect(monX + 9, monY + 31, 14, 2);
     
     // Golden trophy cabinet (right back wall) - obstacle - wider to accommodate photos with proper aspect ratios
-    const cabinetX = 550;
-    const cabinetY = 100;
+    const cabinetX = 600;
+    const cabinetY = 50;
 
     // Cabinet frame - golden wood (wider to fit photos properly)
     ctx.fillStyle = '#d4af37';
@@ -4049,9 +4049,9 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(pic3X, pic3Y, horizontalWidth, horizontalHeight);
     }
 
-    // "YOU WIN" mirror (left back wall) - obstacle
-    const mirrorX = 150;
-    const mirrorY = 100;
+    // "YOU WIN" mirror (left back wall) - pushed against wall
+    const mirrorX = 100;
+    const mirrorY = 50;
     
     ctx.fillStyle = '#d4af37';
     ctx.fillRect(mirrorX, mirrorY, 90, 110);
@@ -6202,6 +6202,24 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // Helper function to check if CEO position collides with obstacles
+            const ceoCollidesWithObstacle = (x, y) => {
+                const deskX = 350, deskY = 250;
+                const safeX = 350, safeY = 140;
+                const mirrorX = 100, mirrorY = 50;
+                const cabinetX = 600, cabinetY = 50;
+
+                // Check desk collision
+                if(x > deskX - 90 && x < deskX + 90 && y > deskY - 60 && y < deskY + 50) return true;
+                // Check safe collision
+                if(x > safeX - 30 && x < safeX + 30 && y > safeY - 10 && y < safeY + 70) return true;
+                // Check mirror collision
+                if(x > mirrorX - 10 && x < mirrorX + 100 && y < mirrorY + 120) return true;
+                // Check trophy collision
+                if(x > cabinetX - 10 && x < cabinetX + 110 && y < cabinetY + 130) return true;
+                return false;
+            };
+
             // CEO AI logic
             if(ceo.state === 'offering') {
                 // First walk to middle rug if not there yet
@@ -6211,8 +6229,24 @@ function update() {
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
                     if(dist > 5) {
-                        ceo.x += (dx / dist) * 2;
-                        ceo.y += (dy / dist) * 2;
+                        const newX = ceo.x + (dx / dist) * 2;
+                        const newY = ceo.y + (dy / dist) * 2;
+                        // Only move if not colliding with obstacles
+                        if(!ceoCollidesWithObstacle(newX, newY)) {
+                            ceo.x = newX;
+                            ceo.y = newY;
+                        } else {
+                            // Try moving around obstacle (prefer horizontal first)
+                            const altX = ceo.x + (dx / dist) * 2;
+                            if(!ceoCollidesWithObstacle(altX, ceo.y)) {
+                                ceo.x = altX;
+                            } else {
+                                const altY = ceo.y + (dy / dist) * 2;
+                                if(!ceoCollidesWithObstacle(ceo.x, altY)) {
+                                    ceo.y = altY;
+                                }
+                            }
+                        }
                         ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                     } else {
                         ceo.walkTarget = null;
@@ -6222,7 +6256,10 @@ function update() {
                     // Once at rug, follow player horizontally
                     if(Math.abs(ceo.x - player.x) > 60) {
                         const direction = ceo.x < player.x ? 1 : -1;
-                        ceo.x += direction * 1.5;
+                        const newX = ceo.x + direction * 1.5;
+                        if(!ceoCollidesWithObstacle(newX, ceo.y)) {
+                            ceo.x = newX;
+                        }
                         ceo.facing = direction > 0 ? 'right' : 'left';
                     } else {
                         ceo.facing = 'forward';
@@ -6231,17 +6268,33 @@ function update() {
             }
         
             if(ceo.state === 'admiring') {
-                const mirrorX = 150;
-                const mirrorTargetX = mirrorX + 65; // Position him slightly further from mirror
-                const mirrorTargetY = 160;
+                const mirrorX = 100;
+                const mirrorTargetX = mirrorX + 50; // Position in front of mirror
+                const mirrorTargetY = 180;
 
                 const dx = mirrorTargetX - ceo.x;
                 const dy = mirrorTargetY - ceo.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if(dist > 5) {
-                    ceo.x += (dx / dist) * 2;
-                    ceo.y += (dy / dist) * 2;
+                    const newX = ceo.x + (dx / dist) * 2;
+                    const newY = ceo.y + (dy / dist) * 2;
+                    // Navigate around obstacles
+                    if(!ceoCollidesWithObstacle(newX, newY)) {
+                        ceo.x = newX;
+                        ceo.y = newY;
+                    } else {
+                        // Try moving around obstacle
+                        const altX = ceo.x + (dx / dist) * 2;
+                        if(!ceoCollidesWithObstacle(altX, ceo.y)) {
+                            ceo.x = altX;
+                        } else {
+                            const altY = ceo.y + (dy / dist) * 2;
+                            if(!ceoCollidesWithObstacle(ceo.x, altY)) {
+                                ceo.y = altY;
+                            }
+                        }
+                    }
                     ceo.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                 } else {
                     ceo.x = mirrorTargetX;
@@ -6259,8 +6312,25 @@ function update() {
 
                 // Stop at a safe distance to avoid trapping player (collision range is 40x50)
                 if(dist > 60) {
-                    ceo.x += (dx / dist) * 2;
-                    ceo.y += (dy / dist) * 2;
+                    const newX = ceo.x + (dx / dist) * 2;
+                    const newY = ceo.y + (dy / dist) * 2;
+
+                    // Navigate around obstacles while chasing
+                    if(!ceoCollidesWithObstacle(newX, newY)) {
+                        ceo.x = newX;
+                        ceo.y = newY;
+                    } else {
+                        // Try moving around obstacle - prefer direction toward player
+                        const altX = ceo.x + (dx / dist) * 2;
+                        if(!ceoCollidesWithObstacle(altX, ceo.y)) {
+                            ceo.x = altX;
+                        } else {
+                            const altY = ceo.y + (dy / dist) * 2;
+                            if(!ceoCollidesWithObstacle(ceo.x, altY)) {
+                                ceo.y = altY;
+                            }
+                        }
+                    }
 
                     if(Math.abs(dx) > Math.abs(dy)) {
                         ceo.facing = dx > 0 ? 'right' : 'left';
@@ -6708,24 +6778,25 @@ function update() {
                 // Collision with desk - adjusted for front-facing perspective
                 const deskX = 350;
                 const deskY = 250; // Matches actual drawn position
-                // Desk collision covers entire desk including top surface and items on top
-                if(player.x > deskX - 85 && player.x < deskX + 85 && player.y > deskY - 55 && player.y < deskY + 70) {
+                // Desk collision covers entire desk including top surface (prevents walking on desk)
+                // Desk extends from Y=195 (top) to Y=295 (bottom including legs/shadow)
+                if(player.x > deskX - 90 && player.x < deskX + 90 && player.y > deskY - 60 && player.y < deskY + 50) {
                     player.x = prevX;
                     player.y = prevY;
                 }
             
-                // Collision with trophy cabinet (wider cabinet: 100px wide, 120px tall)
-                const cabinetX = 550;
-                const cabinetY = 100;
-                if(player.x > cabinetX - 20 && player.x < cabinetX + 120 && player.y < cabinetY + 130) {
+                // Collision with trophy cabinet (100px wide, 120px tall, against back wall)
+                const cabinetX = 600;
+                const cabinetY = 50;
+                if(player.x > cabinetX - 10 && player.x < cabinetX + 110 && player.y < cabinetY + 130) {
                     player.x = prevX;
                     player.y = prevY;
                 }
             
-                // Collision with mirror
-                const mirrorX = 150;
-                const mirrorY = 100;
-                if(player.x > mirrorX - 20 && player.x < mirrorX + 110 && player.y < mirrorY + 130) {
+                // Collision with mirror (against back wall)
+                const mirrorX = 100;
+                const mirrorY = 50;
+                if(player.x > mirrorX - 10 && player.x < mirrorX + 100 && player.y < mirrorY + 120) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -6738,18 +6809,20 @@ function update() {
                     }
                 }
 
-                // Collision with portrait wall (center back - no safe here anymore)
+                // Collision with portrait wall (center back, pushed against wall)
                 const portraitX = 350;
-                const portraitY = 50;
-                if(player.x > portraitX - 55 && player.x < portraitX + 55 && player.y < portraitY + 90) {
+                const portraitY = 20;
+                // Portrait is 120px wide, 90px tall
+                if(player.x > portraitX - 60 && player.x < portraitX + 60 && player.y < portraitY + 100) {
                     player.x = prevX;
                     player.y = prevY;
                 }
 
-                // Collision with safe (on floor in front of portrait)
+                // Collision with safe (separated from desk, no walkover allowed)
                 const safeCollisionX = 350;
-                const safeCollisionY = 100;
-                // Safe is 50px wide, 60px tall (from drawing code)
+                const safeCollisionY = 140;
+                // Safe is 50px wide, 60px tall - full collision box
+                // Safe extends from Y=140 to Y=200 (with shadow at 202)
                 if(player.x > safeCollisionX - 30 && player.x < safeCollisionX + 30 &&
                    player.y > safeCollisionY - 10 && player.y < safeCollisionY + 70) {
                     player.x = prevX;
