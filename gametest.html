@@ -148,6 +148,9 @@ portraitImg.src = 'images/14065C15-1E0F-4E93-96B0-A2B4D680271C.png';
 const letterImg = new Image();
 letterImg.src = 'images/604E8268-5DFB-46F1-8E86-A0B6EC8B64E6.png';
 
+const detectiveNoteImg = new Image();
+detectiveNoteImg.src = 'images/6C2DA7EB-0F87-43BC-867C-8423DA26C787.png';
+
 // Trophy cabinet images
 const trophy1Img = new Image();
 trophy1Img.src = 'images/0B2DF6FF-31C8-449B-8FC4-CE39DDDEB71C.png'; // Freedom isn't free - framed service members photo
@@ -370,12 +373,15 @@ let level6 = {
     moneyLives: 0,
     ceoDefeated: false,
     computerUI: false,
+    computerChoice: 0,
+    computerCompleted: false,
     endingTriggered: false,
     npcExitSequence: false,
     npcExitTimer: 0,
     exitingNPCs: [],
     npcPipes: [],
-    radiationTimer: 0
+    radiationTimer: 0,
+    viewingDetectiveNote: false
 };
 
 let ghostGun = {
@@ -538,6 +544,7 @@ function initLevel(lv) {
         level6.npcExitSequence = false;
         level6.npcExitTimer = 0;
         level6.exitingNPCs = [];
+        level6.viewingDetectiveNote = false;
         level6.npcPipes = [
             {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
             {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
@@ -699,15 +706,53 @@ function drawAmmoCounter(x, y, ammo) {
 
 function drawHeldDoc(x, y, colorName) {
     const col = COLORS.find(c => c.name === colorName);
+
+    // Realistic manila folder appearance
+    const folderWidth = 40;
+    const folderHeight = 35;
+    const tabWidth = 18;
+    const tabHeight = 8;
+    const folderX = x - 20;
+    const folderY = y - 70;
+
+    // Shadow for depth
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(folderX + 2, folderY + 2, folderWidth, folderHeight);
+
+    // Main folder body (manila/beige color)
+    ctx.fillStyle = '#e8d7b8';
+    ctx.fillRect(folderX, folderY, folderWidth, folderHeight);
+
+    // Darker edge to show thickness/depth (right and bottom edge)
+    ctx.fillStyle = '#d4c4a6';
+    ctx.fillRect(folderX + folderWidth - 2, folderY + 2, 2, folderHeight - 2); // right edge
+    ctx.fillRect(folderX + 2, folderY + folderHeight - 2, folderWidth - 2, 2); // bottom edge
+
+    // Tab at top (offset to left)
+    ctx.fillStyle = '#ead9ba';
+    ctx.fillRect(folderX + 2, folderY - tabHeight, tabWidth, tabHeight + 2);
+
+    // Tab darker edge for depth
+    ctx.fillStyle = '#d4c4a6';
+    ctx.fillRect(folderX + 2 + tabWidth - 1, folderY - tabHeight, 1, tabHeight);
+
+    // Folder edge lines for realism
+    ctx.strokeStyle = '#c9b89a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(folderX, folderY, folderWidth, folderHeight);
+
+    // Color indicator stripe (horizontal stripe showing doc color)
     ctx.fillStyle = col.hex;
-    ctx.fillRect(x - 20, y - 70, 40, 35);
-    
-    ctx.strokeStyle = '#2b2b2b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x - 20, y - 70, 40, 35);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px Arial';
+    ctx.fillRect(folderX + 4, folderY + 4, folderWidth - 8, 6);
+
+    // Color stripe border
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(folderX + 4, folderY + 4, folderWidth - 8, 6);
+
+    // Document label text on folder
+    ctx.fillStyle = '#666';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(col.name, x, y - 50);
 }
@@ -3289,6 +3334,160 @@ function drawLevel6MegacomputerRoom() {
         ctx.fill();
     }
 
+    // Dead private eye on the right side, past the danger zone
+    const detectiveX = 550;
+    const detectiveY = 430;
+
+    // Blood pool
+    ctx.fillStyle = '#8B0000';
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.ellipse(detectiveX + 10, detectiveY + 20, 60, 35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Darker center of blood pool
+    ctx.fillStyle = '#660000';
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.ellipse(detectiveX + 10, detectiveY + 20, 40, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Blood splatters
+    for(let i = 0; i < 8; i++) {
+        ctx.fillStyle = '#8B0000';
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        const angle = (i / 8) * Math.PI * 2;
+        const splatterX = detectiveX + 10 + Math.cos(angle) * (50 + Math.random() * 20);
+        const splatterY = detectiveY + 20 + Math.sin(angle) * (30 + Math.random() * 15);
+        ctx.arc(splatterX, splatterY, 3 + Math.random() * 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    // Detective's body (lying face down)
+    // Legs (pointing toward danger zone edge - at x=467)
+    const legAngle = -0.3;
+
+    // Right leg
+    ctx.fillStyle = '#1a1a4d'; // Dark blue suit
+    ctx.fillRect(detectiveX - 50, detectiveY + 40, 45, 12);
+
+    // Left leg (slightly splayed)
+    ctx.save();
+    ctx.translate(detectiveX - 50, detectiveY + 50);
+    ctx.rotate(0.15);
+    ctx.fillStyle = '#1a1a4d';
+    ctx.fillRect(0, 0, 45, 12);
+    ctx.restore();
+
+    // Black shoes
+    ctx.fillStyle = '#000';
+    ctx.fillRect(detectiveX - 95, detectiveY + 39, 10, 14);
+    ctx.fillRect(detectiveX - 95, detectiveY + 50, 10, 14);
+
+    // Torso (blue suit jacket) - sprawled
+    ctx.fillStyle = '#1a1a4d';
+    ctx.fillRect(detectiveX - 20, detectiveY, 50, 45);
+
+    // Six bullet holes in back
+    for(let i = 0; i < 6; i++) {
+        const holeX = detectiveX + (i % 3) * 15 - 10;
+        const holeY = detectiveY + 15 + Math.floor(i / 3) * 15;
+
+        // Bullet hole with blood
+        ctx.fillStyle = '#660000';
+        ctx.beginPath();
+        ctx.arc(holeX, holeY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Darker center
+        ctx.fillStyle = '#330000';
+        ctx.beginPath();
+        ctx.arc(holeX, holeY, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Left arm bent back
+    ctx.fillStyle = '#1a1a4d';
+    ctx.fillRect(detectiveX - 25, detectiveY + 10, 12, 30);
+
+    // Right arm outstretched with note
+    ctx.fillStyle = '#1a1a4d'; // Suit sleeve
+    ctx.fillRect(detectiveX + 30, detectiveY + 15, 40, 12);
+
+    // Hand (pale, bloodied)
+    ctx.fillStyle = '#d4a076';
+    ctx.fillRect(detectiveX + 68, detectiveY + 12, 18, 18);
+
+    // Blood on hand
+    ctx.fillStyle = '#8B0000';
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(detectiveX + 70, detectiveY + 14, 14, 8);
+    ctx.fillRect(detectiveX + 68, detectiveY + 20, 10, 8);
+    ctx.globalAlpha = 1;
+
+    // Fingers
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = '#d4a076';
+        ctx.fillRect(detectiveX + 70 + i * 3, detectiveY + 28, 2, 8);
+    }
+
+    // Yellow note in hand
+    const noteX = detectiveX + 75;
+    const noteY = detectiveY + 8;
+    ctx.fillStyle = '#f4e5a8'; // Yellow legal pad color
+    ctx.fillRect(noteX, noteY, 20, 28);
+
+    // Note lines
+    ctx.strokeStyle = '#c0c0c0';
+    ctx.lineWidth = 0.5;
+    for(let i = 0; i < 8; i++) {
+        ctx.beginPath();
+        ctx.moveTo(noteX + 2, noteY + 3 + i * 3);
+        ctx.lineTo(noteX + 18, noteY + 3 + i * 3);
+        ctx.stroke();
+    }
+
+    // Blood splatter on note
+    ctx.fillStyle = '#8B0000';
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.arc(noteX + 15, noteY + 22, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(noteX + 8, noteY + 15, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Fedora (fallen near head)
+    const hatX = detectiveX + 5;
+    const hatY = detectiveY - 8;
+    ctx.fillStyle = '#2a2a2a'; // Dark gray/black fedora
+    ctx.beginPath();
+    ctx.ellipse(hatX, hatY, 18, 12, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hat crown
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.ellipse(hatX, hatY - 2, 10, 8, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hat band
+    ctx.fillStyle = '#333';
+    ctx.fillRect(hatX - 8, hatY - 2, 16, 3);
+
+    // Interaction prompt for note (when not viewing)
+    if(!level6.viewingDetectiveNote && Math.abs(player.x - noteX) < 40 && Math.abs(player.y - noteY) < 60) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACTION - VIEW NOTE', noteX + 10, noteY - 10);
+    }
+
     // Left door (back to pipe room)
     ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(0, 400, 40, 100);
@@ -3566,7 +3765,7 @@ function drawLevel6CEOOffice() {
 
     // Safe positioned BELOW earth portrait on back wall - volumetric 3D, separated from desk
     const safeX = 350;
-    const safeY = 100; // Positioned with clear separation from desk below
+    const safeY = 140; // Positioned lower to avoid obscuring portrait
     const safeOpen = level6.safeUnlocked;
 
     // Safe shadow on floor
@@ -3665,12 +3864,18 @@ function drawLevel6CEOOffice() {
     } else {
         // Open safe showing contents
         if(!level6.hasRevolver) {
-            // Revolver - exact match to player-held design, lying on side (scaled up)
-            const revX = safeX - 8;
+            // Revolver - exact match to player-held design pointing RIGHT (barrel right, handle down)
+            const revX = safeX + 8;
             const revY = safeY + 22;
-            const scale = 2;
+            const scale = 0.8;
 
-            // Barrel (horizontal, pointing left)
+            // Use mirroring to flip gun to point right
+            ctx.save();
+            ctx.translate(revX, revY);
+            ctx.scale(-1, 1);
+            ctx.translate(-revX, -revY);
+
+            // Barrel (horizontal, pointing left in local coords, but will flip to right)
             ctx.fillStyle = '#4a4a4a';
             ctx.fillRect(revX - 14*scale, revY - 2*scale, 18*scale, 5*scale);
             ctx.fillStyle = '#2a2a2a';
@@ -3729,6 +3934,8 @@ function drawLevel6CEOOffice() {
                 ctx.lineTo(revX + 9*scale, revY + 3*scale + i*2*scale);
                 ctx.stroke();
             }
+
+            ctx.restore();
         }
         if(level6.moneyLives < 3) {
             // Money sack visible
@@ -3923,83 +4130,86 @@ function drawLevel6CEOOffice() {
     ctx.fillRect(monX + 13, monY + 27, 6, 4);
     ctx.fillRect(monX + 9, monY + 31, 14, 2);
     
-    // Golden trophy cabinet (right back wall) - obstacle - wider to accommodate photos with proper aspect ratios
-    const cabinetX = 600;
+    // Golden trophy cabinet (right back wall) - obstacle - LARGER to show photorealistic images clearly
+    const cabinetX = 560;
     const cabinetY = 50;
+    const cabinetWidth = 140;
+    const cabinetHeight = 160;
 
-    // Cabinet frame - golden wood (wider to fit photos properly)
+    // Cabinet frame - golden wood (larger to fit photos properly)
     ctx.fillStyle = '#d4af37';
-    ctx.fillRect(cabinetX, cabinetY, 100, 120);
+    ctx.fillRect(cabinetX, cabinetY, cabinetWidth, cabinetHeight);
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(cabinetX + 4, cabinetY + 4, 92, 112);
+    ctx.fillRect(cabinetX + 4, cabinetY + 4, cabinetWidth - 8, cabinetHeight - 8);
 
     // Glass shelves (adjusted for new cabinet size)
     ctx.strokeStyle = 'rgba(200,220,255,0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(cabinetX + 6, cabinetY + 36);
-    ctx.lineTo(cabinetX + 94, cabinetY + 36);
+    ctx.moveTo(cabinetX + 6, cabinetY + 40);
+    ctx.lineTo(cabinetX + cabinetWidth - 6, cabinetY + 40);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(cabinetX + 6, cabinetY + 68);
-    ctx.lineTo(cabinetX + 94, cabinetY + 68);
+    ctx.moveTo(cabinetX + 6, cabinetY + 85);
+    ctx.lineTo(cabinetX + cabinetWidth - 6, cabinetY + 85);
     ctx.stroke();
 
     // Top shelf: Golden "CEO of the Year" trophy - centered in wider cabinet
+    const trophyCenterX = cabinetX + cabinetWidth / 2;
     ctx.fillStyle = '#8b7355';
-    ctx.fillRect(cabinetX + 42, cabinetY + 28, 16, 5);
+    ctx.fillRect(trophyCenterX - 8, cabinetY + 32, 16, 5);
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
-    ctx.arc(cabinetX + 50, cabinetY + 18, 10, 0, Math.PI * 2);
+    ctx.arc(trophyCenterX, cabinetY + 22, 10, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#0a0a0a';
     ctx.font = 'bold 6px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('CEO', cabinetX + 50, cabinetY + 21);
+    ctx.fillText('CEO', trophyCenterX, cabinetY + 25);
 
     // Middle shelf: Billionaire Club crystal gift - centered in wider cabinet
     ctx.fillStyle = '#8b7355';
-    ctx.fillRect(cabinetX + 46, cabinetY + 60, 8, 4);
+    ctx.fillRect(trophyCenterX - 4, cabinetY + 77, 8, 4);
     // Crystal diamond shape
     ctx.fillStyle = 'rgba(100,200,255,0.8)';
     ctx.strokeStyle = '#4da6ff';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(cabinetX + 50, cabinetY + 48);
-    ctx.lineTo(cabinetX + 58, cabinetY + 56);
-    ctx.lineTo(cabinetX + 50, cabinetY + 60);
-    ctx.lineTo(cabinetX + 42, cabinetY + 56);
+    ctx.moveTo(trophyCenterX, cabinetY + 65);
+    ctx.lineTo(trophyCenterX + 8, cabinetY + 73);
+    ctx.lineTo(trophyCenterX, cabinetY + 77);
+    ctx.lineTo(trophyCenterX - 8, cabinetY + 73);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     // Shine effect
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.beginPath();
-    ctx.moveTo(cabinetX + 50, cabinetY + 50);
-    ctx.lineTo(cabinetX + 54, cabinetY + 54);
-    ctx.lineTo(cabinetX + 50, cabinetY + 56);
-    ctx.lineTo(cabinetX + 46, cabinetY + 54);
+    ctx.moveTo(trophyCenterX, cabinetY + 67);
+    ctx.lineTo(trophyCenterX + 4, cabinetY + 71);
+    ctx.lineTo(trophyCenterX, cabinetY + 73);
+    ctx.lineTo(trophyCenterX - 4, cabinetY + 71);
     ctx.closePath();
     ctx.fill();
 
-    // Bottom shelf: Three photorealistic pictures with PROPER aspect ratios
+    // Bottom shelf: Three photorealistic pictures with PROPER aspect ratios (LARGER for visibility)
     // Picture dimensions based on actual image aspect ratios:
     // - trophy3 (CEO with general): 1024x1536 = 2:3 vertical portrait
     // - trophy1 (Freedom isn't free): 1536x1024 = 3:2 horizontal landscape
     // - trophy2 (CEO at PipeTech): 1536x1024 = 3:2 horizontal landscape
 
-    const verticalWidth = 18;   // 2:3 aspect ratio
-    const verticalHeight = 27;
-    const horizontalWidth = 27; // 3:2 aspect ratio
-    const horizontalHeight = 18;
-    const picSpacing = 3;
+    const verticalWidth = 30;   // 2:3 aspect ratio (increased from 18 for better visibility)
+    const verticalHeight = 45;
+    const horizontalWidth = 45; // 3:2 aspect ratio (increased from 27 for better visibility)
+    const horizontalHeight = 30;
+    const picSpacing = 4;
 
     // Calculate starting position to center all three photos
     const totalWidth = verticalWidth + picSpacing + horizontalWidth + picSpacing + horizontalWidth;
-    const startX = cabinetX + (100 - totalWidth) / 2;
+    const startX = cabinetX + (cabinetWidth - totalWidth) / 2;
 
     // Bottom shelf position adjusted for taller photos
-    const picY = cabinetY + 84;
+    const picY = cabinetY + 105;
 
     // Picture 1 (left): CEO with military general - VERTICAL PORTRAIT
     const pic1X = startX;
@@ -4205,6 +4415,28 @@ function drawLetterUI() {
     ctx.fillText('PRESS ACTION TO CLOSE', 350, 480);
 }
 
+function drawDetectiveNoteUI() {
+    // Full-screen dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.95)';
+    ctx.fillRect(0, 0, 700, 500);
+
+    // Display the detective note image (zoomed in view)
+    if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
+        const noteW = 600;
+        const noteH = 380;
+        const noteX = (700 - noteW) / 2;
+        const noteY = (500 - noteH) / 2 - 10;
+
+        ctx.drawImage(detectiveNoteImg, noteX, noteY, noteW, noteH);
+    }
+
+    // Close instruction
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 480);
+}
+
 function drawSafeUI() {
     // If selecting item after unlock
     if(level6.selectingItem) {
@@ -4230,39 +4462,84 @@ function drawSafeUI() {
         ctx.lineWidth = revolverSelected ? 5 : 2;
         ctx.strokeRect(100, 160, 140, 120);
 
-        // Draw golden revolver icon (ghost gun style design)
+        // Draw golden revolver icon (matches player-held design: barrel right, handle down)
         const revIconX = 170;
         const revIconY = 210;
+        const iconScale = 1.2;
 
-        // Barrel (pointing right)
+        // Use mirroring to flip gun to point right
+        ctx.save();
+        ctx.translate(revIconX, revIconY);
+        ctx.scale(-1, 1);
+        ctx.translate(-revIconX, -revIconY);
+
+        // Barrel (horizontal, pointing left in local coords, but will flip to right)
         ctx.fillStyle = '#d4af37'; // Dark gold
-        ctx.fillRect(revIconX - 5, revIconY - 4, 22, 8);
+        ctx.fillRect(revIconX - 14*iconScale, revIconY - 2*iconScale, 18*iconScale, 5*iconScale);
+        ctx.fillStyle = '#ffd700'; // Bright gold highlight
+        ctx.fillRect(revIconX - 14*iconScale, revIconY - iconScale, 18*iconScale, 2*iconScale);
 
-        // Barrel highlight
-        ctx.fillStyle = '#ffd700'; // Bright gold
-        ctx.fillRect(revIconX - 5, revIconY - 3, 22, 2);
-
-        // Barrel detail line
+        // Barrel tip/sight
         ctx.fillStyle = '#b8941e';
-        ctx.fillRect(revIconX - 5, revIconY, 22, 1);
+        ctx.fillRect(revIconX - 15*iconScale, revIconY - 3*iconScale, 2*iconScale, 7*iconScale);
 
-        // Grip (pointing down)
-        ctx.fillStyle = '#c9a637'; // Medium gold
-        ctx.fillRect(revIconX + 10, revIconY - 2, 6, 10);
-
-        // Grip detail
-        ctx.fillStyle = '#b8941e';
-        ctx.fillRect(revIconX + 10, revIconY + 7, 6, 1);
-
-        // Trigger guard
-        ctx.fillStyle = '#d4af37';
-        ctx.fillRect(revIconX + 5, revIconY + 3, 6, 2);
-
-        // Cylinder/chamber (small circle for detail)
+        // Cylinder
         ctx.fillStyle = '#c9a637';
         ctx.beginPath();
-        ctx.arc(revIconX + 3, revIconY, 3, 0, Math.PI * 2);
+        ctx.arc(revIconX - 2*iconScale, revIconY + iconScale, 5*iconScale, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = '#b8941e';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Cylinder chambers (6 chambers visible)
+        ctx.fillStyle = '#b8941e';
+        for(let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const cx = revIconX - 2*iconScale + Math.cos(angle) * 2.5*iconScale;
+            const cy = revIconY + iconScale + Math.sin(angle) * 2.5*iconScale;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 0.8*iconScale, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Frame
+        ctx.fillStyle = '#d4af37';
+        ctx.fillRect(revIconX + 2*iconScale, revIconY - 2*iconScale, 4*iconScale, 8*iconScale);
+
+        // Hammer
+        ctx.fillStyle = '#b8941e';
+        ctx.fillRect(revIconX + 3*iconScale, revIconY - 5*iconScale, 2*iconScale, 4*iconScale);
+        ctx.fillRect(revIconX + 2*iconScale, revIconY - 6*iconScale, 4*iconScale, 2*iconScale);
+
+        // Wooden grip (golden brown)
+        ctx.fillStyle = '#c9a637';
+        ctx.beginPath();
+        ctx.moveTo(revIconX + 5*iconScale, revIconY + iconScale);
+        ctx.lineTo(revIconX + 5*iconScale, revIconY + 10*iconScale);
+        ctx.lineTo(revIconX + 9*iconScale, revIconY + 11*iconScale);
+        ctx.lineTo(revIconX + 10*iconScale, revIconY + 6*iconScale);
+        ctx.lineTo(revIconX + 9*iconScale, revIconY + iconScale);
+        ctx.closePath();
+        ctx.fill();
+
+        // Grip texture (horizontal lines)
+        ctx.strokeStyle = '#b8941e';
+        ctx.lineWidth = 0.5*iconScale;
+        for(let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(revIconX + 6*iconScale, revIconY + 3*iconScale + i*2*iconScale);
+            ctx.lineTo(revIconX + 9*iconScale, revIconY + 3*iconScale + i*2*iconScale);
+            ctx.stroke();
+        }
+
+        // Trigger
+        ctx.fillStyle = '#b8941e';
+        ctx.beginPath();
+        ctx.arc(revIconX + 1*iconScale, revIconY + 3*iconScale, 1.5*iconScale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
 
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 16px Arial';
@@ -5418,6 +5695,10 @@ function drawScene() {
             drawComputerUI();
         }
 
+        if(level6.viewingDetectiveNote) {
+            drawDetectiveNoteUI();
+        }
+
         for(let bullet of bullets) {
             ctx.fillStyle = '#ff0000';
             ctx.shadowColor = '#ff0000';
@@ -6196,6 +6477,16 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // Handle viewing detective note
+            if(level6.viewingDetectiveNote) {
+                if(keys[' '] || keys['action']) {
+                    level6.viewingDetectiveNote = false;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+                return;
+            }
+
             // Helper function to check if CEO position collides with obstacles
             const ceoCollidesWithObstacle = (x, y) => {
                 const deskX = 350, deskY = 250;
@@ -6469,6 +6760,15 @@ function update() {
                     player.y = 380;
                 }
 
+                // Detective note interaction (noteX = 550 + 75 = 625)
+                const noteX = 625;
+                const noteY = 438; // Position of note in hand
+                if(!level6.viewingDetectiveNote && Math.abs(player.x - noteX) < 40 && (keys[' '] || keys['action'])) {
+                    level6.viewingDetectiveNote = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+
                 // Radiation damage - lose 1 money life every 2 seconds in center zone
                 if(player.x > 233 && player.x < 467) {
                     level6.radiationTimer++;
@@ -6666,14 +6966,14 @@ function update() {
 
                     // Open safe code entry UI if locked (safe is on floor in front of portrait)
                     const safeX = 350;
-                    const safeY = 100; // Matches actual drawn position
-                    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 60 && Math.abs(player.y - safeY) < 80) {
+                    const safeY = 140; // Matches actual drawn position
+                    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 90) {
                         level6.safeUI = true;
                         level6.selectedButton = 0;
                     }
 
                     // Open safe item selection UI if unlocked (always accessible for bullets)
-                    if(level6.safeUnlocked && Math.abs(player.x - safeX) < 60 && Math.abs(player.y - safeY) < 80) {
+                    if(level6.safeUnlocked && Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 90) {
                         level6.safeUI = true;
                         level6.selectingItem = true;
                         level6.itemSelection = 0;
@@ -7366,3 +7666,4 @@ document.getElementById('action-btn').addEventListener('mouseup', e => {
 </script>
 </body>
 </html>
+
