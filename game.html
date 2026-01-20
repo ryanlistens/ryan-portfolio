@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mullet Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Libre+Baskerville&family=Press+Start+2P&display=swap" rel="stylesheet" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
         body {
@@ -167,7 +168,15 @@ ceoPortraitImg.src = 'images/30802F71-C0D0-4774-87C8-F92C80CD8A18.png'; // Satur
 
 // Title screen image
 const titleScreenImg = new Image();
-titleScreenImg.src = 'images/mullet-pro-title.png'; // Photorealistic Mullet Pro cover art
+titleScreenImg.src = 'images/mullet-pro-title.PNG'; // Photorealistic Mullet Pro cover art
+
+// Concept art image for presentation screen
+const conceptArtImg = new Image();
+conceptArtImg.src = 'images/mullet-pro-concept.PNG'; // 80s action movie style concept art
+
+// Mullet/RT Games logo
+const mulletLogoImg = new Image();
+mulletLogoImg.src = 'assets/mullet_icon_reversed_white.png'; // RT Games branded logo
 
 // Audio/Music System
 const levelMusic = {
@@ -180,10 +189,12 @@ const levelMusic = {
     level6: new Audio('music/level6.mp3')
 };
 
-// Set all music to loop
+// Set all music to loop and preload
 Object.values(levelMusic).forEach(audio => {
     audio.loop = true;
     audio.volume = 0.5; // 50% volume by default
+    audio.preload = 'auto'; // Preload audio for immediate playback
+    audio.load(); // Start loading immediately
 });
 
 let currentMusic = null;
@@ -259,6 +270,47 @@ function toggleMute() {
     }
 }
 
+// Handle RT Presents screen interactions - must be called directly in user gesture handlers
+function handleRTPresentsInteraction() {
+    if(state === 'rtPresents') {
+        // Unlock audio
+        if(!audioUnlocked) {
+            audioUnlocked = true;
+            console.log('Audio unlocked on RT Presents button press');
+        }
+        // Play menu music DIRECTLY in user gesture context - critical for autoplay policy
+        if(!musicMuted && levelMusic['menu']) {
+            currentMusic = levelMusic['menu'];
+            currentMusic.play().then(() => {
+                console.log('Menu.mp3 playing successfully');
+            }).catch(err => {
+                console.error('Menu.mp3 failed to play:', err);
+                pendingMusicKey = 'menu';
+            });
+        }
+        // Transition to concept art
+        state = 'conceptArt';
+        frame = 0;
+        return true; // Handled
+    }
+    return false; // Not on RT Presents screen
+}
+
+// Handle Menu screen interactions - must be called directly in user gesture handlers
+function handleMenuInteraction() {
+    if(state === 'menu') {
+        // Unlock audio (music will be played in levelCard transition to avoid double-play)
+        if(!audioUnlocked) {
+            audioUnlocked = true;
+            console.log('Audio unlocked on menu button press');
+        }
+        // Start the game (level1 music will play when transitioning to 'playing' state)
+        startGame();
+        return true; // Handled
+    }
+    return false; // Not on menu screen
+}
+
 const COLORS = [
     {name:'RED', hex:'#e74c3c'},
     {name:'GREEN', hex:'#27ae60'},
@@ -298,7 +350,7 @@ const SAFE_CODE = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
 
 
 // SECTION 3: Game State Variables
-let state = 'menu';
+let state = 'rtPresents'; // Start with RT Games presentation screen
 let level = 1;
 let score = 0;
 let timer = 60;
@@ -603,7 +655,7 @@ function startGame() {
     initLevel(1);
     updateLives();
 
-    // Start level 1 music
+    // Stop menu music and play level 1 music when showing level card
     playMusic('level1');
 }
 
@@ -5559,6 +5611,84 @@ function drawMuteIndicator() {
 }
 
 function drawScene() {
+    // RT Games Presents Screen
+    if(state === 'rtPresents') {
+        // Elegant black background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 700, 500);
+
+        // Fade-in effect
+        const alpha = Math.min(1, frame / 60); // Fade in over 1 second
+        ctx.globalAlpha = alpha;
+
+        // Draw mullet logo centered
+        if(mulletLogoImg.complete && mulletLogoImg.naturalWidth > 0) {
+            const logoSize = 200;
+            const logoX = (700 - logoSize) / 2;
+            const logoY = 120;
+            ctx.drawImage(mulletLogoImg, logoX, logoY, logoSize, logoSize);
+        }
+
+        // "presents..." text with Playfair Display font
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'italic 36px "Playfair Display", serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('presents...', 350, 370);
+
+        ctx.globalAlpha = 1;
+
+        // Blinking "Press any button" instruction with retro arcade font
+        if(Math.floor(frame / 30) % 2 === 0 && frame > 60) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '16px "Press Start 2P", monospace';
+            ctx.fillText('PRESS ANY BUTTON', 350, 440);
+        }
+
+        return;
+    }
+
+    // Concept Art Screen
+    if(state === 'conceptArt') {
+        // Display the Mullet Pro concept art
+        if(conceptArtImg.complete && conceptArtImg.naturalWidth > 0) {
+            ctx.drawImage(conceptArtImg, 0, 0, 700, 500);
+        } else {
+            // Fallback gradient if image not loaded
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, 500);
+            bgGrad.addColorStop(0, '#1a0a2e');
+            bgGrad.addColorStop(0.5, '#ff6b35');
+            bgGrad.addColorStop(1, '#1a0a2e');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, 700, 500);
+
+            // Fallback text
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 64px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 6;
+            ctx.strokeText('MULLET PRO', 350, 250);
+            ctx.fillText('MULLET PRO', 350, 250);
+        }
+
+        // Blinking continue instruction
+        if(Math.floor(frame / 30) % 2 === 0) {
+            // Semi-transparent bar for readability
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 430, 700, 50);
+
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '14px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            ctx.strokeText('ANY BUTTON TO CONTINUE', 350, 462);
+            ctx.fillText('ANY BUTTON TO CONTINUE', 350, 462);
+        }
+
+        return;
+    }
+
     if(state === 'menu') {
         // Photorealistic title screen - "Mullet Pro" cover art
         if(titleScreenImg.complete && titleScreenImg.naturalWidth > 0) {
@@ -5610,20 +5740,20 @@ function drawScene() {
             ctx.fillText('MULLET PRO', 350, 250);
         }
 
-        // Blinking call-to-action overlay
+        // Blinking call-to-action overlay with retro arcade font
         if(Math.floor(frame / 30) % 2 === 0) {
             // Semi-transparent black bar behind text for better readability
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 430, 700, 50);
 
-            // Blinking text
+            // Blinking text with arcade font
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 32px Arial';
+            ctx.font = '16px "Press Start 2P", monospace';
             ctx.textAlign = 'center';
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 4;
-            ctx.strokeText('PRESS ANY BUTTON', 350, 460);
-            ctx.fillText('PRESS ANY BUTTON', 350, 460);
+            ctx.lineWidth = 3;
+            ctx.strokeText('PRESS ANY BUTTON', 350, 462);
+            ctx.fillText('PRESS ANY BUTTON', 350, 462);
         }
 
         // Draw mute indicator
@@ -5635,13 +5765,13 @@ function drawScene() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, 700, 500);
 
-            // Pulsing "TAP TO START" message
+            // Pulsing "TAP TO START" message with retro arcade font
             const pulseAlpha = 0.7 + Math.sin(Date.now() / 400) * 0.3;
             ctx.globalAlpha = pulseAlpha;
 
             // Outer glow
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 64px Arial';
+            ctx.font = '32px "Press Start 2P", monospace';
             ctx.textAlign = 'center';
             ctx.shadowColor = '#ffd700';
             ctx.shadowBlur = 30;
@@ -5652,8 +5782,9 @@ function drawScene() {
 
             // Instruction text
             ctx.fillStyle = '#f5f2ec';
-            ctx.font = 'bold 24px Arial';
-            ctx.fillText('Click or tap anywhere to enable sound', 350, 300);
+            ctx.font = '14px "Press Start 2P", monospace';
+            ctx.fillText('CLICK OR TAP', 350, 280);
+            ctx.fillText('TO ENABLE SOUND', 350, 310);
 
             // Speaker icon
             ctx.font = 'bold 72px Arial';
@@ -5687,7 +5818,7 @@ function drawScene() {
         if(cardTimer > 60) {
             if(Math.floor(frame / 30) % 2 === 0) {
                 ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 32px Arial';
+                ctx.font = '20px "Press Start 2P", monospace';
                 ctx.fillText('GET READY!', 350, 370);
             }
         }
@@ -5727,7 +5858,7 @@ function drawScene() {
 
         if(Math.floor(frame / 30) % 2 === 0) {
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 24px Arial';
+            ctx.font = '12px "Press Start 2P", monospace';
             ctx.fillText('PRESS ANY BUTTON TO CONTINUE', 350, 420);
         }
 
@@ -6279,15 +6410,29 @@ function drawScene() {
 
 // SECTION 13: Update Function - Level 5 Logic
 function update() {
-    if(state === 'menu') {
+    // RT Games presents screen - audio is now handled in event handlers for proper autoplay support
+    if(state === 'rtPresents') {
+        // State transition is now handled in handleRTPresentsInteraction() called from event handlers
+        // This ensures audio plays in the synchronous user gesture context
+        return;
+    }
+
+    // Concept Art screen
+    if(state === 'conceptArt') {
         if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] ||
            keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] ||
            keys['left'] || keys['right']) {
-            // Resume pending music on user interaction
-            resumePendingMusic();
-            startGame();
+            state = 'menu';
+            frame = 0; // Reset frame counter for menu animations
             keys = {};
         }
+        return;
+    }
+
+    // Main menu screen - audio is now handled in event handlers for proper autoplay support
+    if(state === 'menu') {
+        // State transition is now handled in handleMenuInteraction() called from event handlers
+        // This ensures audio plays in the synchronous user gesture context
         return;
     }
     
@@ -6298,12 +6443,23 @@ function update() {
             if(level !== 5 && level !== 6) {
                 spawnCracks();
             }
-            // Ensure level 3 and 4 music is playing
+            // Music is already playing for each level - started when levelCard was shown
+            // by startGame() for level 1 or nextLevel() for levels 2-4
+            // Backup calls to ensure music plays even if initial call failed
+            if(level === 2) {
+                playMusic('level2');
+            }
             if(level === 3) {
                 playMusic('level3');
             }
             if(level === 4) {
                 playMusic('level4');
+            }
+            if(level === 5) {
+                playMusic('level5');
+            }
+            if(level === 6) {
+                playMusic('level6');
             }
         }
         return;
@@ -7244,90 +7400,106 @@ function update() {
                 }
             
                 // CEO office interactions
-                if(keys[' '] || keys['action']) {
-                    keys[' '] = false;
-                    keys['action'] = false;
+if (keys[' '] || keys['action']) {
+    keys[' '] = false;
+    keys['action'] = false;
 
-                    if(ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
-                        level6.moneyLives++;
-                        updateLives();
-                        ceo.hasDrink = true;
-                        ceo.state = 'admiring';
-                    }
+    // 1. CEO Interaction (Giving Drink)
+    if (ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
+        level6.moneyLives++;
+        updateLives();
+        ceo.hasDrink = true;
+        ceo.state = 'admiring';
+        return; // Return to prevent triggering other objects
+    }
 
-                    // Open safe code entry UI if locked (safe is on floor in front of portrait)
-                    const safeX = 350;
-                    const safeY = 140; // Matches actual drawn position
-                    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 90) {
-                        level6.safeUI = true;
-                        level6.selectedButton = 0;
-                    }
+    // 2. Monitor/Computer Interaction (PRIORITY: CHECK THIS BEFORE SAFE)
+    // The monitor is on the desk at Y ~ 205.
+    const monX = 390; 
+    const monY = 205; 
+    
+    // We strictly check player.y > 180 to ensure they are at the DESK, not the wall
+    if (level6.ceoDefeated && !level6.computerUI && 
+        Math.abs(player.x - monX) < 50 && 
+        Math.abs(player.y - monY) < 60 && 
+        player.y > 180) { // Added strict Y check
+            level6.computerUI = true;
+            return; // Stop checking other interactions
+    }
 
-                    // Open safe item selection UI if unlocked (always accessible for bullets)
-                    if(level6.safeUnlocked && Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 90) {
-                        level6.safeUI = true;
-                        level6.selectingItem = true;
-                        level6.itemSelection = 0;
-                    }
+    // 3. Safe Interaction
+    // Safe is at Y = 140 (Back Wall). 
+    const safeX = 350;
+    const safeY = 140; 
+    
+    // Tightened Y-range (reduced from 90 to 50) so you must walk UP to the wall
+    const nearSafe = Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 60;
 
-                    // Computer monitor on desk (matches actual drawn position)
-                    const monX = 390; // deskX + 40
-                    const monY = 205; // deskY - 45
-                    if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 50 && Math.abs(player.y - monY) < 60) {
-                        level6.computerUI = true;
-                    }
-                
-                    if(level6.hasRevolver && level6.revolverAmmo > 0) {
-                        let vx = 0, vy = 0;
-                        if(player.facing === 'left') vx = -12;
-                        else if(player.facing === 'right') vx = 12;
-                        else if(player.facing === 'up') vy = -12;
-                        else if(player.facing === 'down') vy = 12;
+    if (!level6.safeUnlocked && nearSafe) {
+        level6.safeUI = true;
+        level6.selectedButton = 0;
+        return;
+    }
 
-                        if(vx !== 0 || vy !== 0) {
-                            bullets.push({
-                                x: player.x,
-                                y: player.y - 25,
-                                vx: vx,
-                                vy: vy,
-                                fromCEO: false
-                            });
-                            level6.revolverAmmo--;
-                        
-                            if(ceo.state !== 'dead' && Math.abs(bullets[bullets.length-1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length-1].y - ceo.y) < 50) {
-                                ceo.health--;
-                                ceo.blinkTimer = 10;
+    if (level6.safeUnlocked && nearSafe) {
+        level6.safeUI = true;
+        level6.selectingItem = true;
+        level6.itemSelection = 0;
+        return;
+    }
 
-                                // Drop cash sacks - behind CEO if at mirror, otherwise in circle pattern
-                                let sackX, sackY;
-                                if(ceo.state === 'admiring') {
-                                    // Drop behind CEO at mirror for accessibility
-                                    sackX = ceo.x + 10;
-                                    sackY = ceo.y + 50; // Behind and below
-                                } else {
-                                    // Spread in circle pattern
-                                    const sackIndex = 6 - ceo.health;
-                                    const angle = (sackIndex / 6) * Math.PI * 2;
-                                    const radius = 40;
-                                    sackX = ceo.x + Math.cos(angle) * radius;
-                                    sackY = ceo.y + Math.sin(angle) * radius;
-                                }
-                                level6.cashSacks.push({
-                                    x: sackX,
-                                    y: sackY,
-                                    claimed: false
-                                });
+    // 4. Gun Firing Logic (only triggers if nothing else was interacted with)
+    if (level6.hasRevolver && level6.revolverAmmo > 0) {
+        let vx = 0, vy = 0;
+        if (player.facing === 'left') vx = -12;
+        else if (player.facing === 'right') vx = 12;
+        else if (player.facing === 'up') vy = -12;
+        else if (player.facing === 'down') vy = 12;
 
-                                if(ceo.health <= 0) {
-                                    ceo.state = 'dead';
-                                    level6.ceoDefeated = true;
-                                } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
-                                    ceo.state = 'hunting';
-                                }
-                            }
-                        }
-                    }
+        if (vx !== 0 || vy !== 0) {
+            bullets.push({
+                x: player.x,
+                y: player.y - 25,
+                vx: vx,
+                vy: vy,
+                fromCEO: false
+            });
+            level6.revolverAmmo--;
+
+            // Bullet collision with CEO
+            if (ceo.state !== 'dead' && Math.abs(bullets[bullets.length - 1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length - 1].y - ceo.y) < 50) {
+                ceo.health--;
+                ceo.blinkTimer = 10;
+
+                // Drop cash sacks
+                let sackX, sackY;
+                if (ceo.state === 'admiring') {
+                    sackX = ceo.x + 10;
+                    sackY = ceo.y + 50;
+                } else {
+                    const sackIndex = 6 - ceo.health;
+                    const angle = (sackIndex / 6) * Math.PI * 2;
+                    const radius = 40;
+                    sackX = ceo.x + Math.cos(angle) * radius;
+                    sackY = ceo.y + Math.sin(angle) * radius;
                 }
+                level6.cashSacks.push({
+                    x: sackX,
+                    y: sackY,
+                    claimed: false
+                });
+
+                if (ceo.health <= 0) {
+                    ceo.state = 'dead';
+                    level6.ceoDefeated = true;
+                } else if (ceo.state === 'admiring' || ceo.state === 'offering') {
+                    ceo.state = 'hunting';
+                }
+            }
+        }
+    }
+}
+
 
                 // Full 2D movement in CEO office (only if not in UI mode)
                 if(!level6.safeUI && !level6.computerUI) {
@@ -7778,9 +7950,10 @@ let lastTime = Date.now();
 let counter = 0;
 
 function gameLoop() {
-    if(state !== 'playing' && state !== 'levelCard' && state !== 'over' && 
-       state !== 'win' && state !== 'menu' && state !== 'promotion' && 
-       state !== 'theend' && state !== 'victory') return;
+    if(state !== 'playing' && state !== 'levelCard' && state !== 'over' &&
+       state !== 'win' && state !== 'menu' && state !== 'promotion' &&
+       state !== 'theend' && state !== 'victory' && state !== 'rtPresents' &&
+       state !== 'conceptArt' && state !== 'fired' && state !== 'gameover') return;
     
     frame++;
     const now = Date.now();
@@ -7811,23 +7984,34 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Start menu music on page load
-playMusic('menu');
+// Don't play music on page load - let RT Presents screen handle first interaction
+// This bypasses autoplay restrictions by using the button press as the unlock
 
 drawScene();
 gameLoop();
 
 document.addEventListener('keydown', e => {
+    // Handle RT Presents screen FIRST in user gesture context
+    if(handleRTPresentsInteraction()) {
+        keys = {}; // Clear any keys since we're transitioning
+        return;
+    }
+
+    // Handle Menu screen in user gesture context
+    if(handleMenuInteraction()) {
+        keys = {}; // Clear any keys since we're transitioning
+        return;
+    }
+
     keys[e.key] = true;
 
     // Unlock audio on first keyboard interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
         console.log('Audio unlocked by keyboard interaction');
+        // Resume pending music
+        resumePendingMusic();
     }
-
-    // Try to resume pending music on any key press
-    resumePendingMusic();
 
     // Toggle mute with 'M' key
     if(e.key === 'm' || e.key === 'M') {
@@ -7841,18 +8025,13 @@ document.addEventListener('keyup', e => {
 
 // Touch/click support for mute button
 function handleMuteClick(e) {
-    // Unlock audio on first interaction anywhere (not just menu)
+    // Unlock audio on first interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
-        console.log('Audio unlocked by user interaction');
-        // Try to play or resume pending music
-        if(pendingMusicKey) {
-            resumePendingMusic();
-        }
+        console.log('Audio unlocked by canvas interaction');
+        // Resume pending music
+        resumePendingMusic();
     }
-
-    // Try to resume pending music on any canvas interaction
-    resumePendingMusic();
 
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -7890,13 +8069,21 @@ canvas.addEventListener('touchstart', handleMuteClick, {passive: false});
 document.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('touchstart', e => {
         e.preventDefault();
+        // Handle RT Presents screen FIRST in user gesture context
+        if(handleRTPresentsInteraction()) {
+            return;
+        }
+        // Handle Menu screen in user gesture context
+        if(handleMenuInteraction()) {
+            return;
+        }
         // Unlock audio on first touch
         if(!audioUnlocked) {
             audioUnlocked = true;
             console.log('Audio unlocked by touch control');
+            // Resume pending music
+            resumePendingMusic();
         }
-        // Resume pending music
-        resumePendingMusic();
         keys[btn.dataset.dir] = true;
     }, {passive: false});
 
@@ -7907,16 +8094,24 @@ document.querySelectorAll('.control-btn').forEach(btn => {
 
     btn.addEventListener('mousedown', e => {
         e.preventDefault();
+        // Handle RT Presents screen FIRST in user gesture context
+        if(handleRTPresentsInteraction()) {
+            return;
+        }
+        // Handle Menu screen in user gesture context
+        if(handleMenuInteraction()) {
+            return;
+        }
         // Unlock audio on first mouse interaction
         if(!audioUnlocked) {
             audioUnlocked = true;
             console.log('Audio unlocked by mouse control');
+            // Resume pending music
+            resumePendingMusic();
         }
-        // Resume pending music
-        resumePendingMusic();
         keys[btn.dataset.dir] = true;
     });
-    
+
     btn.addEventListener('mouseup', e => {
         e.preventDefault();
         keys[btn.dataset.dir] = false;
@@ -7925,13 +8120,21 @@ document.querySelectorAll('.control-btn').forEach(btn => {
 
 document.getElementById('action-btn').addEventListener('touchstart', e => {
     e.preventDefault();
+    // Handle RT Presents screen FIRST in user gesture context
+    if(handleRTPresentsInteraction()) {
+        return;
+    }
+    // Handle Menu screen in user gesture context
+    if(handleMenuInteraction()) {
+        return;
+    }
     // Unlock audio on first touch
     if(!audioUnlocked) {
         audioUnlocked = true;
         console.log('Audio unlocked by action button touch');
+        // Resume pending music
+        resumePendingMusic();
     }
-    // Resume pending music
-    resumePendingMusic();
     keys['action'] = true;
 }, {passive: false});
 
@@ -7942,13 +8145,21 @@ document.getElementById('action-btn').addEventListener('touchend', e => {
 
 document.getElementById('action-btn').addEventListener('mousedown', e => {
     e.preventDefault();
+    // Handle RT Presents screen FIRST in user gesture context
+    if(handleRTPresentsInteraction()) {
+        return;
+    }
+    // Handle Menu screen in user gesture context
+    if(handleMenuInteraction()) {
+        return;
+    }
     // Unlock audio on first mouse interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
         console.log('Audio unlocked by action button mouse');
+        // Resume pending music
+        resumePendingMusic();
     }
-    // Resume pending music
-    resumePendingMusic();
     keys['action'] = true;
 });
 
