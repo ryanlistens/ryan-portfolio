@@ -270,6 +270,32 @@ function toggleMute() {
     }
 }
 
+// Handle RT Presents screen interactions - must be called directly in user gesture handlers
+function handleRTPresentsInteraction() {
+    if(state === 'rtPresents') {
+        // Unlock audio
+        if(!audioUnlocked) {
+            audioUnlocked = true;
+            console.log('Audio unlocked on RT Presents button press');
+        }
+        // Play menu music DIRECTLY in user gesture context - critical for autoplay policy
+        if(!musicMuted && levelMusic['menu']) {
+            currentMusic = levelMusic['menu'];
+            currentMusic.play().then(() => {
+                console.log('Menu.mp3 playing successfully');
+            }).catch(err => {
+                console.error('Menu.mp3 failed to play:', err);
+                pendingMusicKey = 'menu';
+            });
+        }
+        // Transition to concept art
+        state = 'conceptArt';
+        frame = 0;
+        return true; // Handled
+    }
+    return false; // Not on RT Presents screen
+}
+
 const COLORS = [
     {name:'RED', hex:'#e74c3c'},
     {name:'GREEN', hex:'#27ae60'},
@@ -6368,31 +6394,10 @@ function drawScene() {
 
 // SECTION 13: Update Function - Level 5 Logic
 function update() {
-    // RT Games presents screen
+    // RT Games presents screen - audio is now handled in event handlers for proper autoplay support
     if(state === 'rtPresents') {
-        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] ||
-           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] ||
-           keys['left'] || keys['right']) {
-            // Unlock audio and play menu.mp3 DIRECTLY in this user interaction context
-            // This is critical - playing directly in the button handler bypasses autoplay restrictions
-            if(!audioUnlocked) {
-                audioUnlocked = true;
-                console.log('Audio unlocked on first button press');
-            }
-            // Play menu music directly (not through playMusic helper)
-            if(!musicMuted && levelMusic['menu']) {
-                currentMusic = levelMusic['menu'];
-                currentMusic.play().then(() => {
-                    console.log('Menu.mp3 playing successfully');
-                }).catch(err => {
-                    console.error('Menu.mp3 failed to play:', err);
-                    pendingMusicKey = 'menu'; // Store as pending if it fails
-                });
-            }
-            state = 'conceptArt';
-            frame = 0; // Reset frame counter for concept art animations
-            keys = {};
-        }
+        // State transition is now handled in handleRTPresentsInteraction() called from event handlers
+        // This ensures audio plays in the synchronous user gesture context
         return;
     }
 
@@ -7953,6 +7958,12 @@ drawScene();
 gameLoop();
 
 document.addEventListener('keydown', e => {
+    // Handle RT Presents screen FIRST in user gesture context
+    if(handleRTPresentsInteraction()) {
+        keys = {}; // Clear any keys since we're transitioning
+        return;
+    }
+
     keys[e.key] = true;
 
     // Unlock audio on first keyboard interaction
@@ -8019,6 +8030,10 @@ canvas.addEventListener('touchstart', handleMuteClick, {passive: false});
 document.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('touchstart', e => {
         e.preventDefault();
+        // Handle RT Presents screen FIRST in user gesture context
+        if(handleRTPresentsInteraction()) {
+            return;
+        }
         // Unlock audio on first touch
         if(!audioUnlocked) {
             audioUnlocked = true;
@@ -8036,6 +8051,10 @@ document.querySelectorAll('.control-btn').forEach(btn => {
 
     btn.addEventListener('mousedown', e => {
         e.preventDefault();
+        // Handle RT Presents screen FIRST in user gesture context
+        if(handleRTPresentsInteraction()) {
+            return;
+        }
         // Unlock audio on first mouse interaction
         if(!audioUnlocked) {
             audioUnlocked = true;
@@ -8045,7 +8064,7 @@ document.querySelectorAll('.control-btn').forEach(btn => {
         }
         keys[btn.dataset.dir] = true;
     });
-    
+
     btn.addEventListener('mouseup', e => {
         e.preventDefault();
         keys[btn.dataset.dir] = false;
@@ -8054,6 +8073,10 @@ document.querySelectorAll('.control-btn').forEach(btn => {
 
 document.getElementById('action-btn').addEventListener('touchstart', e => {
     e.preventDefault();
+    // Handle RT Presents screen FIRST in user gesture context
+    if(handleRTPresentsInteraction()) {
+        return;
+    }
     // Unlock audio on first touch
     if(!audioUnlocked) {
         audioUnlocked = true;
@@ -8071,6 +8094,10 @@ document.getElementById('action-btn').addEventListener('touchend', e => {
 
 document.getElementById('action-btn').addEventListener('mousedown', e => {
     e.preventDefault();
+    // Handle RT Presents screen FIRST in user gesture context
+    if(handleRTPresentsInteraction()) {
+        return;
+    }
     // Unlock audio on first mouse interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
