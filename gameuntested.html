@@ -6445,6 +6445,9 @@ function update() {
             }
             // Music is already playing for each level - started when levelCard was shown
             // by startGame() for level 1 or nextLevel() for levels 2-4
+            // Resume pending music in case initial playMusic() call failed
+            // This won't cause double-play because resumePendingMusic() only plays if pendingMusicKey is set
+            resumePendingMusic();
         }
         return;
     }
@@ -7384,92 +7387,106 @@ function update() {
                 }
             
                 // CEO office interactions
-                if(keys[' '] || keys['action']) {
-                    keys[' '] = false;
-                    keys['action'] = false;
+if (keys[' '] || keys['action']) {
+    keys[' '] = false;
+    keys['action'] = false;
 
-                    if(ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
-                        level6.moneyLives++;
-                        updateLives();
-                        ceo.hasDrink = true;
-                        ceo.state = 'admiring';
-                    }
+    // 1. CEO Interaction (Giving Drink)
+    if (ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
+        level6.moneyLives++;
+        updateLives();
+        ceo.hasDrink = true;
+        ceo.state = 'admiring';
+        return; // Return to prevent triggering other objects
+    }
 
-                    // Open safe code entry UI if locked (safe is on floor in front of portrait)
-                    const safeX = 350;
-                    const safeY = 140; // Matches actual drawn position
-                    if(!level6.safeUnlocked && Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 90) {
-                        level6.safeUI = true;
-                        level6.selectedButton = 0;
-                    }
+    // 2. Monitor/Computer Interaction (PRIORITY: CHECK THIS BEFORE SAFE)
+    // The monitor is on the desk at Y ~ 205.
+    const monX = 390; 
+    const monY = 205; 
+    
+    // We strictly check player.y > 180 to ensure they are at the DESK, not the wall
+    if (level6.ceoDefeated && !level6.computerUI && 
+        Math.abs(player.x - monX) < 50 && 
+        Math.abs(player.y - monY) < 60 && 
+        player.y > 180) { // Added strict Y check
+            level6.computerUI = true;
+            return; // Stop checking other interactions
+    }
 
-                    // Open safe item selection UI if unlocked (always accessible for bullets)
-                    if(level6.safeUnlocked && Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 90) {
-                        level6.safeUI = true;
-                        level6.selectingItem = true;
-                        level6.itemSelection = 0;
-                    }
+    // 3. Safe Interaction
+    // Safe is at Y = 140 (Back Wall). 
+    const safeX = 350;
+    const safeY = 140; 
+    
+    // Tightened Y-range (reduced from 90 to 50) so you must walk UP to the wall
+    const nearSafe = Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 60;
 
-                    // Computer monitor on desk (matches actual drawn position)
-                    const monX = 390; // deskX + 40
-                    const monY = 205; // deskY - 45
-                    if(level6.ceoDefeated && !level6.computerUI && Math.abs(player.x - monX) < 50 && Math.abs(player.y - monY) < 60 && (keys[' '] || keys['action'])) {
-                        level6.computerUI = true;
-                        keys[' '] = false;
-                        keys['action'] = false;
-                    }
-                
-                    if(level6.hasRevolver && level6.revolverAmmo > 0) {
-                        let vx = 0, vy = 0;
-                        if(player.facing === 'left') vx = -12;
-                        else if(player.facing === 'right') vx = 12;
-                        else if(player.facing === 'up') vy = -12;
-                        else if(player.facing === 'down') vy = 12;
+    if (!level6.safeUnlocked && nearSafe) {
+        level6.safeUI = true;
+        level6.selectedButton = 0;
+        return;
+    }
 
-                        if(vx !== 0 || vy !== 0) {
-                            bullets.push({
-                                x: player.x,
-                                y: player.y - 25,
-                                vx: vx,
-                                vy: vy,
-                                fromCEO: false
-                            });
-                            level6.revolverAmmo--;
-                        
-                            if(ceo.state !== 'dead' && Math.abs(bullets[bullets.length-1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length-1].y - ceo.y) < 50) {
-                                ceo.health--;
-                                ceo.blinkTimer = 10;
+    if (level6.safeUnlocked && nearSafe) {
+        level6.safeUI = true;
+        level6.selectingItem = true;
+        level6.itemSelection = 0;
+        return;
+    }
 
-                                // Drop cash sacks - behind CEO if at mirror, otherwise in circle pattern
-                                let sackX, sackY;
-                                if(ceo.state === 'admiring') {
-                                    // Drop behind CEO at mirror for accessibility
-                                    sackX = ceo.x + 10;
-                                    sackY = ceo.y + 50; // Behind and below
-                                } else {
-                                    // Spread in circle pattern
-                                    const sackIndex = 6 - ceo.health;
-                                    const angle = (sackIndex / 6) * Math.PI * 2;
-                                    const radius = 40;
-                                    sackX = ceo.x + Math.cos(angle) * radius;
-                                    sackY = ceo.y + Math.sin(angle) * radius;
-                                }
-                                level6.cashSacks.push({
-                                    x: sackX,
-                                    y: sackY,
-                                    claimed: false
-                                });
+    // 4. Gun Firing Logic (only triggers if nothing else was interacted with)
+    if (level6.hasRevolver && level6.revolverAmmo > 0) {
+        let vx = 0, vy = 0;
+        if (player.facing === 'left') vx = -12;
+        else if (player.facing === 'right') vx = 12;
+        else if (player.facing === 'up') vy = -12;
+        else if (player.facing === 'down') vy = 12;
 
-                                if(ceo.health <= 0) {
-                                    ceo.state = 'dead';
-                                    level6.ceoDefeated = true;
-                                } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
-                                    ceo.state = 'hunting';
-                                }
-                            }
-                        }
-                    }
+        if (vx !== 0 || vy !== 0) {
+            bullets.push({
+                x: player.x,
+                y: player.y - 25,
+                vx: vx,
+                vy: vy,
+                fromCEO: false
+            });
+            level6.revolverAmmo--;
+
+            // Bullet collision with CEO
+            if (ceo.state !== 'dead' && Math.abs(bullets[bullets.length - 1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length - 1].y - ceo.y) < 50) {
+                ceo.health--;
+                ceo.blinkTimer = 10;
+
+                // Drop cash sacks
+                let sackX, sackY;
+                if (ceo.state === 'admiring') {
+                    sackX = ceo.x + 10;
+                    sackY = ceo.y + 50;
+                } else {
+                    const sackIndex = 6 - ceo.health;
+                    const angle = (sackIndex / 6) * Math.PI * 2;
+                    const radius = 40;
+                    sackX = ceo.x + Math.cos(angle) * radius;
+                    sackY = ceo.y + Math.sin(angle) * radius;
                 }
+                level6.cashSacks.push({
+                    x: sackX,
+                    y: sackY,
+                    claimed: false
+                });
+
+                if (ceo.health <= 0) {
+                    ceo.state = 'dead';
+                    level6.ceoDefeated = true;
+                } else if (ceo.state === 'admiring' || ceo.state === 'offering') {
+                    ceo.state = 'hunting';
+                }
+            }
+        }
+    }
+}
+
 
                 // Full 2D movement in CEO office (only if not in UI mode)
                 if(!level6.safeUI && !level6.computerUI) {
@@ -8140,4 +8157,3 @@ document.getElementById('action-btn').addEventListener('mouseup', e => {
 </script>
 </body>
 </html>
-
