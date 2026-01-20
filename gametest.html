@@ -296,6 +296,35 @@ function handleRTPresentsInteraction() {
     return false; // Not on RT Presents screen
 }
 
+// Handle Menu screen interactions - must be called directly in user gesture handlers
+function handleMenuInteraction() {
+    if(state === 'menu') {
+        // Unlock audio
+        if(!audioUnlocked) {
+            audioUnlocked = true;
+            console.log('Audio unlocked on menu button press');
+        }
+        // Stop current music and play level1 music DIRECTLY in user gesture context
+        if(currentMusic) {
+            currentMusic.pause();
+            currentMusic.currentTime = 0;
+        }
+        if(!musicMuted && levelMusic['level1']) {
+            currentMusic = levelMusic['level1'];
+            currentMusic.play().then(() => {
+                console.log('Level1.mp3 playing successfully');
+            }).catch(err => {
+                console.error('Level1.mp3 failed to play:', err);
+                pendingMusicKey = 'level1';
+            });
+        }
+        // Start the game
+        startGame();
+        return true; // Handled
+    }
+    return false; // Not on menu screen
+}
+
 const COLORS = [
     {name:'RED', hex:'#e74c3c'},
     {name:'GREEN', hex:'#27ae60'},
@@ -6413,16 +6442,10 @@ function update() {
         return;
     }
 
-    // Main menu screen
+    // Main menu screen - audio is now handled in event handlers for proper autoplay support
     if(state === 'menu') {
-        if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] ||
-           keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] ||
-           keys['left'] || keys['right']) {
-            // Start level 1 music when pressing start
-            playMusic('level1');
-            startGame();
-            keys = {};
-        }
+        // State transition is now handled in handleMenuInteraction() called from event handlers
+        // This ensures audio plays in the synchronous user gesture context
         return;
     }
     
@@ -7964,6 +7987,12 @@ document.addEventListener('keydown', e => {
         return;
     }
 
+    // Handle Menu screen in user gesture context
+    if(handleMenuInteraction()) {
+        keys = {}; // Clear any keys since we're transitioning
+        return;
+    }
+
     keys[e.key] = true;
 
     // Unlock audio on first keyboard interaction
@@ -8034,6 +8063,10 @@ document.querySelectorAll('.control-btn').forEach(btn => {
         if(handleRTPresentsInteraction()) {
             return;
         }
+        // Handle Menu screen in user gesture context
+        if(handleMenuInteraction()) {
+            return;
+        }
         // Unlock audio on first touch
         if(!audioUnlocked) {
             audioUnlocked = true;
@@ -8053,6 +8086,10 @@ document.querySelectorAll('.control-btn').forEach(btn => {
         e.preventDefault();
         // Handle RT Presents screen FIRST in user gesture context
         if(handleRTPresentsInteraction()) {
+            return;
+        }
+        // Handle Menu screen in user gesture context
+        if(handleMenuInteraction()) {
             return;
         }
         // Unlock audio on first mouse interaction
@@ -8077,6 +8114,10 @@ document.getElementById('action-btn').addEventListener('touchstart', e => {
     if(handleRTPresentsInteraction()) {
         return;
     }
+    // Handle Menu screen in user gesture context
+    if(handleMenuInteraction()) {
+        return;
+    }
     // Unlock audio on first touch
     if(!audioUnlocked) {
         audioUnlocked = true;
@@ -8096,6 +8137,10 @@ document.getElementById('action-btn').addEventListener('mousedown', e => {
     e.preventDefault();
     // Handle RT Presents screen FIRST in user gesture context
     if(handleRTPresentsInteraction()) {
+        return;
+    }
+    // Handle Menu screen in user gesture context
+    if(handleMenuInteraction()) {
         return;
     }
     // Unlock audio on first mouse interaction
