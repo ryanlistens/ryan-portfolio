@@ -381,7 +381,8 @@ let level6 = {
     exitingNPCs: [],
     npcPipes: [],
     radiationTimer: 0,
-    viewingDetectiveNote: false
+    viewingDetectiveNote: false,
+    noteScrollOffset: 0
 };
 
 let ghostGun = {
@@ -405,6 +406,7 @@ let level5 = {
     viewingLetter: false,
     viewingPortrait: false,
     emailScrollOffset: 0,
+    letterScrollOffset: 0,
     mulletPro: {
         x: 180,
         y: 380,
@@ -499,6 +501,7 @@ function initLevel(lv) {
     level5.viewingEmail = false;
     level5.viewingLetter = false;
     level5.emailScrollOffset = 0;
+    level5.letterScrollOffset = 0;
     level5.mulletPro.hasDoc = false;
     level5.mulletPro.docColor = null;
     level5.mulletPro.giveTimer = 0;
@@ -545,6 +548,7 @@ function initLevel(lv) {
         level6.npcExitTimer = 0;
         level6.exitingNPCs = [];
         level6.viewingDetectiveNote = false;
+        level6.noteScrollOffset = 0;
         level6.npcPipes = [
             {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
             {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
@@ -2886,7 +2890,7 @@ function drawOfficeRoom(officeName) {
     if(player.y > 420 && Math.abs(player.x - 350) < 70) {
         // Exit prompt with dark background for visibility
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(250, 418, 200, 24);
+        ctx.fillRect(200, 418, 300, 24);
 
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 14px Arial';
@@ -2918,12 +2922,23 @@ function drawOfficeRoom(officeName) {
         ctx.fill();
     }
 
-    // Letter interaction prompt (RED office only)
-    if(officeName === 'RED' && Math.abs(player.x - (deskX + 15)) < 30 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('ACTION - VIEW LETTER', deskX + 15, deskY + 5);
+    // Letter interaction prompt (RED office only) - aligned with letter position
+    if(officeName === 'RED') {
+        const letterX = deskX - 25;
+        if(Math.abs(player.x - letterX) < 35 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ACTION - VIEW LETTER', letterX, deskY + 5);
+
+            // Arrow pointing to letter
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(letterX - 5, deskY + 8);
+            ctx.lineTo(letterX, deskY + 3);
+            ctx.lineTo(letterX + 5, deskY + 8);
+            ctx.fill();
+        }
     }
 }
 // SECTION 10: Level 6 Scene Drawing Functions
@@ -3334,158 +3349,199 @@ function drawLevel6MegacomputerRoom() {
         ctx.fill();
     }
 
-    // Dead private eye on the right side, past the danger zone
-    const detectiveX = 550;
-    const detectiveY = 430;
+    // Dead private detective - lying on ground (90° from standing position)
+    // Body positioned horizontally, head to the left, feet to the right
+    // Right arm raised holding note (upward from body)
+    const detectiveX = 540; // Center point of body
+    const detectiveY = 445; // Ground level
+    const s = 2; // Scale factor to match other NPCs
 
-    // Blood pool
-    ctx.fillStyle = '#8B0000';
+    // Simple blood pool (no active splatter - he's been dead for hours)
+    ctx.fillStyle = '#6b0000';
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(detectiveX, detectiveY + 2, 60, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Darker center of dried blood pool
+    ctx.fillStyle = '#4a0000';
     ctx.globalAlpha = 0.7;
     ctx.beginPath();
-    ctx.ellipse(detectiveX + 10, detectiveY + 20, 60, 35, 0, 0, Math.PI * 2);
+    ctx.ellipse(detectiveX, detectiveY + 2, 40, 15, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Darker center of blood pool
+    // DETECTIVE CHARACTER - Pixel art style like mullet pro/bald boss
+    // Lying flat on back (90° from standing position)
+    // Complete horizontal body from head (left) to feet (right)
+
+    // Define skin tone (pale/dead)
+    const detectiveSkin = '#c9b5a0';
+
+    // Back/far leg (left leg, behind) - repositioned to connect with torso
+    ctx.fillStyle = '#2a2a3d'; // Dark blue suit pants
+    ctx.fillRect(detectiveX + 6*s, detectiveY - 2*s, 16*s, 4*s); // Upper leg - connects to torso
+    ctx.fillRect(detectiveX + 20*s, detectiveY - 3*s, 14*s, 4*s); // Lower leg
+
+    // Back shoe
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(detectiveX + 33*s, detectiveY - 4*s, 5*s, 4*s);
+
+    // Left arm (down by side)
+    ctx.fillStyle = '#1a1a4d'; // Dark blue detective suit
+    ctx.fillRect(detectiveX - 10*s, detectiveY - 8*s, 12*s, 3*s); // Left arm along body
+    ctx.fillStyle = detectiveSkin;
+    ctx.fillRect(detectiveX - 11*s, detectiveY - 9*s, 3*s, 3*s); // Left hand
+
+    // HEAD - lying flat, face up
+    ctx.fillStyle = detectiveSkin;
+    ctx.fillRect(detectiveX - 18*s, detectiveY - 16*s, 10*s, 11*s); // Head
+
+    // Short dark hair (detective style)
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(detectiveX - 18*s, detectiveY - 17*s, 10*s, 4*s); // Hair top
+    ctx.fillRect(detectiveX - 19*s, detectiveY - 14*s, 2*s, 6*s); // Hair side
+    ctx.fillRect(detectiveX - 8*s, detectiveY - 14*s, 2*s, 6*s); // Hair other side
+
+    // Dead pallor/shading
+    ctx.fillStyle = 'rgba(100, 80, 120, 0.15)';
+    ctx.fillRect(detectiveX - 18*s, detectiveY - 13*s, 10*s, 8*s);
+
+    // Closed eyes (dead)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(detectiveX - 16*s, detectiveY - 12*s, 2*s, 1); // Left eye
+    ctx.fillRect(detectiveX - 11*s, detectiveY - 12*s, 2*s, 1); // Right eye
+
+    // Nose
+    ctx.fillStyle = '#b59f8a';
+    ctx.fillRect(detectiveX - 14*s, detectiveY - 10*s, 3*s, 2*s);
+
+    // Mouth (slightly open, dead)
+    ctx.fillStyle = '#4a2a2a';
+    ctx.fillRect(detectiveX - 15*s, detectiveY - 7*s, 4*s, 1);
+
+    // Small blood trickle from mouth
     ctx.fillStyle = '#660000';
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
-    ctx.ellipse(detectiveX + 10, detectiveY + 20, 40, 25, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.fillRect(detectiveX - 11*s, detectiveY - 7*s, 1, 2*s);
 
-    // Blood splatters
-    for(let i = 0; i < 8; i++) {
-        ctx.fillStyle = '#8B0000';
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        const angle = (i / 8) * Math.PI * 2;
-        const splatterX = detectiveX + 10 + Math.cos(angle) * (50 + Math.random() * 20);
-        const splatterY = detectiveY + 20 + Math.sin(angle) * (30 + Math.random() * 15);
-        ctx.arc(splatterX, splatterY, 3 + Math.random() * 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    }
-
-    // Detective's body (lying face down) - chalk outline style
-    // Head at top
-    ctx.fillStyle = '#d4a076'; // Skin tone
+    // Fedora fallen beside head (on ground)
+    const hatX = detectiveX - 24*s;
+    const hatY = detectiveY - 8*s;
+    ctx.fillStyle = '#3a3a3a'; // Dark gray fedora
     ctx.beginPath();
-    ctx.arc(detectiveX, detectiveY - 10, 12, 0, Math.PI * 2);
+    ctx.ellipse(hatX, hatY, 14, 10, -0.1, 0, Math.PI * 2);
     ctx.fill();
 
-    // Torso (blue suit jacket) - centered and proportional
-    ctx.fillStyle = '#1a1a4d';
-    ctx.fillRect(detectiveX - 20, detectiveY, 40, 50);
+    // Hat crown
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath();
+    ctx.ellipse(hatX - 1, hatY, 8, 6, -0.1, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Six bullet holes in back
+    // Hat band
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(hatX - 7, hatY - 1, 12, 2);
+
+    // Neck - connecting head to torso
+    ctx.fillStyle = detectiveSkin;
+    ctx.fillRect(detectiveX - 10*s, detectiveY - 8*s, 5*s, 4*s); // Neck piece
+
+    // TORSO - lying flat, facing up (extended to connect with legs)
+    ctx.fillStyle = '#1a1a4d'; // Dark blue detective suit jacket
+    ctx.fillRect(detectiveX - 8*s, detectiveY - 14*s, 20*s, 14*s); // Extended torso to connect with legs
+
+    // Suit jacket lapels and details
+    ctx.fillStyle = '#14143d'; // Darker blue for shading
+    ctx.fillRect(detectiveX + 8*s, detectiveY - 14*s, 4*s, 10*s); // Right lapel shadow
+    ctx.fillRect(detectiveX - 8*s, detectiveY - 14*s, 4*s, 10*s); // Left lapel shadow
+
+    // White shirt at collar
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(detectiveX - 4*s, detectiveY - 12*s, 8*s, 3*s);
+
+    // Burgundy tie
+    ctx.fillStyle = '#8b1a1a';
+    ctx.fillRect(detectiveX - 2*s, detectiveY - 11*s, 4*s, 10*s);
+
+    // Six bullet holes in torso (2 rows of 3)
     for(let i = 0; i < 6; i++) {
-        const holeX = detectiveX - 15 + (i % 3) * 15;
-        const holeY = detectiveY + 15 + Math.floor(i / 3) * 15;
+        const row = Math.floor(i / 3);
+        const col = i % 3;
+        const holeX = detectiveX - 4*s + col * 4*s;
+        const holeY = detectiveY - 10*s + row * 5*s;
 
-        // Bullet hole with blood
+        // Bullet hole
         ctx.fillStyle = '#660000';
         ctx.beginPath();
-        ctx.arc(holeX, holeY, 4, 0, Math.PI * 2);
+        ctx.arc(holeX, holeY, 2.5, 0, Math.PI * 2);
         ctx.fill();
 
         // Darker center
         ctx.fillStyle = '#330000';
         ctx.beginPath();
-        ctx.arc(holeX, holeY, 2, 0, Math.PI * 2);
+        ctx.arc(holeX, holeY, 1, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // Left arm extending from shoulder
-    ctx.fillStyle = '#1a1a4d';
-    ctx.fillRect(detectiveX - 50, detectiveY + 5, 35, 10);
+    // Front/near leg (right leg, in front) - repositioned to connect with torso
+    ctx.fillStyle = '#2a2a3d';
+    ctx.fillRect(detectiveX + 6*s, detectiveY - 1*s, 16*s, 4*s); // Upper leg - connects to torso
+    ctx.fillRect(detectiveX + 20*s, detectiveY - 2*s, 14*s, 4*s); // Lower leg
 
-    // Right arm outstretched with note
+    // Front shoe
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(detectiveX + 33*s, detectiveY - 2*s, 5*s, 4*s);
+
+    // Right arm RAISED holding note (extends upward from body)
     ctx.fillStyle = '#1a1a4d'; // Suit sleeve
-    ctx.fillRect(detectiveX + 20, detectiveY + 5, 50, 10);
+    ctx.fillRect(detectiveX + 10*s, detectiveY - 16*s, 3*s, 8*s); // Upper arm vertical
+    ctx.fillRect(detectiveX + 11*s, detectiveY - 24*s, 3*s, 10*s); // Forearm raised
 
-    // Legs extending down from hips
-    // Right leg
-    ctx.fillStyle = '#1a1a4d'; // Dark blue suit
-    ctx.fillRect(detectiveX - 15, detectiveY + 50, 12, 45);
+    // Right hand holding note
+    ctx.fillStyle = detectiveSkin;
+    ctx.fillRect(detectiveX + 10*s, detectiveY - 26*s, 4*s, 4*s); // Hand
 
-    // Left leg (slightly splayed)
-    ctx.fillStyle = '#1a1a4d';
-    ctx.fillRect(detectiveX + 5, detectiveY + 50, 12, 45);
-
-    // Black shoes
-    ctx.fillStyle = '#000';
-    ctx.fillRect(detectiveX - 15, detectiveY + 93, 12, 10);
-    ctx.fillRect(detectiveX + 5, detectiveY + 93, 12, 10);
-
-    // Hand (pale, bloodied) - at end of right arm
-    ctx.fillStyle = '#d4a076';
-    ctx.fillRect(detectiveX + 68, detectiveY + 2, 18, 18);
-
-    // Blood on hand
-    ctx.fillStyle = '#8B0000';
-    ctx.globalAlpha = 0.7;
-    ctx.fillRect(detectiveX + 70, detectiveY + 4, 14, 8);
-    ctx.fillRect(detectiveX + 68, detectiveY + 10, 10, 8);
-    ctx.globalAlpha = 1;
-
-    // Fingers
-    for(let i = 0; i < 4; i++) {
-        ctx.fillStyle = '#d4a076';
-        ctx.fillRect(detectiveX + 70 + i * 3, detectiveY + 18, 2, 8);
-    }
-
-    // Yellow note in hand
-    const noteX = detectiveX + 75;
-    const noteY = detectiveY - 2;
+    // Yellow note in raised hand
+    const noteX = detectiveX + 10*s;
+    const noteY = detectiveY - 30*s;
     ctx.fillStyle = '#f4e5a8'; // Yellow legal pad color
-    ctx.fillRect(noteX, noteY, 20, 28);
+    ctx.fillRect(noteX, noteY, 18, 24);
 
     // Note lines
     ctx.strokeStyle = '#c0c0c0';
     ctx.lineWidth = 0.5;
-    for(let i = 0; i < 8; i++) {
+    for(let i = 0; i < 7; i++) {
         ctx.beginPath();
         ctx.moveTo(noteX + 2, noteY + 3 + i * 3);
-        ctx.lineTo(noteX + 18, noteY + 3 + i * 3);
+        ctx.lineTo(noteX + 16, noteY + 3 + i * 3);
         ctx.stroke();
     }
 
     // Blood splatter on note
-    ctx.fillStyle = '#8B0000';
-    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#660000';
+    ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    ctx.arc(noteX + 15, noteY + 22, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(noteX + 8, noteY + 15, 2, 0, Math.PI * 2);
+    ctx.arc(noteX + 12, noteY + 18, 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Fedora (fallen near head)
-    const hatX = detectiveX - 20;
-    const hatY = detectiveY - 15;
-    ctx.fillStyle = '#2a2a2a'; // Dark gray/black fedora
-    ctx.beginPath();
-    ctx.ellipse(hatX, hatY, 18, 12, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Hat crown
-    ctx.fillStyle = '#1a1a1a';
-    ctx.beginPath();
-    ctx.ellipse(hatX, hatY - 2, 10, 8, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Hat band
-    ctx.fillStyle = '#333';
-    ctx.fillRect(hatX - 8, hatY - 2, 16, 3);
-
-    // Interaction prompt for note (when not viewing)
-    if(!level6.viewingDetectiveNote && Math.abs(player.x - noteX) < 40 && Math.abs(player.y - noteY) < 60) {
+    // Interaction prompt for note (when not viewing) - aligned with note center
+    const noteInteractX = noteX + 9; // Center of note
+    const noteInteractY = noteY + 12; // Center of note
+    if(!level6.viewingDetectiveNote && Math.abs(player.x - noteInteractX) < 50 && Math.abs(player.y - noteInteractY) < 50) {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('ACTION - VIEW NOTE', noteX + 10, noteY - 10);
+        ctx.fillText('ACTION - VIEW NOTE', noteInteractX, noteY - 20);
+
+        // Arrow pointing to note
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(noteInteractX - 5, noteY - 8);
+        ctx.lineTo(noteInteractX, noteY - 3);
+        ctx.lineTo(noteInteractX + 5, noteY - 8);
+        ctx.fill();
     }
 
     // Left door (back to pipe room)
@@ -3865,7 +3921,8 @@ function drawLevel6CEOOffice() {
         // Open safe showing contents
         if(!level6.hasRevolver) {
             // Revolver - exact match to player-held design pointing RIGHT (barrel right, handle down)
-            const revX = safeX + 8;
+            // Centered horizontally in safe
+            const revX = safeX;
             const revY = safeY + 22;
             const scale = 0.8;
 
@@ -3936,12 +3993,15 @@ function drawLevel6CEOOffice() {
             }
 
             ctx.restore();
+
+            // Clear any lingering paths to prevent stray lines
+            ctx.beginPath();
         }
         if(level6.moneyLives < 3) {
-            // Money sack visible
+            // Money sack visible - centered horizontally in safe
             ctx.fillStyle = '#27ae60';
             ctx.beginPath();
-            ctx.arc(safeX + 8, safeY + 32, 6, 0, Math.PI * 2);
+            ctx.arc(safeX, safeY + 32, 6, 0, Math.PI * 2);
             ctx.fill();
         }
     }
@@ -4390,7 +4450,7 @@ function drawEmailUI(officeName) {
     ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('PRESS ACTION TO CLOSE', 350, 425);
-    ctx.fillText('↑↓ TO SCROLL', 350, 445);
+    ctx.fillText('▲▼ TO SCROLL', 350, 445);
 }
 
 function drawLetterUI() {
@@ -4398,21 +4458,44 @@ function drawLetterUI() {
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
     ctx.fillRect(0, 0, 700, 500);
 
-    // Display the letter image (shows full desk scene with letter)
+    // Display the letter image with scrolling (preserves full dimensions)
     if(letterImg.complete && letterImg.naturalWidth > 0) {
-        const letterW = 600;
-        const letterH = 380;
-        const letterX = (700 - letterW) / 2;
-        const letterY = (500 - letterH) / 2 - 10;
+        // Calculate dimensions to show text content properly - increased for better readability
+        const maxWidth = 600; // Larger width for better text visibility
+        const viewportHeight = 390; // Taller viewport for more visible text
+        const scale = maxWidth / letterImg.naturalWidth;
+        const fullHeight = letterImg.naturalHeight * scale;
 
-        ctx.drawImage(letterImg, letterX, letterY, letterW, letterH);
+        const letterX = (700 - maxWidth) / 2;
+        const viewportY = 30; // Start higher to maximize text space
+
+        // Create clipping region for scrollable area
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(letterX, viewportY, maxWidth, viewportHeight);
+        ctx.clip();
+
+        // Draw image offset by scroll amount
+        const letterY = viewportY - level5.letterScrollOffset;
+        ctx.drawImage(letterImg, letterX, letterY, maxWidth, fullHeight);
+
+        ctx.restore();
+
+        // Draw border around viewport
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(letterX, viewportY, maxWidth, viewportHeight);
     }
 
-    // Close instruction
+    // Instructions at bottom
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 430, 700, 70);
+
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 18px Arial';
+    ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ACTION TO CLOSE', 350, 480);
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 458);
+    ctx.fillText('▲▼ TO SCROLL', 350, 485);
 }
 
 function drawDetectiveNoteUI() {
@@ -4420,21 +4503,44 @@ function drawDetectiveNoteUI() {
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
     ctx.fillRect(0, 0, 700, 500);
 
-    // Display the detective note image (zoomed in view)
+    // Display the detective note image with scrolling (more text-focused)
     if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
-        const noteW = 600;
-        const noteH = 380;
-        const noteX = (700 - noteW) / 2;
-        const noteY = (500 - noteH) / 2 - 10;
+        // Calculate dimensions to zoom in more on text content - maximized for readability
+        const maxWidth = 640; // Maximum zoom for best text readability
+        const viewportHeight = 410; // Maximum viewport height for text
+        const scale = maxWidth / detectiveNoteImg.naturalWidth;
+        const fullHeight = detectiveNoteImg.naturalHeight * scale;
 
-        ctx.drawImage(detectiveNoteImg, noteX, noteY, noteW, noteH);
+        const noteX = (700 - maxWidth) / 2;
+        const viewportY = 20; // Start as high as possible to maximize text space
+
+        // Create clipping region for scrollable area
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(noteX, viewportY, maxWidth, viewportHeight);
+        ctx.clip();
+
+        // Draw image offset by scroll amount
+        const noteY = viewportY - level6.noteScrollOffset;
+        ctx.drawImage(detectiveNoteImg, noteX, noteY, maxWidth, fullHeight);
+
+        ctx.restore();
+
+        // Draw border around viewport
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(noteX, viewportY, maxWidth, viewportHeight);
     }
 
-    // Close instruction
+    // Instructions at bottom
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 440, 700, 60);
+
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 18px Arial';
+    ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ACTION TO CLOSE', 350, 480);
+    ctx.fillText('PRESS ACTION TO CLOSE', 350, 465);
+    ctx.fillText('▲▼ TO SCROLL', 350, 488);
 }
 
 function drawSafeUI() {
@@ -4610,7 +4716,7 @@ function drawSafeUI() {
 
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 14px Arial';
-        ctx.fillText('USE ARROWS TO SELECT, ACTION TO TAKE', 350, 380);
+        ctx.fillText('USE ◄► TO SELECT, ACTION TO TAKE', 350, 380);
         return;
     }
 
@@ -4671,7 +4777,7 @@ function drawSafeUI() {
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('USE ARROWS TO SELECT, ACTION TO ENTER', 350, 440);
+    ctx.fillText('USE ◄►▲▼ TO SELECT, ACTION TO ENTER', 350, 440);
 
     if(level6.codeInput.length === 4) {
         const correct = level6.codeInput.every((color, i) => color === SAFE_CODE[i]);
@@ -4735,11 +4841,11 @@ function drawComputerUI() {
 
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 16px Arial';
-    ctx.fillText('USE ARROWS TO SELECT, ACTION TO CONFIRM', 350, 360);
+    ctx.fillText('USE ◄► TO SELECT, ACTION TO CONFIRM', 350, 355);
 
     ctx.fillStyle = '#f39c12';
     ctx.font = '14px Arial';
-    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 390);
+    ctx.fillText('WARNING: CHOICE IS FINAL', 350, 380);
 }
 
 
@@ -5259,6 +5365,127 @@ function drawCEO(x, y, facing) {
     }
 }
 
+function drawDeadCEO(x, y) {
+    const s = 2;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 10, 30, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const weatheredSkin = '#c49872';
+
+    // Dead CEO lying on ground horizontally (similar to detective)
+    // Body positioned horizontally, head to the left, feet to the right
+
+    // Small blood pool
+    ctx.fillStyle = '#6b0000';
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 2, 40, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Back/far leg
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x + 6*s, y - 2*s, 16*s, 4*s);
+    ctx.fillRect(x + 20*s, y - 3*s, 14*s, 4*s);
+
+    // Back shoe
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(x + 33*s, y - 4*s, 5*s, 4*s);
+
+    // Left arm along body
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(x - 10*s, y - 8*s, 12*s, 3*s);
+    ctx.fillStyle = weatheredSkin;
+    ctx.fillRect(x - 11*s, y - 9*s, 3*s, 3*s);
+
+    // HEAD lying flat
+    ctx.fillStyle = weatheredSkin;
+    ctx.fillRect(x - 18*s, y - 16*s, 10*s, 11*s);
+
+    // Gray hair
+    ctx.fillStyle = '#6b6b6b';
+    ctx.fillRect(x - 18*s, y - 17*s, 10*s, 4*s);
+    ctx.fillRect(x - 19*s, y - 14*s, 2*s, 6*s);
+    ctx.fillRect(x - 8*s, y - 14*s, 2*s, 6*s);
+
+    // Closed eyes (dead)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 16*s, y - 12*s, 2*s, 1);
+    ctx.fillRect(x - 11*s, y - 12*s, 2*s, 1);
+
+    // Nose
+    ctx.fillStyle = '#b88a62';
+    ctx.fillRect(x - 14*s, y - 10*s, 3*s, 2*s);
+
+    // Cigar fallen from mouth
+    ctx.save();
+    ctx.translate(x - 12, y - 4);
+    ctx.rotate(0.5);
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(0, 0, 14, 2);
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(13, 0, 1, 2);
+    ctx.restore();
+
+    // Neck
+    ctx.fillStyle = weatheredSkin;
+    ctx.fillRect(x - 10*s, y - 8*s, 5*s, 4*s);
+
+    // TORSO lying flat
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(x - 8*s, y - 14*s, 20*s, 14*s);
+
+    // Suit jacket details
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x + 8*s, y - 14*s, 4*s, 10*s);
+    ctx.fillRect(x - 8*s, y - 14*s, 4*s, 10*s);
+
+    // White shirt
+    ctx.fillStyle = '#f5f5f5';
+    ctx.fillRect(x - 4*s, y - 12*s, 8*s, 3*s);
+
+    // Dark red tie
+    ctx.fillStyle = '#8b0000';
+    ctx.fillRect(x - 2*s, y - 11*s, 4*s, 10*s);
+
+    // Bullet holes in torso (6 holes)
+    for(let i = 0; i < 6; i++) {
+        const row = Math.floor(i / 3);
+        const col = i % 3;
+        const holeX = x - 4*s + col * 4*s;
+        const holeY = y - 10*s + row * 5*s;
+
+        ctx.fillStyle = '#660000';
+        ctx.beginPath();
+        ctx.arc(holeX, holeY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#330000';
+        ctx.beginPath();
+        ctx.arc(holeX, holeY, 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Front/near leg
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x + 6*s, y - 1*s, 16*s, 4*s);
+    ctx.fillRect(x + 20*s, y - 2*s, 14*s, 4*s);
+
+    // Front shoe
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(x + 33*s, y - 2*s, 5*s, 4*s);
+
+    // Right arm extended
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(x + 10*s, y - 10*s, 3*s, 8*s);
+    ctx.fillStyle = weatheredSkin;
+    ctx.fillRect(x + 10*s, y - 12*s, 4*s, 4*s);
+}
+
 function drawPortraitUI() {
     // Full-screen dark overlay
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
@@ -5657,6 +5884,9 @@ function drawScene() {
 
             if(ceo.state !== 'dead') {
                 drawCEO(ceo.x, ceo.y, ceo.facing);
+            } else {
+                // Draw dead CEO body on ground
+                drawDeadCEO(ceo.x, ceo.y);
             }
 
             for(let npc of level6.exitingNPCs) {
@@ -6068,9 +6298,12 @@ function update() {
             if(level !== 5 && level !== 6) {
                 spawnCracks();
             }
-            // Ensure level 3 music is playing
+            // Ensure level 3 and 4 music is playing
             if(level === 3) {
                 playMusic('level3');
+            }
+            if(level === 4) {
+                playMusic('level4');
             }
         }
         return;
@@ -6220,8 +6453,29 @@ function update() {
         }
 
         if(level5.viewingLetter) {
+            // Handle letter scrolling
+            if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
+                level5.letterScrollOffset = Math.max(0, level5.letterScrollOffset - 30);
+                keys.upProcessed = true;
+            }
+            if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
+                // Calculate max scroll based on image height
+                if(letterImg.complete && letterImg.naturalWidth > 0) {
+                    const maxWidth = 600;
+                    const viewportHeight = 360;
+                    const scale = maxWidth / letterImg.naturalWidth;
+                    const fullHeight = letterImg.naturalHeight * scale;
+                    const maxScroll = Math.max(0, fullHeight - viewportHeight);
+                    level5.letterScrollOffset = Math.min(maxScroll, level5.letterScrollOffset + 30);
+                }
+                keys.downProcessed = true;
+            }
+            if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
+            if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
+
             if(keys[' '] || keys['action']) {
                 level5.viewingLetter = false;
+                level5.letterScrollOffset = 0;
                 keys[' '] = false;
                 keys['action'] = false;
             }
@@ -6311,7 +6565,7 @@ function update() {
         // OFFICE
         else if(level5.room === 'office' && level5.currentOffice) {
             // Exit office
-            if(player.y > 450 && Math.abs(player.x - 350) < 60 && (keys[' '] || keys['action'])) {
+            if(player.y > 420 && Math.abs(player.x - 350) < 70 && (keys[' '] || keys['action'])) {
                 level5.room = 'hallway';
                 const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
                 player.x = office.x;
@@ -6336,9 +6590,10 @@ function update() {
 
             // Interact with letter (RED only) - on LEFT side of desk
             const letterX = deskX - 25;
-            if(level5.currentOffice === 'RED' && Math.abs(player.x - letterX) < 30 && player.y > deskY + 30 && player.y < deskY + 70) {
+            if(level5.currentOffice === 'RED' && Math.abs(player.x - letterX) < 35 && player.y > deskY + 30 && player.y < deskY + 70) {
                 if(keys[' '] || keys['action']) {
                     level5.viewingLetter = true;
+                    level5.letterScrollOffset = 0;
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -6483,8 +6738,29 @@ function update() {
     if(level === 6) {
             // Handle viewing detective note
             if(level6.viewingDetectiveNote) {
+                // Handle note scrolling
+                if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
+                    level6.noteScrollOffset = Math.max(0, level6.noteScrollOffset - 30);
+                    keys.upProcessed = true;
+                }
+                if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
+                    // Calculate max scroll based on image height
+                    if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
+                        const maxWidth = 600;
+                        const viewportHeight = 360;
+                        const scale = maxWidth / detectiveNoteImg.naturalWidth;
+                        const fullHeight = detectiveNoteImg.naturalHeight * scale;
+                        const maxScroll = Math.max(0, fullHeight - viewportHeight);
+                        level6.noteScrollOffset = Math.min(maxScroll, level6.noteScrollOffset + 30);
+                    }
+                    keys.downProcessed = true;
+                }
+                if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
+                if(!keys['ArrowDown'] && !keys['down']) keys.downProcessed = false;
+
                 if(keys[' '] || keys['action']) {
                     level6.viewingDetectiveNote = false;
+                    level6.noteScrollOffset = 0;
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -6714,7 +6990,7 @@ function update() {
                 }
             }
 
-            // Movement for pipeRoom, megacomputer, and entryway
+            // Movement for pipeRoom, megacomputer, and entryway (1D horizontal only)
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
@@ -6764,11 +7040,15 @@ function update() {
                     player.y = 380;
                 }
 
-                // Detective note interaction (noteX = 550 + 75 = 625)
-                const noteX = 625;
-                const noteY = 438; // Position of note in hand
-                if(!level6.viewingDetectiveNote && Math.abs(player.x - noteX) < 40 && (keys[' '] || keys['action'])) {
+                // Detective note interaction - aligned with actual note position
+                const detectiveX = 540;
+                const detectiveY = 445;
+                const s = 2;
+                const noteInteractX = detectiveX + 10*s + 9; // Note center: 569
+                const noteInteractY = detectiveY - 30*s + 12; // Note center: 397
+                if(!level6.viewingDetectiveNote && Math.abs(player.x - noteInteractX) < 50 && Math.abs(player.y - noteInteractY) < 50 && (keys[' '] || keys['action'])) {
                     level6.viewingDetectiveNote = true;
+                    level6.noteScrollOffset = 0;
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -6917,25 +7197,30 @@ function update() {
             
                 // Handle computer UI
                 if(level6.computerUI) {
-                    // Arrow navigation
+                    // Arrow navigation - directly reset keys after reading
                     if(keys['ArrowLeft'] || keys['left']) {
                         level6.computerChoice = 0; // Self-destruct
                         keys['ArrowLeft'] = false;
                         keys['left'] = false;
                     }
+
                     if(keys['ArrowRight'] || keys['right']) {
                         level6.computerChoice = 1; // Deliver means
                         keys['ArrowRight'] = false;
                         keys['right'] = false;
                     }
 
+                    // Allow closing with Escape key
+                    if(keys['Escape']) {
+                        level6.computerUI = false;
+                        keys['Escape'] = false;
+                    }
+
                     // Confirm selection
                     if(keys[' '] || keys['action']) {
-                        keys[' '] = false;
-                        keys['action'] = false;
-
                         if(level6.computerChoice === 0) {
                             // Self-destruct - "The End"
+                            level6.computerUI = false;
                             state = 'theend';
                             menuChoice = 0;
                         } else {
@@ -6952,6 +7237,8 @@ function update() {
                                 {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, exiting: false, isMulletPro: true}
                             ];
                         }
+                        keys[' '] = false;
+                        keys['action'] = false;
                     }
                     return;
                 }
