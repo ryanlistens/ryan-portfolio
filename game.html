@@ -6452,22 +6452,24 @@ function update() {
         return;
     }
     
-    if(state === 'promotion') {
+        if(state === 'promotion') {
         if(keys[' '] || keys['action'] || keys['ArrowUp'] || keys['ArrowDown'] ||
            keys['ArrowLeft'] || keys['ArrowRight'] || keys['up'] || keys['down'] ||
            keys['left'] || keys['right']) {
+            
+            // FIX: Play Level 5 music IMMEDIATELY upon user interaction
+            playMusic('level5');
+
             keys = {};
             level = 5;
-            timer = 120;
+            timer = 120; // Level 5 gets 120 seconds
             state = 'levelCard';
             cardTimer = 0;
             initLevel(5);
-
-            // Play level 5 music
-            playMusic('level5');
         }
         return;
     }
+
 
     if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
         // Victory screen only has one option, limit menuChoice to 0
@@ -6809,36 +6811,37 @@ function update() {
                     const atFurnace = Math.abs(player.x - furnace.x) < 80;
                     const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
             
-                    if((keys[' '] || keys['action']) && atFurnace) {
-                        if(player.holding) {
-                            player.holding = null;
-                            furnace.flameTime = Date.now();
-                            level5.docsCollected++;
-                    
-                            if(level5.docsCollected >= 6) {
-                                level = 6;
-                                timer = 180;
-                                state = 'levelCard';
-                                cardTimer = 0;
-                                initLevel(6);
+                            if((keys[' '] || keys['action']) && atFurnace) {
+            if(player.holding) {
+                player.holding = null;
+                furnace.flameTime = Date.now();
+                level5.docsCollected++;
+        
+                if(level5.docsCollected >= 6) {
+                    // FIX: Play Level 6 music IMMEDIATELY when the 6th doc is burnt
+                    playMusic('level6');
 
-                                // Play level 6 music
-                                playMusic('level6');
+                    level = 6;
+                    timer = 180; // Level 6 gets 180 seconds
+                    state = 'levelCard';
+                    cardTimer = 0;
+                    initLevel(6);
 
-                                keys[' '] = false;
-                                keys['action'] = false;
-                                return;
-                            }
-                        } else {
-                            // Player walked into furnace without holding document
-                            furnace.flameTime = Date.now();
-                            createExplosion(player.x, player.y);
-                            state = 'fired'; // Special state for furnace death
-                            menuChoice = 0;
-                        }
-                        keys[' '] = false;
-                        keys['action'] = false;
-                    }
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    return;
+                }
+            } else {
+                // Player walked into furnace without holding document
+                furnace.flameTime = Date.now();
+                createExplosion(player.x, player.y);
+                state = 'fired'; // Special state for furnace death
+                menuChoice = 0;
+            }
+            keys[' '] = false;
+            keys['action'] = false;
+        }
+
             
                     if((keys[' '] || keys['action']) && atDoor) {
                         level5.room = 'hallway';
@@ -7972,35 +7975,59 @@ function gameLoop() {
 }
 
 // Don't play music on page load - let RT Presents screen handle first interaction
-// This bypasses autoplay restrictions by using the button press as the unlock
-
 drawScene();
 gameLoop();
 
-document.addEventListener('keydown', e => {
-    // Handle RT Presents screen FIRST in user gesture context
-    if(handleRTPresentsInteraction()) {
-        keys = {}; // Clear any keys since we're transitioning
+// --- NEW HELPER: PRE-TRIGGER MUSIC ON INTERACTION ---
+// This function checks if a tap/click IS ABOUT TO trigger a level change
+// and starts the music immediately while we are still in the event handler.
+function tryTriggerMusicOnInput() {
+    // 1. Level 5 Trigger (Promotion Screen)
+    if (state === 'promotion') {
+        playMusic('level5');
         return;
     }
 
-    // Handle Menu screen in user gesture context
+    // 2. Level 6 Trigger (Furnace Logic ONLY)
+    if (level === 5 && level5.room === 'furnaceRoom' && player.holding) {
+        const furnace = level5.furnaceRoom.furnace;
+        // Check distance (must match update() logic range of < 80)
+        if (Math.abs(player.x - furnace.x) < 80) {
+            // We are holding a doc. If we have 5 collected, this current one is the 6th.
+            // This is the EXACT moment of transition.
+            if (level5.docsCollected >= 5) {
+                playMusic('level6');
+                return;
+            }
+        }
+    }
+}
+
+// --- UPDATED INPUT HANDLERS ---
+
+document.addEventListener('keydown', e => {
+    // Handle RT Presents screen FIRST
+    if(handleRTPresentsInteraction()) {
+        keys = {}; 
+        return;
+    }
+    // Handle Menu screen
     if(handleMenuInteraction()) {
-        keys = {}; // Clear any keys since we're transitioning
+        keys = {}; 
         return;
     }
 
     keys[e.key] = true;
 
-    // Unlock audio on first keyboard interaction
+    // Unlock audio on first interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
-        console.log('Audio unlocked by keyboard interaction');
-        // Resume pending music
         resumePendingMusic();
     }
+    
+    // Try to pre-trigger music for level transitions
+    tryTriggerMusicOnInput();
 
-    // Toggle mute with 'M' key
     if(e.key === 'm' || e.key === 'M') {
         toggleMute();
     }
@@ -8012,11 +8039,8 @@ document.addEventListener('keyup', e => {
 
 // Touch/click support for mute button
 function handleMuteClick(e) {
-    // Unlock audio on first interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
-        console.log('Audio unlocked by canvas interaction');
-        // Resume pending music
         resumePendingMusic();
     }
 
@@ -8043,10 +8067,9 @@ function handleMuteClick(e) {
     const x = (clientX - rect.left) * scaleX;
     const y = (clientY - rect.top) * scaleY;
 
-    // Check if click/touch is within larger mute button area (610, 10, 80, 50)
     if(x >= 610 && x <= 690 && y >= 10 && y <= 60) {
         toggleMute();
-        e.preventDefault();
+        if(e.cancelable) e.preventDefault();
     }
 }
 
@@ -8055,105 +8078,93 @@ canvas.addEventListener('touchstart', handleMuteClick, {passive: false});
 
 document.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('touchstart', e => {
-        e.preventDefault();
-        // Handle RT Presents screen FIRST in user gesture context
-        if(handleRTPresentsInteraction()) {
-            return;
-        }
-        // Handle Menu screen in user gesture context
-        if(handleMenuInteraction()) {
-            return;
-        }
-        // Unlock audio on first touch
+        if(e.cancelable) e.preventDefault();
+        
+        if(handleRTPresentsInteraction()) return;
+        if(handleMenuInteraction()) return;
+        
         if(!audioUnlocked) {
             audioUnlocked = true;
-            console.log('Audio unlocked by touch control');
-            // Resume pending music
-            resumePendingMusic();
         }
+        
+        // Critical Fix: Trigger music logic directly in the touch event
+        resumePendingMusic();
+        tryTriggerMusicOnInput();
+        
         keys[btn.dataset.dir] = true;
     }, {passive: false});
 
     btn.addEventListener('touchend', e => {
-        e.preventDefault();
+        if(e.cancelable) e.preventDefault();
         keys[btn.dataset.dir] = false;
     }, {passive: false});
 
     btn.addEventListener('mousedown', e => {
-        e.preventDefault();
-        // Handle RT Presents screen FIRST in user gesture context
-        if(handleRTPresentsInteraction()) {
-            return;
-        }
-        // Handle Menu screen in user gesture context
-        if(handleMenuInteraction()) {
-            return;
-        }
-        // Unlock audio on first mouse interaction
+        if(e.cancelable) e.preventDefault();
+        
+        if(handleRTPresentsInteraction()) return;
+        if(handleMenuInteraction()) return;
+        
         if(!audioUnlocked) {
             audioUnlocked = true;
-            console.log('Audio unlocked by mouse control');
-            // Resume pending music
-            resumePendingMusic();
         }
+        
+        resumePendingMusic();
+        tryTriggerMusicOnInput();
+        
         keys[btn.dataset.dir] = true;
     });
 
     btn.addEventListener('mouseup', e => {
-        e.preventDefault();
+        if(e.cancelable) e.preventDefault();
         keys[btn.dataset.dir] = false;
     });
 });
 
 document.getElementById('action-btn').addEventListener('touchstart', e => {
-    e.preventDefault();
-    // Handle RT Presents screen FIRST in user gesture context
-    if(handleRTPresentsInteraction()) {
-        return;
-    }
-    // Handle Menu screen in user gesture context
-    if(handleMenuInteraction()) {
-        return;
-    }
-    // Unlock audio on first touch
+    if(e.cancelable) e.preventDefault();
+    
+    if(handleRTPresentsInteraction()) return;
+    if(handleMenuInteraction()) return;
+    
     if(!audioUnlocked) {
         audioUnlocked = true;
-        console.log('Audio unlocked by action button touch');
-        // Resume pending music
-        resumePendingMusic();
     }
+    
+    // Critical Fix: Trigger music logic directly in the touch event
+    resumePendingMusic();
+    tryTriggerMusicOnInput();
+    
     keys['action'] = true;
 }, {passive: false});
 
 document.getElementById('action-btn').addEventListener('touchend', e => {
-    e.preventDefault();
+    if(e.cancelable) e.preventDefault();
     keys['action'] = false;
 }, {passive: false});
 
 document.getElementById('action-btn').addEventListener('mousedown', e => {
-    e.preventDefault();
-    // Handle RT Presents screen FIRST in user gesture context
-    if(handleRTPresentsInteraction()) {
-        return;
-    }
-    // Handle Menu screen in user gesture context
-    if(handleMenuInteraction()) {
-        return;
-    }
-    // Unlock audio on first mouse interaction
+    if(e.cancelable) e.preventDefault();
+    
+    if(handleRTPresentsInteraction()) return;
+    if(handleMenuInteraction()) return;
+    
     if(!audioUnlocked) {
         audioUnlocked = true;
-        console.log('Audio unlocked by action button mouse');
-        // Resume pending music
-        resumePendingMusic();
     }
+    
+    resumePendingMusic();
+    tryTriggerMusicOnInput();
+    
     keys['action'] = true;
 });
 
 document.getElementById('action-btn').addEventListener('mouseup', e => {
-    e.preventDefault();
+    if(e.cancelable) e.preventDefault();
     keys['action'] = false;
 });
+
+
 </script>
 </body>
 </html>
