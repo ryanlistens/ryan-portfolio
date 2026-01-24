@@ -42,14 +42,13 @@
             right: 0;
             display: flex;
             justify-content: space-between;
-            padding: 12px 20px;
-            background: linear-gradient(180deg, rgba(27,27,27,0.95) 0%, rgba(27,27,27,0.85) 100%);
+            padding: 8px 16px;
+            background: linear-gradient(180deg, rgba(27,27,27,0.7) 0%, rgba(27,27,27,0) 100%);
             color: #f5f2ec;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             z-index: 100;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+            pointer-events: none;
         }
         .heart {
             color: #e74c3c;
@@ -82,9 +81,8 @@
             bottom: 0;
             left: 0;
             right: 0;
-            padding: 20px;
-            background: linear-gradient(0deg, rgba(27,27,27,0.95) 0%, rgba(27,27,27,0) 100%);
-            backdrop-filter: blur(10px);
+            padding: 15px;
+            background: linear-gradient(0deg, rgba(27,27,27,0.6) 0%, rgba(27,27,27,0) 100%);
             z-index: 100;
             pointer-events: none;
         }
@@ -211,7 +209,7 @@
             <span id="lives"></span>
         </div>
         <div id="game-container">
-            <canvas id="game" width="700" height="500"></canvas>
+            <canvas id="game"></canvas>
         </div>
         <div id="controls-section">
             <div id="controls-grid">
@@ -236,6 +234,41 @@
 // SECTION 2: Canvas Setup and Constants
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+
+// Game dimensions - internal rendering resolution
+const GAME_WIDTH = 700;
+const GAME_HEIGHT = 500;
+
+// Dynamic canvas sizing to fill the screen
+function resizeCanvas() {
+    const container = document.getElementById('game-container');
+    const rect = container.getBoundingClientRect();
+
+    // Set canvas display size to fill container
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    // Calculate scale to fill screen while maintaining aspect ratio
+    const scaleX = canvas.width / GAME_WIDTH;
+    const scaleY = canvas.height / GAME_HEIGHT;
+    const scale = Math.min(scaleX, scaleY);
+
+    // Calculate offset to center the game
+    const offsetX = (canvas.width - GAME_WIDTH * scale) / 2;
+    const offsetY = (canvas.height - GAME_HEIGHT * scale) / 2;
+
+    // Store scale and offset for input handling
+    canvas.gameScale = scale;
+    canvas.gameOffsetX = offsetX;
+    canvas.gameOffsetY = offsetY;
+}
+
+// Initial resize and add event listener
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', () => {
+    setTimeout(resizeCanvas, 100);
+});
 
 // Enable image smoothing for realistic graphics
 ctx.imageSmoothingEnabled = true;
@@ -6560,6 +6593,15 @@ function drawMuteIndicator() {
 }
 
 function drawScene() {
+    // Clear the entire canvas
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Save the context and apply scaling
+    ctx.save();
+    ctx.translate(canvas.gameOffsetX || 0, canvas.gameOffsetY || 0);
+    ctx.scale(canvas.gameScale || 1, canvas.gameScale || 1);
+
     // RT Games Presents Screen
     if(state === 'rtPresents') {
         // Elegant black background
@@ -7029,28 +7071,73 @@ function drawScene() {
         return;
     }
 
-    
-    // Levels 1-4 standard pipe room
-    ctx.fillStyle = '#e8e6dc';
-    ctx.fillRect(0, 0, 700, 500);
-    
-    ctx.fillStyle = '#808080';
+
+    // Levels 1-4 standard pipe room - Enhanced visuals
+    // Background wall with depth gradient
+    const wallGrad = ctx.createLinearGradient(0, 0, 0, 400);
+    wallGrad.addColorStop(0, '#d4d0c0');
+    wallGrad.addColorStop(0.5, '#e8e6dc');
+    wallGrad.addColorStop(1, '#c8c4b4');
+    ctx.fillStyle = wallGrad;
+    ctx.fillRect(0, 0, 700, 400);
+
+    // Add subtle wall texture with noise
+    ctx.globalAlpha = 0.05;
+    for(let i = 0; i < 100; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#fff';
+        ctx.fillRect(Math.random() * 700, Math.random() * 400, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // Enhanced floor with gradient and depth
+    const floorGrad = ctx.createLinearGradient(0, 400, 0, 500);
+    floorGrad.addColorStop(0, '#6a6a6a');
+    floorGrad.addColorStop(1, '#505050');
+    ctx.fillStyle = floorGrad;
     ctx.fillRect(0, 400, 700, 100);
-    
+
+    // Floor tiles with enhanced depth
     for(let i = 0; i < 20; i++) {
         for(let j = 0; j < 3; j++) {
-            ctx.strokeStyle = '#666';
+            const tileX = i * 35;
+            const tileY = 400 + j * 33;
+
+            // Tile base with gradient
+            const tileGrad = ctx.createLinearGradient(tileX, tileY, tileX + 35, tileY + 33);
+            tileGrad.addColorStop(0, '#707070');
+            tileGrad.addColorStop(1, '#5a5a5a');
+            ctx.fillStyle = tileGrad;
+            ctx.fillRect(tileX, tileY, 35, 33);
+
+            // Tile borders and depth
+            ctx.strokeStyle = '#404040';
             ctx.lineWidth = 1;
-            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+            ctx.strokeRect(tileX, tileY, 35, 33);
+
+            // Inner highlight for depth
+            ctx.strokeStyle = '#808080';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(tileX + 2, tileY + 2, 31, 29);
         }
     }
-    
-    ctx.fillStyle = '#f5f5dc';
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(100, 20, 80, 10);
-    ctx.fillRect(300, 20, 80, 10);
-    ctx.fillRect(500, 20, 80, 10);
-    ctx.globalAlpha = 1;
+
+    // Atmospheric lighting - ceiling lights with glow
+    const lightPositions = [150, 350, 550];
+    for(let lightX of lightPositions) {
+        // Light housing
+        ctx.fillStyle = '#b0b0b0';
+        ctx.fillRect(lightX - 40, 15, 80, 15);
+        ctx.fillStyle = '#909090';
+        ctx.fillRect(lightX - 35, 20, 70, 10);
+
+        // Light glow effect
+        const glowGrad = ctx.createRadialGradient(lightX, 25, 0, lightX, 25, 120);
+        glowGrad.addColorStop(0, 'rgba(255,255,220,0.4)');
+        glowGrad.addColorStop(0.5, 'rgba(255,255,220,0.1)');
+        glowGrad.addColorStop(1, 'rgba(255,255,220,0)');
+        ctx.fillStyle = glowGrad;
+        ctx.fillRect(lightX - 120, 25, 240, 150);
+    }
 
     ctx.fillStyle = '#7a7a7a';
     ctx.fillRect(20, 30, 220, 110);
@@ -7354,6 +7441,9 @@ function drawScene() {
     if(state === 'playing') {
         drawMuteIndicator();
     }
+
+    // Restore the context after scaling
+    ctx.restore();
 }
 
 
@@ -8956,8 +9046,6 @@ function handleMuteClick(e) {
     }
 
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
 
     let clientX, clientY;
     if(e.type.startsWith('touch')) {
@@ -8975,8 +9063,11 @@ function handleMuteClick(e) {
         clientY = e.clientY;
     }
 
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
+    // Convert screen coordinates to game coordinates
+    const canvasX = clientX - rect.left;
+    const canvasY = clientY - rect.top;
+    const x = (canvasX - (canvas.gameOffsetX || 0)) / (canvas.gameScale || 1);
+    const y = (canvasY - (canvas.gameOffsetY || 0)) / (canvas.gameScale || 1);
 
     // Check if click/touch is within larger mute button area (610, 10, 80, 50)
     if(x >= 610 && x <= 690 && y >= 10 && y <= 60) {
