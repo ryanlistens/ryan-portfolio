@@ -524,17 +524,104 @@
         const player = {
             x: 600,
             y: 400,
-            width: 30,
-            height: 50,
+            width: 24,
+            height: 64,
             speed: CONFIG.PLAYER_SPEED,
-            direction: 'down', // up, down, left, right
+            direction: 'right', // up, down, left, right
+            facing: 1, // 1 = right, -1 = left
             isMoving: false,
+            walkCycle: 0,
             inCar: false,
             car: null,
             inventory: [],
             weapon: 'fists', // fists, pistol
             flashlightOn: false
         };
+
+        // ============================================
+        // OBJECT PERMANENCY SYSTEM
+        // ============================================
+        const worldState = {
+            // Window states persist - seeded by building ID
+            windowStates: {},
+            // NPC positions and states persist
+            npcStates: {},
+            // Props placed in world
+            props: [],
+            // Items dropped/placed
+            items: [],
+            // Doors opened/closed
+            doorStates: {},
+            // Events that have occurred
+            events: [],
+            initialized: false
+        };
+
+        // Initialize persistent world state
+        function initWorldState() {
+            if (worldState.initialized) return;
+
+            // Generate consistent window states for each building
+            currentMap.buildings.forEach(building => {
+                const windowCount = Math.floor((building.width - 40) / 50) * building.floors;
+                worldState.windowStates[building.id] = [];
+
+                // Use building position as seed for consistency
+                let seed = building.x * 100 + building.y;
+                for (let i = 0; i < windowCount; i++) {
+                    seed = (seed * 9301 + 49297) % 233280;
+                    worldState.windowStates[building.id].push({
+                        lit: (seed / 233280) > 0.35,
+                        blindsDown: (seed / 233280) > 0.6,
+                        silhouette: (seed / 233280) > 0.85 ? 'person' : null
+                    });
+                }
+            });
+
+            // Initialize NPC states with persistent positions
+            npcs.forEach(npc => {
+                worldState.npcStates[npc.id] = {
+                    x: npc.x,
+                    y: npc.y,
+                    activity: 'idle',
+                    facingRight: true,
+                    talked: false,
+                    bribed: false,
+                    lastInteraction: null
+                };
+            });
+
+            // Add street props
+            worldState.props = [
+                // Phone booths
+                { type: 'phonebooth', x: 520, y: 435 },
+                { type: 'phonebooth', x: 1180, y: 435 },
+                // Benches
+                { type: 'bench', x: 350, y: 440 },
+                { type: 'bench', x: 680, y: 440 },
+                // Trash cans
+                { type: 'trashcan', x: 150, y: 445 },
+                { type: 'trashcan', x: 580, y: 445 },
+                { type: 'trashcan', x: 870, y: 445 },
+                { type: 'trashcan', x: 1130, y: 445 },
+                // Fire hydrants
+                { type: 'hydrant', x: 260, y: 448 },
+                { type: 'hydrant', x: 760, y: 448 },
+                { type: 'hydrant', x: 1050, y: 448 },
+                // Newspaper stands
+                { type: 'newsstand', x: 420, y: 438 },
+                // Mailboxes
+                { type: 'mailbox', x: 620, y: 442 },
+                { type: 'mailbox', x: 980, y: 442 },
+                // Street signs
+                { type: 'streetsign', x: 300, y: 400, text: 'MAIN ST' },
+                { type: 'streetsign', x: 900, y: 400, text: 'ELM AVE' },
+                // Lamp posts (additional atmosphere)
+                { type: 'alley_light', x: 1350, y: 520 }
+            ];
+
+            worldState.initialized = true;
+        }
 
         // Camera
         const camera = {
@@ -896,42 +983,79 @@
             const windowsPerFloor = Math.floor((building.width - 40) / windowSpacing);
             const floorHeight = building.height / building.floors;
 
+            // Get persistent window states for this building
+            const windowStates = worldState.windowStates[building.id] || [];
+
+            let windowIndex = 0;
             for (let floor = 0; floor < building.floors; floor++) {
                 for (let w = 0; w < windowsPerFloor; w++) {
                     const wx = bx + 30 + w * windowSpacing;
                     const wy = by + 30 + floor * floorHeight;
 
-                    // Window frame
+                    // Get this window's persistent state
+                    const state = windowStates[windowIndex] || { lit: false, blindsDown: false, silhouette: null };
+                    windowIndex++;
+
+                    // Window frame (deeper recess)
+                    ctx.fillStyle = '#0a0a0a';
+                    ctx.fillRect(wx - 2, wy - 2, windowWidth + 4, windowHeight + 4);
                     ctx.fillStyle = '#1a1a1a';
                     ctx.fillRect(wx, wy, windowWidth, windowHeight);
 
-                    // Window light (random lit/unlit)
-                    const isLit = Math.random() > 0.4;
-                    if (isLit) {
+                    if (state.lit) {
+                        // Warm interior light gradient
                         const gradient = ctx.createLinearGradient(wx, wy, wx, wy + windowHeight);
-                        gradient.addColorStop(0, COLORS.windowLit);
+                        gradient.addColorStop(0, '#f0d890');
+                        gradient.addColorStop(0.5, COLORS.windowLit);
                         gradient.addColorStop(1, COLORS.windowDim);
                         ctx.fillStyle = gradient;
                         ctx.fillRect(wx + 2, wy + 2, windowWidth - 4, windowHeight - 4);
 
-                        // Window glow
+                        // Window glow (subtle)
                         ctx.shadowColor = COLORS.windowLit;
-                        ctx.shadowBlur = 15;
+                        ctx.shadowBlur = 12;
                         ctx.fillRect(wx + 2, wy + 2, windowWidth - 4, windowHeight - 4);
                         ctx.shadowBlur = 0;
 
-                        // Blinds
-                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-                        ctx.lineWidth = 1;
-                        for (let b = 0; b < 5; b++) {
+                        // Blinds (if down - persistent)
+                        if (state.blindsDown) {
+                            ctx.fillStyle = 'rgba(180, 160, 120, 0.7)';
+                            ctx.fillRect(wx + 2, wy + 2, windowWidth - 4, windowHeight - 8);
+
+                            ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+                            ctx.lineWidth = 1;
+                            for (let b = 0; b < 6; b++) {
+                                ctx.beginPath();
+                                ctx.moveTo(wx + 2, wy + 6 + b * 6);
+                                ctx.lineTo(wx + windowWidth - 2, wy + 6 + b * 6);
+                                ctx.stroke();
+                            }
+                        }
+
+                        // Silhouette in window (persistent)
+                        if (state.silhouette === 'person' && !state.blindsDown) {
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                            // Head
                             ctx.beginPath();
-                            ctx.moveTo(wx + 2, wy + 10 + b * 9);
-                            ctx.lineTo(wx + windowWidth - 2, wy + 10 + b * 9);
-                            ctx.stroke();
+                            ctx.arc(wx + windowWidth/2, wy + 15, 6, 0, Math.PI * 2);
+                            ctx.fill();
+                            // Shoulders
+                            ctx.beginPath();
+                            ctx.moveTo(wx + windowWidth/2 - 10, wy + 35);
+                            ctx.lineTo(wx + windowWidth/2 - 8, wy + 22);
+                            ctx.lineTo(wx + windowWidth/2 + 8, wy + 22);
+                            ctx.lineTo(wx + windowWidth/2 + 10, wy + 35);
+                            ctx.closePath();
+                            ctx.fill();
                         }
                     } else {
+                        // Dark window with subtle reflection
                         ctx.fillStyle = COLORS.windowDark;
                         ctx.fillRect(wx + 2, wy + 2, windowWidth - 4, windowHeight - 4);
+
+                        // Night sky reflection
+                        ctx.fillStyle = 'rgba(30, 30, 50, 0.5)';
+                        ctx.fillRect(wx + 3, wy + 3, windowWidth - 6, windowHeight / 3);
                     }
 
                     // Window cross frame
@@ -943,6 +1067,10 @@
                     ctx.moveTo(wx, wy + windowHeight / 2);
                     ctx.lineTo(wx + windowWidth, wy + windowHeight / 2);
                     ctx.stroke();
+
+                    // Window sill
+                    ctx.fillStyle = '#3a3a3a';
+                    ctx.fillRect(wx - 2, wy + windowHeight, windowWidth + 4, 3);
                 }
             }
         }
@@ -1205,87 +1333,331 @@
             ctx.fill();
         }
 
-        function drawPlayer() {
-            const px = player.x - camera.x;
-            const py = player.y - camera.y;
+        // ============================================
+        // MANNEQUIN-STYLE CHARACTER RENDERING
+        // Angular, art deco influenced, elongated proportions
+        // ============================================
 
-            // Player shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        function drawMannequin(x, y, options = {}) {
+            const {
+                facing = 1,           // 1 = right, -1 = left
+                isMoving = false,
+                walkCycle = 0,
+                outfit = 'detective', // detective, suit, dress, worker, casual
+                hatType = 'fedora',   // fedora, none, bowler, pillbox
+                lightFactor = 1,
+                isPlayer = false
+            } = options;
+
+            const cx = x;  // center x
+            const cy = y;  // feet y position
+
+            // Character proportions (mannequin style - elongated)
+            const scale = 1;
+            const headHeight = 10 * scale;
+            const neckHeight = 4 * scale;
+            const torsoHeight = 18 * scale;
+            const legHeight = 28 * scale;
+            const armLength = 20 * scale;
+            const shoulderWidth = 14 * scale;
+            const hipWidth = 8 * scale;
+            const headWidth = 8 * scale;
+
+            // Walk animation
+            const walkPhase = isMoving ? Math.sin(walkCycle * 0.15) : 0;
+            const legSwing = walkPhase * 8;
+            const armSwing = walkPhase * 6;
+            const bodyBob = Math.abs(walkPhase) * 2;
+
+            // Calculate key points
+            const feetY = cy;
+            const hipY = feetY - legHeight;
+            const shoulderY = hipY - torsoHeight;
+            const neckY = shoulderY - neckHeight;
+            const headCenterY = neckY - headHeight / 2;
+
+            // Long dramatic shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
             ctx.beginPath();
-            ctx.ellipse(px + player.width / 2, py + player.height + 5, 20, 8, 0, 0, Math.PI * 2);
+            ctx.ellipse(cx, feetY + 3, 18, 6, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Check if player is in light
-            const inLight = isInLight(player.x, player.y);
-            const lightFactor = inLight ? 1 : 0.4;
-
-            // Legs
-            ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
-            const legOffset = player.isMoving ? Math.sin(Date.now() / 100) * 3 : 0;
-            ctx.fillRect(px + 8, py + 35, 6, 18);
-            ctx.fillRect(px + 16, py + 35 + legOffset, 6, 18);
-
-            // Body (suit)
-            ctx.fillStyle = adjustBrightness('#2a2a2a', lightFactor);
-            ctx.fillRect(px + 5, py + 15, 20, 22);
-
-            // Coat details
-            ctx.strokeStyle = adjustBrightness('#1a1a1a', lightFactor);
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(px + 15, py + 15);
-            ctx.lineTo(px + 15, py + 37);
-            ctx.stroke();
-
-            // Head
-            ctx.fillStyle = adjustBrightness(COLORS.skin, lightFactor);
-            ctx.beginPath();
-            ctx.ellipse(px + 15, py + 8, 8, 9, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Hat (fedora)
-            ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
-            // Hat brim
-            ctx.beginPath();
-            ctx.ellipse(px + 15, py + 2, 14, 4, 0, 0, Math.PI * 2);
-            ctx.fill();
-            // Hat top
-            ctx.fillRect(px + 7, py - 8, 16, 10);
-            ctx.beginPath();
-            ctx.moveTo(px + 7, py - 8);
-            ctx.quadraticCurveTo(px + 15, py - 12, px + 23, py - 8);
-            ctx.fill();
-
-            // Hat band
-            ctx.fillStyle = adjustBrightness('#4a3a2a', lightFactor);
-            ctx.fillRect(px + 7, py - 2, 16, 3);
-
-            // Face details (when lit)
-            if (inLight) {
-                // Eyes
-                ctx.fillStyle = '#1a1a1a';
-                ctx.fillRect(px + 11, py + 5, 2, 2);
-                ctx.fillRect(px + 17, py + 5, 2, 2);
-
-                // Nose shadow
+            // Extended shadow for noir effect
+            if (lightFactor > 0.5) {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-                ctx.fillRect(px + 14, py + 7, 2, 4);
+                ctx.beginPath();
+                ctx.moveTo(cx - 8, feetY);
+                ctx.lineTo(cx + 40, feetY + 60);
+                ctx.lineTo(cx + 50, feetY + 58);
+                ctx.lineTo(cx + 8, feetY);
+                ctx.closePath();
+                ctx.fill();
             }
 
-            // Arms
-            ctx.fillStyle = adjustBrightness('#2a2a2a', lightFactor);
-            const armSwing = player.isMoving ? Math.sin(Date.now() / 100) * 5 : 0;
-            ctx.fillRect(px + 1, py + 17 + armSwing, 5, 15);
-            ctx.fillRect(px + 24, py + 17 - armSwing, 5, 15);
+            ctx.save();
+            ctx.translate(cx, 0);
+            ctx.scale(facing, 1);
+            ctx.translate(-cx, 0);
 
-            // Hands
-            ctx.fillStyle = adjustBrightness(COLORS.skin, lightFactor);
+            // === LEGS (angular, defined) ===
+            const leftFootX = cx - 4 + (isMoving ? legSwing : 0);
+            const rightFootX = cx + 4 + (isMoving ? -legSwing : 0);
+            const leftKneeX = cx - 3 + (isMoving ? legSwing * 0.3 : 0);
+            const rightKneeX = cx + 3 + (isMoving ? -legSwing * 0.3 : 0);
+            const kneeY = hipY + legHeight * 0.55;
+
+            // Left leg
+            ctx.strokeStyle = adjustBrightness('#1a1a1a', lightFactor);
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.arc(px + 3, py + 33 + armSwing, 3, 0, Math.PI * 2);
+            ctx.moveTo(cx - hipWidth/2, hipY - bodyBob);
+            ctx.lineTo(leftKneeX, kneeY - bodyBob);
+            ctx.lineTo(leftFootX, feetY);
+            ctx.stroke();
+
+            // Right leg
+            ctx.beginPath();
+            ctx.moveTo(cx + hipWidth/2 - 2, hipY - bodyBob);
+            ctx.lineTo(rightKneeX, kneeY - bodyBob);
+            ctx.lineTo(rightFootX, feetY);
+            ctx.stroke();
+
+            // Shoes (angular)
+            ctx.fillStyle = adjustBrightness('#0f0f0f', lightFactor);
+            // Left shoe
+            ctx.beginPath();
+            ctx.moveTo(leftFootX - 5, feetY);
+            ctx.lineTo(leftFootX + 6, feetY);
+            ctx.lineTo(leftFootX + 4, feetY - 4);
+            ctx.lineTo(leftFootX - 3, feetY - 4);
+            ctx.closePath();
+            ctx.fill();
+            // Right shoe
+            ctx.beginPath();
+            ctx.moveTo(rightFootX - 5, feetY);
+            ctx.lineTo(rightFootX + 6, feetY);
+            ctx.lineTo(rightFootX + 4, feetY - 4);
+            ctx.lineTo(rightFootX - 3, feetY - 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // === TORSO (trench coat / suit - angular cut) ===
+            const coatColor = outfit === 'detective' ? '#2a2520' : '#1a1a1a';
+
+            // Coat body - angular trapezoid
+            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(cx - shoulderWidth/2, shoulderY - bodyBob);
+            ctx.lineTo(cx + shoulderWidth/2, shoulderY - bodyBob);
+            ctx.lineTo(cx + hipWidth/2 + 2, hipY + 4 - bodyBob);
+            ctx.lineTo(cx - hipWidth/2 - 2, hipY + 4 - bodyBob);
+            ctx.closePath();
+            ctx.fill();
+
+            // Coat lapels (V-shape detail)
+            ctx.strokeStyle = adjustBrightness('#1a1815', lightFactor);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 3, shoulderY + 2 - bodyBob);
+            ctx.lineTo(cx, shoulderY + 10 - bodyBob);
+            ctx.lineTo(cx + 3, shoulderY + 2 - bodyBob);
+            ctx.stroke();
+
+            // Coat center line
+            ctx.strokeStyle = adjustBrightness('#151310', lightFactor);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(cx, shoulderY + 10 - bodyBob);
+            ctx.lineTo(cx, hipY + 2 - bodyBob);
+            ctx.stroke();
+
+            // === ARMS (angular, hinged at elbow) ===
+            const shoulderOffsetX = shoulderWidth/2 - 1;
+            const elbowY = shoulderY + armLength * 0.45 - bodyBob;
+            const handY = shoulderY + armLength - bodyBob;
+
+            // Left arm
+            const leftElbowX = cx - shoulderOffsetX - 3 + (isMoving ? -armSwing * 0.5 : 0);
+            const leftHandX = cx - shoulderOffsetX - 1 + (isMoving ? -armSwing : 0);
+            const leftHandY = handY + (isMoving ? armSwing * 0.3 : 0);
+
+            ctx.strokeStyle = adjustBrightness(coatColor, lightFactor);
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(cx - shoulderOffsetX, shoulderY + 2 - bodyBob);
+            ctx.lineTo(leftElbowX, elbowY);
+            ctx.lineTo(leftHandX, leftHandY);
+            ctx.stroke();
+
+            // Right arm
+            const rightElbowX = cx + shoulderOffsetX + 3 + (isMoving ? armSwing * 0.5 : 0);
+            const rightHandX = cx + shoulderOffsetX + 1 + (isMoving ? armSwing : 0);
+            const rightHandY = handY + (isMoving ? -armSwing * 0.3 : 0);
+
+            ctx.beginPath();
+            ctx.moveTo(cx + shoulderOffsetX, shoulderY + 2 - bodyBob);
+            ctx.lineTo(rightElbowX, elbowY);
+            ctx.lineTo(rightHandX, rightHandY);
+            ctx.stroke();
+
+            // Hands (small angular)
+            ctx.fillStyle = adjustBrightness('#c4a882', lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(leftHandX - 2, leftHandY);
+            ctx.lineTo(leftHandX + 2, leftHandY);
+            ctx.lineTo(leftHandX + 1, leftHandY + 4);
+            ctx.lineTo(leftHandX - 1, leftHandY + 4);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(rightHandX - 2, rightHandY);
+            ctx.lineTo(rightHandX + 2, rightHandY);
+            ctx.lineTo(rightHandX + 1, rightHandY + 4);
+            ctx.lineTo(rightHandX - 1, rightHandY + 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // === NECK ===
+            ctx.fillStyle = adjustBrightness('#c4a882', lightFactor);
+            ctx.fillRect(cx - 2, neckY - bodyBob, 4, neckHeight + 2);
+
+            // Collar points
+            ctx.fillStyle = adjustBrightness('#f5f0e6', lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(cx - 4, shoulderY - bodyBob);
+            ctx.lineTo(cx - 2, shoulderY - 4 - bodyBob);
+            ctx.lineTo(cx, shoulderY - bodyBob);
+            ctx.closePath();
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(px + 27, py + 33 - armSwing, 3, 0, Math.PI * 2);
+            ctx.moveTo(cx, shoulderY - bodyBob);
+            ctx.lineTo(cx + 2, shoulderY - 4 - bodyBob);
+            ctx.lineTo(cx + 4, shoulderY - bodyBob);
+            ctx.closePath();
             ctx.fill();
+
+            // === HEAD (angular, geometric) ===
+            // Jaw - angular
+            ctx.fillStyle = adjustBrightness('#c4a882', lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(cx - headWidth/2, headCenterY - 2 - bodyBob);
+            ctx.lineTo(cx - headWidth/2 + 1, headCenterY + headHeight/2 - 2 - bodyBob);
+            ctx.lineTo(cx, headCenterY + headHeight/2 + 2 - bodyBob); // chin point
+            ctx.lineTo(cx + headWidth/2 - 1, headCenterY + headHeight/2 - 2 - bodyBob);
+            ctx.lineTo(cx + headWidth/2, headCenterY - 2 - bodyBob);
+            ctx.closePath();
+            ctx.fill();
+
+            // Upper head / forehead
+            ctx.beginPath();
+            ctx.moveTo(cx - headWidth/2, headCenterY - 2 - bodyBob);
+            ctx.lineTo(cx - headWidth/2 + 1, headCenterY - headHeight/2 - bodyBob);
+            ctx.lineTo(cx + headWidth/2 - 1, headCenterY - headHeight/2 - bodyBob);
+            ctx.lineTo(cx + headWidth/2, headCenterY - 2 - bodyBob);
+            ctx.closePath();
+            ctx.fill();
+
+            // Face shadow (one side for noir effect)
+            if (lightFactor > 0.5) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                ctx.beginPath();
+                ctx.moveTo(cx, headCenterY - headHeight/2 - bodyBob);
+                ctx.lineTo(cx, headCenterY + headHeight/2 + 2 - bodyBob);
+                ctx.lineTo(cx - headWidth/2 + 1, headCenterY + headHeight/2 - 2 - bodyBob);
+                ctx.lineTo(cx - headWidth/2, headCenterY - 2 - bodyBob);
+                ctx.lineTo(cx - headWidth/2 + 1, headCenterY - headHeight/2 - bodyBob);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Eyes (minimal, angular)
+            if (lightFactor > 0.3) {
+                ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
+                // Angular eye shapes
+                ctx.beginPath();
+                ctx.moveTo(cx - 4, headCenterY - 1 - bodyBob);
+                ctx.lineTo(cx - 2, headCenterY - 2 - bodyBob);
+                ctx.lineTo(cx - 1, headCenterY - 1 - bodyBob);
+                ctx.lineTo(cx - 2, headCenterY - bodyBob);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(cx + 1, headCenterY - 1 - bodyBob);
+                ctx.lineTo(cx + 2, headCenterY - 2 - bodyBob);
+                ctx.lineTo(cx + 4, headCenterY - 1 - bodyBob);
+                ctx.lineTo(cx + 2, headCenterY - bodyBob);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // === HAT (fedora - angular) ===
+            if (hatType === 'fedora') {
+                const hatY = headCenterY - headHeight/2 - 2 - bodyBob;
+
+                // Hat brim - angular
+                ctx.fillStyle = adjustBrightness('#1a1815', lightFactor);
+                ctx.beginPath();
+                ctx.moveTo(cx - 12, hatY + 3);
+                ctx.lineTo(cx - 10, hatY);
+                ctx.lineTo(cx + 10, hatY);
+                ctx.lineTo(cx + 12, hatY + 3);
+                ctx.lineTo(cx + 10, hatY + 4);
+                ctx.lineTo(cx - 10, hatY + 4);
+                ctx.closePath();
+                ctx.fill();
+
+                // Hat crown - angular with pinch
+                ctx.beginPath();
+                ctx.moveTo(cx - 7, hatY);
+                ctx.lineTo(cx - 6, hatY - 8);
+                ctx.lineTo(cx - 2, hatY - 10); // pinch
+                ctx.lineTo(cx + 2, hatY - 10); // pinch
+                ctx.lineTo(cx + 6, hatY - 8);
+                ctx.lineTo(cx + 7, hatY);
+                ctx.closePath();
+                ctx.fill();
+
+                // Hat band
+                ctx.fillStyle = adjustBrightness('#3d352a', lightFactor);
+                ctx.fillRect(cx - 6, hatY - 2, 12, 2);
+
+                // Hat shadow on face
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(cx - headWidth/2, headCenterY - headHeight/2 - bodyBob);
+                ctx.lineTo(cx + headWidth/2, headCenterY - headHeight/2 - bodyBob);
+                ctx.lineTo(cx + headWidth/2, headCenterY - 2 - bodyBob);
+                ctx.lineTo(cx - headWidth/2, headCenterY - 2 - bodyBob);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawPlayer() {
+            const px = player.x - camera.x + player.width / 2;
+            const py = player.y - camera.y + player.height;
+
+            const inLight = isInLight(player.x, player.y);
+            const lightFactor = inLight ? 1 : 0.35;
+
+            if (player.isMoving) {
+                player.walkCycle++;
+            }
+
+            drawMannequin(px, py, {
+                facing: player.facing,
+                isMoving: player.isMoving,
+                walkCycle: player.walkCycle,
+                outfit: 'detective',
+                hatType: 'fedora',
+                lightFactor: lightFactor,
+                isPlayer: true
+            });
         }
 
         function isInLight(x, y) {
@@ -1323,39 +1695,265 @@
         }
 
         function drawNPC(npc) {
-            // Similar to player but with variations
-            const nx = npc.x - camera.x;
-            const ny = npc.y - camera.y;
+            const state = worldState.npcStates[npc.id] || { x: npc.x, y: npc.y, facingRight: true };
+            const nx = state.x - camera.x + 12;
+            const ny = state.y - camera.y + 64;
 
-            const inLight = isInLight(npc.x, npc.y);
-            const lightFactor = inLight ? 1 : 0.35;
+            const inLight = isInLight(state.x, state.y);
+            const lightFactor = inLight ? 1 : 0.3;
 
+            // Determine outfit based on role
+            let outfit = 'suit';
+            let hatType = 'none';
+
+            if (npc.role === 'bartender') { outfit = 'worker'; }
+            else if (npc.role === 'owner' && npc.name === 'Margaret') { outfit = 'dress'; hatType = 'none'; }
+            else if (npc.role === 'owner' || npc.role === 'pharmacist') { outfit = 'suit'; }
+            else if (npc.role === 'patron') { outfit = 'casual'; hatType = 'fedora'; }
+            else if (npc.role === 'police') { outfit = 'suit'; hatType = 'none'; }
+            else if (npc.role === 'secretary') { outfit = 'dress'; }
+
+            drawMannequin(nx, ny, {
+                facing: state.facingRight ? 1 : -1,
+                isMoving: false,
+                walkCycle: 0,
+                outfit: outfit,
+                hatType: hatType,
+                lightFactor: lightFactor,
+                isPlayer: false
+            });
+        }
+
+        // ============================================
+        // STREET PROPS RENDERING
+        // ============================================
+
+        function drawStreetProps() {
+            for (const prop of worldState.props) {
+                const px = prop.x - camera.x;
+                const py = prop.y - camera.y;
+
+                if (px < -50 || px > CONFIG.CANVAS_WIDTH + 50) continue;
+
+                switch (prop.type) {
+                    case 'phonebooth':
+                        drawPhoneBooth(px, py);
+                        break;
+                    case 'bench':
+                        drawBench(px, py);
+                        break;
+                    case 'trashcan':
+                        drawTrashCan(px, py);
+                        break;
+                    case 'hydrant':
+                        drawFireHydrant(px, py);
+                        break;
+                    case 'newsstand':
+                        drawNewsstand(px, py);
+                        break;
+                    case 'mailbox':
+                        drawMailbox(px, py);
+                        break;
+                    case 'streetsign':
+                        drawStreetSign(px, py, prop.text);
+                        break;
+                }
+            }
+        }
+
+        function drawPhoneBooth(x, y) {
             // Shadow
             ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.beginPath();
-            ctx.ellipse(nx + 12, ny + 48, 15, 6, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.fillRect(x + 3, y + 58, 24, 6);
 
-            // Body
-            ctx.fillStyle = adjustBrightness('#3d3d3d', lightFactor);
-            ctx.fillRect(nx + 4, ny + 15, 16, 20);
+            // Booth frame
+            ctx.fillStyle = '#8b0000';
+            ctx.fillRect(x, y, 30, 60);
 
-            // Head
-            ctx.fillStyle = adjustBrightness(COLORS.skin, lightFactor);
-            ctx.beginPath();
-            ctx.ellipse(nx + 12, ny + 8, 7, 8, 0, 0, Math.PI * 2);
-            ctx.fill();
+            // Glass panels
+            ctx.fillStyle = 'rgba(180, 200, 220, 0.3)';
+            ctx.fillRect(x + 3, y + 8, 24, 35);
 
-            // Hair/Hat varies by NPC
-            ctx.fillStyle = adjustBrightness('#2a2a2a', lightFactor);
+            // Door frame
+            ctx.strokeStyle = '#5a0000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x + 3, y + 8, 24, 48);
+
+            // Phone inside (silhouette)
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(x + 10, y + 18, 10, 15);
+
+            // Light on top
+            ctx.fillStyle = '#ffeecc';
+            ctx.shadowColor = '#ffeecc';
+            ctx.shadowBlur = 10;
+            ctx.fillRect(x + 8, y - 5, 14, 5);
+            ctx.shadowBlur = 0;
+        }
+
+        function drawBench(x, y) {
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
             ctx.beginPath();
-            ctx.arc(nx + 12, ny + 3, 7, Math.PI, 0, false);
+            ctx.ellipse(x + 25, y + 22, 28, 6, 0, 0, Math.PI * 2);
             ctx.fill();
 
             // Legs
-            ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
-            ctx.fillRect(nx + 5, ny + 35, 5, 12);
-            ctx.fillRect(nx + 14, ny + 35, 5, 12);
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(x + 5, y + 8, 4, 14);
+            ctx.fillRect(x + 41, y + 8, 4, 14);
+
+            // Seat
+            ctx.fillStyle = '#4a3a2a';
+            ctx.fillRect(x, y, 50, 8);
+
+            // Back rest
+            ctx.fillRect(x, y - 15, 50, 6);
+            ctx.fillRect(x + 2, y - 15, 3, 18);
+            ctx.fillRect(x + 45, y - 15, 3, 18);
+        }
+
+        function drawTrashCan(x, y) {
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.ellipse(x + 8, y + 25, 10, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Can body
+            ctx.fillStyle = '#3d3d3d';
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + 16, y);
+            ctx.lineTo(x + 14, y + 24);
+            ctx.lineTo(x + 2, y + 24);
+            ctx.closePath();
+            ctx.fill();
+
+            // Rim
+            ctx.fillStyle = '#4a4a4a';
+            ctx.fillRect(x - 1, y - 2, 18, 3);
+
+            // Lines
+            ctx.strokeStyle = '#2a2a2a';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + 5, y + 2);
+            ctx.lineTo(x + 4, y + 22);
+            ctx.moveTo(x + 11, y + 2);
+            ctx.lineTo(x + 12, y + 22);
+            ctx.stroke();
+        }
+
+        function drawFireHydrant(x, y) {
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.ellipse(x + 7, y + 22, 9, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Base
+            ctx.fillStyle = '#8b0000';
+            ctx.fillRect(x + 2, y + 15, 10, 7);
+
+            // Body
+            ctx.beginPath();
+            ctx.moveTo(x + 1, y + 15);
+            ctx.lineTo(x + 3, y + 4);
+            ctx.lineTo(x + 11, y + 4);
+            ctx.lineTo(x + 13, y + 15);
+            ctx.closePath();
+            ctx.fill();
+
+            // Top
+            ctx.fillRect(x + 4, y, 6, 4);
+            ctx.fillRect(x + 5, y - 3, 4, 4);
+
+            // Side nozzle
+            ctx.fillRect(x + 12, y + 6, 5, 4);
+
+            // Highlight
+            ctx.fillStyle = '#aa2020';
+            ctx.fillRect(x + 5, y + 5, 2, 8);
+        }
+
+        function drawNewsstand(x, y) {
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(x + 3, y + 32, 34, 6);
+
+            // Stand body
+            ctx.fillStyle = '#2a4a2a';
+            ctx.fillRect(x, y, 40, 32);
+
+            // Papers display
+            ctx.fillStyle = '#e8e0d0';
+            ctx.fillRect(x + 3, y + 3, 34, 20);
+
+            // Headlines (abstract lines)
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(x + 5, y + 5, 20, 3);
+            ctx.fillRect(x + 5, y + 10, 28, 2);
+            ctx.fillRect(x + 5, y + 14, 25, 2);
+            ctx.fillRect(x + 5, y + 18, 22, 2);
+
+            // Coin slot area
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(x + 15, y + 25, 10, 5);
+        }
+
+        function drawMailbox(x, y) {
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.ellipse(x + 8, y + 35, 10, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Post
+            ctx.fillStyle = '#1a3a6a';
+            ctx.fillRect(x + 5, y + 15, 6, 20);
+
+            // Box body
+            ctx.fillRect(x - 2, y, 20, 16);
+
+            // Rounded top
+            ctx.beginPath();
+            ctx.arc(x + 8, y, 10, Math.PI, 0, false);
+            ctx.fill();
+
+            // Slot
+            ctx.fillStyle = '#0a1a3a';
+            ctx.fillRect(x + 2, y + 5, 12, 3);
+
+            // USPS eagle (simplified)
+            ctx.fillStyle = '#c0c0c0';
+            ctx.beginPath();
+            ctx.moveTo(x + 8, y - 4);
+            ctx.lineTo(x + 12, y - 1);
+            ctx.lineTo(x + 4, y - 1);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawStreetSign(x, y, text) {
+            // Pole
+            ctx.fillStyle = '#3a3a3a';
+            ctx.fillRect(x + 12, y, 4, 50);
+
+            // Sign
+            ctx.fillStyle = '#1a5a1a';
+            ctx.fillRect(x, y - 10, 60, 16);
+
+            // Border
+            ctx.strokeStyle = '#f0f0f0';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 1, y - 9, 58, 14);
+
+            // Text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px Bebas Neue';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, x + 30, y);
         }
 
         // ============================================
@@ -1380,11 +1978,13 @@
             if (keys.left) {
                 player.x -= player.speed;
                 player.direction = 'left';
+                player.facing = -1;
                 player.isMoving = true;
             }
             if (keys.right) {
                 player.x += player.speed;
                 player.direction = 'right';
+                player.facing = 1;
                 player.isMoving = true;
             }
 
@@ -1555,6 +2155,11 @@
             ctx.clearRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
 
             if (game.state === 'playing') {
+                // Initialize world state on first frame
+                if (!worldState.initialized) {
+                    initWorldState();
+                }
+
                 updatePlayer();
                 updateLocationDisplay();
 
@@ -1572,19 +2177,39 @@
                     drawBuilding(building);
                 }
 
+                // Draw street props (behind characters)
+                drawStreetProps();
+
                 // Draw cars
                 for (const car of currentMap.cars) {
                     drawCar(car);
                 }
 
-                // Draw NPCs
+                // Collect all drawable entities and sort by Y for proper depth
+                const entities = [];
+
+                // Add NPCs
                 for (const npc of npcs.filter(n => n.location !== 'interior')) {
-                    // Only draw NPCs in current area
-                    drawNPC(npc);
+                    const state = worldState.npcStates[npc.id];
+                    if (state) {
+                        entities.push({ type: 'npc', data: npc, y: state.y });
+                    }
                 }
 
-                // Draw player
-                drawPlayer();
+                // Add player
+                entities.push({ type: 'player', data: player, y: player.y });
+
+                // Sort by Y position (painter's algorithm)
+                entities.sort((a, b) => a.y - b.y);
+
+                // Draw sorted entities
+                for (const entity of entities) {
+                    if (entity.type === 'player') {
+                        drawPlayer();
+                    } else if (entity.type === 'npc') {
+                        drawNPC(entity.data);
+                    }
+                }
 
                 // Draw minimap
                 drawMinimap();
