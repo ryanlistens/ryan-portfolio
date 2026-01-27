@@ -532,10 +532,22 @@
             isMoving: false,
             walkCycle: 0,
             inCar: false,
-            car: null,
+            currentCar: null,
+            carSpeed: 0,
             inventory: [],
             weapon: 'fists', // fists, pistol
-            flashlightOn: false
+            ammo: 6,
+            cash: 50,
+            flashlightOn: false,
+            nearInteractable: null,
+            actionCooldown: 0
+        };
+
+        // Action system state
+        const actions = {
+            currentAction: null, // null, 'bribe', 'slap', 'shoot'
+            targetNPC: null,
+            actionTimer: 0
         };
 
         // ============================================
@@ -661,17 +673,17 @@
         const STREET_TOP = GROUND_LEVEL + 58;
         const STREET_BOTTOM = STREET_TOP + 120;
 
-        // Town map - Level 1: Downtown
+        // Town map - Level 1: Downtown (expanded with alleys)
         const DOWNTOWN = {
-            width: 2400,
+            width: 3200,
             height: 800,
             name: 'DOWNTOWN',
             buildings: [
                 // Office Building (with PI office, accountant, attorney)
                 {
                     id: 'office_building',
-                    x: 80, y: 180,
-                    width: 350, height: 230,
+                    x: 60, y: 160,
+                    width: 380, height: 250,
                     type: 'office',
                     name: "PROFESSIONAL BUILDING",
                     floors: 2,
@@ -685,104 +697,128 @@
                     interiorId: 'pi_office'
                 },
 
-                // Cafe
+                // === ALLEY 1 (40px gap) ===
+
+                // Cafe/Diner - Classic American diner look
                 {
                     id: 'cafe',
-                    x: 480, y: 210,
-                    width: 200, height: 200,
+                    x: 500, y: 200,
+                    width: 240, height: 210,
                     type: 'cafe',
                     name: "ROSIE'S DINER",
                     floors: 1,
-                    color: '#5a4838',
+                    color: '#c41e3a', // Diner red
+                    accentColor: '#f0f0e8', // Cream trim
                     hasNeon: true,
-                    neonText: "OPEN 24 HRS",
-                    neonColor: COLORS.neonRed,
+                    neonText: "EAT",
+                    neonColor: '#ff6b6b',
                     enterable: true,
                     interiorId: 'cafe'
                 },
 
-                // Pharmacy
+                // === ALLEY 2 (50px gap) ===
+
+                // Pharmacy/Drug Store - Distinctive medical look
                 {
                     id: 'pharmacy',
-                    x: 730, y: 200,
-                    width: 180, height: 210,
+                    x: 800, y: 180,
+                    width: 220, height: 230,
                     type: 'pharmacy',
-                    name: "COLEMAN'S PHARMACY",
+                    name: "COLEMAN'S DRUGS",
                     floors: 1,
-                    color: '#4a4a4a',
-                    hasNeon: true,
-                    neonText: "Rx",
-                    neonColor: COLORS.neonGreen,
+                    color: '#e8e8e0', // White/cream storefront
+                    accentColor: '#1a5c1a', // Pharmacy green
                     enterable: true,
                     interiorId: 'pharmacy'
                 },
 
-                // Bookstore
+                // === ALLEY 3 (45px gap) ===
+
+                // Bookstore - Warm, inviting wood storefront
                 {
                     id: 'bookstore',
-                    x: 960, y: 220,
-                    width: 170, height: 190,
+                    x: 1075, y: 210,
+                    width: 190, height: 200,
                     type: 'bookstore',
                     name: "CHAPTER & VERSE",
+                    subtitle: "BOOKS & STATIONERY",
                     floors: 1,
-                    color: '#5c4033',
+                    color: '#3d2817', // Dark wood
+                    accentColor: '#c4a35a', // Gold trim
                     enterable: true,
                     interiorId: 'bookstore'
                 },
 
-                // Bar
+                // === ALLEY 4 (55px gap) ===
+
+                // Bar - Dark, moody speakeasy look
                 {
                     id: 'bar',
-                    x: 1180, y: 190,
-                    width: 220, height: 220,
+                    x: 1330, y: 180,
+                    width: 250, height: 230,
                     type: 'bar',
                     name: "THE BLUE MOON",
+                    subtitle: "COCKTAIL LOUNGE",
                     floors: 1,
-                    color: '#2a1d15',
+                    color: '#1a1520', // Near black
+                    accentColor: '#3366cc', // Blue accent
                     hasNeon: true,
                     neonText: "COCKTAILS",
-                    neonColor: COLORS.neonBlue,
+                    neonColor: '#4488ff',
                     enterable: true,
                     interiorId: 'bar'
                 },
 
-                // Movie Theater
+                // === ALLEY 5 (60px gap) ===
+
+                // Movie Theater - Grand art deco facade
                 {
                     id: 'theater',
-                    x: 1450, y: 130,
-                    width: 320, height: 280,
+                    x: 1650, y: 100,
+                    width: 400, height: 310,
                     type: 'theater',
-                    name: "PARAMOUNT THEATER",
+                    name: "PARAMOUNT",
                     floors: 2,
-                    color: '#3a3a3a',
+                    color: '#2a2a35', // Dark blue-gray
+                    accentColor: '#c4a35a', // Gold trim
                     marquee: true,
-                    nowPlaying: ["NORTH BY NORTHWEST", "THE NUN'S STORY"],
+                    nowPlaying: [
+                        { title: "NORTH BY NORTHWEST", times: "7:00  9:30" },
+                        { title: "THE NUN'S STORY", times: "6:45  9:15" }
+                    ],
                     enterable: true,
                     interiorId: 'theater'
                 },
 
-                // Police Station
+                // === ALLEY 6 (50px gap) ===
+
+                // Police Station - Imposing civic building
                 {
                     id: 'police',
-                    x: 1820, y: 160,
-                    width: 260, height: 250,
+                    x: 2110, y: 140,
+                    width: 300, height: 270,
                     type: 'police',
-                    name: "POLICE DEPT",
+                    name: "POLICE",
+                    subtitle: "CITY OF MILLBROOK",
                     floors: 2,
-                    color: '#3d3d3d',
+                    color: '#4a4a4a', // Gray stone
+                    accentColor: '#1a1a3a', // Navy blue
                     enterable: true,
                     interiorId: 'police'
                 },
 
-                // Apartment Building
+                // === ALLEY 7 (55px gap) ===
+
+                // Apartment Building - Tall residential
                 {
                     id: 'apartments',
-                    x: 2130, y: 80,
-                    width: 180, height: 330,
+                    x: 2470, y: 60,
+                    width: 200, height: 350,
                     type: 'apartment',
-                    name: "LAKESIDE APTS",
+                    name: "LAKESIDE",
+                    subtitle: "APARTMENTS",
                     floors: 3,
-                    color: '#4a3020',
+                    color: '#5a4030', // Brown brick
                     apartments: [
                         { floor: 1, resident: "Mrs. Henderson" },
                         { floor: 2, resident: "Frank Torres" },
@@ -793,43 +829,55 @@
                 }
             ],
 
+            // Alleys between buildings (dark gaps with detail)
+            alleys: [
+                { x: 440, width: 50 },   // After office
+                { x: 750, width: 40 },   // After cafe
+                { x: 1030, width: 35 },  // After pharmacy
+                { x: 1275, width: 45 },  // After bookstore
+                { x: 1590, width: 50 },  // After bar
+                { x: 2060, width: 40 },  // After theater
+                { x: 2420, width: 40 }   // After police
+            ],
+
             // Street lights - positioned on sidewalk
             streetLights: [
                 { x: 150, y: 355 },
-                { x: 400, y: 355 },
-                { x: 650, y: 355 },
-                { x: 900, y: 355 },
-                { x: 1150, y: 355 },
-                { x: 1400, y: 355 },
-                { x: 1700, y: 355 },
-                { x: 1950, y: 355 },
-                { x: 2200, y: 355 }
+                { x: 470, y: 355 },
+                { x: 780, y: 355 },
+                { x: 1050, y: 355 },
+                { x: 1310, y: 355 },
+                { x: 1620, y: 355 },
+                { x: 1900, y: 355 },
+                { x: 2200, y: 355 },
+                { x: 2500, y: 355 },
+                { x: 2800, y: 355 }
             ],
 
             // Parked cars - on the street
             cars: [
                 { x: 200, y: 490, color: '#2a3d2a', model: 'sedan', canEnter: false },
-                { x: 380, y: 490, color: '#4a2a2a', model: 'coupe', canEnter: false },
-                { x: 600, y: 490, color: '#1a1a2a', model: 'sedan', canEnter: true }, // Player's car
-                { x: 850, y: 490, color: '#3d3d3d', model: 'sedan', canEnter: false },
-                { x: 1100, y: 490, color: '#2a2a3d', model: 'coupe', canEnter: false },
-                { x: 1350, y: 490, color: '#3d2a2a', model: 'sedan', canEnter: false },
-                { x: 1650, y: 490, color: '#2a3a2a', model: 'sedan', canEnter: false },
-                { x: 1900, y: 490, color: '#3a3a3a', model: 'truck', canEnter: false },
-                { x: 2150, y: 490, color: '#2a2a2a', model: 'sedan', canEnter: false }
+                { x: 400, y: 490, color: '#4a2a2a', model: 'coupe', canEnter: false },
+                { x: 650, y: 490, color: '#1a1a2a', model: 'sedan', canEnter: true }, // Player's car
+                { x: 950, y: 490, color: '#3d3d3d', model: 'sedan', canEnter: false },
+                { x: 1200, y: 490, color: '#2a2a3d', model: 'coupe', canEnter: false },
+                { x: 1500, y: 490, color: '#3d2a2a', model: 'sedan', canEnter: false },
+                { x: 1850, y: 490, color: '#2a3a2a', model: 'sedan', canEnter: false },
+                { x: 2150, y: 490, color: '#3a3a3a', model: 'truck', canEnter: false },
+                { x: 2450, y: 490, color: '#2a2a2a', model: 'sedan', canEnter: false },
+                { x: 2750, y: 490, color: '#3d3d2a', model: 'coupe', canEnter: false }
             ],
 
             // Collision rectangles for solid objects
             colliders: [
-                // Buildings block movement
-                { x: 80, y: 180, width: 350, height: 235 },
-                { x: 480, y: 210, width: 200, height: 205 },
-                { x: 730, y: 200, width: 180, height: 215 },
-                { x: 960, y: 220, width: 170, height: 195 },
-                { x: 1180, y: 190, width: 220, height: 225 },
-                { x: 1450, y: 130, width: 320, height: 285 },
-                { x: 1820, y: 160, width: 260, height: 255 },
-                { x: 2130, y: 80, width: 180, height: 335 }
+                { x: 60, y: 160, width: 380, height: 255 },
+                { x: 500, y: 200, width: 240, height: 215 },
+                { x: 800, y: 180, width: 220, height: 235 },
+                { x: 1075, y: 210, width: 190, height: 205 },
+                { x: 1330, y: 180, width: 250, height: 235 },
+                { x: 1650, y: 100, width: 400, height: 315 },
+                { x: 2110, y: 140, width: 300, height: 275 },
+                { x: 2470, y: 60, width: 200, height: 355 }
             ],
 
             // NPCs on streets
@@ -1216,6 +1264,21 @@
             if (building.marquee) {
                 drawTheaterMarquee(building, bx, by);
             }
+
+            // Building-specific details
+            if (building.type === 'pharmacy') {
+                drawPharmacyDetails(building, bx, by);
+            } else if (building.type === 'cafe') {
+                drawCafeDetails(building, bx, by);
+            } else if (building.type === 'bar') {
+                drawBarDetails(building, bx, by);
+            } else if (building.type === 'bookstore') {
+                drawBookstoreDetails(building, bx, by);
+            } else if (building.type === 'police') {
+                drawPoliceDetails(building, bx, by);
+            } else if (building.type === 'apartment') {
+                drawApartmentDetails(building, bx, by);
+            }
         }
 
         function drawBuildingWindows(building, bx, by) {
@@ -1523,43 +1586,550 @@
 
         function drawTheaterMarquee(building, bx, by) {
             const marqueeWidth = building.width - 40;
-            const marqueeHeight = 80;
+            const marqueeHeight = 100;
             const marqueeX = bx + 20;
-            const marqueeY = by - 60;
+            const marqueeY = by - 75;
 
-            // Marquee structure
-            ctx.fillStyle = '#1a1a1a';
+            // Marquee frame (art deco style)
+            ctx.fillStyle = '#c4a35a'; // Gold frame
+            ctx.fillRect(marqueeX - 5, marqueeY - 5, marqueeWidth + 10, marqueeHeight + 10);
+
+            // Inner marquee (black letterboard)
+            ctx.fillStyle = '#0a0a0a';
             ctx.fillRect(marqueeX, marqueeY, marqueeWidth, marqueeHeight);
 
-            // Border lights
+            // Letterboard grooves (horizontal lines)
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+            for (let row = 0; row < 6; row++) {
+                const y = marqueeY + 12 + row * 15;
+                ctx.beginPath();
+                ctx.moveTo(marqueeX + 5, y);
+                ctx.lineTo(marqueeX + marqueeWidth - 5, y);
+                ctx.stroke();
+            }
+
+            // Border lights (chase lights effect)
+            const time = Date.now() / 200;
             ctx.fillStyle = COLORS.windowLit;
-            const bulbSpacing = 15;
+            const bulbSpacing = 12;
+            // Top row
             for (let i = 0; i < marqueeWidth / bulbSpacing; i++) {
-                const flicker = Math.random() > 0.9 ? 0.3 : 1;
+                const flicker = ((i + Math.floor(time)) % 3 === 0) ? 1 : 0.3;
                 ctx.globalAlpha = flicker;
                 ctx.shadowColor = COLORS.windowLit;
-                ctx.shadowBlur = 8;
+                ctx.shadowBlur = 6;
                 ctx.beginPath();
-                ctx.arc(marqueeX + 7 + i * bulbSpacing, marqueeY + 5, 3, 0, Math.PI * 2);
+                ctx.arc(marqueeX + 6 + i * bulbSpacing, marqueeY - 2, 2.5, 0, Math.PI * 2);
                 ctx.fill();
+            }
+            // Bottom row
+            for (let i = 0; i < marqueeWidth / bulbSpacing; i++) {
+                const flicker = ((i + Math.floor(time) + 1) % 3 === 0) ? 1 : 0.3;
+                ctx.globalAlpha = flicker;
                 ctx.beginPath();
-                ctx.arc(marqueeX + 7 + i * bulbSpacing, marqueeY + marqueeHeight - 5, 3, 0, Math.PI * 2);
+                ctx.arc(marqueeX + 6 + i * bulbSpacing, marqueeY + marqueeHeight + 2, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Left side
+            for (let i = 0; i < marqueeHeight / bulbSpacing; i++) {
+                const flicker = ((i + Math.floor(time) + 2) % 3 === 0) ? 1 : 0.3;
+                ctx.globalAlpha = flicker;
+                ctx.beginPath();
+                ctx.arc(marqueeX - 2, marqueeY + 6 + i * bulbSpacing, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Right side
+            for (let i = 0; i < marqueeHeight / bulbSpacing; i++) {
+                const flicker = ((i + Math.floor(time)) % 3 === 0) ? 1 : 0.3;
+                ctx.globalAlpha = flicker;
+                ctx.beginPath();
+                ctx.arc(marqueeX + marqueeWidth + 2, marqueeY + 6 + i * bulbSpacing, 2.5, 0, Math.PI * 2);
                 ctx.fill();
             }
             ctx.globalAlpha = 1;
             ctx.shadowBlur = 0;
 
-            // Now playing text
+            // Theater name at top - individual plastic letters
+            ctx.fillStyle = '#ff2222';
+            ctx.font = 'bold 16px Bebas Neue';
+            ctx.textAlign = 'center';
+            const theaterName = 'PARAMOUNT';
+            const letterSpacing = 18;
+            const nameStartX = marqueeX + marqueeWidth / 2 - (theaterName.length * letterSpacing) / 2;
+            for (let i = 0; i < theaterName.length; i++) {
+                // Letter shadow (3D effect)
+                ctx.fillStyle = '#550000';
+                ctx.fillText(theaterName[i], nameStartX + i * letterSpacing + 2, marqueeY + 18);
+                // Letter
+                ctx.fillStyle = '#ff3333';
+                ctx.fillText(theaterName[i], nameStartX + i * letterSpacing, marqueeY + 16);
+            }
+
+            // "NOW SHOWING" - smaller letters
+            ctx.font = 'bold 9px Bebas Neue';
+            ctx.fillStyle = '#ffcc00';
+            ctx.fillText('NOW SHOWING', marqueeX + marqueeWidth / 2, marqueeY + 30);
+
+            // Movie titles with times - individual letter style
+            ctx.font = 'bold 11px Bebas Neue';
+            if (building.nowPlaying && building.nowPlaying.length > 0) {
+                building.nowPlaying.forEach((movie, i) => {
+                    const movieY = marqueeY + 48 + i * 24;
+
+                    // Movie title in white
+                    ctx.fillStyle = '#ffffff';
+                    const title = movie.title || movie;
+                    ctx.fillText(title, marqueeX + marqueeWidth / 2, movieY);
+
+                    // Show times in yellow below
+                    if (movie.times) {
+                        ctx.fillStyle = '#ffcc00';
+                        ctx.font = 'bold 9px Bebas Neue';
+                        ctx.fillText(movie.times, marqueeX + marqueeWidth / 2, movieY + 11);
+                        ctx.font = 'bold 11px Bebas Neue';
+                    }
+                });
+            }
+
+            // Box office window below marquee
+            const boxOfficeX = bx + building.width / 2 - 30;
+            const boxOfficeY = by + 30;
+
+            // Box office booth
+            ctx.fillStyle = '#c4a35a';
+            ctx.fillRect(boxOfficeX - 5, boxOfficeY - 5, 70, 55);
+            ctx.fillStyle = '#2a2a35';
+            ctx.fillRect(boxOfficeX, boxOfficeY, 60, 45);
+
+            // Glass window
+            ctx.fillStyle = 'rgba(200, 220, 255, 0.3)';
+            ctx.fillRect(boxOfficeX + 5, boxOfficeY + 5, 50, 25);
+
+            // "TICKETS" sign
             ctx.fillStyle = '#ff3333';
+            ctx.font = 'bold 8px Bebas Neue';
+            ctx.fillText('TICKETS', boxOfficeX + 30, boxOfficeY + 42);
+
+            // Ticket booth attendant silhouette
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath();
+            ctx.ellipse(boxOfficeX + 30, boxOfficeY + 18, 8, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw alleys between buildings
+        function drawAlleys() {
+            if (!currentMap.alleys) return;
+
+            const groundLevel = 410;
+
+            for (const alley of currentMap.alleys) {
+                const ax = alley.x - camera.x;
+
+                // Skip if off screen
+                if (ax + alley.width < -10 || ax > CONFIG.CANVAS_WIDTH + 10) continue;
+
+                // Dark alley background
+                ctx.fillStyle = '#0a0808';
+                ctx.fillRect(ax, groundLevel - 300, alley.width, 320);
+
+                // Depth gradient (darker in center)
+                const alleyGradient = ctx.createLinearGradient(ax, 0, ax + alley.width, 0);
+                alleyGradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+                alleyGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.7)');
+                alleyGradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+                ctx.fillStyle = alleyGradient;
+                ctx.fillRect(ax, groundLevel - 300, alley.width, 320);
+
+                // Pipes on alley walls
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(ax + 3, groundLevel - 200, 4, 180);
+                ctx.fillRect(ax + alley.width - 7, groundLevel - 250, 4, 230);
+
+                // Dumpster in some alleys
+                if (alley.width > 40) {
+                    ctx.fillStyle = '#1a2a1a';
+                    ctx.fillRect(ax + alley.width / 2 - 12, groundLevel - 35, 24, 30);
+                    ctx.fillStyle = '#0a1a0a';
+                    ctx.fillRect(ax + alley.width / 2 - 10, groundLevel - 32, 20, 5);
+                }
+
+                // Ground debris/shadow
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(ax, groundLevel - 20, alley.width, 25);
+            }
+        }
+
+        // Pharmacy-specific rendering
+        function drawPharmacyDetails(building, bx, by) {
+            const groundLevel = 410;
+
+            // Large RX Sign on facade
+            const rxX = bx + building.width / 2;
+            const rxY = by + 35;
+
+            // RX sign background (pharmacy green)
+            ctx.fillStyle = '#1a5c1a';
+            ctx.beginPath();
+            ctx.ellipse(rxX, rxY, 35, 35, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // RX sign border
+            ctx.strokeStyle = '#e8e8e0';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(rxX, rxY, 35, 35, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // RX text
+            ctx.fillStyle = '#e8e8e0';
+            ctx.font = 'bold 28px serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Rx', rxX, rxY + 2);
+
+            // Mortar and pestle icon below RX
+            const mortarX = rxX;
+            const mortarY = rxY + 55;
+
+            // Mortar bowl
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath();
+            ctx.moveTo(mortarX - 15, mortarY);
+            ctx.quadraticCurveTo(mortarX - 18, mortarY + 15, mortarX - 10, mortarY + 18);
+            ctx.lineTo(mortarX + 10, mortarY + 18);
+            ctx.quadraticCurveTo(mortarX + 18, mortarY + 15, mortarX + 15, mortarY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Pestle
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.moveTo(mortarX - 3, mortarY - 5);
+            ctx.lineTo(mortarX + 12, mortarY - 20);
+            ctx.lineTo(mortarX + 15, mortarY - 17);
+            ctx.lineTo(mortarX + 3, mortarY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Store window display with pill bottles
+            const windowY = by + building.height * 0.45;
+            const windowHeight = 50;
+
+            // Display window background
+            ctx.fillStyle = 'rgba(255, 250, 240, 0.9)';
+            ctx.fillRect(bx + 20, windowY, building.width - 40, windowHeight);
+
+            // Pill bottles in window
+            const bottleColors = ['#ff6b6b', '#4dabf7', '#69db7c', '#ffd43b', '#cc5de8'];
+            const bottleWidth = 16;
+            const bottleSpacing = 30;
+            const numBottles = Math.floor((building.width - 60) / bottleSpacing);
+
+            for (let i = 0; i < numBottles; i++) {
+                const bottleX = bx + 35 + i * bottleSpacing;
+                const bottleY = windowY + windowHeight - 35;
+                const color = bottleColors[i % bottleColors.length];
+
+                // Bottle body
+                ctx.fillStyle = color;
+                ctx.fillRect(bottleX, bottleY, bottleWidth, 28);
+
+                // Bottle cap
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(bottleX + 2, bottleY - 5, bottleWidth - 4, 7);
+
+                // Label
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(bottleX + 2, bottleY + 8, bottleWidth - 4, 12);
+            }
+
+            // "PRESCRIPTIONS" text on window
+            ctx.fillStyle = '#1a5c1a';
             ctx.font = 'bold 10px Bebas Neue';
             ctx.textAlign = 'center';
-            ctx.fillText('NOW PLAYING', marqueeX + marqueeWidth / 2, marqueeY + 25);
+            ctx.fillText('PRESCRIPTIONS', bx + building.width / 2, windowY + 12);
 
-            ctx.fillStyle = COLORS.cream;
-            ctx.font = 'bold 14px Bebas Neue';
-            building.nowPlaying.forEach((movie, i) => {
-                ctx.fillText(movie, marqueeX + marqueeWidth / 2, marqueeY + 45 + i * 18);
-            });
+            // Additional signage - "DRUGS • SUNDRIES"
+            ctx.fillStyle = '#1a5c1a';
+            ctx.font = 'bold 8px Bebas Neue';
+            ctx.fillText('DRUGS • SUNDRIES • FOUNTAIN', bx + building.width / 2, by + building.height * 0.35);
+        }
+
+        // Cafe/Diner specific rendering
+        function drawCafeDetails(building, bx, by) {
+            const groundLevel = 410;
+
+            // Chrome diner trim
+            ctx.fillStyle = '#c0c0c0';
+            ctx.fillRect(bx + 5, by + building.height * 0.5, building.width - 10, 4);
+            ctx.fillRect(bx + 5, by + building.height * 0.7, building.width - 10, 4);
+
+            // Large window with counter visible
+            const windowY = by + building.height * 0.52;
+            const windowHeight = 45;
+
+            // Window
+            ctx.fillStyle = 'rgba(255, 240, 220, 0.8)';
+            ctx.fillRect(bx + 15, windowY, building.width - 30, windowHeight);
+
+            // Counter inside
+            ctx.fillStyle = '#8b4513';
+            ctx.fillRect(bx + 18, windowY + windowHeight - 12, building.width - 36, 10);
+
+            // Stools (silhouettes)
+            ctx.fillStyle = '#c41e3a';
+            for (let i = 0; i < 4; i++) {
+                const stoolX = bx + 35 + i * 45;
+                // Stool seat
+                ctx.beginPath();
+                ctx.ellipse(stoolX, windowY + windowHeight - 8, 8, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Stool pole
+                ctx.fillRect(stoolX - 2, windowY + windowHeight - 5, 4, 8);
+            }
+
+            // "OPEN 24 HOURS" sign
+            ctx.fillStyle = '#ffcc00';
+            ctx.font = 'bold 9px Bebas Neue';
+            ctx.textAlign = 'center';
+            ctx.fillText('OPEN 24 HOURS', bx + building.width / 2, by + 25);
+
+            // Coffee cup icon
+            const cupX = bx + building.width - 40;
+            const cupY = by + 35;
+            ctx.fillStyle = '#f0f0e8';
+            ctx.beginPath();
+            ctx.moveTo(cupX, cupY);
+            ctx.lineTo(cupX + 20, cupY);
+            ctx.lineTo(cupX + 17, cupY + 18);
+            ctx.lineTo(cupX + 3, cupY + 18);
+            ctx.closePath();
+            ctx.fill();
+            // Steam
+            ctx.strokeStyle = '#cccccc';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(cupX + 5 + i * 5, cupY - 2);
+                ctx.quadraticCurveTo(cupX + 7 + i * 5, cupY - 8, cupX + 5 + i * 5, cupY - 12);
+                ctx.stroke();
+            }
+        }
+
+        // Bar specific rendering
+        function drawBarDetails(building, bx, by) {
+            // Neon blue accent lines
+            ctx.shadowColor = '#4488ff';
+            ctx.shadowBlur = 10;
+            ctx.strokeStyle = '#4488ff';
+            ctx.lineWidth = 2;
+
+            // Art deco lines
+            ctx.beginPath();
+            ctx.moveTo(bx + 20, by + 30);
+            ctx.lineTo(bx + building.width - 20, by + 30);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(bx + 20, by + 40);
+            ctx.lineTo(bx + building.width - 20, by + 40);
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+
+            // Frosted windows (you can't see inside)
+            const windowY = by + building.height * 0.5;
+            ctx.fillStyle = 'rgba(50, 50, 80, 0.7)';
+            ctx.fillRect(bx + 15, windowY, building.width - 30, 40);
+
+            // Window frost pattern
+            ctx.fillStyle = 'rgba(100, 100, 150, 0.3)';
+            for (let i = 0; i < 8; i++) {
+                ctx.fillRect(bx + 20 + i * 24, windowY + 5, 18, 30);
+            }
+
+            // Martini glass icon
+            const glassX = bx + 30;
+            const glassY = by + 55;
+            ctx.strokeStyle = '#4488ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(glassX, glassY);
+            ctx.lineTo(glassX + 20, glassY);
+            ctx.lineTo(glassX + 10, glassY + 15);
+            ctx.lineTo(glassX + 10, glassY + 25);
+            ctx.moveTo(glassX + 5, glassY + 25);
+            ctx.lineTo(glassX + 15, glassY + 25);
+            ctx.stroke();
+
+            // Olive
+            ctx.fillStyle = '#69db7c';
+            ctx.beginPath();
+            ctx.ellipse(glassX + 10, glassY + 5, 3, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Bookstore specific rendering
+        function drawBookstoreDetails(building, bx, by) {
+            // Warm light from window
+            const windowY = by + building.height * 0.45;
+            const windowHeight = 50;
+
+            // Bay window effect
+            ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
+            ctx.fillRect(bx + 15, windowY, building.width - 30, windowHeight);
+
+            // Books in window display
+            const bookColors = ['#8b0000', '#00008b', '#006400', '#4a0080', '#8b4513'];
+            for (let row = 0; row < 2; row++) {
+                for (let i = 0; i < 7; i++) {
+                    const bookX = bx + 22 + i * 22;
+                    const bookY = windowY + 10 + row * 22;
+                    const bookHeight = 15 + (i % 3) * 3;
+                    const color = bookColors[(i + row) % bookColors.length];
+
+                    ctx.fillStyle = color;
+                    ctx.fillRect(bookX, bookY + (18 - bookHeight), 18, bookHeight);
+
+                    // Book spine detail
+                    ctx.fillStyle = adjustBrightness(color, 0.7);
+                    ctx.fillRect(bookX, bookY + (18 - bookHeight), 3, bookHeight);
+                }
+            }
+
+            // "BOOKS" painted on window
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = 'bold 14px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('BOOKS', bx + building.width / 2, windowY + windowHeight - 8);
+
+            // Open book icon above door
+            const bookIconX = bx + building.width / 2;
+            const bookIconY = by + 30;
+            ctx.fillStyle = '#c4a35a';
+            // Left page
+            ctx.beginPath();
+            ctx.moveTo(bookIconX, bookIconY);
+            ctx.lineTo(bookIconX - 15, bookIconY + 3);
+            ctx.lineTo(bookIconX - 15, bookIconY + 18);
+            ctx.lineTo(bookIconX, bookIconY + 15);
+            ctx.closePath();
+            ctx.fill();
+            // Right page
+            ctx.beginPath();
+            ctx.moveTo(bookIconX, bookIconY);
+            ctx.lineTo(bookIconX + 15, bookIconY + 3);
+            ctx.lineTo(bookIconX + 15, bookIconY + 18);
+            ctx.lineTo(bookIconX, bookIconY + 15);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Police station specific rendering
+        function drawPoliceDetails(building, bx, by) {
+            // American flag
+            const flagX = bx + building.width - 30;
+            const flagY = by - 30;
+
+            // Flag pole
+            ctx.fillStyle = '#c0c0c0';
+            ctx.fillRect(flagX + 18, flagY, 3, 60);
+
+            // Flag
+            ctx.fillStyle = '#b22234'; // Red
+            ctx.fillRect(flagX, flagY + 5, 20, 12);
+            // Stripes
+            for (let i = 0; i < 6; i++) {
+                ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#b22234';
+                ctx.fillRect(flagX, flagY + 5 + i * 2, 20, 2);
+            }
+            // Blue canton
+            ctx.fillStyle = '#3c3b6e';
+            ctx.fillRect(flagX, flagY + 5, 8, 6);
+
+            // Police badge emblem
+            const badgeX = bx + building.width / 2;
+            const badgeY = by + 50;
+
+            // Shield shape
+            ctx.fillStyle = '#c4a35a';
+            ctx.beginPath();
+            ctx.moveTo(badgeX, badgeY - 20);
+            ctx.lineTo(badgeX + 20, badgeY - 10);
+            ctx.lineTo(badgeX + 20, badgeY + 10);
+            ctx.lineTo(badgeX, badgeY + 25);
+            ctx.lineTo(badgeX - 20, badgeY + 10);
+            ctx.lineTo(badgeX - 20, badgeY - 10);
+            ctx.closePath();
+            ctx.fill();
+
+            // Inner shield
+            ctx.fillStyle = '#1a1a3a';
+            ctx.beginPath();
+            ctx.moveTo(badgeX, badgeY - 15);
+            ctx.lineTo(badgeX + 15, badgeY - 7);
+            ctx.lineTo(badgeX + 15, badgeY + 7);
+            ctx.lineTo(badgeX, badgeY + 18);
+            ctx.lineTo(badgeX - 15, badgeY + 7);
+            ctx.lineTo(badgeX - 15, badgeY - 7);
+            ctx.closePath();
+            ctx.fill();
+
+            // Star
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = 'bold 16px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('★', badgeX, badgeY + 5);
+
+            // "POLICE DEPT" text
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = 'bold 10px Bebas Neue';
+            ctx.fillText('POLICE DEPT', badgeX, badgeY + 40);
+        }
+
+        // Apartment building specific rendering
+        function drawApartmentDetails(building, bx, by) {
+            // Fire escape
+            const escapeX = bx + building.width - 25;
+            ctx.fillStyle = '#1a1a1a';
+
+            // Vertical rails
+            ctx.fillRect(escapeX, by + 30, 3, building.height - 50);
+            ctx.fillRect(escapeX + 20, by + 30, 3, building.height - 50);
+
+            // Horizontal platforms
+            const floorHeight = building.height / building.floors;
+            for (let floor = 0; floor < building.floors; floor++) {
+                const platformY = by + 50 + floor * floorHeight;
+                ctx.fillRect(escapeX - 5, platformY, 30, 3);
+                // Railings
+                ctx.fillRect(escapeX - 5, platformY - 15, 2, 15);
+                ctx.fillRect(escapeX + 23, platformY - 15, 2, 15);
+            }
+
+            // Ladder sections
+            for (let floor = 0; floor < building.floors - 1; floor++) {
+                const ladderY = by + 55 + floor * floorHeight;
+                for (let rung = 0; rung < 4; rung++) {
+                    ctx.fillRect(escapeX + 3, ladderY + rung * 15, 14, 2);
+                }
+            }
+
+            // Building number
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = 'bold 24px Bebas Neue';
+            ctx.textAlign = 'center';
+            ctx.fillText('247', bx + 40, by + 50);
+
+            // Mailboxes near entrance
+            ctx.fillStyle = '#3a3a3a';
+            ctx.fillRect(bx + 15, by + building.height - 80, 30, 40);
+            // Individual mailbox slots
+            for (let i = 0; i < 3; i++) {
+                ctx.fillStyle = '#c0c0c0';
+                ctx.fillRect(bx + 18, by + building.height - 75 + i * 12, 24, 8);
+            }
         }
 
         function drawStreetLight(light) {
@@ -2105,15 +2675,14 @@
         }
 
         function drawPlayer() {
+            // Don't draw player when in car
+            if (player.inCar) return;
+
             const px = player.x - camera.x + player.width / 2;
             const py = player.y - camera.y + player.height;
 
             const inLight = isInLight(player.x, player.y);
             const lightFactor = inLight ? 1 : 0.35;
-
-            if (player.isMoving) {
-                player.walkCycle++;
-            }
 
             drawMannequin(px, py, {
                 facing: player.facing,
@@ -2428,7 +2997,890 @@
         // GAME LOGIC
         // ============================================
 
+        // ============================================
+        // INTERIOR SYSTEM
+        // ============================================
+
+        const INTERIORS = {
+            pi_office: {
+                name: "JACK NOIR - PRIVATE INVESTIGATOR",
+                width: 800,
+                height: 500,
+                backgroundColor: '#1a1612',
+                floorColor: '#2a2218',
+                wallColor: '#2d261f',
+                // Furniture and props
+                elements: [
+                    // Waiting area (left side)
+                    { type: 'couch', x: 80, y: 280, width: 120, height: 50 },
+                    { type: 'table', x: 100, y: 350, width: 60, height: 40 },
+                    { type: 'plant', x: 50, y: 250 },
+                    { type: 'lamp', x: 210, y: 240, on: true },
+                    // Secretary desk (center)
+                    { type: 'desk', x: 300, y: 200, width: 150, height: 60, label: 'SECRETARY' },
+                    { type: 'chair', x: 350, y: 270, facing: 'up' },
+                    { type: 'filing_cabinet', x: 280, y: 120, width: 40, height: 80 },
+                    { type: 'filing_cabinet', x: 460, y: 120, width: 40, height: 80 },
+                    // Divider/wall to private office
+                    { type: 'wall', x: 520, y: 100, width: 15, height: 300 },
+                    { type: 'door_interior', x: 520, y: 180, width: 15, height: 70, label: 'PRIVATE', leadsTo: 'pi_private' },
+                    // Private office (right side) - visible through door
+                    { type: 'desk', x: 620, y: 200, width: 140, height: 70, label: 'YOUR DESK' },
+                    { type: 'chair', x: 680, y: 280, facing: 'up' },
+                    { type: 'window', x: 700, y: 80, width: 80, height: 100 },
+                    { type: 'filing_cabinet', x: 580, y: 120, width: 35, height: 70 },
+                    { type: 'chaise', x: 600, y: 330, width: 100, height: 45 }, // Client sits here
+                    { type: 'lamp', x: 760, y: 180, on: true },
+                    // Exit door
+                    { type: 'exit_door', x: 380, y: 420, width: 60, height: 80 }
+                ],
+                // NPCs in this interior
+                npcs: ['secretary'],
+                // Ambient details
+                details: [
+                    { type: 'clock', x: 400, y: 90 },
+                    { type: 'sign', x: 380, y: 60, text: 'NOIR INVESTIGATIONS' },
+                    { type: 'blinds', x: 700, y: 80 }
+                ]
+            },
+
+            cafe: {
+                name: "ROSIE'S DINER",
+                width: 700,
+                height: 500,
+                backgroundColor: '#1f1a15',
+                floorColor: '#2a2520',
+                wallColor: '#352a22',
+                elements: [
+                    // Counter
+                    { type: 'counter', x: 50, y: 150, width: 300, height: 40 },
+                    { type: 'stool', x: 80, y: 200 },
+                    { type: 'stool', x: 130, y: 200 },
+                    { type: 'stool', x: 180, y: 200 },
+                    { type: 'stool', x: 230, y: 200 },
+                    { type: 'stool', x: 280, y: 200 },
+                    // Booths
+                    { type: 'booth', x: 450, y: 120, width: 100, height: 70 },
+                    { type: 'booth', x: 450, y: 220, width: 100, height: 70 },
+                    { type: 'booth', x: 450, y: 320, width: 100, height: 70 },
+                    // Tables
+                    { type: 'table', x: 200, y: 300, width: 80, height: 60 },
+                    { type: 'table', x: 320, y: 300, width: 80, height: 60 },
+                    // Kitchen door
+                    { type: 'door_interior', x: 50, y: 80, width: 60, height: 70, label: 'KITCHEN' },
+                    // Pie display
+                    { type: 'display_case', x: 360, y: 150, width: 60, height: 40 },
+                    // Coffee machine
+                    { type: 'coffee_machine', x: 100, y: 100 },
+                    // Jukebox
+                    { type: 'jukebox', x: 580, y: 350 },
+                    // Exit
+                    { type: 'exit_door', x: 320, y: 420, width: 60, height: 80 }
+                ],
+                npcs: ['waitress', 'cook'],
+                details: [
+                    { type: 'neon_sign', x: 300, y: 50, text: 'ROSIE\'S' },
+                    { type: 'menu_board', x: 150, y: 70 },
+                    { type: 'clock', x: 500, y: 60 }
+                ]
+            },
+
+            bar: {
+                name: "THE BLUE MOON",
+                width: 750,
+                height: 500,
+                backgroundColor: '#0f0d10',
+                floorColor: '#1a1618',
+                wallColor: '#1f1a1d',
+                elements: [
+                    // Bar counter
+                    { type: 'bar_counter', x: 50, y: 180, width: 350, height: 50 },
+                    { type: 'stool', x: 80, y: 240 },
+                    { type: 'stool', x: 130, y: 240 },
+                    { type: 'stool', x: 180, y: 240 },
+                    { type: 'stool', x: 230, y: 240 },
+                    { type: 'stool', x: 280, y: 240 },
+                    { type: 'stool', x: 330, y: 240 },
+                    // Back bar with bottles
+                    { type: 'back_bar', x: 50, y: 80, width: 350, height: 80 },
+                    // Tables
+                    { type: 'table', x: 480, y: 150, width: 70, height: 50 },
+                    { type: 'table', x: 480, y: 250, width: 70, height: 50 },
+                    { type: 'table', x: 600, y: 200, width: 70, height: 50 },
+                    // Pool table
+                    { type: 'pool_table', x: 550, y: 350, width: 120, height: 70 },
+                    // Phone booth in back
+                    { type: 'phone_booth', x: 680, y: 80 },
+                    // Restroom doors
+                    { type: 'door_interior', x: 680, y: 180, width: 50, height: 60, label: 'MEN' },
+                    { type: 'door_interior', x: 680, y: 260, width: 50, height: 60, label: 'WOMEN' },
+                    // Exit
+                    { type: 'exit_door', x: 350, y: 420, width: 60, height: 80 }
+                ],
+                npcs: ['bartender', 'barfly1'],
+                details: [
+                    { type: 'neon_sign', x: 180, y: 50, text: 'BLUE MOON', color: '#3366ff' },
+                    { type: 'dartboard', x: 620, y: 100 },
+                    { type: 'mirror', x: 200, y: 90 }
+                ]
+            }
+        };
+
+        // Current interior state
+        let currentInterior = null;
+        let interiorPlayerPos = { x: 400, y: 380 };
+
+        // Enter a building interior
+        function enterBuilding(buildingId) {
+            const interior = INTERIORS[buildingId];
+            if (!interior) return;
+
+            currentInterior = buildingId;
+            game.state = 'interior';
+
+            // Position player at entrance
+            interiorPlayerPos = { x: interior.width / 2, y: interior.height - 100 };
+
+            // Update location display
+            document.getElementById('location-display').textContent = interior.name;
+            document.getElementById('location-display').classList.add('visible');
+            setTimeout(() => {
+                document.getElementById('location-display').classList.remove('visible');
+            }, 2000);
+        }
+
+        // Exit to street
+        function exitBuilding() {
+            currentInterior = null;
+            game.state = 'playing';
+
+            // Find which building we were in and position player outside its door
+            for (const building of currentMap.buildings) {
+                if (building.interiorId === currentInterior) {
+                    player.x = building.x + building.width / 2 - player.width / 2;
+                    player.y = GROUND_LEVEL + 10;
+                    break;
+                }
+            }
+        }
+
+        // Draw interior scene
+        function drawInterior() {
+            const interior = INTERIORS[currentInterior];
+            if (!interior) return;
+
+            // Background
+            ctx.fillStyle = interior.backgroundColor;
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+
+            // Floor
+            const floorY = 250;
+            ctx.fillStyle = interior.floorColor;
+            ctx.fillRect(0, floorY, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT - floorY);
+
+            // Floor boards
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < CONFIG.CANVAS_WIDTH; x += 60) {
+                ctx.beginPath();
+                ctx.moveTo(x, floorY);
+                ctx.lineTo(x, CONFIG.CANVAS_HEIGHT);
+                ctx.stroke();
+            }
+
+            // Walls
+            ctx.fillStyle = interior.wallColor;
+            ctx.fillRect(0, 50, CONFIG.CANVAS_WIDTH, floorY - 50);
+
+            // Wainscoting
+            ctx.fillStyle = adjustBrightness(interior.wallColor, 0.7);
+            ctx.fillRect(0, floorY - 60, CONFIG.CANVAS_WIDTH, 60);
+            ctx.strokeStyle = adjustBrightness(interior.wallColor, 0.5);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, floorY - 60);
+            ctx.lineTo(CONFIG.CANVAS_WIDTH, floorY - 60);
+            ctx.stroke();
+
+            // Ceiling
+            ctx.fillStyle = '#1a1815';
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, 50);
+
+            // Ceiling light
+            ctx.fillStyle = '#0a0a08';
+            ctx.beginPath();
+            ctx.moveTo(CONFIG.CANVAS_WIDTH/2 - 40, 50);
+            ctx.lineTo(CONFIG.CANVAS_WIDTH/2 + 40, 50);
+            ctx.lineTo(CONFIG.CANVAS_WIDTH/2 + 30, 80);
+            ctx.lineTo(CONFIG.CANVAS_WIDTH/2 - 30, 80);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#f0d890';
+            ctx.shadowColor = '#f0d890';
+            ctx.shadowBlur = 40;
+            ctx.beginPath();
+            ctx.arc(CONFIG.CANVAS_WIDTH/2, 75, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Draw elements
+            for (const el of interior.elements) {
+                drawInteriorElement(el);
+            }
+
+            // Draw details
+            for (const detail of interior.details || []) {
+                drawInteriorDetail(detail);
+            }
+
+            // Draw interior NPCs
+            for (const npcId of interior.npcs || []) {
+                const npc = npcs.find(n => n.id === npcId);
+                if (npc) {
+                    drawInteriorNPC(npc);
+                }
+            }
+
+            // Draw player in interior
+            drawMannequin(interiorPlayerPos.x, interiorPlayerPos.y + 60, {
+                facing: player.facing,
+                isMoving: player.isMoving,
+                walkCycle: player.walkCycle,
+                outfit: 'detective',
+                hatType: 'fedora',
+                lightFactor: 0.9,
+                isPlayer: true
+            });
+        }
+
+        function drawInteriorElement(el) {
+            const x = el.x + (CONFIG.CANVAS_WIDTH - INTERIORS[currentInterior].width) / 2;
+            const y = el.y + 100;
+
+            switch (el.type) {
+                case 'desk':
+                    // Desk shadow
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fillRect(x + 5, y + el.height + 5, el.width, 10);
+                    // Desk body
+                    ctx.fillStyle = '#3d2a1a';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    // Desk top
+                    ctx.fillStyle = '#4a3520';
+                    ctx.fillRect(x - 5, y - 5, el.width + 10, 10);
+                    // Drawers
+                    ctx.strokeStyle = '#2a1a10';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x + 10, y + 15, el.width/3 - 15, el.height - 25);
+                    ctx.strokeRect(x + el.width/3 + 5, y + 15, el.width/3 - 10, el.height - 25);
+                    // Drawer handles
+                    ctx.fillStyle = '#b08030';
+                    ctx.fillRect(x + 25, y + 35, 15, 4);
+                    ctx.fillRect(x + el.width/3 + 20, y + 35, 15, 4);
+                    // Items on desk
+                    ctx.fillStyle = '#1a1a1a';
+                    ctx.fillRect(x + el.width - 40, y - 15, 30, 20); // Phone
+                    ctx.fillStyle = '#f0e8d8';
+                    ctx.fillRect(x + 20, y - 12, 50, 35); // Papers
+                    break;
+
+                case 'chair':
+                    ctx.fillStyle = '#2a2015';
+                    // Seat
+                    ctx.fillRect(x - 15, y, 30, 25);
+                    // Back
+                    ctx.fillRect(x - 12, y - 30, 24, 35);
+                    // Legs
+                    ctx.fillStyle = '#1a1510';
+                    ctx.fillRect(x - 12, y + 25, 4, 15);
+                    ctx.fillRect(x + 8, y + 25, 4, 15);
+                    break;
+
+                case 'couch':
+                    // Shadow
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fillRect(x + 5, y + el.height + 3, el.width, 8);
+                    // Base
+                    ctx.fillStyle = '#3a2820';
+                    ctx.fillRect(x, y + 20, el.width, el.height - 20);
+                    // Cushions
+                    ctx.fillStyle = '#4a3830';
+                    ctx.fillRect(x + 5, y + 10, el.width/2 - 8, el.height - 15);
+                    ctx.fillRect(x + el.width/2 + 3, y + 10, el.width/2 - 8, el.height - 15);
+                    // Back
+                    ctx.fillStyle = '#3a2820';
+                    ctx.fillRect(x, y, el.width, 25);
+                    // Arms
+                    ctx.fillRect(x - 10, y, 15, el.height);
+                    ctx.fillRect(x + el.width - 5, y, 15, el.height);
+                    break;
+
+                case 'chaise':
+                    // Chaise lounge for clients
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fillRect(x + 3, y + el.height + 2, el.width, 6);
+                    ctx.fillStyle = '#4a3028';
+                    ctx.fillRect(x, y + 10, el.width, el.height - 10);
+                    ctx.fillStyle = '#5a4038';
+                    ctx.fillRect(x + 5, y + 5, el.width - 30, el.height - 10);
+                    // Raised end
+                    ctx.fillStyle = '#4a3028';
+                    ctx.fillRect(x + el.width - 25, y - 10, 25, el.height + 10);
+                    break;
+
+                case 'filing_cabinet':
+                    ctx.fillStyle = '#3a3a3a';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    ctx.strokeStyle = '#2a2a2a';
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < 3; i++) {
+                        ctx.strokeRect(x + 3, y + 5 + i * (el.height/3), el.width - 6, el.height/3 - 8);
+                        ctx.fillStyle = '#606060';
+                        ctx.fillRect(x + el.width/2 - 8, y + 15 + i * (el.height/3), 16, 4);
+                    }
+                    break;
+
+                case 'table':
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(x + 3, y + el.height + 2, el.width, 5);
+                    ctx.fillStyle = '#3d2a1a';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    ctx.fillStyle = '#4a3520';
+                    ctx.fillRect(x - 3, y - 3, el.width + 6, 6);
+                    break;
+
+                case 'lamp':
+                    // Stand
+                    ctx.fillStyle = '#2a2a2a';
+                    ctx.fillRect(x - 3, y, 6, 50);
+                    // Base
+                    ctx.fillRect(x - 12, y + 50, 24, 6);
+                    // Shade
+                    ctx.fillStyle = el.on ? '#e8d090' : '#4a4030';
+                    ctx.beginPath();
+                    ctx.moveTo(x - 20, y);
+                    ctx.lineTo(x + 20, y);
+                    ctx.lineTo(x + 15, y - 25);
+                    ctx.lineTo(x - 15, y - 25);
+                    ctx.closePath();
+                    ctx.fill();
+                    if (el.on) {
+                        ctx.fillStyle = 'rgba(255, 230, 150, 0.15)';
+                        ctx.beginPath();
+                        ctx.moveTo(x - 20, y);
+                        ctx.lineTo(x - 60, y + 100);
+                        ctx.lineTo(x + 60, y + 100);
+                        ctx.lineTo(x + 20, y);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    break;
+
+                case 'exit_door':
+                    // Door frame
+                    ctx.fillStyle = '#1a1510';
+                    ctx.fillRect(x - 5, y - 5, el.width + 10, el.height + 5);
+                    // Door
+                    ctx.fillStyle = '#2a2015';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    // Window
+                    ctx.fillStyle = 'rgba(100, 120, 140, 0.3)';
+                    ctx.fillRect(x + 10, y + 10, el.width - 20, 30);
+                    // Handle
+                    ctx.fillStyle = '#b08030';
+                    ctx.beginPath();
+                    ctx.arc(x + el.width - 12, y + el.height/2, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    // EXIT sign
+                    ctx.fillStyle = '#ff3030';
+                    ctx.shadowColor = '#ff3030';
+                    ctx.shadowBlur = 10;
+                    ctx.font = 'bold 12px Bebas Neue';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('EXIT', x + el.width/2, y - 15);
+                    ctx.shadowBlur = 0;
+                    break;
+
+                case 'window':
+                    ctx.fillStyle = '#0a0a15';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    // Night sky through window
+                    ctx.fillStyle = '#0f0f1a';
+                    ctx.fillRect(x + 4, y + 4, el.width - 8, el.height - 8);
+                    // Window frame
+                    ctx.strokeStyle = '#2a2520';
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(x, y, el.width, el.height);
+                    ctx.beginPath();
+                    ctx.moveTo(x + el.width/2, y);
+                    ctx.lineTo(x + el.width/2, y + el.height);
+                    ctx.moveTo(x, y + el.height/2);
+                    ctx.lineTo(x + el.width, y + el.height/2);
+                    ctx.stroke();
+                    // City lights outside
+                    ctx.fillStyle = '#f0d060';
+                    ctx.fillRect(x + 15, y + 60, 3, 5);
+                    ctx.fillRect(x + 45, y + 50, 2, 4);
+                    ctx.fillRect(x + 60, y + 65, 3, 4);
+                    break;
+
+                case 'wall':
+                    ctx.fillStyle = '#2a2520';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    ctx.fillStyle = '#1a1815';
+                    ctx.fillRect(x, y + el.height - 40, el.width, 40);
+                    break;
+
+                case 'door_interior':
+                    ctx.fillStyle = '#1a1510';
+                    ctx.fillRect(x, y, el.width + 40, el.height);
+                    ctx.fillStyle = '#2a2015';
+                    ctx.fillRect(x + 3, y + 3, el.width + 34, el.height - 6);
+                    // Frosted glass
+                    ctx.fillStyle = 'rgba(200, 180, 140, 0.2)';
+                    ctx.fillRect(x + 8, y + 10, el.width + 24, el.height/2);
+                    // Label
+                    if (el.label) {
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                        ctx.font = '10px Special Elite';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(el.label, x + el.width/2 + 20, y + 30);
+                    }
+                    break;
+
+                case 'stool':
+                    ctx.fillStyle = '#2a2a2a';
+                    ctx.fillRect(x - 2, y, 4, 30);
+                    ctx.fillStyle = '#8b0000';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#6b0000';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+
+                case 'counter':
+                case 'bar_counter':
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fillRect(x + 5, y + el.height + 3, el.width, 8);
+                    ctx.fillStyle = '#2a1a10';
+                    ctx.fillRect(x, y, el.width, el.height);
+                    ctx.fillStyle = '#3a2515';
+                    ctx.fillRect(x - 5, y - 8, el.width + 10, 12);
+                    // Bar rail
+                    ctx.fillStyle = '#b08030';
+                    ctx.fillRect(x, y + el.height - 8, el.width, 4);
+                    break;
+            }
+        }
+
+        function drawInteriorDetail(detail) {
+            const x = detail.x + (CONFIG.CANVAS_WIDTH - INTERIORS[currentInterior].width) / 2;
+            const y = detail.y + 100;
+
+            switch (detail.type) {
+                case 'clock':
+                    ctx.fillStyle = '#2a2520';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#f0e8d8';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 16, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Hands
+                    ctx.strokeStyle = '#1a1a1a';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + 8, y - 5);
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x - 3, y + 10);
+                    ctx.stroke();
+                    break;
+
+                case 'neon_sign':
+                    ctx.fillStyle = detail.color || '#ff3333';
+                    ctx.shadowColor = detail.color || '#ff3333';
+                    ctx.shadowBlur = 20;
+                    ctx.font = 'bold 24px Bebas Neue';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(detail.text, x, y);
+                    ctx.shadowBlur = 0;
+                    break;
+
+                case 'sign':
+                    ctx.fillStyle = '#1a1815';
+                    ctx.fillRect(x - 60, y - 15, 120, 30);
+                    ctx.fillStyle = '#c4a35a';
+                    ctx.font = '12px Bebas Neue';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(detail.text, x, y + 5);
+                    break;
+            }
+        }
+
+        function drawInteriorNPC(npc) {
+            const interior = INTERIORS[currentInterior];
+            const baseX = (CONFIG.CANVAS_WIDTH - interior.width) / 2;
+
+            // Position based on role
+            let npcX = baseX + 375;
+            let npcY = 340;
+
+            if (npc.role === 'secretary') {
+                npcX = baseX + 375;
+                npcY = 340;
+            } else if (npc.role === 'bartender') {
+                npcX = baseX + 200;
+                npcY = 300;
+            } else if (npc.role === 'owner') {
+                npcX = baseX + 150;
+                npcY = 340;
+            }
+
+            drawMannequin(npcX, npcY, {
+                facing: 1,
+                isMoving: false,
+                walkCycle: 0,
+                outfit: npc.role === 'secretary' ? 'dress' : 'suit',
+                hatType: 'none',
+                lightFactor: 0.85,
+                isPlayer: false
+            });
+        }
+
+        // ============================================
+        // DIALOGUE SYSTEM
+        // ============================================
+
+        let currentDialogue = null;
+        let dialogueIndex = 0;
+
+        function startDialogue(npcId) {
+            const npc = npcs.find(n => n.id === npcId);
+            if (!npc || !npc.dialogue) return;
+
+            currentDialogue = npc;
+            dialogueIndex = 0;
+            game.state = 'dialogue';
+
+            showDialogueBox(npc.name, npc.dialogue[0]);
+        }
+
+        function advanceDialogue() {
+            if (!currentDialogue) return;
+
+            dialogueIndex++;
+            if (dialogueIndex >= currentDialogue.dialogue.length) {
+                endDialogue();
+                return;
+            }
+
+            showDialogueBox(currentDialogue.name, currentDialogue.dialogue[dialogueIndex]);
+        }
+
+        function endDialogue() {
+            currentDialogue = null;
+            dialogueIndex = 0;
+            game.state = currentInterior ? 'interior' : 'playing';
+            hideDialogueBox();
+        }
+
+        function showDialogueBox(speaker, text) {
+            document.getElementById('dialogue-speaker').textContent = speaker.toUpperCase();
+            document.getElementById('dialogue-text').textContent = text;
+            document.getElementById('dialogue-box').classList.add('visible');
+        }
+
+        function hideDialogueBox() {
+            document.getElementById('dialogue-box').classList.remove('visible');
+        }
+
+        // ============================================
+        // DRIVING SYSTEM
+        // ============================================
+
+        function enterCar(car) {
+            player.inCar = true;
+            player.currentCar = car;
+            player.carSpeed = 0;
+            game.state = 'driving';
+
+            // Hide interaction prompt
+            document.getElementById('interact-prompt').classList.remove('visible');
+
+            // Show driving HUD
+            document.getElementById('location-display').textContent = 'DRIVING';
+            document.getElementById('location-display').classList.add('visible');
+        }
+
+        function exitCar() {
+            if (!player.currentCar) return;
+
+            // Position player next to car
+            player.x = player.currentCar.x + 120;
+            player.y = GROUND_LEVEL + 100;
+
+            player.inCar = false;
+            player.currentCar = null;
+            player.carSpeed = 0;
+            game.state = 'playing';
+
+            document.getElementById('location-display').classList.remove('visible');
+        }
+
+        function updateDriving() {
+            if (!player.currentCar) return;
+
+            const car = player.currentCar;
+            const maxSpeed = CONFIG.CAR_SPEED;
+            const acceleration = 0.3;
+            const friction = 0.1;
+
+            // Accelerate/brake
+            if (keys.up || keys.right) {
+                player.carSpeed = Math.min(maxSpeed, player.carSpeed + acceleration);
+            } else if (keys.down || keys.left) {
+                player.carSpeed = Math.max(-maxSpeed * 0.5, player.carSpeed - acceleration);
+            } else {
+                // Apply friction
+                if (player.carSpeed > 0) {
+                    player.carSpeed = Math.max(0, player.carSpeed - friction);
+                } else if (player.carSpeed < 0) {
+                    player.carSpeed = Math.min(0, player.carSpeed + friction);
+                }
+            }
+
+            // Move car
+            car.x += player.carSpeed;
+
+            // Keep car on road
+            car.x = Math.max(50, Math.min(currentMap.width - 150, car.x));
+
+            // Update player position to match car
+            player.x = car.x + 50;
+            player.y = GROUND_LEVEL + 100;
+
+            // Update camera
+            camera.x = player.x - CONFIG.CANVAS_WIDTH / 2;
+            camera.x = Math.max(0, Math.min(currentMap.width - CONFIG.CANVAS_WIDTH, camera.x));
+
+            // Check for exit (when stopped)
+            if (Math.abs(player.carSpeed) < 0.1) {
+                document.getElementById('interact-prompt').textContent = '[E] EXIT CAR';
+                document.getElementById('interact-prompt').classList.add('visible');
+            } else {
+                document.getElementById('interact-prompt').classList.remove('visible');
+            }
+        }
+
+        function drawDrivingHUD() {
+            // Speedometer
+            const speed = Math.abs(player.carSpeed);
+            const speedPercent = speed / CONFIG.CAR_SPEED;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - 150, CONFIG.CANVAS_HEIGHT - 80, 130, 60);
+
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = '12px Bebas Neue';
+            ctx.textAlign = 'left';
+            ctx.fillText('SPEED', CONFIG.CANVAS_WIDTH - 140, CONFIG.CANVAS_HEIGHT - 60);
+
+            // Speed bar
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - 140, CONFIG.CANVAS_HEIGHT - 50, 110, 15);
+
+            ctx.fillStyle = speed > CONFIG.CAR_SPEED * 0.7 ? '#c44' : '#4a4';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - 140, CONFIG.CANVAS_HEIGHT - 50, 110 * speedPercent, 15);
+
+            // MPH display
+            const mph = Math.round(speed * 10);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Bebas Neue';
+            ctx.textAlign = 'right';
+            ctx.fillText(mph + ' MPH', CONFIG.CANVAS_WIDTH - 30, CONFIG.CANVAS_HEIGHT - 25);
+        }
+
+        // ============================================
+        // ACTION SYSTEM (Bribe, Slap, Shoot)
+        // ============================================
+
+        function performAction(actionType, targetNPC) {
+            if (player.actionCooldown > 0) return;
+
+            actions.currentAction = actionType;
+            actions.targetNPC = targetNPC;
+
+            switch (actionType) {
+                case 'bribe':
+                    performBribe(targetNPC);
+                    break;
+                case 'slap':
+                    performSlap(targetNPC);
+                    break;
+                case 'shoot':
+                    performShoot(targetNPC);
+                    break;
+            }
+
+            player.actionCooldown = 30; // Cooldown frames
+        }
+
+        function performBribe(npc) {
+            const bribeCost = 10;
+
+            if (player.cash < bribeCost) {
+                showDialogueBox('SYSTEM', "You don't have enough cash to bribe.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            if (!npc.canBeBribed) {
+                showDialogueBox(npc.name, "I'm not that kind of person.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            player.cash -= bribeCost;
+            updateCashDisplay();
+
+            const npcState = worldState.npcStates[npc.id];
+            if (npcState) {
+                npcState.bribed = true;
+            }
+
+            // Reveal information
+            const bribeDialogues = [
+                "Alright, I'll tell you what I know...",
+                "You didn't hear this from me...",
+                "There's been strange happenings late at night...",
+                "I saw someone suspicious near the apartments...",
+                "Check the bar after midnight. That's all I'm saying."
+            ];
+
+            const randomDialogue = bribeDialogues[Math.floor(Math.random() * bribeDialogues.length)];
+            showDialogueBox(npc.name, randomDialogue);
+            game.state = 'dialogue';
+        }
+
+        function performSlap(npc) {
+            // Screen shake effect
+            actions.actionTimer = 10;
+
+            // NPC reaction
+            const slapReactions = [
+                "Hey! What's the big idea?!",
+                "You'll regret that!",
+                "*stumbles back*",
+                "Is that all you got?",
+                "The cops will hear about this!"
+            ];
+
+            // Decrease reputation
+            game.reputation = Math.max(1, game.reputation - 1);
+            updateRepDisplay();
+
+            const reaction = slapReactions[Math.floor(Math.random() * slapReactions.length)];
+            showDialogueBox(npc.name, reaction);
+            game.state = 'dialogue';
+
+            // Some NPCs might reveal info when intimidated
+            if (Math.random() > 0.6) {
+                const npcState = worldState.npcStates[npc.id];
+                if (npcState) {
+                    npcState.intimidated = true;
+                }
+            }
+        }
+
+        function performShoot(npc) {
+            if (player.weapon !== 'pistol') {
+                showDialogueBox('SYSTEM', "You need a pistol to shoot.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            if (player.ammo <= 0) {
+                showDialogueBox('SYSTEM', "Click. Empty chamber.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            player.ammo--;
+
+            // Major reputation hit
+            game.reputation = Math.max(1, game.reputation - 2);
+            updateRepDisplay();
+
+            // Screen flash
+            actions.actionTimer = 15;
+
+            showDialogueBox('SYSTEM', "BANG! The shot echoes through the night...");
+            game.state = 'dialogue';
+
+            // This would trigger police response in full game
+            worldState.events.push({
+                type: 'gunshot',
+                location: currentInterior || 'street',
+                time: { ...game.time },
+                witnessed: true
+            });
+        }
+
+        function updateCashDisplay() {
+            document.getElementById('cash-display').textContent = '$' + player.cash.toFixed(2);
+        }
+
+        function updateRepDisplay() {
+            const filled = '■'.repeat(game.reputation);
+            const empty = '□'.repeat(5 - game.reputation);
+            document.getElementById('rep-display').textContent = filled + empty;
+        }
+
+        function drawActionMenu() {
+            if (!player.nearInteractable || player.nearInteractable.type !== 'npc') return;
+            if (game.state === 'dialogue') return;
+
+            const npc = player.nearInteractable.npc;
+            if (!npc) return;
+
+            // Draw action hints at bottom of screen
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH / 2 - 200, CONFIG.CANVAS_HEIGHT - 45, 400, 35);
+
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = '12px Special Elite';
+            ctx.textAlign = 'center';
+
+            let actionText = '[E] Talk';
+            if (npc.canBeBribed) actionText += '  [B] Bribe ($10)';
+            actionText += '  [F] Slap';
+            if (player.weapon === 'pistol') actionText += '  [G] Shoot';
+
+            ctx.fillText(actionText, CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 22);
+        }
+
+        // ============================================
+        // PLAYER UPDATE
+        // ============================================
+
         function updatePlayer() {
+            // Handle dialogue state
+            if (game.state === 'dialogue') {
+                return; // No movement during dialogue
+            }
+
+            // Handle interior movement
+            if (game.state === 'interior') {
+                updateInteriorPlayer();
+                return;
+            }
+
             if (game.state !== 'playing') return;
 
             player.isMoving = false;
@@ -2454,6 +3906,10 @@
                 player.direction = 'right';
                 player.facing = 1;
                 player.isMoving = true;
+            }
+
+            if (player.isMoving) {
+                player.walkCycle++;
             }
 
             // Boundary checks - player stays on sidewalk/street area
@@ -2497,22 +3953,119 @@
             checkInteractions();
         }
 
-        function checkInteractions() {
+        function updateInteriorPlayer() {
+            const interior = INTERIORS[currentInterior];
+            if (!interior) return;
+
+            player.isMoving = false;
+
+            if (keys.up) {
+                interiorPlayerPos.y -= player.speed;
+                player.isMoving = true;
+            }
+            if (keys.down) {
+                interiorPlayerPos.y += player.speed;
+                player.isMoving = true;
+            }
+            if (keys.left) {
+                interiorPlayerPos.x -= player.speed;
+                player.facing = -1;
+                player.isMoving = true;
+            }
+            if (keys.right) {
+                interiorPlayerPos.x += player.speed;
+                player.facing = 1;
+                player.isMoving = true;
+            }
+
+            if (player.isMoving) {
+                player.walkCycle++;
+            }
+
+            // Boundary checks
+            interiorPlayerPos.x = Math.max(50, Math.min(interior.width - 50, interiorPlayerPos.x));
+            interiorPlayerPos.y = Math.max(180, Math.min(interior.height - 50, interiorPlayerPos.y));
+
+            // Check for exit door
+            checkInteriorInteractions();
+        }
+
+        function checkInteriorInteractions() {
+            const interior = INTERIORS[currentInterior];
+            if (!interior) return;
+
+            const baseX = (CONFIG.CANVAS_WIDTH - interior.width) / 2;
             let nearInteractable = false;
+
+            // Check for exit door
+            for (const el of interior.elements) {
+                if (el.type === 'exit_door') {
+                    const doorX = el.x + baseX + el.width / 2;
+                    const doorY = el.y + 100;
+                    const dist = Math.sqrt(
+                        Math.pow(interiorPlayerPos.x + baseX - doorX, 2) +
+                        Math.pow(interiorPlayerPos.y - doorY + 40, 2)
+                    );
+
+                    if (dist < 60) {
+                        nearInteractable = true;
+                        document.getElementById('interact-prompt').textContent = '[E] EXIT';
+                        nearInteractable = { type: 'exit' };
+                        break;
+                    }
+                }
+            }
+
+            // Check for NPCs to talk to
+            if (!nearInteractable) {
+                for (const npcId of interior.npcs || []) {
+                    const npc = npcs.find(n => n.id === npcId);
+                    if (npc) {
+                        // Calculate NPC position
+                        let npcX = 375;
+                        if (npc.role === 'secretary') npcX = 375;
+                        else if (npc.role === 'bartender') npcX = 200;
+
+                        const dist = Math.sqrt(
+                            Math.pow(interiorPlayerPos.x - npcX, 2) +
+                            Math.pow(interiorPlayerPos.y - 280, 2)
+                        );
+
+                        if (dist < 80) {
+                            nearInteractable = { type: 'npc', npc: npc };
+                            document.getElementById('interact-prompt').textContent = `[E] TALK TO ${npc.name.toUpperCase()}`;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            const promptEl = document.getElementById('interact-prompt');
+            if (nearInteractable) {
+                promptEl.classList.add('visible');
+                player.nearInteractable = nearInteractable;
+            } else {
+                promptEl.classList.remove('visible');
+                player.nearInteractable = null;
+            }
+        }
+
+        function checkInteractions() {
+            let nearInteractable = null;
 
             // Check building entrances
             for (const building of currentMap.buildings) {
                 if (building.enterable) {
                     const doorX = building.x + building.width / 2;
-                    const doorY = building.y + building.height;
+                    const doorY = GROUND_LEVEL;
 
                     const dist = Math.sqrt(
                         Math.pow(player.x + player.width / 2 - doorX, 2) +
                         Math.pow(player.y + player.height - doorY, 2)
                     );
 
-                    if (dist < 50) {
-                        nearInteractable = true;
+                    if (dist < 60) {
+                        nearInteractable = { type: 'building', building: building };
                         document.getElementById('interact-prompt').textContent = `[E] ENTER ${building.name.split('\n')[0]}`;
                         break;
                     }
@@ -2525,11 +4078,11 @@
                     if (car.canEnter) {
                         const dist = Math.sqrt(
                             Math.pow(player.x - car.x - 50, 2) +
-                            Math.pow(player.y - car.y, 2)
+                            Math.pow(player.y - (GROUND_LEVEL + 120), 2)
                         );
 
-                        if (dist < 60) {
-                            nearInteractable = true;
+                        if (dist < 70) {
+                            nearInteractable = { type: 'car', car: car };
                             document.getElementById('interact-prompt').textContent = '[E] ENTER CAR';
                             break;
                         }
@@ -2540,9 +4093,60 @@
             const promptEl = document.getElementById('interact-prompt');
             if (nearInteractable) {
                 promptEl.classList.add('visible');
+                player.nearInteractable = nearInteractable;
             } else {
                 promptEl.classList.remove('visible');
+                player.nearInteractable = null;
             }
+        }
+
+        function handleInteraction() {
+            if (game.state === 'dialogue') {
+                advanceDialogue();
+                return;
+            }
+
+            if (game.state === 'interior') {
+                if (player.nearInteractable) {
+                    if (player.nearInteractable.type === 'exit') {
+                        exitBuilding();
+                    } else if (player.nearInteractable.type === 'npc') {
+                        startDialogue(player.nearInteractable.npc.id);
+                    }
+                }
+                return;
+            }
+
+            if (game.state === 'driving') {
+                if (Math.abs(player.carSpeed) < 0.1) {
+                    exitCar();
+                }
+                return;
+            }
+
+            if (game.state === 'playing' && player.nearInteractable) {
+                if (player.nearInteractable.type === 'building') {
+                    const building = player.nearInteractable.building;
+                    if (INTERIORS[building.interiorId]) {
+                        enterBuilding(building.interiorId);
+                    }
+                } else if (player.nearInteractable.type === 'car') {
+                    enterCar(player.nearInteractable.car);
+                } else if (player.nearInteractable.type === 'npc') {
+                    startDialogue(player.nearInteractable.npc.id);
+                }
+            }
+        }
+
+        // Handle action keys (B, F, G)
+        function handleActionKey(action) {
+            if (game.state !== 'playing' && game.state !== 'interior') return;
+            if (!player.nearInteractable || player.nearInteractable.type !== 'npc') return;
+
+            const npc = player.nearInteractable.npc;
+            if (!npc) return;
+
+            performAction(action, npc);
         }
 
         function updateGameTime() {
@@ -2647,12 +4251,12 @@
             // Clear canvas
             ctx.clearRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
 
-            if (game.state === 'playing') {
-                // Initialize world state on first frame
-                if (!worldState.initialized) {
-                    initWorldState();
-                }
+            // Initialize world state on first frame
+            if (!worldState.initialized) {
+                initWorldState();
+            }
 
+            if (game.state === 'playing') {
                 updatePlayer();
                 updateLocationDisplay();
 
@@ -2664,6 +4268,9 @@
                 for (const light of currentMap.streetLights) {
                     drawStreetLight(light);
                 }
+
+                // Draw alleys (dark gaps between buildings)
+                drawAlleys();
 
                 // Draw buildings
                 for (const building of currentMap.buildings) {
@@ -2706,9 +4313,124 @@
 
                 // Draw minimap
                 drawMinimap();
+            } else if (game.state === 'interior' || game.state === 'dialogue') {
+                updatePlayer();
+                drawInterior();
+                drawActionMenu();
+            } else if (game.state === 'driving') {
+                updateDriving();
+
+                // Draw scene
+                drawSky();
+                drawGround();
+
+                for (const light of currentMap.streetLights) {
+                    drawStreetLight(light);
+                }
+
+                // Draw alleys (dark gaps between buildings)
+                drawAlleys();
+
+                for (const building of currentMap.buildings) {
+                    drawBuilding(building);
+                }
+
+                drawStreetProps();
+
+                for (const car of currentMap.cars) {
+                    drawCar(car);
+                }
+
+                drawMinimap();
+                drawDrivingHUD();
+            } else if (game.state === 'title') {
+                drawTitleScreen();
+            }
+
+            // Update cooldowns
+            if (player.actionCooldown > 0) player.actionCooldown--;
+
+            // Screen shake effect
+            if (actions.actionTimer > 0) {
+                actions.actionTimer--;
+                ctx.save();
+                ctx.translate(
+                    (Math.random() - 0.5) * actions.actionTimer,
+                    (Math.random() - 0.5) * actions.actionTimer
+                );
+                ctx.restore();
             }
 
             requestAnimationFrame(gameLoop);
+        }
+
+        function drawTitleScreen() {
+            // Noir background
+            const gradient = ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
+            gradient.addColorStop(0, '#050508');
+            gradient.addColorStop(0.5, '#0a0a12');
+            gradient.addColorStop(1, '#050508');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+
+            // City silhouette
+            ctx.fillStyle = '#0f0f15';
+            for (let i = 0; i < 15; i++) {
+                const bx = i * 90 - 20;
+                const bh = 100 + Math.sin(i * 1.5) * 80 + Math.cos(i * 0.7) * 50;
+                ctx.fillRect(bx, CONFIG.CANVAS_HEIGHT - bh - 100, 70, bh);
+            }
+
+            // Street
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT - 100, CONFIG.CANVAS_WIDTH, 100);
+
+            // Street light glow
+            ctx.fillStyle = 'rgba(255, 230, 180, 0.1)';
+            ctx.beginPath();
+            ctx.ellipse(200, CONFIG.CANVAS_HEIGHT - 80, 150, 60, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Lone figure silhouette
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.ellipse(200, CONFIG.CANVAS_HEIGHT - 90, 15, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Body
+            ctx.fillRect(192, CONFIG.CANVAS_HEIGHT - 150, 16, 60);
+            // Head with hat
+            ctx.beginPath();
+            ctx.arc(200, CONFIG.CANVAS_HEIGHT - 160, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(185, CONFIG.CANVAS_HEIGHT - 172, 30, 6);
+            ctx.fillRect(190, CONFIG.CANVAS_HEIGHT - 180, 20, 10);
+
+            // Title
+            ctx.fillStyle = '#d4c5a9';
+            ctx.font = 'bold 100px Bebas Neue';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(212, 197, 169, 0.3)';
+            ctx.shadowBlur = 30;
+            ctx.fillText('NIGHTFALL', CONFIG.CANVAS_WIDTH / 2, 280);
+            ctx.shadowBlur = 0;
+
+            // Subtitle
+            ctx.fillStyle = '#8b7355';
+            ctx.font = '18px Special Elite';
+            ctx.fillText('A NOIR DETECTIVE MYSTERY', CONFIG.CANVAS_WIDTH / 2, 320);
+
+            // Year
+            ctx.fillStyle = '#3d3428';
+            ctx.font = '40px Bebas Neue';
+            ctx.fillText('1 9 5 9', CONFIG.CANVAS_WIDTH / 2, 400);
+
+            // Prompt
+            ctx.fillStyle = '#8b7355';
+            ctx.font = '14px Special Elite';
+            const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7;
+            ctx.globalAlpha = pulse;
+            ctx.fillText('PRESS ANY KEY TO BEGIN', CONFIG.CANVAS_WIDTH / 2, 500);
+            ctx.globalAlpha = 1;
         }
 
         // ============================================
@@ -2746,10 +4468,32 @@
                 case 'e':
                 case 'E':
                 case 'Enter':
+                    if (!keys.interact) {
+                        handleInteraction();
+                    }
                     keys.interact = true;
                     break;
                 case ' ':
                     keys.action = true;
+                    break;
+                case 'b':
+                case 'B':
+                    handleActionKey('bribe');
+                    break;
+                case 'f':
+                case 'F':
+                    handleActionKey('slap');
+                    break;
+                case 'g':
+                case 'G':
+                    handleActionKey('shoot');
+                    break;
+                case 'Escape':
+                    if (game.state === 'dialogue') {
+                        endDialogue();
+                    } else if (game.state === 'driving' && Math.abs(player.carSpeed) < 0.1) {
+                        exitCar();
+                    }
                     break;
             }
         });
@@ -2809,6 +4553,7 @@
         setupTouchControl('d-right', 'right');
 
         document.getElementById('btn-interact').addEventListener('click', () => {
+            handleInteraction();
             keys.interact = true;
             setTimeout(() => keys.interact = false, 100);
         });
