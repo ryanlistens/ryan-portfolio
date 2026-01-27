@@ -532,10 +532,22 @@
             isMoving: false,
             walkCycle: 0,
             inCar: false,
-            car: null,
+            currentCar: null,
+            carSpeed: 0,
             inventory: [],
             weapon: 'fists', // fists, pistol
-            flashlightOn: false
+            ammo: 6,
+            cash: 50,
+            flashlightOn: false,
+            nearInteractable: null,
+            actionCooldown: 0
+        };
+
+        // Action system state
+        const actions = {
+            currentAction: null, // null, 'bribe', 'slap', 'shoot'
+            targetNPC: null,
+            actionTimer: 0
         };
 
         // ============================================
@@ -2105,15 +2117,14 @@
         }
 
         function drawPlayer() {
+            // Don't draw player when in car
+            if (player.inCar) return;
+
             const px = player.x - camera.x + player.width / 2;
             const py = player.y - camera.y + player.height;
 
             const inLight = isInLight(player.x, player.y);
             const lightFactor = inLight ? 1 : 0.35;
-
-            if (player.isMoving) {
-                player.walkCycle++;
-            }
 
             drawMannequin(px, py, {
                 facing: player.facing,
@@ -3032,6 +3043,271 @@
         }
 
         // ============================================
+        // DRIVING SYSTEM
+        // ============================================
+
+        function enterCar(car) {
+            player.inCar = true;
+            player.currentCar = car;
+            player.carSpeed = 0;
+            game.state = 'driving';
+
+            // Hide interaction prompt
+            document.getElementById('interact-prompt').classList.remove('visible');
+
+            // Show driving HUD
+            document.getElementById('location-display').textContent = 'DRIVING';
+            document.getElementById('location-display').classList.add('visible');
+        }
+
+        function exitCar() {
+            if (!player.currentCar) return;
+
+            // Position player next to car
+            player.x = player.currentCar.x + 120;
+            player.y = GROUND_LEVEL + 100;
+
+            player.inCar = false;
+            player.currentCar = null;
+            player.carSpeed = 0;
+            game.state = 'playing';
+
+            document.getElementById('location-display').classList.remove('visible');
+        }
+
+        function updateDriving() {
+            if (!player.currentCar) return;
+
+            const car = player.currentCar;
+            const maxSpeed = CONFIG.CAR_SPEED;
+            const acceleration = 0.3;
+            const friction = 0.1;
+
+            // Accelerate/brake
+            if (keys.up || keys.right) {
+                player.carSpeed = Math.min(maxSpeed, player.carSpeed + acceleration);
+            } else if (keys.down || keys.left) {
+                player.carSpeed = Math.max(-maxSpeed * 0.5, player.carSpeed - acceleration);
+            } else {
+                // Apply friction
+                if (player.carSpeed > 0) {
+                    player.carSpeed = Math.max(0, player.carSpeed - friction);
+                } else if (player.carSpeed < 0) {
+                    player.carSpeed = Math.min(0, player.carSpeed + friction);
+                }
+            }
+
+            // Move car
+            car.x += player.carSpeed;
+
+            // Keep car on road
+            car.x = Math.max(50, Math.min(currentMap.width - 150, car.x));
+
+            // Update player position to match car
+            player.x = car.x + 50;
+            player.y = GROUND_LEVEL + 100;
+
+            // Update camera
+            camera.x = player.x - CONFIG.CANVAS_WIDTH / 2;
+            camera.x = Math.max(0, Math.min(currentMap.width - CONFIG.CANVAS_WIDTH, camera.x));
+
+            // Check for exit (when stopped)
+            if (Math.abs(player.carSpeed) < 0.1) {
+                document.getElementById('interact-prompt').textContent = '[E] EXIT CAR';
+                document.getElementById('interact-prompt').classList.add('visible');
+            } else {
+                document.getElementById('interact-prompt').classList.remove('visible');
+            }
+        }
+
+        function drawDrivingHUD() {
+            // Speedometer
+            const speed = Math.abs(player.carSpeed);
+            const speedPercent = speed / CONFIG.CAR_SPEED;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - 150, CONFIG.CANVAS_HEIGHT - 80, 130, 60);
+
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = '12px Bebas Neue';
+            ctx.textAlign = 'left';
+            ctx.fillText('SPEED', CONFIG.CANVAS_WIDTH - 140, CONFIG.CANVAS_HEIGHT - 60);
+
+            // Speed bar
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - 140, CONFIG.CANVAS_HEIGHT - 50, 110, 15);
+
+            ctx.fillStyle = speed > CONFIG.CAR_SPEED * 0.7 ? '#c44' : '#4a4';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - 140, CONFIG.CANVAS_HEIGHT - 50, 110 * speedPercent, 15);
+
+            // MPH display
+            const mph = Math.round(speed * 10);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Bebas Neue';
+            ctx.textAlign = 'right';
+            ctx.fillText(mph + ' MPH', CONFIG.CANVAS_WIDTH - 30, CONFIG.CANVAS_HEIGHT - 25);
+        }
+
+        // ============================================
+        // ACTION SYSTEM (Bribe, Slap, Shoot)
+        // ============================================
+
+        function performAction(actionType, targetNPC) {
+            if (player.actionCooldown > 0) return;
+
+            actions.currentAction = actionType;
+            actions.targetNPC = targetNPC;
+
+            switch (actionType) {
+                case 'bribe':
+                    performBribe(targetNPC);
+                    break;
+                case 'slap':
+                    performSlap(targetNPC);
+                    break;
+                case 'shoot':
+                    performShoot(targetNPC);
+                    break;
+            }
+
+            player.actionCooldown = 30; // Cooldown frames
+        }
+
+        function performBribe(npc) {
+            const bribeCost = 10;
+
+            if (player.cash < bribeCost) {
+                showDialogueBox('SYSTEM', "You don't have enough cash to bribe.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            if (!npc.canBeBribed) {
+                showDialogueBox(npc.name, "I'm not that kind of person.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            player.cash -= bribeCost;
+            updateCashDisplay();
+
+            const npcState = worldState.npcStates[npc.id];
+            if (npcState) {
+                npcState.bribed = true;
+            }
+
+            // Reveal information
+            const bribeDialogues = [
+                "Alright, I'll tell you what I know...",
+                "You didn't hear this from me...",
+                "There's been strange happenings late at night...",
+                "I saw someone suspicious near the apartments...",
+                "Check the bar after midnight. That's all I'm saying."
+            ];
+
+            const randomDialogue = bribeDialogues[Math.floor(Math.random() * bribeDialogues.length)];
+            showDialogueBox(npc.name, randomDialogue);
+            game.state = 'dialogue';
+        }
+
+        function performSlap(npc) {
+            // Screen shake effect
+            actions.actionTimer = 10;
+
+            // NPC reaction
+            const slapReactions = [
+                "Hey! What's the big idea?!",
+                "You'll regret that!",
+                "*stumbles back*",
+                "Is that all you got?",
+                "The cops will hear about this!"
+            ];
+
+            // Decrease reputation
+            game.reputation = Math.max(1, game.reputation - 1);
+            updateRepDisplay();
+
+            const reaction = slapReactions[Math.floor(Math.random() * slapReactions.length)];
+            showDialogueBox(npc.name, reaction);
+            game.state = 'dialogue';
+
+            // Some NPCs might reveal info when intimidated
+            if (Math.random() > 0.6) {
+                const npcState = worldState.npcStates[npc.id];
+                if (npcState) {
+                    npcState.intimidated = true;
+                }
+            }
+        }
+
+        function performShoot(npc) {
+            if (player.weapon !== 'pistol') {
+                showDialogueBox('SYSTEM', "You need a pistol to shoot.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            if (player.ammo <= 0) {
+                showDialogueBox('SYSTEM', "Click. Empty chamber.");
+                game.state = 'dialogue';
+                return;
+            }
+
+            player.ammo--;
+
+            // Major reputation hit
+            game.reputation = Math.max(1, game.reputation - 2);
+            updateRepDisplay();
+
+            // Screen flash
+            actions.actionTimer = 15;
+
+            showDialogueBox('SYSTEM', "BANG! The shot echoes through the night...");
+            game.state = 'dialogue';
+
+            // This would trigger police response in full game
+            worldState.events.push({
+                type: 'gunshot',
+                location: currentInterior || 'street',
+                time: { ...game.time },
+                witnessed: true
+            });
+        }
+
+        function updateCashDisplay() {
+            document.getElementById('cash-display').textContent = '$' + player.cash.toFixed(2);
+        }
+
+        function updateRepDisplay() {
+            const filled = '■'.repeat(game.reputation);
+            const empty = '□'.repeat(5 - game.reputation);
+            document.getElementById('rep-display').textContent = filled + empty;
+        }
+
+        function drawActionMenu() {
+            if (!player.nearInteractable || player.nearInteractable.type !== 'npc') return;
+            if (game.state === 'dialogue') return;
+
+            const npc = player.nearInteractable.npc;
+            if (!npc) return;
+
+            // Draw action hints at bottom of screen
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(CONFIG.CANVAS_WIDTH / 2 - 200, CONFIG.CANVAS_HEIGHT - 45, 400, 35);
+
+            ctx.fillStyle = '#c4a35a';
+            ctx.font = '12px Special Elite';
+            ctx.textAlign = 'center';
+
+            let actionText = '[E] Talk';
+            if (npc.canBeBribed) actionText += '  [B] Bribe ($10)';
+            actionText += '  [F] Slap';
+            if (player.weapon === 'pistol') actionText += '  [G] Shoot';
+
+            ctx.fillText(actionText, CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 22);
+        }
+
+        // ============================================
         // PLAYER UPDATE
         // ============================================
 
@@ -3283,6 +3559,13 @@
                 return;
             }
 
+            if (game.state === 'driving') {
+                if (Math.abs(player.carSpeed) < 0.1) {
+                    exitCar();
+                }
+                return;
+            }
+
             if (game.state === 'playing' && player.nearInteractable) {
                 if (player.nearInteractable.type === 'building') {
                     const building = player.nearInteractable.building;
@@ -3290,9 +3573,22 @@
                         enterBuilding(building.interiorId);
                     }
                 } else if (player.nearInteractable.type === 'car') {
-                    // TODO: Enter car / driving mode
+                    enterCar(player.nearInteractable.car);
+                } else if (player.nearInteractable.type === 'npc') {
+                    startDialogue(player.nearInteractable.npc.id);
                 }
             }
+        }
+
+        // Handle action keys (B, F, G)
+        function handleActionKey(action) {
+            if (game.state !== 'playing' && game.state !== 'interior') return;
+            if (!player.nearInteractable || player.nearInteractable.type !== 'npc') return;
+
+            const npc = player.nearInteractable.npc;
+            if (!npc) return;
+
+            performAction(action, npc);
         }
 
         function updateGameTime() {
@@ -3459,9 +3755,118 @@
             } else if (game.state === 'interior' || game.state === 'dialogue') {
                 updatePlayer();
                 drawInterior();
+                drawActionMenu();
+            } else if (game.state === 'driving') {
+                updateDriving();
+
+                // Draw scene
+                drawSky();
+                drawGround();
+
+                for (const light of currentMap.streetLights) {
+                    drawStreetLight(light);
+                }
+
+                for (const building of currentMap.buildings) {
+                    drawBuilding(building);
+                }
+
+                drawStreetProps();
+
+                for (const car of currentMap.cars) {
+                    drawCar(car);
+                }
+
+                drawMinimap();
+                drawDrivingHUD();
+            } else if (game.state === 'title') {
+                drawTitleScreen();
+            }
+
+            // Update cooldowns
+            if (player.actionCooldown > 0) player.actionCooldown--;
+
+            // Screen shake effect
+            if (actions.actionTimer > 0) {
+                actions.actionTimer--;
+                ctx.save();
+                ctx.translate(
+                    (Math.random() - 0.5) * actions.actionTimer,
+                    (Math.random() - 0.5) * actions.actionTimer
+                );
+                ctx.restore();
             }
 
             requestAnimationFrame(gameLoop);
+        }
+
+        function drawTitleScreen() {
+            // Noir background
+            const gradient = ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
+            gradient.addColorStop(0, '#050508');
+            gradient.addColorStop(0.5, '#0a0a12');
+            gradient.addColorStop(1, '#050508');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+
+            // City silhouette
+            ctx.fillStyle = '#0f0f15';
+            for (let i = 0; i < 15; i++) {
+                const bx = i * 90 - 20;
+                const bh = 100 + Math.sin(i * 1.5) * 80 + Math.cos(i * 0.7) * 50;
+                ctx.fillRect(bx, CONFIG.CANVAS_HEIGHT - bh - 100, 70, bh);
+            }
+
+            // Street
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT - 100, CONFIG.CANVAS_WIDTH, 100);
+
+            // Street light glow
+            ctx.fillStyle = 'rgba(255, 230, 180, 0.1)';
+            ctx.beginPath();
+            ctx.ellipse(200, CONFIG.CANVAS_HEIGHT - 80, 150, 60, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Lone figure silhouette
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.ellipse(200, CONFIG.CANVAS_HEIGHT - 90, 15, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Body
+            ctx.fillRect(192, CONFIG.CANVAS_HEIGHT - 150, 16, 60);
+            // Head with hat
+            ctx.beginPath();
+            ctx.arc(200, CONFIG.CANVAS_HEIGHT - 160, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(185, CONFIG.CANVAS_HEIGHT - 172, 30, 6);
+            ctx.fillRect(190, CONFIG.CANVAS_HEIGHT - 180, 20, 10);
+
+            // Title
+            ctx.fillStyle = '#d4c5a9';
+            ctx.font = 'bold 100px Bebas Neue';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(212, 197, 169, 0.3)';
+            ctx.shadowBlur = 30;
+            ctx.fillText('NIGHTFALL', CONFIG.CANVAS_WIDTH / 2, 280);
+            ctx.shadowBlur = 0;
+
+            // Subtitle
+            ctx.fillStyle = '#8b7355';
+            ctx.font = '18px Special Elite';
+            ctx.fillText('A NOIR DETECTIVE MYSTERY', CONFIG.CANVAS_WIDTH / 2, 320);
+
+            // Year
+            ctx.fillStyle = '#3d3428';
+            ctx.font = '40px Bebas Neue';
+            ctx.fillText('1 9 5 9', CONFIG.CANVAS_WIDTH / 2, 400);
+
+            // Prompt
+            ctx.fillStyle = '#8b7355';
+            ctx.font = '14px Special Elite';
+            const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7;
+            ctx.globalAlpha = pulse;
+            ctx.fillText('PRESS ANY KEY TO BEGIN', CONFIG.CANVAS_WIDTH / 2, 500);
+            ctx.globalAlpha = 1;
         }
 
         // ============================================
@@ -3506,6 +3911,25 @@
                     break;
                 case ' ':
                     keys.action = true;
+                    break;
+                case 'b':
+                case 'B':
+                    handleActionKey('bribe');
+                    break;
+                case 'f':
+                case 'F':
+                    handleActionKey('slap');
+                    break;
+                case 'g':
+                case 'G':
+                    handleActionKey('shoot');
+                    break;
+                case 'Escape':
+                    if (game.state === 'dialogue') {
+                        endDialogue();
+                    } else if (game.state === 'driving' && Math.abs(player.carSpeed) < 0.1) {
+                        exitCar();
+                    }
                     break;
             }
         });
