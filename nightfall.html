@@ -523,7 +523,7 @@
         // Player state
         const player = {
             x: 600,
-            y: 400,
+            y: 450, // Start on sidewalk (GROUND_LEVEL + 40)
             width: 24,
             height: 64,
             speed: CONFIG.PLAYER_SPEED,
@@ -2463,585 +2463,216 @@
 
         function drawMannequin(x, y, options = {}) {
             const {
-                facing = 1,           // 1 = right, -1 = left
+                facing = 1,
                 isMoving = false,
                 walkCycle = 0,
-                outfit = 'detective', // detective, suit, dress, worker, casual
-                hatType = 'fedora',   // fedora, none, bowler, pillbox
+                hatType = 'fedora',
                 lightFactor = 1,
                 isPlayer = false,
-                appearance = null     // NPC appearance traits
+                appearance = null,
+                outfit = 'detective'
             } = options;
 
-            // Default appearance (player or fallback)
-            const app = appearance || {
-                skin: '#c4a882',
-                faceShape: 'angular',
-                eyeStyle: 'normal',
-                hairStyle: 'none',
-                hairColor: '#1a1a1a',
-                gender: 'm'
-            };
+            const app = appearance || { skin: '#d4a87a', gender: 'm' };
 
-            const cx = x;  // center x
-            const cy = y;  // feet y position
-
-            // Character proportions (realistic human - 7.5 heads tall)
-            const scale = 1.3; // Slightly larger characters
-            const headHeight = 12 * scale;
-            const headWidth = 10 * scale;
-            const neckHeight = 3 * scale;
+            // Better proportions - taller, more realistic human figure
+            const scale = 1.2; // Slightly larger characters
+            const headSize = 12 * scale;
             const torsoHeight = 24 * scale;
-            const legHeight = 32 * scale;
-            const armLength = 22 * scale;
-            const shoulderWidth = 16 * scale;
-            const hipWidth = 10 * scale;
+            const legHeight = 26 * scale;
+            const armLength = 18 * scale;
+            const bodyWidth = 14 * scale;
 
-            // Walk animation
-            const walkPhase = isMoving ? Math.sin(walkCycle * 0.15) : 0;
-            const legSwing = walkPhase * 8;
-            const armSwing = walkPhase * 6;
-            const bodyBob = Math.abs(walkPhase) * 2;
-
-            // Calculate key points
-            const feetY = cy;
+            // Feet position (y is bottom of character)
+            const feetY = y;
             const hipY = feetY - legHeight;
             const shoulderY = hipY - torsoHeight;
-            const neckY = shoulderY - neckHeight;
-            const headCenterY = neckY - headHeight / 2;
+            const headY = shoulderY - headSize;
 
-            // Long dramatic shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.beginPath();
-            ctx.ellipse(cx, feetY + 3, 18, 6, 0, 0, Math.PI * 2);
-            ctx.fill();
+            // Walking animation
+            const walkAnim = isMoving ? Math.sin(walkCycle * 0.2) * 5 : 0;
 
-            // Extended shadow for noir effect
-            if (lightFactor > 0.5) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-                ctx.beginPath();
-                ctx.moveTo(cx - 8, feetY);
-                ctx.lineTo(cx + 40, feetY + 60);
-                ctx.lineTo(cx + 50, feetY + 58);
-                ctx.lineTo(cx + 8, feetY);
-                ctx.closePath();
-                ctx.fill();
+            // Outfit colors - more visible, saturated colors
+            let coatColor, pantsColor, shirtColor;
+            if (isPlayer) {
+                coatColor = '#4a3828'; // Brown trench coat
+                pantsColor = '#2a2a30'; // Dark pants
+                shirtColor = '#e8e0d0'; // Light shirt
+            } else if (outfit === 'dress') {
+                coatColor = '#8b3a3a'; // Red dress
+                pantsColor = '#8b3a3a';
+                shirtColor = '#d4a87a';
+            } else if (outfit === 'suit') {
+                coatColor = '#3a3a40'; // Dark suit
+                pantsColor = '#2a2a30';
+                shirtColor = '#d0d0d8';
+            } else {
+                coatColor = '#4a4a50'; // Gray coat
+                pantsColor = '#3a3a40';
+                shirtColor = '#c0c0c0';
             }
 
             ctx.save();
-            ctx.translate(cx, 0);
-            ctx.scale(facing, 1);
-            ctx.translate(-cx, 0);
+            ctx.translate(x, 0);
+            if (facing === -1) {
+                ctx.scale(-1, 1);
+            }
+            ctx.translate(-x, 0);
 
-            // === LEGS (angular, defined) ===
-            const leftFootX = cx - 4 + (isMoving ? legSwing : 0);
-            const rightFootX = cx + 4 + (isMoving ? -legSwing : 0);
-            const leftKneeX = cx - 3 + (isMoving ? legSwing * 0.3 : 0);
-            const rightKneeX = cx + 3 + (isMoving ? -legSwing * 0.3 : 0);
-            const kneeY = hipY + legHeight * 0.55;
+            // Shadow on ground
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath();
+            ctx.ellipse(x, feetY + 3, 14 * scale, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
 
+            // LEGS - solid filled rectangles for visibility
+            const legWidth = 5 * scale;
+            ctx.fillStyle = adjustBrightness(pantsColor, lightFactor);
             // Left leg
-            ctx.strokeStyle = adjustBrightness('#1a1a1a', lightFactor);
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(cx - hipWidth/2, hipY - bodyBob);
-            ctx.lineTo(leftKneeX, kneeY - bodyBob);
-            ctx.lineTo(leftFootX, feetY);
-            ctx.stroke();
-
+            ctx.fillRect(x - legWidth - 2 + walkAnim * 0.3, hipY, legWidth, legHeight - 4);
             // Right leg
-            ctx.beginPath();
-            ctx.moveTo(cx + hipWidth/2 - 2, hipY - bodyBob);
-            ctx.lineTo(rightKneeX, kneeY - bodyBob);
-            ctx.lineTo(rightFootX, feetY);
-            ctx.stroke();
+            ctx.fillRect(x + 2 - walkAnim * 0.3, hipY, legWidth, legHeight - 4);
 
-            // Shoes (angular)
-            ctx.fillStyle = adjustBrightness('#0f0f0f', lightFactor);
-            // Left shoe
-            ctx.beginPath();
-            ctx.moveTo(leftFootX - 5, feetY);
-            ctx.lineTo(leftFootX + 6, feetY);
-            ctx.lineTo(leftFootX + 4, feetY - 4);
-            ctx.lineTo(leftFootX - 3, feetY - 4);
-            ctx.closePath();
-            ctx.fill();
-            // Right shoe
-            ctx.beginPath();
-            ctx.moveTo(rightFootX - 5, feetY);
-            ctx.lineTo(rightFootX + 6, feetY);
-            ctx.lineTo(rightFootX + 4, feetY - 4);
-            ctx.lineTo(rightFootX - 3, feetY - 4);
-            ctx.closePath();
-            ctx.fill();
+            // SHOES - black oxfords
+            ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
+            ctx.fillRect(x - legWidth - 4 + walkAnim * 0.3, feetY - 5, legWidth + 4, 6);
+            ctx.fillRect(x - walkAnim * 0.3, feetY - 5, legWidth + 4, 6);
 
-            // === TORSO (trench coat / suit - angular cut) ===
-            const coatColor = outfit === 'detective' ? '#2a2520' : '#1a1a1a';
-
-            // Coat body - angular trapezoid
+            // TORSO/BODY - solid filled shape
             ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
             ctx.beginPath();
-            ctx.moveTo(cx - shoulderWidth/2, shoulderY - bodyBob);
-            ctx.lineTo(cx + shoulderWidth/2, shoulderY - bodyBob);
-            ctx.lineTo(cx + hipWidth/2 + 2, hipY + 4 - bodyBob);
-            ctx.lineTo(cx - hipWidth/2 - 2, hipY + 4 - bodyBob);
+            ctx.moveTo(x - bodyWidth, shoulderY);
+            ctx.lineTo(x + bodyWidth, shoulderY);
+            ctx.lineTo(x + bodyWidth - 2, hipY + 4);
+            ctx.lineTo(x - bodyWidth + 2, hipY + 4);
             ctx.closePath();
             ctx.fill();
 
-            // Coat lapels (V-shape detail)
-            ctx.strokeStyle = adjustBrightness('#1a1815', lightFactor);
-            ctx.lineWidth = 2;
+            // Coat lapels / collar - lighter accent
+            ctx.fillStyle = adjustBrightness(shirtColor, lightFactor);
             ctx.beginPath();
-            ctx.moveTo(cx - 3, shoulderY + 2 - bodyBob);
-            ctx.lineTo(cx, shoulderY + 10 - bodyBob);
-            ctx.lineTo(cx + 3, shoulderY + 2 - bodyBob);
-            ctx.stroke();
+            ctx.moveTo(x - 4, shoulderY + 2);
+            ctx.lineTo(x, shoulderY + 12);
+            ctx.lineTo(x + 4, shoulderY + 2);
+            ctx.closePath();
+            ctx.fill();
 
-            // Coat center line
-            ctx.strokeStyle = adjustBrightness('#151310', lightFactor);
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(cx, shoulderY + 10 - bodyBob);
-            ctx.lineTo(cx, hipY + 2 - bodyBob);
-            ctx.stroke();
-
-            // === ARMS (angular, hinged at elbow) ===
-            const shoulderOffsetX = shoulderWidth/2 - 1;
-            const elbowY = shoulderY + armLength * 0.45 - bodyBob;
-            const handY = shoulderY + armLength - bodyBob;
-
+            // ARMS - solid filled
+            const armWidth = 4 * scale;
+            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
             // Left arm
-            const leftElbowX = cx - shoulderOffsetX - 3 + (isMoving ? -armSwing * 0.5 : 0);
-            const leftHandX = cx - shoulderOffsetX - 1 + (isMoving ? -armSwing : 0);
-            const leftHandY = handY + (isMoving ? armSwing * 0.3 : 0);
-
-            ctx.strokeStyle = adjustBrightness(coatColor, lightFactor);
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(cx - shoulderOffsetX, shoulderY + 2 - bodyBob);
-            ctx.lineTo(leftElbowX, elbowY);
-            ctx.lineTo(leftHandX, leftHandY);
-            ctx.stroke();
-
+            ctx.save();
+            ctx.translate(x - bodyWidth, shoulderY + 3);
+            ctx.rotate(-0.15 + walkAnim * 0.02);
+            ctx.fillRect(-armWidth/2, 0, armWidth, armLength);
+            ctx.restore();
             // Right arm
-            const rightElbowX = cx + shoulderOffsetX + 3 + (isMoving ? armSwing * 0.5 : 0);
-            const rightHandX = cx + shoulderOffsetX + 1 + (isMoving ? armSwing : 0);
-            const rightHandY = handY + (isMoving ? -armSwing * 0.3 : 0);
+            ctx.save();
+            ctx.translate(x + bodyWidth, shoulderY + 3);
+            ctx.rotate(0.15 - walkAnim * 0.02);
+            ctx.fillRect(-armWidth/2, 0, armWidth, armLength);
+            ctx.restore();
 
+            // HANDS - visible skin tone
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
             ctx.beginPath();
-            ctx.moveTo(cx + shoulderOffsetX, shoulderY + 2 - bodyBob);
-            ctx.lineTo(rightElbowX, elbowY);
-            ctx.lineTo(rightHandX, rightHandY);
+            ctx.arc(x - bodyWidth - walkAnim * 0.2, shoulderY + armLength + 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + bodyWidth + walkAnim * 0.2, shoulderY + armLength + 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // NECK
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.fillRect(x - 4, shoulderY - 6, 8, 8);
+
+            // HEAD - oval face shape
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.beginPath();
+            ctx.ellipse(x, headY + headSize / 2 + 2, headSize / 2 + 1, headSize / 2 + 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Slight head outline for definition
+            ctx.strokeStyle = adjustBrightness('#6a5a4a', lightFactor * 0.6);
+            ctx.lineWidth = 1;
             ctx.stroke();
 
-            // Hands (small angular)
-            ctx.fillStyle = adjustBrightness('#c4a882', lightFactor);
-            ctx.beginPath();
-            ctx.moveTo(leftHandX - 2, leftHandY);
-            ctx.lineTo(leftHandX + 2, leftHandY);
-            ctx.lineTo(leftHandX + 1, leftHandY + 4);
-            ctx.lineTo(leftHandX - 1, leftHandY + 4);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.moveTo(rightHandX - 2, rightHandY);
-            ctx.lineTo(rightHandX + 2, rightHandY);
-            ctx.lineTo(rightHandX + 1, rightHandY + 4);
-            ctx.lineTo(rightHandX - 1, rightHandY + 4);
-            ctx.closePath();
-            ctx.fill();
-
-            // === NECK ===
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.fillRect(cx - 2, neckY - bodyBob, 4, neckHeight + 2);
-
-            // Collar points (for suits/detective)
-            if (outfit !== 'dress') {
-                ctx.fillStyle = adjustBrightness('#f5f0e6', lightFactor);
+            // FACE DETAILS
+            if (lightFactor > 0.25) {
+                // Eyes - small dark dots
+                ctx.fillStyle = '#1a1a1a';
                 ctx.beginPath();
-                ctx.moveTo(cx - 4, shoulderY - bodyBob);
-                ctx.lineTo(cx - 2, shoulderY - 4 - bodyBob);
-                ctx.lineTo(cx, shoulderY - bodyBob);
-                ctx.closePath();
+                ctx.arc(x - 4, headY + headSize / 2 + 1, 1.5, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.moveTo(cx, shoulderY - bodyBob);
-                ctx.lineTo(cx + 2, shoulderY - 4 - bodyBob);
-                ctx.lineTo(cx + 4, shoulderY - bodyBob);
-                ctx.closePath();
+                ctx.arc(x + 4, headY + headSize / 2 + 1, 1.5, 0, Math.PI * 2);
                 ctx.fill();
-            }
 
-            // === HEAD (with face shape variety) ===
-            const skinColor = adjustBrightness(app.skin, lightFactor);
-
-            // Adjust head proportions based on face shape
-            let hw = headWidth;  // head width
-            let chinDrop = 2;    // how far chin extends
-            let cheekWidth = 1;  // cheek prominence
-            let foreheadWidth = 1; // forehead width factor
-
-            if (app.faceShape === 'round') {
-                hw = headWidth + 2;
-                chinDrop = 0;
-                cheekWidth = 2;
-            } else if (app.faceShape === 'wide' || app.faceShape === 'square') {
-                hw = headWidth + 3;
-                chinDrop = 1;
-                cheekWidth = 2;
-            } else if (app.faceShape === 'thin' || app.faceShape === 'gaunt') {
-                hw = headWidth - 1;
-                chinDrop = 3;
-                cheekWidth = 0;
-            } else if (app.faceShape === 'oval' || app.faceShape === 'elegant') {
-                hw = headWidth;
-                chinDrop = 2;
-                foreheadWidth = 0.9;
-            } else if (app.faceShape === 'heart') {
-                hw = headWidth + 1;
-                chinDrop = 3;
-                foreheadWidth = 1.2;
-            } else if (app.faceShape === 'heavy') {
-                hw = headWidth + 4;
-                chinDrop = 0;
-                cheekWidth = 3;
-            }
-
-            // Draw head shape
-            ctx.fillStyle = skinColor;
-            ctx.beginPath();
-            // Jaw and lower face
-            ctx.moveTo(cx - hw/2, headCenterY - 2 - bodyBob);
-            ctx.lineTo(cx - hw/2 + cheekWidth, headCenterY + headHeight/2 - 2 - bodyBob);
-            ctx.lineTo(cx, headCenterY + headHeight/2 + chinDrop - bodyBob); // chin
-            ctx.lineTo(cx + hw/2 - cheekWidth, headCenterY + headHeight/2 - 2 - bodyBob);
-            ctx.lineTo(cx + hw/2, headCenterY - 2 - bodyBob);
-            ctx.closePath();
-            ctx.fill();
-
-            // Upper head / forehead
-            const fhw = hw * foreheadWidth;
-            ctx.beginPath();
-            ctx.moveTo(cx - hw/2, headCenterY - 2 - bodyBob);
-            ctx.lineTo(cx - fhw/2, headCenterY - headHeight/2 - bodyBob);
-            ctx.lineTo(cx + fhw/2, headCenterY - headHeight/2 - bodyBob);
-            ctx.lineTo(cx + hw/2, headCenterY - 2 - bodyBob);
-            ctx.closePath();
-            ctx.fill();
-
-            // Face shadow (noir effect)
-            if (lightFactor > 0.5) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                // Eyebrows
+                ctx.strokeStyle = '#3a3020';
+                ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.moveTo(cx, headCenterY - headHeight/2 - bodyBob);
-                ctx.lineTo(cx, headCenterY + headHeight/2 + chinDrop - bodyBob);
-                ctx.lineTo(cx - hw/2 + cheekWidth, headCenterY + headHeight/2 - 2 - bodyBob);
-                ctx.lineTo(cx - hw/2, headCenterY - 2 - bodyBob);
-                ctx.lineTo(cx - fhw/2, headCenterY - headHeight/2 - bodyBob);
-                ctx.closePath();
-                ctx.fill();
-            }
-
-            // === FACIAL FEATURES ===
-            if (lightFactor > 0.3) {
-                const eyeY = headCenterY - 1 - bodyBob;
-
-                // Different eye styles
-                ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
-
-                if (app.eyeStyle === 'wide' || app.eyeStyle === 'large') {
-                    // Large round eyes
-                    ctx.beginPath();
-                    ctx.arc(cx - 3, eyeY, 2, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(cx + 3, eyeY, 2, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (app.eyeStyle === 'narrow' || app.eyeStyle === 'stern') {
-                    // Narrow slits
-                    ctx.fillRect(cx - 5, eyeY - 1, 4, 2);
-                    ctx.fillRect(cx + 1, eyeY - 1, 4, 2);
-                } else if (app.eyeStyle === 'almond' || app.eyeStyle === 'cat') {
-                    // Almond shaped
-                    ctx.beginPath();
-                    ctx.moveTo(cx - 5, eyeY);
-                    ctx.quadraticCurveTo(cx - 3, eyeY - 2, cx - 1, eyeY);
-                    ctx.quadraticCurveTo(cx - 3, eyeY + 1, cx - 5, eyeY);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(cx + 1, eyeY);
-                    ctx.quadraticCurveTo(cx + 3, eyeY - 2, cx + 5, eyeY);
-                    ctx.quadraticCurveTo(cx + 3, eyeY + 1, cx + 1, eyeY);
-                    ctx.fill();
-                } else if (app.eyeStyle === 'droopy') {
-                    // Droopy tired eyes
-                    ctx.beginPath();
-                    ctx.moveTo(cx - 5, eyeY - 1);
-                    ctx.lineTo(cx - 1, eyeY + 1);
-                    ctx.lineTo(cx - 3, eyeY + 1);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(cx + 1, eyeY + 1);
-                    ctx.lineTo(cx + 5, eyeY - 1);
-                    ctx.lineTo(cx + 3, eyeY + 1);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.eyeStyle === 'glasses') {
-                    // Glasses frames
-                    ctx.strokeStyle = adjustBrightness('#1a1a1a', lightFactor);
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.arc(cx - 3, eyeY, 3, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(cx + 3, eyeY, 3, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(cx, eyeY);
-                    ctx.lineTo(cx - 0.5, eyeY);
-                    ctx.stroke();
-                    // Tiny pupils
-                    ctx.fillRect(cx - 3, eyeY, 1, 1);
-                    ctx.fillRect(cx + 3, eyeY, 1, 1);
-                } else if (app.eyeStyle === 'small') {
-                    // Small beady eyes
-                    ctx.fillRect(cx - 3, eyeY, 2, 2);
-                    ctx.fillRect(cx + 2, eyeY, 2, 2);
-                } else {
-                    // Default angular eyes
-                    ctx.beginPath();
-                    ctx.moveTo(cx - 4, eyeY);
-                    ctx.lineTo(cx - 2, eyeY - 1);
-                    ctx.lineTo(cx - 1, eyeY);
-                    ctx.lineTo(cx - 2, eyeY + 1);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(cx + 1, eyeY);
-                    ctx.lineTo(cx + 2, eyeY - 1);
-                    ctx.lineTo(cx + 4, eyeY);
-                    ctx.lineTo(cx + 2, eyeY + 1);
-                    ctx.closePath();
-                    ctx.fill();
-                }
-
-                // Nose (subtle)
-                ctx.fillStyle = adjustBrightness(app.skin, lightFactor * 0.85);
+                ctx.moveTo(x - 6, headY + headSize / 2 - 2);
+                ctx.lineTo(x - 2, headY + headSize / 2 - 3);
+                ctx.stroke();
                 ctx.beginPath();
-                ctx.moveTo(cx, eyeY + 2);
-                ctx.lineTo(cx + 1, eyeY + 5);
-                ctx.lineTo(cx - 1, eyeY + 5);
-                ctx.closePath();
-                ctx.fill();
+                ctx.moveTo(x + 2, headY + headSize / 2 - 3);
+                ctx.lineTo(x + 6, headY + headSize / 2 - 2);
+                ctx.stroke();
+
+                // Nose hint
+                ctx.strokeStyle = adjustBrightness('#8a7a6a', lightFactor * 0.5);
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, headY + headSize / 2 + 2);
+                ctx.lineTo(x, headY + headSize / 2 + 5);
+                ctx.stroke();
 
                 // Mouth
-                const mouthY = headCenterY + headHeight/4 + 1 - bodyBob;
-                if (app.lipstick) {
-                    // Red lips
-                    ctx.fillStyle = adjustBrightness('#8b2020', lightFactor);
-                    ctx.beginPath();
-                    ctx.ellipse(cx, mouthY, 3, 1.5, 0, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    // Simple mouth line
-                    ctx.strokeStyle = adjustBrightness('#6a5a4a', lightFactor);
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(cx - 2, mouthY);
-                    ctx.lineTo(cx + 2, mouthY);
-                    ctx.stroke();
-                }
-
-                // Mustache
-                if (app.mustache) {
-                    ctx.fillStyle = adjustBrightness(app.hairColor || '#4a4a4a', lightFactor);
-                    ctx.beginPath();
-                    ctx.moveTo(cx - 4, mouthY - 2);
-                    ctx.quadraticCurveTo(cx, mouthY - 1, cx + 4, mouthY - 2);
-                    ctx.lineTo(cx + 4, mouthY - 1);
-                    ctx.quadraticCurveTo(cx, mouthY, cx - 4, mouthY - 1);
-                    ctx.closePath();
-                    ctx.fill();
-                }
-
-                // Stubble
-                if (app.stubble) {
-                    ctx.fillStyle = 'rgba(50, 50, 50, 0.3)';
-                    for (let i = 0; i < 12; i++) {
-                        const sx = cx - 3 + (i % 4) * 2;
-                        const sy = mouthY - 3 + Math.floor(i / 4) * 3;
-                        ctx.fillRect(sx, sy, 1, 1);
-                    }
-                }
-
-                // Scar
-                if (app.scar) {
-                    ctx.strokeStyle = adjustBrightness('#a08070', lightFactor);
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(cx + 2, eyeY - 3);
-                    ctx.lineTo(cx + 4, eyeY + 4);
-                    ctx.stroke();
-                }
+                ctx.strokeStyle = '#5a4a3a';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x - 3, headY + headSize / 2 + 8);
+                ctx.lineTo(x + 3, headY + headSize / 2 + 8);
+                ctx.stroke();
             }
 
-            // === HAIR (when no hat) ===
-            if (hatType === 'none' && app.hairStyle && app.hairStyle !== 'bald') {
-                const hairColor = adjustBrightness(app.hairColor || '#1a1a1a', lightFactor);
-                ctx.fillStyle = hairColor;
-                const hairY = headCenterY - headHeight/2 - bodyBob;
-
-                if (app.hairStyle === 'updo') {
-                    // Victory roll style updo
-                    ctx.beginPath();
-                    ctx.ellipse(cx, hairY - 2, 6, 4, 0, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(cx - fhw/2 - 1, hairY + 3);
-                    ctx.quadraticCurveTo(cx, hairY - 4, cx + fhw/2 + 1, hairY + 3);
-                    ctx.lineTo(cx + fhw/2, hairY + 5);
-                    ctx.lineTo(cx - fhw/2, hairY + 5);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'bob') {
-                    // Bob cut
-                    ctx.beginPath();
-                    ctx.moveTo(cx - hw/2 - 2, headCenterY - bodyBob);
-                    ctx.quadraticCurveTo(cx - hw/2 - 3, hairY, cx, hairY - 2);
-                    ctx.quadraticCurveTo(cx + hw/2 + 3, hairY, cx + hw/2 + 2, headCenterY - bodyBob);
-                    ctx.lineTo(cx + hw/2, headCenterY - bodyBob);
-                    ctx.lineTo(cx - hw/2, headCenterY - bodyBob);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'curled') {
-                    // Curled 1950s style
-                    ctx.beginPath();
-                    ctx.moveTo(cx - hw/2 - 1, headCenterY - 3 - bodyBob);
-                    for (let i = 0; i < 5; i++) {
-                        const cx1 = cx - hw/2 + i * (hw/4);
-                        ctx.quadraticCurveTo(cx1, hairY - 3 - (i % 2) * 2, cx1 + hw/8, hairY - 2);
-                    }
-                    ctx.lineTo(cx + hw/2 + 1, headCenterY - 3 - bodyBob);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'waves') {
-                    // Elegant waves
-                    ctx.beginPath();
-                    ctx.moveTo(cx - hw/2 - 2, headCenterY + 2 - bodyBob);
-                    ctx.quadraticCurveTo(cx - hw/2 - 2, hairY - 2, cx, hairY - 3);
-                    ctx.quadraticCurveTo(cx + hw/2 + 2, hairY - 2, cx + hw/2 + 2, headCenterY + 2 - bodyBob);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'slicked') {
-                    // Slicked back
-                    ctx.beginPath();
-                    ctx.moveTo(cx - fhw/2, hairY + 3);
-                    ctx.lineTo(cx - fhw/2 + 2, hairY);
-                    ctx.lineTo(cx + fhw/2 - 2, hairY);
-                    ctx.lineTo(cx + fhw/2, hairY + 3);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'parted') {
-                    // Side parted
-                    ctx.beginPath();
-                    ctx.moveTo(cx - fhw/2, hairY + 4);
-                    ctx.lineTo(cx - fhw/2 + 1, hairY);
-                    ctx.lineTo(cx - 2, hairY - 1);
-                    ctx.lineTo(cx + fhw/2 - 1, hairY + 1);
-                    ctx.lineTo(cx + fhw/2, hairY + 4);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'receding') {
-                    // Receding hairline
-                    ctx.beginPath();
-                    ctx.moveTo(cx - fhw/2 + 3, hairY + 4);
-                    ctx.lineTo(cx - 2, hairY + 1);
-                    ctx.lineTo(cx + 2, hairY + 1);
-                    ctx.lineTo(cx + fhw/2 - 3, hairY + 4);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (app.hairStyle === 'messy') {
-                    // Messy/disheveled
-                    ctx.beginPath();
-                    ctx.moveTo(cx - fhw/2 - 1, hairY + 4);
-                    ctx.lineTo(cx - fhw/2, hairY);
-                    ctx.lineTo(cx - 2, hairY - 2);
-                    ctx.lineTo(cx + 1, hairY - 1);
-                    ctx.lineTo(cx + fhw/2 + 1, hairY);
-                    ctx.lineTo(cx + fhw/2 + 2, hairY + 4);
-                    ctx.closePath();
-                    ctx.fill();
-                    // Stray hairs
-                    ctx.strokeStyle = hairColor;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(cx - 3, hairY - 1);
-                    ctx.lineTo(cx - 4, hairY - 4);
-                    ctx.moveTo(cx + 2, hairY - 1);
-                    ctx.lineTo(cx + 5, hairY - 3);
-                    ctx.stroke();
-                } else if (app.hairStyle === 'crew') {
-                    // Crew cut
-                    ctx.fillRect(cx - fhw/2, hairY, fhw, 4);
-                }
+            // HAIR (visible on sides if no hat)
+            if (hatType === 'none' && app.gender === 'f') {
+                ctx.fillStyle = adjustBrightness('#3a2a1a', lightFactor);
+                ctx.beginPath();
+                ctx.ellipse(x, headY + 4, headSize / 2 + 3, headSize / 2 + 1, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Hair falling down sides
+                ctx.fillRect(x - headSize / 2 - 3, headY + 2, 4, headSize + 8);
+                ctx.fillRect(x + headSize / 2, headY + 2, 4, headSize + 8);
+            } else if (hatType === 'none') {
+                ctx.fillStyle = adjustBrightness('#2a2018', lightFactor);
+                ctx.beginPath();
+                ctx.ellipse(x, headY + 3, headSize / 2 + 1, headSize / 2 - 2, 0, 0, Math.PI, true);
+                ctx.fill();
             }
 
-            // === HAT (fedora - properly proportioned) ===
+            // FEDORA HAT
             if (hatType === 'fedora') {
-                const hatY = headCenterY - headHeight/2 - 1 - bodyBob;
-                const brimWidth = hw * 1.4; // Brim slightly wider than head
-                const crownWidth = hw * 0.9;
-                const crownHeight = headHeight * 0.5;
-
-                // Hat brim - subtle curve
                 ctx.fillStyle = adjustBrightness('#2a2520', lightFactor);
+                // Brim - wider, more defined
                 ctx.beginPath();
-                ctx.moveTo(cx - brimWidth/2, hatY + 2);
-                ctx.quadraticCurveTo(cx - brimWidth/2 - 1, hatY, cx - crownWidth/2, hatY);
-                ctx.lineTo(cx + crownWidth/2, hatY);
-                ctx.quadraticCurveTo(cx + brimWidth/2 + 1, hatY, cx + brimWidth/2, hatY + 2);
-                ctx.lineTo(cx + brimWidth/2 - 1, hatY + 3);
-                ctx.lineTo(cx - brimWidth/2 + 1, hatY + 3);
+                ctx.ellipse(x, headY + 4, headSize + 4, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Crown
+                ctx.beginPath();
+                ctx.moveTo(x - headSize + 2, headY + 3);
+                ctx.lineTo(x - headSize + 4, headY - 6);
+                ctx.lineTo(x - 3, headY - 10);
+                ctx.lineTo(x + 3, headY - 10);
+                ctx.lineTo(x + headSize - 4, headY - 6);
+                ctx.lineTo(x + headSize - 2, headY + 3);
                 ctx.closePath();
                 ctx.fill();
-
-                // Hat crown - classic fedora shape with front pinch
-                ctx.fillStyle = adjustBrightness('#2a2520', lightFactor);
-                ctx.beginPath();
-                ctx.moveTo(cx - crownWidth/2, hatY);
-                ctx.lineTo(cx - crownWidth/2 + 1, hatY - crownHeight + 2);
-                ctx.quadraticCurveTo(cx - 2, hatY - crownHeight - 1, cx, hatY - crownHeight);
-                ctx.quadraticCurveTo(cx + 2, hatY - crownHeight - 1, cx + crownWidth/2 - 1, hatY - crownHeight + 2);
-                ctx.lineTo(cx + crownWidth/2, hatY);
-                ctx.closePath();
-                ctx.fill();
-
-                // Crown highlight
-                ctx.fillStyle = adjustBrightness('#3a3530', lightFactor);
-                ctx.beginPath();
-                ctx.moveTo(cx - crownWidth/4, hatY - crownHeight + 2);
-                ctx.quadraticCurveTo(cx, hatY - crownHeight, cx + crownWidth/4, hatY - crownHeight + 2);
-                ctx.lineTo(cx + crownWidth/4 - 1, hatY - 2);
-                ctx.lineTo(cx - crownWidth/4 + 1, hatY - 2);
-                ctx.closePath();
-                ctx.fill();
-
-                // Hat band
-                ctx.fillStyle = adjustBrightness('#4a4035', lightFactor);
-                ctx.fillRect(cx - crownWidth/2 + 1, hatY - 3, crownWidth - 2, 3);
-
-                // Hat shadow on upper face
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-                ctx.beginPath();
-                ctx.moveTo(cx - hw/2, headCenterY - headHeight/2 - bodyBob);
-                ctx.lineTo(cx + hw/2, headCenterY - headHeight/2 - bodyBob);
-                ctx.lineTo(cx + hw/2, headCenterY - headHeight/4 - bodyBob);
-                ctx.lineTo(cx - hw/2, headCenterY - headHeight/4 - bodyBob);
-                ctx.closePath();
-                ctx.fill();
+                // Band
+                ctx.fillStyle = adjustBrightness('#4a4540', lightFactor);
+                ctx.fillRect(x - headSize + 4, headY - 1, headSize * 2 - 8, 3);
             }
 
             ctx.restore();
@@ -3531,17 +3162,17 @@
 
         // Exit to street
         function exitBuilding() {
-            currentInterior = null;
-            game.state = 'playing';
-
             // Find which building we were in and position player outside its door
             for (const building of currentMap.buildings) {
                 if (building.interiorId === currentInterior) {
                     player.x = building.x + building.width / 2 - player.width / 2;
-                    player.y = GROUND_LEVEL + 10;
+                    player.y = GROUND_LEVEL + 40; // On sidewalk in front of door
                     break;
                 }
             }
+
+            currentInterior = null;
+            game.state = 'playing';
         }
 
         // Draw interior scene
@@ -3623,14 +3254,15 @@
             }
 
             // Draw player in interior
-            drawMannequin(interiorPlayerPos.x, interiorPlayerPos.y + 60, {
+            drawMannequin(interiorPlayerPos.x, interiorPlayerPos.y, {
                 facing: player.facing,
                 isMoving: player.isMoving,
                 walkCycle: player.walkCycle,
                 outfit: 'detective',
                 hatType: 'fedora',
-                lightFactor: 0.9,
-                isPlayer: true
+                lightFactor: 0.95,
+                isPlayer: true,
+                appearance: player.appearance
             });
         }
 
@@ -3909,28 +3541,44 @@
 
             // Position based on role
             let npcX = baseX + 375;
-            let npcY = 340;
+            let npcY = 360;
 
             if (npc.role === 'secretary') {
                 npcX = baseX + 375;
-                npcY = 340;
+                npcY = 360;
             } else if (npc.role === 'bartender') {
                 npcX = baseX + 200;
-                npcY = 300;
+                npcY = 320;
             } else if (npc.role === 'owner') {
                 npcX = baseX + 150;
-                npcY = 340;
+                npcY = 360;
+            } else if (npc.role === 'pharmacist') {
+                npcX = baseX + 300;
+                npcY = 360;
+            }
+
+            // Determine outfit based on role and gender
+            let outfit = 'suit';
+            if (npc.appearance && npc.appearance.gender === 'f') {
+                outfit = 'dress';
             }
 
             drawMannequin(npcX, npcY, {
-                facing: 1,
+                facing: -1, // Face toward player entering
                 isMoving: false,
                 walkCycle: 0,
-                outfit: npc.role === 'secretary' ? 'dress' : 'suit',
+                outfit: outfit,
                 hatType: 'none',
-                lightFactor: 0.85,
-                isPlayer: false
+                lightFactor: 0.9,
+                isPlayer: false,
+                appearance: npc.appearance // Pass NPC's appearance for proper skin/face
             });
+
+            // Draw NPC name label above them
+            ctx.fillStyle = '#d4c5a9';
+            ctx.font = '12px "Special Elite", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(npc.name.toUpperCase(), npcX, npcY - 85);
         }
 
         // ============================================
@@ -4020,6 +3668,10 @@
             const maxSpeed = CONFIG.CAR_SPEED;
             const acceleration = 0.3;
             const friction = 0.1;
+            const carWidth = 120; // Width of car collision box
+
+            // Store previous position for collision rollback
+            const prevX = car.x;
 
             // Accelerate/brake
             if (keys.up || keys.right) {
@@ -4040,6 +3692,24 @@
 
             // Keep car on road
             car.x = Math.max(50, Math.min(currentMap.width - 150, car.x));
+
+            // Check collision with other parked cars
+            for (const otherCar of currentMap.cars) {
+                if (otherCar === car) continue; // Skip self
+
+                // Simple box collision check
+                const carLeft = car.x;
+                const carRight = car.x + carWidth;
+                const otherLeft = otherCar.x;
+                const otherRight = otherCar.x + carWidth;
+
+                if (carRight > otherLeft && carLeft < otherRight) {
+                    // Collision! Stop and push back
+                    car.x = prevX;
+                    player.carSpeed = 0;
+                    break;
+                }
+            }
 
             // Update player position to match car
             player.x = car.x + 50;
@@ -4294,8 +3964,9 @@
 
             // Boundary checks - player stays on sidewalk/street area
             player.x = Math.max(20, Math.min(currentMap.width - player.width - 20, player.x));
-            // Y boundaries: top sidewalk to bottom sidewalk
-            player.y = Math.max(GROUND_LEVEL - 45, Math.min(GROUND_LEVEL + 180, player.y));
+            // Y boundaries: near building fronts (GROUND_LEVEL) to across the street (GROUND_LEVEL + 160)
+            // Player walks in front of buildings on sidewalk
+            player.y = Math.max(GROUND_LEVEL + 20, Math.min(GROUND_LEVEL + 160, player.y));
 
             // Collision with buildings
             for (const collider of currentMap.colliders || []) {
@@ -4400,24 +4071,23 @@
                 for (const npcId of interior.npcs || []) {
                     const npc = npcs.find(n => n.id === npcId);
                     if (npc) {
-                        // Calculate NPC position based on role
+                        // Calculate NPC position based on role (must match drawInteriorNPC)
                         let npcX = 375;
-                        let npcY = 280;
-                        if (npc.role === 'secretary') { npcX = 375; npcY = 280; }
-                        else if (npc.role === 'bartender') { npcX = 200; npcY = 200; }
-                        else if (npc.role === 'owner' && npc.id === 'waitress') { npcX = 180; npcY = 180; }
-                        else if (npc.role === 'cook') { npcX = 100; npcY = 150; }
-                        else if (npc.role === 'patron') { npcX = 280; npcY = 280; }
-                        else if (npc.role === 'pharmacist') { npcX = 350; npcY = 250; }
-                        else if (npc.role === 'owner') { npcX = 400; npcY = 250; }
-                        else if (npc.role === 'employee') { npcX = 350; npcY = 280; }
+                        let npcY = 360;
+                        if (npc.role === 'secretary') { npcX = 375; npcY = 360; }
+                        else if (npc.role === 'bartender') { npcX = 200; npcY = 320; }
+                        else if (npc.role === 'owner') { npcX = 150; npcY = 360; }
+                        else if (npc.role === 'cook') { npcX = 100; npcY = 360; }
+                        else if (npc.role === 'patron') { npcX = 280; npcY = 360; }
+                        else if (npc.role === 'pharmacist') { npcX = 300; npcY = 360; }
+                        else if (npc.role === 'employee') { npcX = 350; npcY = 360; }
 
                         const dist = Math.sqrt(
                             Math.pow(interiorPlayerPos.x - npcX, 2) +
                             Math.pow(interiorPlayerPos.y - npcY, 2)
                         );
 
-                        if (dist < 100) {
+                        if (dist < 80) {
                             nearInteractable = { type: 'npc', npc: npc };
                             let prompt = `[E] TALK TO ${npc.name.toUpperCase()}`;
                             if (npc.canBeBribed) prompt += '  [B] BRIBE';
@@ -4446,14 +4116,13 @@
             for (const building of currentMap.buildings) {
                 if (building.enterable) {
                     const doorX = building.x + building.width / 2;
-                    const doorY = GROUND_LEVEL;
 
-                    const dist = Math.sqrt(
-                        Math.pow(player.x + player.width / 2 - doorX, 2) +
-                        Math.pow(player.y + player.height - doorY, 2)
-                    );
+                    // Use primarily horizontal distance - player just needs to be in front of door
+                    const xDist = Math.abs(player.x + player.width / 2 - doorX);
+                    // Player should be on sidewalk near building (GROUND_LEVEL + 20 to +60)
+                    const nearBuilding = player.y >= GROUND_LEVEL + 15 && player.y <= GROUND_LEVEL + 70;
 
-                    if (dist < 60) {
+                    if (xDist < 50 && nearBuilding) {
                         nearInteractable = { type: 'building', building: building };
                         document.getElementById('interact-prompt').textContent = `[E] ENTER ${building.name.split('\n')[0]}`;
                         break;
@@ -5075,7 +4744,10 @@
         function init() {
             // Position player on sidewalk in front of PI office
             player.x = 250;
-            player.y = GROUND_LEVEL - 20;
+            player.y = GROUND_LEVEL + 40; // On the sidewalk in front of buildings
+
+            // Initialize world state
+            initWorldState();
 
             // Start game loop
             requestAnimationFrame(gameLoop);
