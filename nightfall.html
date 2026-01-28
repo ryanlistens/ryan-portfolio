@@ -523,7 +523,7 @@
         // Player state
         const player = {
             x: 600,
-            y: 400,
+            y: 450, // Start on sidewalk (GROUND_LEVEL + 40)
             width: 24,
             height: 64,
             speed: CONFIG.PLAYER_SPEED,
@@ -2469,129 +2469,210 @@
                 hatType = 'fedora',
                 lightFactor = 1,
                 isPlayer = false,
-                appearance = null
+                appearance = null,
+                outfit = 'detective'
             } = options;
 
-            const app = appearance || { skin: '#d4b896', gender: 'm' };
+            const app = appearance || { skin: '#d4a87a', gender: 'm' };
 
-            // Simple human proportions (total ~55px tall)
-            const headSize = 10;
-            const torsoHeight = 20;
-            const legHeight = 22;
-            const armLength = 16;
+            // Better proportions - taller, more realistic human figure
+            const scale = 1.2; // Slightly larger characters
+            const headSize = 12 * scale;
+            const torsoHeight = 24 * scale;
+            const legHeight = 26 * scale;
+            const armLength = 18 * scale;
+            const bodyWidth = 14 * scale;
 
-            // Feet position
+            // Feet position (y is bottom of character)
             const feetY = y;
             const hipY = feetY - legHeight;
             const shoulderY = hipY - torsoHeight;
             const headY = shoulderY - headSize;
 
             // Walking animation
-            const walkAnim = isMoving ? Math.sin(walkCycle * 0.2) * 6 : 0;
+            const walkAnim = isMoving ? Math.sin(walkCycle * 0.2) * 5 : 0;
+
+            // Outfit colors - more visible, saturated colors
+            let coatColor, pantsColor, shirtColor;
+            if (isPlayer) {
+                coatColor = '#4a3828'; // Brown trench coat
+                pantsColor = '#2a2a30'; // Dark pants
+                shirtColor = '#e8e0d0'; // Light shirt
+            } else if (outfit === 'dress') {
+                coatColor = '#8b3a3a'; // Red dress
+                pantsColor = '#8b3a3a';
+                shirtColor = '#d4a87a';
+            } else if (outfit === 'suit') {
+                coatColor = '#3a3a40'; // Dark suit
+                pantsColor = '#2a2a30';
+                shirtColor = '#d0d0d8';
+            } else {
+                coatColor = '#4a4a50'; // Gray coat
+                pantsColor = '#3a3a40';
+                shirtColor = '#c0c0c0';
+            }
 
             ctx.save();
             ctx.translate(x, 0);
             if (facing === -1) {
                 ctx.scale(-1, 1);
-                ctx.translate(-0, 0);
             }
             ctx.translate(-x, 0);
 
-            // Shadow
-            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            // Shadow on ground
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
             ctx.beginPath();
-            ctx.ellipse(x, feetY + 2, 12, 4, 0, 0, Math.PI * 2);
+            ctx.ellipse(x, feetY + 3, 14 * scale, 4, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Legs (simple lines)
-            ctx.strokeStyle = adjustBrightness('#1a1a2a', lightFactor);
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
+            // LEGS - solid filled rectangles for visibility
+            const legWidth = 5 * scale;
+            ctx.fillStyle = adjustBrightness(pantsColor, lightFactor);
             // Left leg
-            ctx.beginPath();
-            ctx.moveTo(x - 4, hipY);
-            ctx.lineTo(x - 4 + walkAnim * 0.5, feetY);
-            ctx.stroke();
+            ctx.fillRect(x - legWidth - 2 + walkAnim * 0.3, hipY, legWidth, legHeight - 4);
             // Right leg
-            ctx.beginPath();
-            ctx.moveTo(x + 4, hipY);
-            ctx.lineTo(x + 4 - walkAnim * 0.5, feetY);
-            ctx.stroke();
+            ctx.fillRect(x + 2 - walkAnim * 0.3, hipY, legWidth, legHeight - 4);
 
-            // Shoes
+            // SHOES - black oxfords
             ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
-            ctx.fillRect(x - 8 + walkAnim * 0.5, feetY - 3, 8, 4);
-            ctx.fillRect(x - walkAnim * 0.5, feetY - 3, 8, 4);
+            ctx.fillRect(x - legWidth - 4 + walkAnim * 0.3, feetY - 5, legWidth + 4, 6);
+            ctx.fillRect(x - walkAnim * 0.3, feetY - 5, legWidth + 4, 6);
 
-            // Body/Coat
-            ctx.fillStyle = adjustBrightness('#2a2520', lightFactor);
+            // TORSO/BODY - solid filled shape
+            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
             ctx.beginPath();
-            ctx.moveTo(x - 10, shoulderY);
-            ctx.lineTo(x + 10, shoulderY);
-            ctx.lineTo(x + 8, hipY + 5);
-            ctx.lineTo(x - 8, hipY + 5);
+            ctx.moveTo(x - bodyWidth, shoulderY);
+            ctx.lineTo(x + bodyWidth, shoulderY);
+            ctx.lineTo(x + bodyWidth - 2, hipY + 4);
+            ctx.lineTo(x - bodyWidth + 2, hipY + 4);
             ctx.closePath();
             ctx.fill();
 
-            // Arms
-            ctx.strokeStyle = adjustBrightness('#2a2520', lightFactor);
-            ctx.lineWidth = 4;
+            // Coat lapels / collar - lighter accent
+            ctx.fillStyle = adjustBrightness(shirtColor, lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(x - 4, shoulderY + 2);
+            ctx.lineTo(x, shoulderY + 12);
+            ctx.lineTo(x + 4, shoulderY + 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // ARMS - solid filled
+            const armWidth = 4 * scale;
+            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
             // Left arm
-            ctx.beginPath();
-            ctx.moveTo(x - 10, shoulderY + 3);
-            ctx.lineTo(x - 12 - walkAnim * 0.3, shoulderY + armLength);
-            ctx.stroke();
+            ctx.save();
+            ctx.translate(x - bodyWidth, shoulderY + 3);
+            ctx.rotate(-0.15 + walkAnim * 0.02);
+            ctx.fillRect(-armWidth/2, 0, armWidth, armLength);
+            ctx.restore();
             // Right arm
+            ctx.save();
+            ctx.translate(x + bodyWidth, shoulderY + 3);
+            ctx.rotate(0.15 - walkAnim * 0.02);
+            ctx.fillRect(-armWidth/2, 0, armWidth, armLength);
+            ctx.restore();
+
+            // HANDS - visible skin tone
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
             ctx.beginPath();
-            ctx.moveTo(x + 10, shoulderY + 3);
-            ctx.lineTo(x + 12 + walkAnim * 0.3, shoulderY + armLength);
+            ctx.arc(x - bodyWidth - walkAnim * 0.2, shoulderY + armLength + 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + bodyWidth + walkAnim * 0.2, shoulderY + armLength + 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // NECK
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.fillRect(x - 4, shoulderY - 6, 8, 8);
+
+            // HEAD - oval face shape
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.beginPath();
+            ctx.ellipse(x, headY + headSize / 2 + 2, headSize / 2 + 1, headSize / 2 + 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Slight head outline for definition
+            ctx.strokeStyle = adjustBrightness('#6a5a4a', lightFactor * 0.6);
+            ctx.lineWidth = 1;
             ctx.stroke();
 
-            // Hands
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.beginPath();
-            ctx.arc(x - 12 - walkAnim * 0.3, shoulderY + armLength + 2, 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(x + 12 + walkAnim * 0.3, shoulderY + armLength + 2, 3, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Neck
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.fillRect(x - 3, headY + headSize - 2, 6, 5);
-
-            // Head
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.beginPath();
-            ctx.ellipse(x, headY + headSize / 2, headSize / 2, headSize / 2 + 2, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Face details (simple)
-            if (lightFactor > 0.3) {
-                // Eyes
+            // FACE DETAILS
+            if (lightFactor > 0.25) {
+                // Eyes - small dark dots
                 ctx.fillStyle = '#1a1a1a';
-                ctx.fillRect(x - 4, headY + headSize / 2 - 1, 2, 2);
-                ctx.fillRect(x + 2, headY + headSize / 2 - 1, 2, 2);
+                ctx.beginPath();
+                ctx.arc(x - 4, headY + headSize / 2 + 1, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + 4, headY + headSize / 2 + 1, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eyebrows
+                ctx.strokeStyle = '#3a3020';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x - 6, headY + headSize / 2 - 2);
+                ctx.lineTo(x - 2, headY + headSize / 2 - 3);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x + 2, headY + headSize / 2 - 3);
+                ctx.lineTo(x + 6, headY + headSize / 2 - 2);
+                ctx.stroke();
+
+                // Nose hint
+                ctx.strokeStyle = adjustBrightness('#8a7a6a', lightFactor * 0.5);
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, headY + headSize / 2 + 2);
+                ctx.lineTo(x, headY + headSize / 2 + 5);
+                ctx.stroke();
+
+                // Mouth
+                ctx.strokeStyle = '#5a4a3a';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x - 3, headY + headSize / 2 + 8);
+                ctx.lineTo(x + 3, headY + headSize / 2 + 8);
+                ctx.stroke();
             }
 
-            // Fedora hat
+            // HAIR (visible on sides if no hat)
+            if (hatType === 'none' && app.gender === 'f') {
+                ctx.fillStyle = adjustBrightness('#3a2a1a', lightFactor);
+                ctx.beginPath();
+                ctx.ellipse(x, headY + 4, headSize / 2 + 3, headSize / 2 + 1, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Hair falling down sides
+                ctx.fillRect(x - headSize / 2 - 3, headY + 2, 4, headSize + 8);
+                ctx.fillRect(x + headSize / 2, headY + 2, 4, headSize + 8);
+            } else if (hatType === 'none') {
+                ctx.fillStyle = adjustBrightness('#2a2018', lightFactor);
+                ctx.beginPath();
+                ctx.ellipse(x, headY + 3, headSize / 2 + 1, headSize / 2 - 2, 0, 0, Math.PI, true);
+                ctx.fill();
+            }
+
+            // FEDORA HAT
             if (hatType === 'fedora') {
-                ctx.fillStyle = adjustBrightness('#1a1815', lightFactor);
-                // Brim
-                ctx.fillRect(x - 9, headY + 2, 18, 3);
+                ctx.fillStyle = adjustBrightness('#2a2520', lightFactor);
+                // Brim - wider, more defined
+                ctx.beginPath();
+                ctx.ellipse(x, headY + 4, headSize + 4, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
                 // Crown
                 ctx.beginPath();
-                ctx.moveTo(x - 7, headY + 2);
-                ctx.lineTo(x - 6, headY - 5);
-                ctx.lineTo(x - 2, headY - 7);
-                ctx.lineTo(x + 2, headY - 7);
-                ctx.lineTo(x + 6, headY - 5);
-                ctx.lineTo(x + 7, headY + 2);
+                ctx.moveTo(x - headSize + 2, headY + 3);
+                ctx.lineTo(x - headSize + 4, headY - 6);
+                ctx.lineTo(x - 3, headY - 10);
+                ctx.lineTo(x + 3, headY - 10);
+                ctx.lineTo(x + headSize - 4, headY - 6);
+                ctx.lineTo(x + headSize - 2, headY + 3);
                 ctx.closePath();
                 ctx.fill();
                 // Band
-                ctx.fillStyle = adjustBrightness('#3a3530', lightFactor);
-                ctx.fillRect(x - 6, headY, 12, 2);
+                ctx.fillStyle = adjustBrightness('#4a4540', lightFactor);
+                ctx.fillRect(x - headSize + 4, headY - 1, headSize * 2 - 8, 3);
             }
 
             ctx.restore();
@@ -3081,17 +3162,17 @@
 
         // Exit to street
         function exitBuilding() {
-            currentInterior = null;
-            game.state = 'playing';
-
             // Find which building we were in and position player outside its door
             for (const building of currentMap.buildings) {
                 if (building.interiorId === currentInterior) {
                     player.x = building.x + building.width / 2 - player.width / 2;
-                    player.y = GROUND_LEVEL + 10;
+                    player.y = GROUND_LEVEL + 40; // On sidewalk in front of door
                     break;
                 }
             }
+
+            currentInterior = null;
+            game.state = 'playing';
         }
 
         // Draw interior scene
@@ -3173,14 +3254,15 @@
             }
 
             // Draw player in interior
-            drawMannequin(interiorPlayerPos.x, interiorPlayerPos.y + 60, {
+            drawMannequin(interiorPlayerPos.x, interiorPlayerPos.y, {
                 facing: player.facing,
                 isMoving: player.isMoving,
                 walkCycle: player.walkCycle,
                 outfit: 'detective',
                 hatType: 'fedora',
-                lightFactor: 0.9,
-                isPlayer: true
+                lightFactor: 0.95,
+                isPlayer: true,
+                appearance: player.appearance
             });
         }
 
@@ -3459,28 +3541,44 @@
 
             // Position based on role
             let npcX = baseX + 375;
-            let npcY = 340;
+            let npcY = 360;
 
             if (npc.role === 'secretary') {
                 npcX = baseX + 375;
-                npcY = 340;
+                npcY = 360;
             } else if (npc.role === 'bartender') {
                 npcX = baseX + 200;
-                npcY = 300;
+                npcY = 320;
             } else if (npc.role === 'owner') {
                 npcX = baseX + 150;
-                npcY = 340;
+                npcY = 360;
+            } else if (npc.role === 'pharmacist') {
+                npcX = baseX + 300;
+                npcY = 360;
+            }
+
+            // Determine outfit based on role and gender
+            let outfit = 'suit';
+            if (npc.appearance && npc.appearance.gender === 'f') {
+                outfit = 'dress';
             }
 
             drawMannequin(npcX, npcY, {
-                facing: 1,
+                facing: -1, // Face toward player entering
                 isMoving: false,
                 walkCycle: 0,
-                outfit: npc.role === 'secretary' ? 'dress' : 'suit',
+                outfit: outfit,
                 hatType: 'none',
-                lightFactor: 0.85,
-                isPlayer: false
+                lightFactor: 0.9,
+                isPlayer: false,
+                appearance: npc.appearance // Pass NPC's appearance for proper skin/face
             });
+
+            // Draw NPC name label above them
+            ctx.fillStyle = '#d4c5a9';
+            ctx.font = '12px "Special Elite", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(npc.name.toUpperCase(), npcX, npcY - 85);
         }
 
         // ============================================
@@ -3570,6 +3668,10 @@
             const maxSpeed = CONFIG.CAR_SPEED;
             const acceleration = 0.3;
             const friction = 0.1;
+            const carWidth = 120; // Width of car collision box
+
+            // Store previous position for collision rollback
+            const prevX = car.x;
 
             // Accelerate/brake
             if (keys.up || keys.right) {
@@ -3590,6 +3692,24 @@
 
             // Keep car on road
             car.x = Math.max(50, Math.min(currentMap.width - 150, car.x));
+
+            // Check collision with other parked cars
+            for (const otherCar of currentMap.cars) {
+                if (otherCar === car) continue; // Skip self
+
+                // Simple box collision check
+                const carLeft = car.x;
+                const carRight = car.x + carWidth;
+                const otherLeft = otherCar.x;
+                const otherRight = otherCar.x + carWidth;
+
+                if (carRight > otherLeft && carLeft < otherRight) {
+                    // Collision! Stop and push back
+                    car.x = prevX;
+                    player.carSpeed = 0;
+                    break;
+                }
+            }
 
             // Update player position to match car
             player.x = car.x + 50;
@@ -3844,8 +3964,9 @@
 
             // Boundary checks - player stays on sidewalk/street area
             player.x = Math.max(20, Math.min(currentMap.width - player.width - 20, player.x));
-            // Y boundaries: top sidewalk to bottom sidewalk
-            player.y = Math.max(GROUND_LEVEL - 45, Math.min(GROUND_LEVEL + 180, player.y));
+            // Y boundaries: near building fronts (GROUND_LEVEL) to across the street (GROUND_LEVEL + 160)
+            // Player walks in front of buildings on sidewalk
+            player.y = Math.max(GROUND_LEVEL + 20, Math.min(GROUND_LEVEL + 160, player.y));
 
             // Collision with buildings
             for (const collider of currentMap.colliders || []) {
@@ -3950,24 +4071,23 @@
                 for (const npcId of interior.npcs || []) {
                     const npc = npcs.find(n => n.id === npcId);
                     if (npc) {
-                        // Calculate NPC position based on role
+                        // Calculate NPC position based on role (must match drawInteriorNPC)
                         let npcX = 375;
-                        let npcY = 280;
-                        if (npc.role === 'secretary') { npcX = 375; npcY = 280; }
-                        else if (npc.role === 'bartender') { npcX = 200; npcY = 200; }
-                        else if (npc.role === 'owner' && npc.id === 'waitress') { npcX = 180; npcY = 180; }
-                        else if (npc.role === 'cook') { npcX = 100; npcY = 150; }
-                        else if (npc.role === 'patron') { npcX = 280; npcY = 280; }
-                        else if (npc.role === 'pharmacist') { npcX = 350; npcY = 250; }
-                        else if (npc.role === 'owner') { npcX = 400; npcY = 250; }
-                        else if (npc.role === 'employee') { npcX = 350; npcY = 280; }
+                        let npcY = 360;
+                        if (npc.role === 'secretary') { npcX = 375; npcY = 360; }
+                        else if (npc.role === 'bartender') { npcX = 200; npcY = 320; }
+                        else if (npc.role === 'owner') { npcX = 150; npcY = 360; }
+                        else if (npc.role === 'cook') { npcX = 100; npcY = 360; }
+                        else if (npc.role === 'patron') { npcX = 280; npcY = 360; }
+                        else if (npc.role === 'pharmacist') { npcX = 300; npcY = 360; }
+                        else if (npc.role === 'employee') { npcX = 350; npcY = 360; }
 
                         const dist = Math.sqrt(
                             Math.pow(interiorPlayerPos.x - npcX, 2) +
                             Math.pow(interiorPlayerPos.y - npcY, 2)
                         );
 
-                        if (dist < 100) {
+                        if (dist < 80) {
                             nearInteractable = { type: 'npc', npc: npc };
                             let prompt = `[E] TALK TO ${npc.name.toUpperCase()}`;
                             if (npc.canBeBribed) prompt += '  [B] BRIBE';
@@ -3996,14 +4116,13 @@
             for (const building of currentMap.buildings) {
                 if (building.enterable) {
                     const doorX = building.x + building.width / 2;
-                    const doorY = GROUND_LEVEL;
 
-                    const dist = Math.sqrt(
-                        Math.pow(player.x + player.width / 2 - doorX, 2) +
-                        Math.pow(player.y + player.height - doorY, 2)
-                    );
+                    // Use primarily horizontal distance - player just needs to be in front of door
+                    const xDist = Math.abs(player.x + player.width / 2 - doorX);
+                    // Player should be on sidewalk near building (GROUND_LEVEL + 20 to +60)
+                    const nearBuilding = player.y >= GROUND_LEVEL + 15 && player.y <= GROUND_LEVEL + 70;
 
-                    if (dist < 60) {
+                    if (xDist < 50 && nearBuilding) {
                         nearInteractable = { type: 'building', building: building };
                         document.getElementById('interact-prompt').textContent = `[E] ENTER ${building.name.split('\n')[0]}`;
                         break;
@@ -4625,7 +4744,10 @@
         function init() {
             // Position player on sidewalk in front of PI office
             player.x = 250;
-            player.y = GROUND_LEVEL - 20;
+            player.y = GROUND_LEVEL + 40; // On the sidewalk in front of buildings
+
+            // Initialize world state
+            initWorldState();
 
             // Start game loop
             requestAnimationFrame(gameLoop);
