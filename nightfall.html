@@ -941,7 +941,24 @@
             // PI Office
             { id: 'secretary', name: 'Dolores', location: 'pi_office', role: 'secretary', x: 250, y: 280,
               dialogue: ["A client is waiting, Mr. Noir.", "The phone's been ringing all day."],
-              appearance: { skin: '#d4a574', faceShape: 'elegant', eyeStyle: 'cat', hairStyle: 'waves', hairColor: '#2a1a0a', gender: 'f', lipstick: true } }
+              appearance: { skin: '#d4a574', faceShape: 'elegant', eyeStyle: 'cat', hairStyle: 'waves', hairColor: '#2a1a0a', gender: 'f', lipstick: true } },
+
+            // STREET NPCs (pedestrians walking around)
+            { id: 'pedestrian1', name: 'Businessman', location: 'street', role: 'pedestrian', x: 300, y: 470,
+              dialogue: ["Excuse me, I'm late for a meeting.", "Do I know you?"],
+              appearance: { skin: '#d4b896', gender: 'm', hairStyle: 'parted', hairColor: '#3a3a3a' }, canBeBribed: false },
+            { id: 'pedestrian2', name: 'Lady', location: 'street', role: 'pedestrian', x: 800, y: 475,
+              dialogue: ["Good evening.", "Lovely night, isn't it?"],
+              appearance: { skin: '#f0d5b8', gender: 'f', hairStyle: 'curled', hairColor: '#8b4513' }, canBeBribed: false },
+            { id: 'pedestrian3', name: 'Dockworker', location: 'street', role: 'pedestrian', x: 1400, y: 465,
+              dialogue: ["Just got off my shift.", "What're you looking at?"],
+              appearance: { skin: '#c49a6c', gender: 'm', hairStyle: 'crew', hairColor: '#2a2a2a' }, canBeBribed: true },
+            { id: 'pedestrian4', name: 'Newsboy', location: 'street', role: 'pedestrian', x: 1900, y: 480,
+              dialogue: ["Extra! Extra! Read all about it!", "Paper's just a nickel, mister."],
+              appearance: { skin: '#d4a574', gender: 'm', hairStyle: 'messy', hairColor: '#5a4030', age: 'young' }, canBeBribed: true },
+            { id: 'suspicious_man', name: 'Stranger', location: 'street', role: 'pedestrian', x: 2200, y: 470,
+              dialogue: ["...", "*glances nervously*", "I don't know nothing about nothing."],
+              appearance: { skin: '#c9a882', gender: 'm', hairStyle: 'slicked', hairColor: '#1a1a1a', stubble: true }, canBeBribed: true }
         ];
 
         // Killer AI
@@ -2475,204 +2492,294 @@
 
             const app = appearance || { skin: '#d4a87a', gender: 'm' };
 
-            // Better proportions - taller, more realistic human figure
-            const scale = 1.2; // Slightly larger characters
-            const headSize = 12 * scale;
-            const torsoHeight = 24 * scale;
-            const legHeight = 26 * scale;
-            const armLength = 18 * scale;
-            const bodyWidth = 14 * scale;
+            // Human proportions - proper figure (about 70px tall)
+            const totalHeight = 70;
+            const headHeight = 12;
+            const neckHeight = 4;
+            const torsoHeight = 22;
+            const legHeight = 32;
+            const shoulderWidth = 18;
+            const hipWidth = 14;
+            const headWidth = 10;
 
-            // Feet position (y is bottom of character)
+            // Calculate body part positions from feet up
             const feetY = y;
+            const kneeY = feetY - legHeight * 0.45;
             const hipY = feetY - legHeight;
+            const waistY = hipY - torsoHeight * 0.4;
+            const chestY = hipY - torsoHeight * 0.7;
             const shoulderY = hipY - torsoHeight;
-            const headY = shoulderY - headSize;
+            const neckY = shoulderY - neckHeight;
+            const chinY = neckY - 2;
+            const headTopY = chinY - headHeight;
 
             // Walking animation
-            const walkAnim = isMoving ? Math.sin(walkCycle * 0.2) * 5 : 0;
+            const walkPhase = walkCycle * 0.15;
+            const legSwing = isMoving ? Math.sin(walkPhase) * 8 : 0;
+            const armSwing = isMoving ? Math.sin(walkPhase) * 6 : 0;
+            const bodyBob = isMoving ? Math.abs(Math.sin(walkPhase * 2)) * 2 : 0;
 
-            // Outfit colors - more visible, saturated colors
-            let coatColor, pantsColor, shirtColor;
+            // Outfit colors
+            let coatColor, pantsColor, shirtColor, tieColor;
             if (isPlayer) {
-                coatColor = '#4a3828'; // Brown trench coat
-                pantsColor = '#2a2a30'; // Dark pants
-                shirtColor = '#e8e0d0'; // Light shirt
+                coatColor = '#5a4a38'; // Brown trench coat
+                pantsColor = '#2a2a35'; // Dark pants
+                shirtColor = '#d8d0c0'; // Light shirt
+                tieColor = '#4a2a2a';
             } else if (outfit === 'dress') {
-                coatColor = '#8b3a3a'; // Red dress
-                pantsColor = '#8b3a3a';
-                shirtColor = '#d4a87a';
+                coatColor = '#8b3a4a'; // Burgundy dress
+                pantsColor = '#8b3a4a';
+                shirtColor = app.skin;
+                tieColor = null;
             } else if (outfit === 'suit') {
-                coatColor = '#3a3a40'; // Dark suit
-                pantsColor = '#2a2a30';
-                shirtColor = '#d0d0d8';
+                coatColor = '#3a3a45'; // Dark suit
+                pantsColor = '#2a2a35';
+                shirtColor = '#c8c8d0';
+                tieColor = '#3a2a4a';
             } else {
-                coatColor = '#4a4a50'; // Gray coat
-                pantsColor = '#3a3a40';
-                shirtColor = '#c0c0c0';
+                coatColor = '#4a4a55'; // Gray coat
+                pantsColor = '#3a3a45';
+                shirtColor = '#b8b8c0';
+                tieColor = '#2a3a4a';
             }
 
             ctx.save();
-            ctx.translate(x, 0);
+            ctx.translate(x, -bodyBob);
             if (facing === -1) {
                 ctx.scale(-1, 1);
+                ctx.translate(-x * 2, 0);
             }
-            ctx.translate(-x, 0);
 
-            // Shadow on ground
-            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
-            ctx.ellipse(x, feetY + 3, 14 * scale, 4, 0, 0, Math.PI * 2);
+            ctx.ellipse(x, feetY + 2, 12, 4, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // LEGS - solid filled rectangles for visibility
-            const legWidth = 5 * scale;
-            ctx.fillStyle = adjustBrightness(pantsColor, lightFactor);
+            // === LEGS ===
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+
             // Left leg
-            ctx.fillRect(x - legWidth - 2 + walkAnim * 0.3, hipY, legWidth, legHeight - 4);
-            // Right leg
-            ctx.fillRect(x + 2 - walkAnim * 0.3, hipY, legWidth, legHeight - 4);
-
-            // SHOES - black oxfords
-            ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
-            ctx.fillRect(x - legWidth - 4 + walkAnim * 0.3, feetY - 5, legWidth + 4, 6);
-            ctx.fillRect(x - walkAnim * 0.3, feetY - 5, legWidth + 4, 6);
-
-            // TORSO/BODY - solid filled shape
-            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
+            ctx.strokeStyle = adjustBrightness(pantsColor, lightFactor);
             ctx.beginPath();
-            ctx.moveTo(x - bodyWidth, shoulderY);
-            ctx.lineTo(x + bodyWidth, shoulderY);
-            ctx.lineTo(x + bodyWidth - 2, hipY + 4);
-            ctx.lineTo(x - bodyWidth + 2, hipY + 4);
-            ctx.closePath();
-            ctx.fill();
-
-            // Coat lapels / collar - lighter accent
-            ctx.fillStyle = adjustBrightness(shirtColor, lightFactor);
-            ctx.beginPath();
-            ctx.moveTo(x - 4, shoulderY + 2);
-            ctx.lineTo(x, shoulderY + 12);
-            ctx.lineTo(x + 4, shoulderY + 2);
-            ctx.closePath();
-            ctx.fill();
-
-            // ARMS - solid filled
-            const armWidth = 4 * scale;
-            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
-            // Left arm
-            ctx.save();
-            ctx.translate(x - bodyWidth, shoulderY + 3);
-            ctx.rotate(-0.15 + walkAnim * 0.02);
-            ctx.fillRect(-armWidth/2, 0, armWidth, armLength);
-            ctx.restore();
-            // Right arm
-            ctx.save();
-            ctx.translate(x + bodyWidth, shoulderY + 3);
-            ctx.rotate(0.15 - walkAnim * 0.02);
-            ctx.fillRect(-armWidth/2, 0, armWidth, armLength);
-            ctx.restore();
-
-            // HANDS - visible skin tone
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.beginPath();
-            ctx.arc(x - bodyWidth - walkAnim * 0.2, shoulderY + armLength + 5, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(x + bodyWidth + walkAnim * 0.2, shoulderY + armLength + 5, 4, 0, Math.PI * 2);
-            ctx.fill();
-
-            // NECK
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.fillRect(x - 4, shoulderY - 6, 8, 8);
-
-            // HEAD - oval face shape
-            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
-            ctx.beginPath();
-            ctx.ellipse(x, headY + headSize / 2 + 2, headSize / 2 + 1, headSize / 2 + 3, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Slight head outline for definition
-            ctx.strokeStyle = adjustBrightness('#6a5a4a', lightFactor * 0.6);
-            ctx.lineWidth = 1;
+            ctx.moveTo(x - 5, hipY);
+            ctx.quadraticCurveTo(x - 5 - legSwing * 0.3, kneeY, x - 4 + legSwing, feetY - 3);
             ctx.stroke();
 
-            // FACE DETAILS
-            if (lightFactor > 0.25) {
-                // Eyes - small dark dots
+            // Right leg
+            ctx.beginPath();
+            ctx.moveTo(x + 5, hipY);
+            ctx.quadraticCurveTo(x + 5 + legSwing * 0.3, kneeY, x + 4 - legSwing, feetY - 3);
+            ctx.stroke();
+
+            // Shoes
+            ctx.fillStyle = adjustBrightness('#1a1a1a', lightFactor);
+            ctx.beginPath();
+            ctx.ellipse(x - 4 + legSwing, feetY - 2, 5, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(x + 4 - legSwing, feetY - 2, 5, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // === TORSO ===
+            // Main body shape
+            ctx.fillStyle = adjustBrightness(coatColor, lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(x - shoulderWidth/2, shoulderY);
+            ctx.lineTo(x + shoulderWidth/2, shoulderY);
+            ctx.lineTo(x + hipWidth/2 + 2, hipY);
+            ctx.lineTo(x - hipWidth/2 - 2, hipY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Jacket lapels / dress neckline
+            if (outfit !== 'dress') {
+                ctx.fillStyle = adjustBrightness(shirtColor, lightFactor);
+                ctx.beginPath();
+                ctx.moveTo(x - 6, shoulderY + 2);
+                ctx.lineTo(x, chestY + 5);
+                ctx.lineTo(x + 6, shoulderY + 2);
+                ctx.lineTo(x + 4, shoulderY + 4);
+                ctx.lineTo(x, chestY + 8);
+                ctx.lineTo(x - 4, shoulderY + 4);
+                ctx.closePath();
+                ctx.fill();
+
+                // Tie
+                if (tieColor) {
+                    ctx.fillStyle = adjustBrightness(tieColor, lightFactor);
+                    ctx.beginPath();
+                    ctx.moveTo(x - 2, shoulderY + 5);
+                    ctx.lineTo(x + 2, shoulderY + 5);
+                    ctx.lineTo(x + 3, hipY - 5);
+                    ctx.lineTo(x, hipY);
+                    ctx.lineTo(x - 3, hipY - 5);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+
+            // Coat buttons
+            ctx.fillStyle = adjustBrightness('#2a2520', lightFactor);
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.arc(x + 5, shoulderY + 10 + i * 8, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // === ARMS ===
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = adjustBrightness(coatColor, lightFactor);
+
+            // Left arm
+            ctx.beginPath();
+            ctx.moveTo(x - shoulderWidth/2, shoulderY + 2);
+            ctx.quadraticCurveTo(x - shoulderWidth/2 - 3 + armSwing, waistY, x - shoulderWidth/2 - 2 + armSwing * 1.5, hipY + 5);
+            ctx.stroke();
+
+            // Right arm
+            ctx.beginPath();
+            ctx.moveTo(x + shoulderWidth/2, shoulderY + 2);
+            ctx.quadraticCurveTo(x + shoulderWidth/2 + 3 - armSwing, waistY, x + shoulderWidth/2 + 2 - armSwing * 1.5, hipY + 5);
+            ctx.stroke();
+
+            // Hands
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.beginPath();
+            ctx.arc(x - shoulderWidth/2 - 2 + armSwing * 1.5, hipY + 7, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + shoulderWidth/2 + 2 - armSwing * 1.5, hipY + 7, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // === NECK ===
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.fillRect(x - 3, neckY, 6, neckHeight + 2);
+
+            // === HEAD ===
+            // Face shape - more rectangular/angular for noir style
+            ctx.fillStyle = adjustBrightness(app.skin, lightFactor);
+            ctx.beginPath();
+            ctx.moveTo(x - headWidth/2, chinY);
+            ctx.lineTo(x - headWidth/2 - 1, chinY - headHeight * 0.4);
+            ctx.quadraticCurveTo(x - headWidth/2 - 1, headTopY + 2, x, headTopY);
+            ctx.quadraticCurveTo(x + headWidth/2 + 1, headTopY + 2, x + headWidth/2 + 1, chinY - headHeight * 0.4);
+            ctx.lineTo(x + headWidth/2, chinY);
+            ctx.quadraticCurveTo(x, chinY + 2, x - headWidth/2, chinY);
+            ctx.fill();
+
+            // Face details
+            if (lightFactor > 0.3) {
+                // Eyes
                 ctx.fillStyle = '#1a1a1a';
-                ctx.beginPath();
-                ctx.arc(x - 4, headY + headSize / 2 + 1, 1.5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(x + 4, headY + headSize / 2 + 1, 1.5, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.fillRect(x - 4, chinY - headHeight * 0.55, 2, 2);
+                ctx.fillRect(x + 2, chinY - headHeight * 0.55, 2, 2);
 
                 // Eyebrows
-                ctx.strokeStyle = '#3a3020';
+                ctx.strokeStyle = adjustBrightness('#3a3020', lightFactor);
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.moveTo(x - 6, headY + headSize / 2 - 2);
-                ctx.lineTo(x - 2, headY + headSize / 2 - 3);
+                ctx.moveTo(x - 5, chinY - headHeight * 0.65);
+                ctx.lineTo(x - 1, chinY - headHeight * 0.68);
                 ctx.stroke();
                 ctx.beginPath();
-                ctx.moveTo(x + 2, headY + headSize / 2 - 3);
-                ctx.lineTo(x + 6, headY + headSize / 2 - 2);
+                ctx.moveTo(x + 1, chinY - headHeight * 0.68);
+                ctx.lineTo(x + 5, chinY - headHeight * 0.65);
                 ctx.stroke();
 
-                // Nose hint
-                ctx.strokeStyle = adjustBrightness('#8a7a6a', lightFactor * 0.5);
+                // Nose - angular line
+                ctx.strokeStyle = adjustBrightness('#8a7060', lightFactor * 0.6);
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.moveTo(x, headY + headSize / 2 + 2);
-                ctx.lineTo(x, headY + headSize / 2 + 5);
+                ctx.moveTo(x, chinY - headHeight * 0.5);
+                ctx.lineTo(x + 1, chinY - headHeight * 0.3);
+                ctx.lineTo(x - 1, chinY - headHeight * 0.25);
                 ctx.stroke();
 
                 // Mouth
-                ctx.strokeStyle = '#5a4a3a';
+                ctx.strokeStyle = adjustBrightness('#6a4a3a', lightFactor);
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x - 3, chinY - headHeight * 0.12);
+                ctx.lineTo(x + 3, chinY - headHeight * 0.12);
+                ctx.stroke();
+
+                // Jaw shadow for definition
+                ctx.strokeStyle = adjustBrightness('#8a7a6a', lightFactor * 0.4);
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.moveTo(x - 3, headY + headSize / 2 + 8);
-                ctx.lineTo(x + 3, headY + headSize / 2 + 8);
+                ctx.moveTo(x - headWidth/2 + 1, chinY - 2);
+                ctx.lineTo(x + headWidth/2 - 1, chinY - 2);
                 ctx.stroke();
             }
 
-            // HAIR (visible on sides if no hat)
-            if (hatType === 'none' && app.gender === 'f') {
-                ctx.fillStyle = adjustBrightness('#3a2a1a', lightFactor);
-                ctx.beginPath();
-                ctx.ellipse(x, headY + 4, headSize / 2 + 3, headSize / 2 + 1, 0, 0, Math.PI * 2);
-                ctx.fill();
-                // Hair falling down sides
-                ctx.fillRect(x - headSize / 2 - 3, headY + 2, 4, headSize + 8);
-                ctx.fillRect(x + headSize / 2, headY + 2, 4, headSize + 8);
-            } else if (hatType === 'none') {
-                ctx.fillStyle = adjustBrightness('#2a2018', lightFactor);
-                ctx.beginPath();
-                ctx.ellipse(x, headY + 3, headSize / 2 + 1, headSize / 2 - 2, 0, 0, Math.PI, true);
-                ctx.fill();
+            // === HAIR ===
+            const hairColor = app.hairColor || '#2a2018';
+            if (hatType === 'none') {
+                ctx.fillStyle = adjustBrightness(hairColor, lightFactor);
+                if (app.gender === 'f') {
+                    // Women's hair - wavy sides
+                    ctx.beginPath();
+                    ctx.moveTo(x - headWidth/2 - 2, headTopY + 3);
+                    ctx.quadraticCurveTo(x, headTopY - 2, x + headWidth/2 + 2, headTopY + 3);
+                    ctx.lineTo(x + headWidth/2 + 3, chinY - 5);
+                    ctx.lineTo(x + headWidth/2 + 4, chinY + 10);
+                    ctx.lineTo(x + headWidth/2, chinY + 5);
+                    ctx.lineTo(x - headWidth/2, chinY + 5);
+                    ctx.lineTo(x - headWidth/2 - 4, chinY + 10);
+                    ctx.lineTo(x - headWidth/2 - 3, chinY - 5);
+                    ctx.closePath();
+                    ctx.fill();
+                } else {
+                    // Men's hair - short on top
+                    ctx.beginPath();
+                    ctx.moveTo(x - headWidth/2, headTopY + 4);
+                    ctx.quadraticCurveTo(x, headTopY - 1, x + headWidth/2, headTopY + 4);
+                    ctx.lineTo(x + headWidth/2 - 1, chinY - headHeight * 0.7);
+                    ctx.lineTo(x - headWidth/2 + 1, chinY - headHeight * 0.7);
+                    ctx.closePath();
+                    ctx.fill();
+                }
             }
 
-            // FEDORA HAT
+            // === FEDORA HAT ===
             if (hatType === 'fedora') {
-                ctx.fillStyle = adjustBrightness('#2a2520', lightFactor);
-                // Brim - wider, more defined
+                const hatColor = '#2a2520';
+                ctx.fillStyle = adjustBrightness(hatColor, lightFactor);
+
+                // Hat brim - flat rectangular shape
                 ctx.beginPath();
-                ctx.ellipse(x, headY + 4, headSize + 4, 4, 0, 0, Math.PI * 2);
-                ctx.fill();
-                // Crown
-                ctx.beginPath();
-                ctx.moveTo(x - headSize + 2, headY + 3);
-                ctx.lineTo(x - headSize + 4, headY - 6);
-                ctx.lineTo(x - 3, headY - 10);
-                ctx.lineTo(x + 3, headY - 10);
-                ctx.lineTo(x + headSize - 4, headY - 6);
-                ctx.lineTo(x + headSize - 2, headY + 3);
+                ctx.moveTo(x - headWidth - 6, headTopY + 4);
+                ctx.lineTo(x + headWidth + 6, headTopY + 4);
+                ctx.lineTo(x + headWidth + 4, headTopY + 7);
+                ctx.lineTo(x - headWidth - 4, headTopY + 7);
                 ctx.closePath();
                 ctx.fill();
-                // Band
+
+                // Hat crown - trapezoidal shape
+                ctx.beginPath();
+                ctx.moveTo(x - headWidth/2 - 2, headTopY + 4);
+                ctx.lineTo(x - headWidth/2, headTopY - 8);
+                ctx.lineTo(x - 2, headTopY - 12);
+                ctx.lineTo(x + 2, headTopY - 12);
+                ctx.lineTo(x + headWidth/2, headTopY - 8);
+                ctx.lineTo(x + headWidth/2 + 2, headTopY + 4);
+                ctx.closePath();
+                ctx.fill();
+
+                // Crease in crown
+                ctx.strokeStyle = adjustBrightness('#1a1a1a', lightFactor * 0.5);
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x - 2, headTopY - 11);
+                ctx.lineTo(x, headTopY - 6);
+                ctx.lineTo(x + 2, headTopY - 11);
+                ctx.stroke();
+
+                // Hat band
                 ctx.fillStyle = adjustBrightness('#4a4540', lightFactor);
-                ctx.fillRect(x - headSize + 4, headY - 1, headSize * 2 - 8, 3);
+                ctx.fillRect(x - headWidth/2, headTopY - 2, headWidth, 4);
             }
 
             ctx.restore();
@@ -2758,6 +2865,15 @@
             else if (npc.role === 'patron') { outfit = 'casual'; hatType = 'fedora'; }
             else if (npc.role === 'police') { outfit = 'suit'; hatType = 'none'; }
             else if (npc.role === 'secretary') { outfit = 'dress'; }
+            else if (npc.role === 'pedestrian') {
+                // Pedestrians vary
+                if (npc.appearance && npc.appearance.gender === 'f') {
+                    outfit = 'dress';
+                } else {
+                    outfit = Math.random() > 0.5 ? 'suit' : 'casual';
+                    hatType = Math.random() > 0.7 ? 'fedora' : 'none';
+                }
+            }
 
             drawMannequin(nx, ny, {
                 facing: state.facingRight ? 1 : -1,
@@ -3757,7 +3873,7 @@
         }
 
         // ============================================
-        // ACTION SYSTEM (Bribe, Slap, Shoot)
+        // ACTION SYSTEM (Interview, Smack, Gun)
         // ============================================
 
         function performAction(actionType, targetNPC) {
@@ -3767,115 +3883,121 @@
             actions.targetNPC = targetNPC;
 
             switch (actionType) {
-                case 'bribe':
-                    performBribe(targetNPC);
+                case 'interview':
+                    performInterview(targetNPC);
                     break;
-                case 'slap':
-                    performSlap(targetNPC);
+                case 'smack':
+                    performSmack(targetNPC);
                     break;
-                case 'shoot':
-                    performShoot(targetNPC);
+                case 'gun':
+                    performGun(targetNPC);
                     break;
             }
 
             player.actionCooldown = 30; // Cooldown frames
         }
 
-        function performBribe(npc) {
-            const bribeCost = 10;
-
-            if (player.cash < bribeCost) {
-                showDialogueBox('SYSTEM', "You don't have enough cash to bribe.");
-                game.state = 'dialogue';
-                return;
-            }
-
-            if (!npc.canBeBribed) {
-                showDialogueBox(npc.name, "I'm not that kind of person.");
-                game.state = 'dialogue';
-                return;
-            }
-
-            player.cash -= bribeCost;
-            updateCashDisplay();
-
+        function performInterview(npc) {
             const npcState = worldState.npcStates[npc.id];
-            if (npcState) {
-                npcState.bribed = true;
+
+            // Different responses based on relationship
+            let dialogues;
+            if (npcState && npcState.intimidated) {
+                dialogues = [
+                    "Okay, okay! I'll tell you everything!",
+                    "Please, don't hurt me. Here's what I know...",
+                    "There's a man... comes around late at night...",
+                    "I saw him near the apartments last week.",
+                    "He wears a dark coat, always looking around nervous-like."
+                ];
+            } else if (npc.canBeBribed && player.cash >= 10) {
+                dialogues = [
+                    "Maybe if you made it worth my while...",
+                    "Information ain't free, pal.",
+                    "I might know something. What's in it for me?"
+                ];
+            } else {
+                dialogues = npc.dialogue || [
+                    "I don't know anything.",
+                    "Can't help you, stranger.",
+                    "Mind your own business."
+                ];
             }
 
-            // Reveal information
-            const bribeDialogues = [
-                "Alright, I'll tell you what I know...",
-                "You didn't hear this from me...",
-                "There's been strange happenings late at night...",
-                "I saw someone suspicious near the apartments...",
-                "Check the bar after midnight. That's all I'm saying."
-            ];
-
-            const randomDialogue = bribeDialogues[Math.floor(Math.random() * bribeDialogues.length)];
+            const randomDialogue = dialogues[Math.floor(Math.random() * dialogues.length)];
             showDialogueBox(npc.name, randomDialogue);
             game.state = 'dialogue';
+
+            if (npcState) {
+                npcState.talked = true;
+            }
         }
 
-        function performSlap(npc) {
+        function performSmack(npc) {
             // Screen shake effect
             actions.actionTimer = 10;
 
-            // NPC reaction
-            const slapReactions = [
+            // NPC reaction - intimidation
+            const smackReactions = [
                 "Hey! What's the big idea?!",
                 "You'll regret that!",
                 "*stumbles back*",
                 "Is that all you got?",
-                "The cops will hear about this!"
+                "Okay okay! I'll talk!"
             ];
 
             // Decrease reputation
             game.reputation = Math.max(1, game.reputation - 1);
             updateRepDisplay();
 
-            const reaction = slapReactions[Math.floor(Math.random() * slapReactions.length)];
+            const reaction = smackReactions[Math.floor(Math.random() * smackReactions.length)];
             showDialogueBox(npc.name, reaction);
             game.state = 'dialogue';
 
-            // Some NPCs might reveal info when intimidated
-            if (Math.random() > 0.6) {
-                const npcState = worldState.npcStates[npc.id];
-                if (npcState) {
-                    npcState.intimidated = true;
-                }
+            // NPCs reveal info when intimidated
+            const npcState = worldState.npcStates[npc.id];
+            if (npcState) {
+                npcState.intimidated = true;
             }
         }
 
-        function performShoot(npc) {
+        function performGun(npc) {
+            // Draw gun to threaten - doesn't need to shoot
             if (player.weapon !== 'pistol') {
-                showDialogueBox('SYSTEM', "You need a pistol to shoot.");
+                showDialogueBox('SYSTEM', "You reach for your piece... but you don't have one.");
                 game.state = 'dialogue';
                 return;
             }
 
-            if (player.ammo <= 0) {
-                showDialogueBox('SYSTEM', "Click. Empty chamber.");
-                game.state = 'dialogue';
-                return;
-            }
+            // Screen effect - tense moment
+            actions.actionTimer = 8;
 
-            player.ammo--;
+            // Major intimidation
+            const npcState = worldState.npcStates[npc.id];
+            if (npcState) {
+                npcState.intimidated = true;
+                npcState.terrified = true;
+            }
 
             // Major reputation hit
             game.reputation = Math.max(1, game.reputation - 2);
             updateRepDisplay();
 
-            // Screen flash
-            actions.actionTimer = 15;
+            const gunReactions = [
+                "Whoa! Easy there! I'll tell you everything!",
+                "Please don't shoot! I have a family!",
+                "*hands up* Okay, okay! Whatever you want!",
+                "You're crazy! Here, take my wallet!",
+                "The killer... he hangs around the apartments! That's all I know!"
+            ];
 
-            showDialogueBox('SYSTEM', "BANG! The shot echoes through the night...");
+            const reaction = gunReactions[Math.floor(Math.random() * gunReactions.length)];
+            showDialogueBox(npc.name, reaction);
             game.state = 'dialogue';
 
             // This would trigger police response in full game
             worldState.events.push({
-                type: 'gunshot',
+                type: 'gun_threat',
                 location: currentInterior || 'street',
                 time: { ...game.time },
                 witnessed: true
@@ -3907,10 +4029,9 @@
             ctx.font = '12px Special Elite';
             ctx.textAlign = 'center';
 
-            let actionText = '[E] Talk';
-            if (npc.canBeBribed) actionText += '  [B] Bribe ($10)';
-            actionText += '  [F] Slap';
-            if (player.weapon === 'pistol') actionText += '  [G] Shoot';
+            let actionText = '[I] INTERVIEW';
+            actionText += '  [S] SMACK';
+            if (player.weapon === 'pistol') actionText += '  [G] GUN';
 
             ctx.fillText(actionText, CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 22);
         }
@@ -3964,9 +4085,9 @@
 
             // Boundary checks - player stays on sidewalk/street area
             player.x = Math.max(20, Math.min(currentMap.width - player.width - 20, player.x));
-            // Y boundaries: near building fronts (GROUND_LEVEL) to across the street (GROUND_LEVEL + 160)
-            // Player walks in front of buildings on sidewalk
-            player.y = Math.max(GROUND_LEVEL + 20, Math.min(GROUND_LEVEL + 160, player.y));
+            // Y boundaries: sidewalk to far sidewalk
+            // GROUND_LEVEL = 410, sidewalk starts there, street is further down
+            player.y = Math.max(GROUND_LEVEL + 30, Math.min(GROUND_LEVEL + 180, player.y));
 
             // Collision with buildings
             for (const collider of currentMap.colliders || []) {
@@ -4089,9 +4210,8 @@
 
                         if (dist < 80) {
                             nearInteractable = { type: 'npc', npc: npc };
-                            let prompt = `[E] TALK TO ${npc.name.toUpperCase()}`;
-                            if (npc.canBeBribed) prompt += '  [B] BRIBE';
-                            prompt += '  [F] SLAP';
+                            let prompt = `[I] INTERVIEW ${npc.name.toUpperCase()}  [S] SMACK`;
+                            if (player.weapon === 'pistol') prompt += '  [G] GUN';
                             document.getElementById('interact-prompt').textContent = prompt;
                             break;
                         }
@@ -4125,6 +4245,27 @@
                     if (xDist < 50 && nearBuilding) {
                         nearInteractable = { type: 'building', building: building };
                         document.getElementById('interact-prompt').textContent = `[E] ENTER ${building.name.split('\n')[0]}`;
+                        break;
+                    }
+                }
+            }
+
+            // Check street NPCs
+            if (!nearInteractable) {
+                for (const npc of npcs.filter(n => n.location === 'street')) {
+                    const state = worldState.npcStates[npc.id];
+                    if (!state) continue;
+
+                    const dist = Math.sqrt(
+                        Math.pow(player.x + player.width/2 - state.x, 2) +
+                        Math.pow(player.y - state.y, 2)
+                    );
+
+                    if (dist < 60) {
+                        nearInteractable = { type: 'npc', npc: npc };
+                        let prompt = `[I] INTERVIEW ${npc.name.toUpperCase()}  [S] SMACK`;
+                        if (player.weapon === 'pistol') prompt += '  [G] GUN';
+                        document.getElementById('interact-prompt').textContent = prompt;
                         break;
                     }
                 }
@@ -4346,8 +4487,8 @@
                 // Collect all drawable entities and sort by Y for proper depth
                 const entities = [];
 
-                // Add NPCs
-                for (const npc of npcs.filter(n => n.location !== 'interior')) {
+                // Add STREET NPCs only (pedestrians) - building NPCs stay inside
+                for (const npc of npcs.filter(n => n.location === 'street')) {
                     const state = worldState.npcStates[npc.id];
                     if (state) {
                         entities.push({ type: 'npc', data: npc, y: state.y });
@@ -4422,183 +4563,333 @@
             requestAnimationFrame(gameLoop);
         }
 
-        function drawTitleScreen() {
-            // Deep noir night sky
-            const gradient = ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
-            gradient.addColorStop(0, '#020204');
-            gradient.addColorStop(0.3, '#0a0812');
-            gradient.addColorStop(0.6, '#12101a');
-            gradient.addColorStop(1, '#0a0808');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+        // Shattered glass shards - generated once
+        let glassShards = null;
+        let titleAnimTime = 0;
 
-            // Distant stars
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            for (let i = 0; i < 50; i++) {
-                const sx = (i * 137) % CONFIG.CANVAS_WIDTH;
-                const sy = (i * 89) % 200;
-                ctx.fillRect(sx, sy, 1, 1);
+        function generateGlassShards() {
+            const shards = [];
+            const impactX = CONFIG.CANVAS_WIDTH * 0.55;
+            const impactY = CONFIG.CANVAS_HEIGHT * 0.35;
+
+            // Generate radial cracks from impact point
+            const numCracks = 12;
+            for (let i = 0; i < numCracks; i++) {
+                const angle = (i / numCracks) * Math.PI * 2 + Math.random() * 0.3;
+                const length = 150 + Math.random() * 350;
+                shards.push({
+                    type: 'crack',
+                    x1: impactX,
+                    y1: impactY,
+                    x2: impactX + Math.cos(angle) * length,
+                    y2: impactY + Math.sin(angle) * length,
+                    branches: []
+                });
+
+                // Add branches to main cracks
+                const numBranches = Math.floor(Math.random() * 4) + 2;
+                for (let j = 0; j < numBranches; j++) {
+                    const t = 0.2 + Math.random() * 0.6;
+                    const bx = impactX + Math.cos(angle) * length * t;
+                    const by = impactY + Math.sin(angle) * length * t;
+                    const bAngle = angle + (Math.random() - 0.5) * 1.2;
+                    const bLength = 30 + Math.random() * 80;
+                    shards[shards.length - 1].branches.push({
+                        x1: bx, y1: by,
+                        x2: bx + Math.cos(bAngle) * bLength,
+                        y2: by + Math.sin(bAngle) * bLength
+                    });
+                }
             }
 
-            // Moon glow
-            ctx.fillStyle = 'rgba(200, 190, 170, 0.05)';
+            // Generate glass fragments around impact
+            const numFragments = 25;
+            for (let i = 0; i < numFragments; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 20 + Math.random() * 120;
+                const fx = impactX + Math.cos(angle) * dist;
+                const fy = impactY + Math.sin(angle) * dist;
+                const size = 15 + Math.random() * 40;
+                const points = [];
+                const numPoints = 4 + Math.floor(Math.random() * 3);
+                for (let p = 0; p < numPoints; p++) {
+                    const pa = (p / numPoints) * Math.PI * 2;
+                    const pr = size * (0.6 + Math.random() * 0.4);
+                    points.push({
+                        x: fx + Math.cos(pa) * pr,
+                        y: fy + Math.sin(pa) * pr
+                    });
+                }
+                shards.push({
+                    type: 'fragment',
+                    points: points,
+                    fallen: dist < 60, // Fragments near impact have fallen out
+                    reflection: Math.random()
+                });
+            }
+
+            // Blood drops on glass
+            const numDrops = 8;
+            for (let i = 0; i < numDrops; i++) {
+                shards.push({
+                    type: 'blood',
+                    x: impactX - 50 + Math.random() * 150,
+                    y: impactY - 30 + Math.random() * 200,
+                    size: 3 + Math.random() * 8,
+                    drip: Math.random() > 0.5 ? 20 + Math.random() * 60 : 0
+                });
+            }
+
+            return shards;
+        }
+
+        function drawTitleScreen() {
+            titleAnimTime += 0.016;
+
+            // Generate shards once
+            if (!glassShards) {
+                glassShards = generateGlassShards();
+            }
+
+            const impactX = CONFIG.CANVAS_WIDTH * 0.55;
+            const impactY = CONFIG.CANVAS_HEIGHT * 0.35;
+
+            // === SCENE THROUGH THE WINDOW (the street below) ===
+            // Night sky gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
+            skyGrad.addColorStop(0, '#02020a');
+            skyGrad.addColorStop(0.4, '#0a0815');
+            skyGrad.addColorStop(1, '#151020');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+
+            // Stars
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            for (let i = 0; i < 80; i++) {
+                const sx = (i * 137 + 50) % CONFIG.CANVAS_WIDTH;
+                const sy = (i * 73) % (CONFIG.CANVAS_HEIGHT * 0.5);
+                const twinkle = Math.sin(titleAnimTime * 3 + i) * 0.5 + 0.5;
+                ctx.globalAlpha = twinkle * 0.6;
+                ctx.fillRect(sx, sy, 1 + (i % 2), 1 + (i % 2));
+            }
+            ctx.globalAlpha = 1;
+
+            // Moon
+            ctx.fillStyle = 'rgba(200, 195, 180, 0.1)';
             ctx.beginPath();
-            ctx.arc(CONFIG.CANVAS_WIDTH - 150, 100, 80, 0, Math.PI * 2);
+            ctx.arc(900, 80, 60, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = 'rgba(220, 210, 190, 0.15)';
+            ctx.fillStyle = 'rgba(230, 225, 210, 0.3)';
             ctx.beginPath();
-            ctx.arc(CONFIG.CANVAS_WIDTH - 150, 100, 30, 0, Math.PI * 2);
+            ctx.arc(900, 80, 25, 0, Math.PI * 2);
             ctx.fill();
 
-            // City skyline silhouette (back layer - taller buildings)
-            ctx.fillStyle = '#08080c';
-            const buildings = [
-                { x: 50, h: 280, w: 60 }, { x: 100, h: 220, w: 80 }, { x: 180, h: 320, w: 70 },
-                { x: 250, h: 250, w: 90 }, { x: 350, h: 340, w: 50 }, { x: 400, h: 290, w: 85 },
-                { x: 500, h: 380, w: 60 }, { x: 560, h: 260, w: 100 }, { x: 680, h: 310, w: 55 },
-                { x: 740, h: 270, w: 75 }, { x: 830, h: 350, w: 65 }, { x: 900, h: 240, w: 95 },
-                { x: 1000, h: 300, w: 70 }, { x: 1080, h: 280, w: 80 }
+            // Distant city skyline
+            ctx.fillStyle = '#0a0a12';
+            const farBuildings = [
+                { x: 0, w: 80, h: 200 }, { x: 70, w: 60, h: 280 }, { x: 120, w: 100, h: 220 },
+                { x: 210, w: 70, h: 320 }, { x: 270, w: 90, h: 250 }, { x: 350, w: 50, h: 350 },
+                { x: 390, w: 110, h: 280 }, { x: 490, w: 80, h: 380 }, { x: 560, w: 100, h: 300 },
+                { x: 650, w: 70, h: 260 }, { x: 710, w: 90, h: 340 }, { x: 790, w: 60, h: 290 },
+                { x: 840, w: 100, h: 360 }, { x: 930, w: 80, h: 270 }, { x: 1000, w: 70, h: 310 },
+                { x: 1060, w: 100, h: 240 }
             ];
-            for (const b of buildings) {
-                ctx.fillRect(b.x, CONFIG.CANVAS_HEIGHT - 100 - b.h, b.w, b.h);
-                // Some lit windows
-                ctx.fillStyle = 'rgba(255, 230, 180, 0.4)';
-                for (let row = 0; row < b.h / 30; row++) {
-                    for (let col = 0; col < b.w / 20; col++) {
-                        if (((row * 7 + col * 13 + b.x) % 5) < 2) {
-                            ctx.fillRect(b.x + 5 + col * 18, CONFIG.CANVAS_HEIGHT - 95 - b.h + row * 28, 8, 12);
+            for (const b of farBuildings) {
+                ctx.fillRect(b.x, CONFIG.CANVAS_HEIGHT - 80 - b.h, b.w, b.h + 80);
+            }
+
+            // Lit windows in buildings
+            for (const b of farBuildings) {
+                for (let row = 0; row < b.h / 25; row++) {
+                    for (let col = 0; col < b.w / 15; col++) {
+                        if (((row * 7 + col * 11 + b.x) % 6) < 2) {
+                            const flicker = Math.sin(titleAnimTime * 2 + row + col + b.x) * 0.2 + 0.8;
+                            ctx.fillStyle = `rgba(255, 220, 150, ${0.5 * flicker})`;
+                            ctx.fillRect(b.x + 4 + col * 14, CONFIG.CANVAS_HEIGHT - 75 - b.h + row * 24, 6, 10);
                         }
                     }
                 }
-                ctx.fillStyle = '#08080c';
             }
 
-            // Street level
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT - 100, CONFIG.CANVAS_WIDTH, 100);
+            // Street far below
+            ctx.fillStyle = '#0a0a0c';
+            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT - 80, CONFIG.CANVAS_WIDTH, 80);
 
-            // Wet street reflection
-            ctx.fillStyle = 'rgba(60, 50, 80, 0.15)';
-            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT - 95, CONFIG.CANVAS_WIDTH, 90);
+            // Street lights below (tiny from this height)
+            for (let i = 0; i < 6; i++) {
+                const lx = 100 + i * 180;
+                ctx.fillStyle = 'rgba(255, 200, 100, 0.6)';
+                ctx.beginPath();
+                ctx.arc(lx, CONFIG.CANVAS_HEIGHT - 70, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255, 200, 100, 0.15)';
+                ctx.beginPath();
+                ctx.arc(lx, CONFIG.CANVAS_HEIGHT - 60, 20, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
-            // Street lamp (left side)
-            const lampX = 150;
-            const lampY = CONFIG.CANVAS_HEIGHT - 100;
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(lampX - 3, lampY - 160, 6, 160);
-            // Lamp head
-            ctx.fillRect(lampX - 15, lampY - 170, 30, 15);
-            // Lamp glow
-            ctx.fillStyle = 'rgba(255, 230, 180, 0.3)';
+            // Tiny car headlights moving
+            const carX = (titleAnimTime * 60) % (CONFIG.CANVAS_WIDTH + 100) - 50;
+            ctx.fillStyle = 'rgba(255, 255, 200, 0.8)';
             ctx.beginPath();
-            ctx.ellipse(lampX, lampY - 30, 100, 50, 0, 0, Math.PI * 2);
-            ctx.fill();
-            // Light cone
-            ctx.fillStyle = 'rgba(255, 230, 180, 0.08)';
-            ctx.beginPath();
-            ctx.moveTo(lampX - 15, lampY - 155);
-            ctx.lineTo(lampX - 100, lampY);
-            ctx.lineTo(lampX + 100, lampY);
-            ctx.lineTo(lampX + 15, lampY - 155);
-            ctx.closePath();
+            ctx.arc(carX, CONFIG.CANVAS_HEIGHT - 55, 2, 0, Math.PI * 2);
+            ctx.arc(carX + 8, CONFIG.CANVAS_HEIGHT - 55, 2, 0, Math.PI * 2);
             ctx.fill();
 
-            // Lone detective figure
-            const figX = lampX + 30;
-            const figY = lampY;
-            // Shadow stretching away from light
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.beginPath();
-            ctx.moveTo(figX - 8, figY);
-            ctx.lineTo(figX + 60, figY + 5);
-            ctx.lineTo(figX + 80, figY);
-            ctx.lineTo(figX + 8, figY);
-            ctx.closePath();
-            ctx.fill();
-            // Figure (dark silhouette)
-            ctx.fillStyle = '#0a0a0a';
-            // Legs
-            ctx.fillRect(figX - 5, figY - 45, 5, 45);
-            ctx.fillRect(figX + 2, figY - 45, 5, 45);
-            // Body (coat)
-            ctx.beginPath();
-            ctx.moveTo(figX - 10, figY - 45);
-            ctx.lineTo(figX - 12, figY - 90);
-            ctx.lineTo(figX + 14, figY - 90);
-            ctx.lineTo(figX + 12, figY - 45);
-            ctx.closePath();
-            ctx.fill();
-            // Head
-            ctx.beginPath();
-            ctx.arc(figX, figY - 100, 8, 0, Math.PI * 2);
-            ctx.fill();
-            // Fedora
-            ctx.fillRect(figX - 12, figY - 110, 24, 4);
-            ctx.fillRect(figX - 8, figY - 118, 16, 10);
-            // Cigarette glow
-            ctx.fillStyle = '#ff4400';
-            ctx.beginPath();
-            ctx.arc(figX + 15, figY - 95, 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255, 100, 50, 0.3)';
-            ctx.beginPath();
-            ctx.arc(figX + 15, figY - 95, 5, 0, Math.PI * 2);
-            ctx.fill();
+            // === WINDOW FRAME (dark apartment interior) ===
+            // Darkness of the room we're in
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
 
-            // Title with dramatic shadow
-            ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-            ctx.shadowBlur = 20;
-            ctx.shadowOffsetX = 5;
-            ctx.shadowOffsetY = 5;
-            ctx.fillStyle = '#d4c5a9';
-            ctx.font = 'bold 120px Bebas Neue';
-            ctx.textAlign = 'center';
-            ctx.fillText('NIGHTFALL', CONFIG.CANVAS_WIDTH / 2, 260);
-            ctx.restore();
+            // Window frame - thick dark wood
+            const frameWidth = 35;
+            ctx.fillStyle = '#1a1512';
+            // Top frame
+            ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, frameWidth);
+            // Bottom frame
+            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT - frameWidth, CONFIG.CANVAS_WIDTH, frameWidth);
+            // Left frame
+            ctx.fillRect(0, 0, frameWidth, CONFIG.CANVAS_HEIGHT);
+            // Right frame
+            ctx.fillRect(CONFIG.CANVAS_WIDTH - frameWidth, 0, frameWidth, CONFIG.CANVAS_HEIGHT);
+            // Center vertical bar
+            ctx.fillRect(CONFIG.CANVAS_WIDTH / 2 - 8, 0, 16, CONFIG.CANVAS_HEIGHT);
+            // Center horizontal bar
+            ctx.fillRect(0, CONFIG.CANVAS_HEIGHT / 2 - 8, CONFIG.CANVAS_WIDTH, 16);
 
-            // Title glow
-            ctx.shadowColor = 'rgba(212, 197, 169, 0.2)';
-            ctx.shadowBlur = 40;
-            ctx.fillStyle = '#d4c5a9';
-            ctx.fillText('NIGHTFALL', CONFIG.CANVAS_WIDTH / 2, 260);
-            ctx.shadowBlur = 0;
+            // Frame edge highlights
+            ctx.strokeStyle = '#2a2520';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(frameWidth, frameWidth, CONFIG.CANVAS_WIDTH - frameWidth * 2, CONFIG.CANVAS_HEIGHT - frameWidth * 2);
 
-            // Subtitle line
-            ctx.strokeStyle = '#5a4a3a';
-            ctx.lineWidth = 1;
+            // === SHATTERED GLASS ===
+            // Draw cracks
+            ctx.strokeStyle = 'rgba(200, 220, 255, 0.6)';
+            ctx.lineWidth = 2;
+            for (const shard of glassShards) {
+                if (shard.type === 'crack') {
+                    ctx.beginPath();
+                    ctx.moveTo(shard.x1, shard.y1);
+                    ctx.lineTo(shard.x2, shard.y2);
+                    ctx.stroke();
+
+                    // Draw branches
+                    ctx.lineWidth = 1;
+                    for (const branch of shard.branches) {
+                        ctx.beginPath();
+                        ctx.moveTo(branch.x1, branch.y1);
+                        ctx.lineTo(branch.x2, branch.y2);
+                        ctx.stroke();
+                    }
+                    ctx.lineWidth = 2;
+                }
+            }
+
+            // Draw glass fragments
+            for (const shard of glassShards) {
+                if (shard.type === 'fragment') {
+                    if (shard.fallen) {
+                        // Hole in glass - show dark void
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    } else {
+                        // Glass with reflection
+                        const reflectAlpha = 0.1 + shard.reflection * 0.15;
+                        ctx.fillStyle = `rgba(180, 200, 220, ${reflectAlpha})`;
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(shard.points[0].x, shard.points[0].y);
+                    for (let i = 1; i < shard.points.length; i++) {
+                        ctx.lineTo(shard.points[i].x, shard.points[i].y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+
+                    if (!shard.fallen) {
+                        ctx.strokeStyle = 'rgba(200, 220, 255, 0.4)';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Impact point - spider web center
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.moveTo(CONFIG.CANVAS_WIDTH / 2 - 200, 290);
-            ctx.lineTo(CONFIG.CANVAS_WIDTH / 2 + 200, 290);
+            ctx.arc(impactX, impactY, 15, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(impactX, impactY, 8, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Subtitle
-            ctx.fillStyle = '#8b7355';
-            ctx.font = '20px Special Elite';
-            ctx.fillText('A  NOIR  DETECTIVE  MYSTERY', CONFIG.CANVAS_WIDTH / 2, 320);
+            // Blood on the glass
+            for (const shard of glassShards) {
+                if (shard.type === 'blood') {
+                    ctx.fillStyle = '#4a0a0a';
+                    ctx.beginPath();
+                    ctx.arc(shard.x, shard.y, shard.size, 0, Math.PI * 2);
+                    ctx.fill();
 
-            // Setting
+                    // Blood drip
+                    if (shard.drip > 0) {
+                        ctx.fillStyle = '#3a0808';
+                        ctx.beginPath();
+                        ctx.moveTo(shard.x - shard.size * 0.3, shard.y + shard.size * 0.5);
+                        ctx.quadraticCurveTo(shard.x, shard.y + shard.drip * 0.5, shard.x - 1, shard.y + shard.drip);
+                        ctx.quadraticCurveTo(shard.x, shard.y + shard.drip * 0.5, shard.x + shard.size * 0.3, shard.y + shard.size * 0.5);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            // Glass reflection overlay
+            const glassGrad = ctx.createLinearGradient(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+            glassGrad.addColorStop(0, 'rgba(150, 170, 200, 0.08)');
+            glassGrad.addColorStop(0.5, 'rgba(150, 170, 200, 0.02)');
+            glassGrad.addColorStop(1, 'rgba(150, 170, 200, 0.1)');
+            ctx.fillStyle = glassGrad;
+            ctx.fillRect(frameWidth, frameWidth, CONFIG.CANVAS_WIDTH - frameWidth * 2, CONFIG.CANVAS_HEIGHT - frameWidth * 2);
+
+            // === TITLE ===
+            // Title shadow (blood red undertone)
+            ctx.save();
+            ctx.shadowColor = 'rgba(80, 0, 0, 0.8)';
+            ctx.shadowBlur = 30;
+            ctx.shadowOffsetX = 4;
+            ctx.shadowOffsetY = 4;
+            ctx.fillStyle = '#1a0505';
+            ctx.font = 'bold 130px Bebas Neue';
+            ctx.textAlign = 'center';
+            ctx.fillText('NIGHTFALL', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 180);
+            ctx.restore();
+
+            // Main title - stark white against dark
+            ctx.fillStyle = '#e8e0d0';
+            ctx.font = 'bold 130px Bebas Neue';
+            ctx.fillText('NIGHTFALL', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 180);
+
+            // Subtitle
+            ctx.fillStyle = '#8a7a6a';
+            ctx.font = '18px Special Elite';
+            ctx.fillText('A  NOIR  DETECTIVE  MYSTERY', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 130);
+
+            // Year
             ctx.fillStyle = '#5a4a3a';
             ctx.font = '14px Special Elite';
-            ctx.fillText('SMALL TOWN AMERICA', CONFIG.CANVAS_WIDTH / 2, 360);
+            ctx.fillText('— 1959 —', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 100);
 
-            // Year with decorative brackets
-            ctx.fillStyle = '#3d3428';
-            ctx.font = '50px Bebas Neue';
-            ctx.fillText('〈 1959 〉', CONFIG.CANVAS_WIDTH / 2, 420);
-
-            // Prompt (pulsing)
-            ctx.fillStyle = '#8b7355';
-            ctx.font = '16px Special Elite';
-            const pulse = Math.sin(Date.now() / 400) * 0.4 + 0.6;
+            // Prompt (pulsing, at bottom)
+            const pulse = Math.sin(titleAnimTime * 2.5) * 0.4 + 0.6;
             ctx.globalAlpha = pulse;
-            ctx.fillText('PRESS  ANY  KEY  TO  BEGIN', CONFIG.CANVAS_WIDTH / 2, 520);
+            ctx.fillStyle = '#a09080';
+            ctx.font = '16px Special Elite';
+            ctx.fillText('PRESS  ANY  KEY  TO  BEGIN', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 55);
             ctx.globalAlpha = 1;
 
-            // Copyright/credits
-            ctx.fillStyle = '#3a3228';
-            ctx.font = '10px Special Elite';
-            ctx.fillText('A GAME OF SHADOWS AND SECRETS', CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT - 20);
+            // Atmospheric text at top
+            ctx.fillStyle = 'rgba(100, 80, 60, 0.6)';
+            ctx.font = '11px Special Elite';
+            ctx.fillText('SOME WINDOWS ARE BETTER LEFT CLOSED', CONFIG.CANVAS_WIDTH / 2, 55);
         }
 
         // ============================================
@@ -4644,17 +4935,19 @@
                 case ' ':
                     keys.action = true;
                     break;
-                case 'b':
-                case 'B':
-                    handleActionKey('bribe');
+                case 'i':
+                case 'I':
+                    handleActionKey('interview');
                     break;
-                case 'f':
-                case 'F':
-                    handleActionKey('slap');
+                case 's':
+                case 'S':
+                    if (!keys.down) { // S is also used for movement
+                        handleActionKey('smack');
+                    }
                     break;
                 case 'g':
                 case 'G':
-                    handleActionKey('shoot');
+                    handleActionKey('gun');
                     break;
                 case 'Escape':
                     if (game.state === 'dialogue') {
