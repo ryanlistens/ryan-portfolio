@@ -661,8 +661,8 @@
         const player = {
             x: 600,
             y: 450, // Start on sidewalk (GROUND_LEVEL + 40)
-            width: 24,
-            height: 64,
+            width: 36,
+            height: 100,
             speed: CONFIG.PLAYER_SPEED,
             direction: 'right', // up, down, left, right
             facing: 1, // 1 = right, -1 = left
@@ -2617,15 +2617,16 @@
 
             const app = appearance || { skin: '#d4a87a', gender: 'm' };
 
-            // Human proportions - proper figure (about 70px tall)
-            const totalHeight = 70;
-            const headHeight = 12;
-            const neckHeight = 4;
-            const torsoHeight = 22;
-            const legHeight = 32;
-            const shoulderWidth = 18;
-            const hipWidth = 14;
-            const headWidth = 10;
+            // LARGER human proportions - proper figure (about 100px tall)
+            const scale = 1.4;
+            const totalHeight = 100 * scale;
+            const headHeight = 18 * scale;
+            const neckHeight = 5 * scale;
+            const torsoHeight = 32 * scale;
+            const legHeight = 45 * scale;
+            const shoulderWidth = 26 * scale;
+            const hipWidth = 20 * scale;
+            const headWidth = 14 * scale;
 
             // Calculate body part positions from feet up
             const feetY = y;
@@ -3261,9 +3262,9 @@
                 name: "JACK NOIR - PRIVATE INVESTIGATOR",
                 width: 800,
                 height: 500,
-                backgroundColor: '#1a1612',
-                floorColor: '#2a2218',
-                wallColor: '#2d261f',
+                backgroundColor: '#2a2622', // Brighter
+                floorColor: '#3a3228',
+                wallColor: '#3d362f',
                 // Furniture and props
                 elements: [
                     // Waiting area (left side)
@@ -3303,9 +3304,9 @@
                 name: "ROSIE'S DINER",
                 width: 700,
                 height: 500,
-                backgroundColor: '#1f1a15',
-                floorColor: '#2a2520',
-                wallColor: '#352a22',
+                backgroundColor: '#2f2a25', // Brighter diner
+                floorColor: '#3a3530',
+                wallColor: '#453a32',
                 elements: [
                     // Counter
                     { type: 'counter', x: 50, y: 150, width: 300, height: 40 },
@@ -3344,9 +3345,9 @@
                 name: "THE BLUE MOON",
                 width: 750,
                 height: 500,
-                backgroundColor: '#0f0d10',
-                floorColor: '#1a1618',
-                wallColor: '#1f1a1d',
+                backgroundColor: '#1f1d20', // Darker bar but still visible
+                floorColor: '#2a2628',
+                wallColor: '#2f2a2d',
                 elements: [
                     // Bar counter
                     { type: 'bar_counter', x: 50, y: 180, width: 350, height: 50 },
@@ -3844,7 +3845,11 @@
         }
 
         function advanceDialogue() {
-            if (!currentDialogue) return;
+            // If no multi-part dialogue, just close the box
+            if (!currentDialogue) {
+                endDialogue();
+                return;
+            }
 
             dialogueIndex++;
             if (dialogueIndex >= currentDialogue.dialogue.length) {
@@ -3860,6 +3865,8 @@
             dialogueIndex = 0;
             game.state = currentInterior ? 'interior' : 'playing';
             hideDialogueBox();
+            // Clear any lingering interaction state
+            player.nearInteractable = null;
         }
 
         function showDialogueBox(speaker, text) {
@@ -4260,11 +4267,12 @@
                 player.walkCycle++;
             }
 
-            // Boundary checks - player stays on sidewalk/street area
+            // Boundary checks - allow full sidewalk and street movement
             player.x = Math.max(20, Math.min(currentMap.width - player.width - 20, player.x));
-            // Y boundaries: sidewalk to far sidewalk
-            // GROUND_LEVEL = 410, sidewalk starts there, street is further down
-            player.y = Math.max(GROUND_LEVEL + 30, Math.min(GROUND_LEVEL + 180, player.y));
+            // Y boundaries: from near buildings to far side of street
+            // GROUND_LEVEL = 410, buildings end there, sidewalk and street below
+            // Allow walking up close to buildings (for door entry) and down to street
+            player.y = Math.max(GROUND_LEVEL - 20, Math.min(GROUND_LEVEL + 200, player.y));
 
             // Collision with buildings
             for (const collider of currentMap.colliders || []) {
@@ -4416,10 +4424,10 @@
 
                     // Use primarily horizontal distance - player just needs to be in front of door
                     const xDist = Math.abs(player.x + player.width / 2 - doorX);
-                    // Player should be on sidewalk near building (GROUND_LEVEL + 20 to +60)
-                    const nearBuilding = player.y >= GROUND_LEVEL + 15 && player.y <= GROUND_LEVEL + 70;
+                    // Player should be near building (expanded range to allow door access)
+                    const nearBuilding = player.y >= GROUND_LEVEL - 30 && player.y <= GROUND_LEVEL + 100;
 
-                    if (xDist < 50 && nearBuilding) {
+                    if (xDist < 70 && nearBuilding) {
                         nearInteractable = { type: 'building', building: building };
                         document.getElementById('interact-prompt').textContent = `TAP ENTER: ${building.name.split('\n')[0]}`;
                         break;
@@ -4866,94 +4874,113 @@
             ctx.fillRect(w * 0.5 - 5, 0, 10, h);
             ctx.fillRect(0, h * 0.5 - 5, w, 10);
 
-            // === DETECTIVE SILHOUETTE (clear black against bright window) ===
-            const figX = w * 0.32;
-            const figY = h * 0.95;
+            // === DETECTIVE SILHOUETTE - Realistic human proportions ===
+            const figX = w * 0.30;
+            const figY = h * 1.05; // Extends below canvas slightly
 
-            // Rim light effect (subtle edge glow from window light)
             ctx.save();
-            ctx.shadowColor = 'rgba(200, 180, 150, 0.3)';
-            ctx.shadowBlur = 15;
-            ctx.shadowOffsetX = 2;
+            ctx.shadowColor = 'rgba(200, 180, 150, 0.25)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetX = 3;
             ctx.shadowOffsetY = 0;
 
             ctx.fillStyle = '#000000';
 
-            // Body and trench coat (wide shoulders, noir style)
+            // Torso - trench coat, realistic male proportions
             ctx.beginPath();
-            ctx.moveTo(figX - 100, figY);
-            ctx.lineTo(figX - 100, figY - 50);
-            ctx.quadraticCurveTo(figX - 110, figY - 100, figX - 80, figY - 150);
-            ctx.lineTo(figX - 60, figY - 200);
-            ctx.quadraticCurveTo(figX - 40, figY - 230, figX, figY - 240);
-            ctx.quadraticCurveTo(figX + 40, figY - 230, figX + 60, figY - 200);
-            ctx.lineTo(figX + 80, figY - 150);
-            ctx.quadraticCurveTo(figX + 110, figY - 100, figX + 100, figY - 50);
-            ctx.lineTo(figX + 100, figY);
+            // Start at bottom left of coat
+            ctx.moveTo(figX - 55, figY);
+            // Left coat edge going up
+            ctx.lineTo(figX - 50, figY - 120);
+            // Waist (narrower)
+            ctx.lineTo(figX - 35, figY - 180);
+            // Left shoulder
+            ctx.lineTo(figX - 50, figY - 240);
+            // Neck left
+            ctx.lineTo(figX - 15, figY - 260);
+            // Neck right
+            ctx.lineTo(figX + 15, figY - 260);
+            // Right shoulder
+            ctx.lineTo(figX + 50, figY - 240);
+            // Waist right
+            ctx.lineTo(figX + 35, figY - 180);
+            // Right coat edge
+            ctx.lineTo(figX + 50, figY - 120);
+            // Bottom right
+            ctx.lineTo(figX + 55, figY);
             ctx.closePath();
             ctx.fill();
 
-            // Head
+            // Neck
+            ctx.fillRect(figX - 12, figY - 280, 24, 25);
+
+            // Head - oval, not circle
             ctx.beginPath();
-            ctx.ellipse(figX, figY - 270, 35, 40, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX, figY - 305, 25, 30, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Fedora hat (iconic detective)
+            // Fedora hat
+            // Brim
             ctx.beginPath();
-            ctx.ellipse(figX, figY - 298, 50, 10, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX, figY - 328, 42, 8, 0, 0, Math.PI * 2);
             ctx.fill();
+            // Crown
             ctx.beginPath();
-            ctx.moveTo(figX - 35, figY - 300);
-            ctx.quadraticCurveTo(figX - 30, figY - 330, figX, figY - 340);
-            ctx.quadraticCurveTo(figX + 30, figY - 330, figX + 35, figY - 300);
-            ctx.closePath();
+            ctx.moveTo(figX - 25, figY - 330);
+            ctx.quadraticCurveTo(figX - 20, figY - 355, figX, figY - 360);
+            ctx.quadraticCurveTo(figX + 20, figY - 355, figX + 25, figY - 330);
+            ctx.lineTo(figX - 25, figY - 330);
             ctx.fill();
 
-            // Arms raised holding binoculars
-            // Left arm
+            // Left arm - bent up holding binoculars
             ctx.beginPath();
-            ctx.moveTo(figX - 60, figY - 180);
-            ctx.quadraticCurveTo(figX - 100, figY - 220, figX - 75, figY - 270);
-            ctx.lineTo(figX - 55, figY - 260);
-            ctx.quadraticCurveTo(figX - 75, figY - 220, figX - 45, figY - 180);
+            ctx.moveTo(figX - 50, figY - 235); // shoulder
+            ctx.quadraticCurveTo(figX - 70, figY - 250, figX - 65, figY - 280); // elbow
+            ctx.quadraticCurveTo(figX - 55, figY - 300, figX - 40, figY - 300); // to binoculars
+            ctx.lineTo(figX - 35, figY - 290);
+            ctx.quadraticCurveTo(figX - 50, figY - 290, figX - 55, figY - 275);
+            ctx.quadraticCurveTo(figX - 60, figY - 255, figX - 42, figY - 240);
             ctx.closePath();
             ctx.fill();
 
             // Right arm
             ctx.beginPath();
-            ctx.moveTo(figX + 60, figY - 180);
-            ctx.quadraticCurveTo(figX + 100, figY - 220, figX + 75, figY - 270);
-            ctx.lineTo(figX + 55, figY - 260);
-            ctx.quadraticCurveTo(figX + 75, figY - 220, figX + 45, figY - 180);
+            ctx.moveTo(figX + 50, figY - 235);
+            ctx.quadraticCurveTo(figX + 70, figY - 250, figX + 65, figY - 280);
+            ctx.quadraticCurveTo(figX + 55, figY - 300, figX + 40, figY - 300);
+            ctx.lineTo(figX + 35, figY - 290);
+            ctx.quadraticCurveTo(figX + 50, figY - 290, figX + 55, figY - 275);
+            ctx.quadraticCurveTo(figX + 60, figY - 255, figX + 42, figY - 240);
             ctx.closePath();
             ctx.fill();
 
             // Binoculars
             ctx.beginPath();
-            ctx.ellipse(figX - 28, figY - 268, 22, 18, 0.1, 0, Math.PI * 2);
+            ctx.ellipse(figX - 20, figY - 302, 18, 14, 0.1, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(figX + 28, figY - 268, 22, 18, -0.1, 0, Math.PI * 2);
+            ctx.ellipse(figX + 20, figY - 302, 18, 14, -0.1, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillRect(figX - 12, figY - 280, 24, 16);
+            // Bridge between barrels
+            ctx.fillRect(figX - 8, figY - 312, 16, 12);
 
-            // Hands on binoculars
+            // Hands gripping binoculars
             ctx.beginPath();
-            ctx.ellipse(figX - 52, figY - 262, 15, 12, 0.3, 0, Math.PI * 2);
+            ctx.ellipse(figX - 38, figY - 298, 12, 10, 0.3, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(figX + 52, figY - 262, 15, 12, -0.3, 0, Math.PI * 2);
+            ctx.ellipse(figX + 38, figY - 298, 12, 10, -0.3, 0, Math.PI * 2);
             ctx.fill();
 
             ctx.restore();
 
-            // Binocular lens reflection (catches light)
-            ctx.fillStyle = 'rgba(180, 160, 140, 0.25)';
+            // Binocular lens reflection
+            ctx.fillStyle = 'rgba(180, 170, 150, 0.2)';
             ctx.beginPath();
-            ctx.ellipse(figX - 28, figY - 268, 14, 11, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX - 20, figY - 302, 12, 9, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(figX + 28, figY - 268, 14, 11, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX + 20, figY - 302, 12, 9, 0, 0, Math.PI * 2);
             ctx.fill();
 
             // === RAIN ON WINDOW ===
@@ -5196,7 +5223,11 @@
         function init() {
             // Position player on sidewalk in front of PI office
             player.x = 250;
-            player.y = GROUND_LEVEL + 40; // On the sidewalk in front of buildings
+            player.y = GROUND_LEVEL + 50; // On the sidewalk in front of buildings
+
+            // Initialize camera to center on player
+            camera.x = player.x - CONFIG.CANVAS_WIDTH / 2 + player.width / 2;
+            camera.x = Math.max(0, Math.min(currentMap.width - CONFIG.CANVAS_WIDTH, camera.x));
 
             // Initialize world state
             initWorldState();
