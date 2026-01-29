@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>NIGHTFALL - A Collage Noir</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:wght@700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Special Elite', monospace;
+        }
+
+        /* ========================================
+           MAIN GAME CONTAINER
+        ======================================== */
+        #game {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0d0d0d;
+            overflow: hidden;
+        }
+
+        /* ========================================
+           SCENE CONTAINER - Where collages live
+        ======================================== */
+        #scene {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* ========================================
+           COLLAGE LAYERS - Stacked image elements
+        ======================================== */
+        .layer {
+            position: absolute;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            transform-origin: bottom center;
+        }
+
+        /* Clickable hotspots */
+        .hotspot {
+            position: absolute;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .hotspot:hover {
+            filter: brightness(1.2) drop-shadow(0 0 10px rgba(255, 200, 100, 0.5));
+        }
+
+        /* ========================================
+           GILLIAM-STYLE ANIMATIONS
+        ======================================== */
+        @keyframes cutout-idle {
+            0%, 100% { transform: rotate(0deg) translateY(0); }
+            25% { transform: rotate(0.3deg) translateY(-1px); }
+            75% { transform: rotate(-0.3deg) translateY(1px); }
+        }
+
+        @keyframes cutout-talk {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            10% { transform: rotate(-1deg) scale(1.02); }
+            20% { transform: rotate(1deg) scale(0.98); }
+            30% { transform: rotate(-0.5deg) scale(1.01); }
+            40% { transform: rotate(0.5deg) scale(0.99); }
+            50% { transform: rotate(0deg) scale(1); }
+        }
+
+        @keyframes cutout-walk {
+            0% { transform: rotate(-2deg) translateX(0); }
+            25% { transform: rotate(2deg) translateX(5px); }
+            50% { transform: rotate(-2deg) translateX(10px); }
+            75% { transform: rotate(2deg) translateX(15px); }
+            100% { transform: rotate(-2deg) translateX(20px); }
+        }
+
+        @keyframes cutout-enter {
+            0% { transform: scale(0.8) rotate(-5deg); opacity: 0; }
+            50% { transform: scale(1.1) rotate(3deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        @keyframes paper-flutter {
+            0%, 100% { transform: rotate(-1deg); }
+            50% { transform: rotate(1deg); }
+        }
+
+        @keyframes lamp-flicker {
+            0%, 90%, 100% { opacity: 1; }
+            92%, 94%, 96% { opacity: 0.7; }
+        }
+
+        @keyframes smoke-rise {
+            0% { transform: translateY(0) scale(1); opacity: 0.6; }
+            100% { transform: translateY(-50px) scale(1.5); opacity: 0; }
+        }
+
+        .animate-idle {
+            animation: cutout-idle 3s ease-in-out infinite;
+        }
+
+        .animate-talk {
+            animation: cutout-talk 0.3s ease-in-out infinite;
+        }
+
+        .animate-enter {
+            animation: cutout-enter 0.5s ease-out forwards;
+        }
+
+        .animate-flutter {
+            animation: paper-flutter 2s ease-in-out infinite;
+        }
+
+        .animate-flicker {
+            animation: lamp-flicker 4s ease-in-out infinite;
+        }
+
+        /* ========================================
+           FILM GRAIN OVERLAY
+        ======================================== */
+        #grain {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.15;
+            z-index: 1000;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        }
+
+        /* Sepia/noir color treatment */
+        #scene {
+            filter: sepia(20%) contrast(1.1) saturate(0.8);
+        }
+
+        /* ========================================
+           UI ELEMENTS
+        ======================================== */
+        #ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        #ui > * {
+            pointer-events: auto;
+        }
+
+        /* Location title */
+        #location {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Playfair Display', serif;
+            font-size: 24px;
+            color: #d4c4a4;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.9);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #location.visible {
+            opacity: 1;
+        }
+
+        /* Dialogue box */
+        #dialogue {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 85%;
+            max-width: 600px;
+            background: rgba(20, 18, 15, 0.95);
+            border: 2px solid #3d3428;
+            padding: 20px;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+
+        #dialogue.visible {
+            display: block;
+        }
+
+        #dialogue .speaker {
+            font-family: 'Playfair Display', serif;
+            font-size: 16px;
+            color: #c4a35a;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        #dialogue .text {
+            font-family: 'Special Elite', monospace;
+            font-size: 14px;
+            color: #d4c5a9;
+            line-height: 1.6;
+        }
+
+        #dialogue .continue {
+            font-size: 11px;
+            color: #8a7a5a;
+            margin-top: 15px;
+            text-align: right;
+        }
+
+        /* Inventory/status */
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #a99a7a;
+            font-size: 12px;
+        }
+
+        #status .label {
+            font-size: 10px;
+            color: #6a5a4a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Navigation arrows */
+        .nav-arrow {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(30, 25, 20, 0.7);
+            border: 2px solid #4a3a2a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #a99a7a;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 50;
+        }
+
+        .nav-arrow:hover {
+            background: rgba(60, 50, 40, 0.9);
+            transform: scale(1.1);
+        }
+
+        .nav-arrow.left { left: 20px; top: 50%; transform: translateY(-50%); }
+        .nav-arrow.right { right: 20px; top: 50%; transform: translateY(-50%); }
+        .nav-arrow.back { left: 20px; bottom: 20px; }
+
+        .nav-arrow.hidden { display: none; }
+
+        /* Action buttons */
+        #actions {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 12px 20px;
+            background: rgba(30, 25, 20, 0.9);
+            border: 2px solid #4a3a2a;
+            color: #c4a35a;
+            font-family: 'Special Elite', monospace;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .action-btn:hover {
+            background: rgba(80, 60, 40, 0.9);
+            transform: scale(1.05);
+        }
+
+        .action-btn.hidden { display: none; }
+
+        /* ========================================
+           TITLE SCREEN
+        ======================================== */
+        #title-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0808;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 1s;
+        }
+
+        #title-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #title-screen h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(48px, 12vw, 120px);
+            color: #d4c4a4;
+            letter-spacing: 10px;
+            text-shadow: 0 0 60px rgba(200, 180, 140, 0.3);
+            margin-bottom: 20px;
+        }
+
+        #title-screen .subtitle {
+            font-family: 'Special Elite', monospace;
+            font-size: clamp(12px, 3vw, 18px);
+            color: #8a7a5a;
+            letter-spacing: 6px;
+            margin-bottom: 40px;
+        }
+
+        #title-screen .prompt {
+            font-family: 'Special Elite', monospace;
+            font-size: 14px;
+            color: #6a5a4a;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Collage cutout styling */
+        .cutout {
+            filter: grayscale(30%) contrast(1.2);
+            image-rendering: crisp-edges;
+        }
+
+        .cutout-photo {
+            border: 3px solid rgba(0,0,0,0.6);
+            box-shadow:
+                3px 3px 0 rgba(0,0,0,0.4),
+                inset 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        /* Torn paper edge effect */
+        .torn-edge {
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M0,0 L100,0 L100,95 Q95,100 90,95 Q85,100 80,95 Q75,100 70,95 Q65,100 60,95 Q55,100 50,95 Q45,100 40,95 Q35,100 30,95 Q25,100 20,95 Q15,100 10,95 Q5,100 0,95 Z'/%3E%3C/svg%3E");
+            mask-size: 100% 100%;
+        }
+
+        /* Vintage photo styling */
+        .vintage-photo {
+            filter: sepia(40%) contrast(1.1) brightness(0.9);
+            border: 8px solid #f5f0e6;
+            box-shadow: 4px 4px 12px rgba(0,0,0,0.5);
+        }
+
+        /* Ad clipping style */
+        .ad-clipping {
+            transform: rotate(-1deg);
+            border: 2px solid #c4a35a;
+            padding: 5px;
+            background: #f8f4e8;
+        }
+
+        /* Magazine cutout wobble */
+        @keyframes magazine-wobble {
+            0%, 100% { transform: rotate(-0.5deg); }
+            50% { transform: rotate(0.5deg); }
+        }
+
+        .magazine-cut {
+            animation: magazine-wobble 4s ease-in-out infinite;
+        }
+
+        /* Clue highlight effect */
+        .clue-item {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .clue-item:hover {
+            filter: brightness(1.3) drop-shadow(0 0 15px rgba(255, 200, 100, 0.6));
+            transform: scale(1.05);
+        }
+
+        .clue-item.found {
+            filter: sepia(80%);
+        }
+
+        /* Inventory panel */
+        #inventory {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .inventory-item {
+            width: 50px;
+            height: 50px;
+            background: rgba(30, 25, 20, 0.9);
+            border: 2px solid #4a3a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #a99a7a;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .inventory-item:hover {
+            background: rgba(60, 50, 40, 0.9);
+            border-color: #8a7a5a;
+        }
+
+        /* Case notes panel */
+        #case-notes {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 500px;
+            background: #f5f0e6;
+            border: 3px solid #3d3428;
+            padding: 30px;
+            z-index: 200;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+        }
+
+        #case-notes.visible {
+            display: block;
+        }
+
+        #case-notes h2 {
+            font-family: 'Playfair Display', serif;
+            color: #2a2015;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3d3428;
+            padding-bottom: 10px;
+        }
+
+        #case-notes .note {
+            font-family: 'Special Elite', monospace;
+            color: #3a3025;
+            font-size: 14px;
+            margin-bottom: 10px;
+            padding-left: 15px;
+            border-left: 3px solid #8a7a5a;
+        }
+
+        #case-notes .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 24px;
+            color: #5a4a3a;
+            cursor: pointer;
+        }
+
+        /* ========================================
+           RESPONSIVE
+        ======================================== */
+        @media (max-width: 600px) {
+            #dialogue {
+                width: 92%;
+                bottom: 80px;
+                padding: 15px;
+            }
+
+            .nav-arrow {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+
+            #actions {
+                right: 10px;
+                bottom: 10px;
+            }
+
+            .action-btn {
+                padding: 10px 15px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <!-- Scene container - collage layers go here -->
+        <div id="scene"></div>
+
+        <!-- Film grain overlay -->
+        <div id="grain"></div>
+
+        <!-- UI Layer -->
+        <div id="ui">
+            <!-- Status -->
+            <div id="status">
+                <div class="label">Case File</div>
+                <div id="case-name">The Marlowe Murder</div>
+            </div>
+
+            <!-- Location name -->
+            <div id="location"></div>
+
+            <!-- Dialogue box -->
+            <div id="dialogue">
+                <div class="speaker"></div>
+                <div class="text"></div>
+                <div class="continue">tap to continue</div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="nav-arrow left hidden" id="nav-left">◀</div>
+            <div class="nav-arrow right hidden" id="nav-right">▶</div>
+            <div class="nav-arrow back hidden" id="nav-back">↩</div>
+
+            <!-- Actions -->
+            <div id="actions">
+                <button class="action-btn hidden" id="btn-look">LOOK</button>
+                <button class="action-btn hidden" id="btn-talk">TALK</button>
+                <button class="action-btn hidden" id="btn-take">TAKE</button>
+            </div>
+
+            <!-- Inventory -->
+            <div id="inventory"></div>
+
+            <!-- Case Notes -->
+            <div id="case-notes">
+                <span class="close-btn">&times;</span>
+                <h2>CASE NOTES</h2>
+                <div id="notes-content"></div>
+            </div>
+
+            <!-- Notes button -->
+            <button class="action-btn" id="btn-notes" style="position: absolute; top: 20px; right: 20px;">NOTES</button>
+        </div>
+
+        <!-- Title Screen -->
+        <div id="title-screen">
+            <h1>NIGHTFALL</h1>
+            <div class="subtitle">A COLLAGE NOIR</div>
+            <div class="prompt">TAP TO BEGIN</div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // NIGHTFALL - COLLAGE NOIR ENGINE
+        // Terry Gilliam-style cutout adventure
+        // ============================================
+
+        const game = {
+            currentScene: 'street_main',
+            previousScene: null,
+            inventory: [],
+            flags: {},
+            selectedObject: null
+        };
+
+        // ============================================
+        // SCENE DEFINITIONS
+        // Each scene is a collage of layered images
+        // ============================================
+
+        const SCENES = {
+            // === MAIN STREET - EXTERIOR ===
+            street_main: {
+                name: "MAIN STREET",
+                background: "linear-gradient(to bottom, #0a0a12 0%, #1a1a28 40%, #2a2a35 100%)",
+                layers: [
+                    // Sky/backdrop
+                    {
+                        id: 'sky',
+                        type: 'sky',
+                        style: {
+                            width: '100%',
+                            height: '50%',
+                            top: '0',
+                            left: '0',
+                            background: 'linear-gradient(to bottom, #0a0a15 0%, #15152a 60%, #252535 100%)'
+                        }
+                    },
+                    // Moon
+                    {
+                        id: 'moon',
+                        type: 'decoration',
+                        style: {
+                            width: '60px',
+                            height: '60px',
+                            top: '8%',
+                            right: '15%',
+                            background: 'radial-gradient(circle, #e8e0c8 0%, #d4c8a8 40%, transparent 70%)',
+                            borderRadius: '50%',
+                            boxShadow: '0 0 40px rgba(232, 224, 200, 0.4)'
+                        }
+                    },
+                    // Building silhouettes - back row
+                    {
+                        id: 'buildings_back',
+                        type: 'building',
+                        style: {
+                            width: '100%',
+                            height: '55%',
+                            bottom: '25%',
+                            left: '0',
+                            background: '#12121a'
+                        },
+                        // Will be replaced with actual vintage building photos
+                        placeholder: '1959 city skyline photograph'
+                    },
+                    // Street level buildings - front row
+                    {
+                        id: 'buildings_front',
+                        type: 'building',
+                        style: {
+                            width: '100%',
+                            height: '45%',
+                            bottom: '15%',
+                            left: '0',
+                            background: 'linear-gradient(to bottom, #1a1a22 0%, #222230 100%)'
+                        },
+                        // Storefront cutouts will overlay this
+                        placeholder: '1959 storefront photographs - detective office, bar, diner'
+                    },
+                    // Neon sign - BAR
+                    {
+                        id: 'neon_bar',
+                        type: 'decoration',
+                        animate: 'flicker',
+                        style: {
+                            top: '35%',
+                            left: '20%',
+                            padding: '5px 15px',
+                            fontFamily: 'sans-serif',
+                            fontSize: '18px',
+                            fontWeight: 'bold',
+                            color: '#ff4444',
+                            textShadow: '0 0 10px #ff4444, 0 0 20px #ff4444, 0 0 30px #ff2222',
+                            background: 'transparent'
+                        },
+                        text: 'BAR'
+                    },
+                    // Neon sign - HOTEL
+                    {
+                        id: 'neon_hotel',
+                        type: 'decoration',
+                        animate: 'flicker',
+                        style: {
+                            top: '30%',
+                            right: '25%',
+                            padding: '5px 15px',
+                            fontFamily: 'sans-serif',
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: '#44aaff',
+                            textShadow: '0 0 10px #44aaff, 0 0 20px #44aaff',
+                            background: 'transparent'
+                        },
+                        text: 'HOTEL'
+                    },
+                    // Street/sidewalk
+                    {
+                        id: 'street',
+                        type: 'ground',
+                        style: {
+                            width: '100%',
+                            height: '20%',
+                            bottom: '0',
+                            left: '0',
+                            background: 'linear-gradient(to bottom, #2a2a2a 0%, #1a1a1a 100%)'
+                        }
+                    },
+                    // Streetlamp with glow
+                    {
+                        id: 'streetlamp',
+                        type: 'decoration',
+                        animate: 'flicker',
+                        style: {
+                            width: '8px',
+                            height: '120px',
+                            bottom: '15%',
+                            left: '30%',
+                            background: '#1a1a1a'
+                        }
+                    },
+                    {
+                        id: 'lamplight',
+                        type: 'light',
+                        animate: 'flicker',
+                        style: {
+                            width: '150px',
+                            height: '150px',
+                            bottom: '28%',
+                            left: 'calc(30% - 70px)',
+                            background: 'radial-gradient(circle, rgba(255,230,180,0.3) 0%, transparent 70%)',
+                            borderRadius: '50%'
+                        }
+                    },
+                    // Parked car (cutout)
+                    {
+                        id: 'car_parked',
+                        type: 'prop',
+                        hotspot: true,
+                        action: 'look',
+                        description: "A '57 Chevy. Seen better days.",
+                        style: {
+                            width: '180px',
+                            height: '70px',
+                            bottom: '10%',
+                            left: '50%',
+                            background: '#1a1518',
+                            borderRadius: '10px 30px 5px 5px'
+                        },
+                        placeholder: '1959 vintage car photograph cutout'
+                    },
+                    // Detective figure (player)
+                    {
+                        id: 'detective',
+                        type: 'character',
+                        animate: 'idle',
+                        style: {
+                            width: '80px',
+                            height: '180px',
+                            bottom: '12%',
+                            left: '40%',
+                            background: '#0a0a0a'
+                        },
+                        placeholder: '1959 man in trench coat and fedora - cutout'
+                    }
+                ],
+                hotspots: [
+                    {
+                        id: 'enter_bar',
+                        bounds: { left: '15%', top: '35%', width: '15%', height: '30%' },
+                        action: 'enter',
+                        target: 'bar_interior',
+                        prompt: 'Enter the bar'
+                    },
+                    {
+                        id: 'enter_office',
+                        bounds: { left: '60%', top: '35%', width: '15%', height: '30%' },
+                        action: 'enter',
+                        target: 'office_interior',
+                        prompt: 'Enter the detective office'
+                    }
+                ],
+                navigation: {
+                    left: 'street_west',
+                    right: 'street_east'
+                }
+            },
+
+            // === DETECTIVE OFFICE - INTERIOR ===
+            office_interior: {
+                name: "NOIR INVESTIGATIONS",
+                background: "#1a1815",
+                layers: [
+                    // Back wall
+                    {
+                        id: 'wall',
+                        type: 'background',
+                        style: {
+                            width: '100%',
+                            height: '70%',
+                            top: '0',
+                            left: '0',
+                            background: 'linear-gradient(to bottom, #2a2520 0%, #1f1c18 100%)'
+                        },
+                        placeholder: '1959 office wall with venetian blinds - photograph'
+                    },
+                    // Window with blinds
+                    {
+                        id: 'window',
+                        type: 'prop',
+                        style: {
+                            width: '200px',
+                            height: '180px',
+                            top: '10%',
+                            right: '15%',
+                            background: 'linear-gradient(to bottom, #1a2530 0%, #0a1520 100%)',
+                            border: '8px solid #2a2018'
+                        },
+                        placeholder: '1959 office window with venetian blinds'
+                    },
+                    // Light through blinds
+                    {
+                        id: 'blinds_light',
+                        type: 'light',
+                        style: {
+                            width: '300px',
+                            height: '200px',
+                            top: '20%',
+                            right: '10%',
+                            background: 'repeating-linear-gradient(180deg, rgba(255,240,200,0.1) 0px, rgba(255,240,200,0.1) 3px, transparent 3px, transparent 15px)',
+                            transform: 'skewX(-20deg)'
+                        }
+                    },
+                    // Desk
+                    {
+                        id: 'desk',
+                        type: 'furniture',
+                        hotspot: true,
+                        action: 'search',
+                        style: {
+                            width: '350px',
+                            height: '120px',
+                            bottom: '20%',
+                            left: '25%',
+                            background: '#3d2a1a',
+                            borderTop: '8px solid #4a3520'
+                        },
+                        placeholder: '1959 wooden office desk - photograph cutout'
+                    },
+                    // Desk lamp
+                    {
+                        id: 'desk_lamp',
+                        type: 'prop',
+                        animate: 'flicker',
+                        style: {
+                            width: '60px',
+                            height: '80px',
+                            bottom: '35%',
+                            left: '30%',
+                            background: 'transparent'
+                        },
+                        placeholder: '1959 brass desk lamp - cutout'
+                    },
+                    // Lamp light cone
+                    {
+                        id: 'lamp_glow',
+                        type: 'light',
+                        animate: 'flicker',
+                        style: {
+                            width: '150px',
+                            height: '100px',
+                            bottom: '20%',
+                            left: '25%',
+                            background: 'conic-gradient(from 180deg, transparent 130deg, rgba(255,230,180,0.2) 180deg, transparent 230deg)',
+                            transformOrigin: 'top center'
+                        }
+                    },
+                    // Typewriter on desk
+                    {
+                        id: 'typewriter',
+                        type: 'prop',
+                        hotspot: true,
+                        action: 'use',
+                        description: "My trusty Underwood. Got more stories in it than I can count.",
+                        style: {
+                            width: '80px',
+                            height: '60px',
+                            bottom: '32%',
+                            left: '45%',
+                            background: '#1a1a1a'
+                        },
+                        placeholder: '1959 Underwood typewriter - cutout'
+                    },
+                    // Phone
+                    {
+                        id: 'phone',
+                        type: 'prop',
+                        hotspot: true,
+                        action: 'use',
+                        description: "Rotary phone. Nobody's called in three days.",
+                        style: {
+                            width: '50px',
+                            height: '40px',
+                            bottom: '33%',
+                            left: '55%',
+                            background: '#0a0a0a'
+                        },
+                        placeholder: '1959 black rotary telephone - cutout'
+                    },
+                    // Filing cabinet
+                    {
+                        id: 'filing_cabinet',
+                        type: 'furniture',
+                        hotspot: true,
+                        action: 'search',
+                        description: "Case files. Mostly cold. Just like the trail.",
+                        style: {
+                            width: '70px',
+                            height: '150px',
+                            bottom: '15%',
+                            left: '10%',
+                            background: '#3a3a3a'
+                        },
+                        placeholder: '1959 metal filing cabinet - cutout'
+                    },
+                    // Chair
+                    {
+                        id: 'chair',
+                        type: 'furniture',
+                        style: {
+                            width: '80px',
+                            height: '120px',
+                            bottom: '15%',
+                            left: '35%',
+                            background: '#2a1a10'
+                        },
+                        placeholder: '1959 leather office chair - cutout'
+                    },
+                    // Coat rack with hat and coat
+                    {
+                        id: 'coatrack',
+                        type: 'prop',
+                        style: {
+                            width: '50px',
+                            height: '180px',
+                            bottom: '15%',
+                            right: '10%',
+                            background: 'transparent'
+                        },
+                        placeholder: '1959 coat rack with fedora and trench coat'
+                    },
+                    // Ashtray with smoke
+                    {
+                        id: 'ashtray',
+                        type: 'prop',
+                        style: {
+                            width: '40px',
+                            height: '20px',
+                            bottom: '33%',
+                            left: '38%',
+                            background: '#2a2a2a'
+                        },
+                        placeholder: '1959 glass ashtray with cigarette'
+                    },
+                    // Floor
+                    {
+                        id: 'floor',
+                        type: 'ground',
+                        style: {
+                            width: '100%',
+                            height: '20%',
+                            bottom: '0',
+                            left: '0',
+                            background: 'linear-gradient(to bottom, #1a1512 0%, #12100d 100%)'
+                        },
+                        placeholder: '1959 worn wooden floor texture'
+                    }
+                ],
+                hotspots: [],
+                navigation: {
+                    back: 'street_main'
+                },
+                npcs: [
+                    {
+                        id: 'secretary',
+                        name: 'DOLORES',
+                        position: { bottom: '18%', left: '60%' },
+                        size: { width: '70px', height: '160px' },
+                        dialogue: [
+                            "You've got a visitor, boss. Says it's urgent.",
+                            "Some dame. Legs up to here. Trouble written all over her.",
+                            "She's waiting in the lobby. If we had one."
+                        ],
+                        placeholder: '1959 woman secretary at desk - cutout'
+                    }
+                ]
+            },
+
+            // === BAR INTERIOR ===
+            bar_interior: {
+                name: "THE BLUE MOON",
+                background: "#0f0d12",
+                layers: [
+                    // Back wall with bottles
+                    {
+                        id: 'back_wall',
+                        type: 'background',
+                        style: {
+                            width: '100%',
+                            height: '60%',
+                            top: '0',
+                            left: '0',
+                            background: 'linear-gradient(to bottom, #1a1520 0%, #12101a 100%)'
+                        },
+                        placeholder: '1959 bar back wall with bottles and mirror'
+                    },
+                    // Bar counter
+                    {
+                        id: 'bar_counter',
+                        type: 'furniture',
+                        style: {
+                            width: '90%',
+                            height: '80px',
+                            bottom: '25%',
+                            left: '5%',
+                            background: 'linear-gradient(to bottom, #3a2820 0%, #2a1a15 100%)',
+                            borderTop: '10px solid #4a3025',
+                            borderRadius: '5px'
+                        },
+                        placeholder: '1959 wooden bar counter - photograph'
+                    },
+                    // Bar stools
+                    {
+                        id: 'stool1',
+                        type: 'furniture',
+                        style: {
+                            width: '40px',
+                            height: '70px',
+                            bottom: '18%',
+                            left: '20%'
+                        },
+                        placeholder: '1959 bar stool - cutout'
+                    },
+                    {
+                        id: 'stool2',
+                        type: 'furniture',
+                        style: {
+                            width: '40px',
+                            height: '70px',
+                            bottom: '18%',
+                            left: '35%'
+                        },
+                        placeholder: '1959 bar stool - cutout'
+                    },
+                    // Bottles on shelf
+                    {
+                        id: 'bottles',
+                        type: 'prop',
+                        style: {
+                            width: '80%',
+                            height: '100px',
+                            top: '20%',
+                            left: '10%'
+                        },
+                        placeholder: '1959 liquor bottles on shelf - photograph'
+                    },
+                    // Neon beer sign
+                    {
+                        id: 'beer_sign',
+                        type: 'decoration',
+                        animate: 'flicker',
+                        style: {
+                            top: '15%',
+                            left: '20%',
+                            padding: '8px 15px',
+                            fontSize: '14px',
+                            color: '#ffaa44',
+                            textShadow: '0 0 10px #ffaa44',
+                            fontFamily: 'cursive'
+                        },
+                        text: 'Schlitz'
+                    },
+                    // Floor
+                    {
+                        id: 'floor',
+                        type: 'ground',
+                        style: {
+                            width: '100%',
+                            height: '20%',
+                            bottom: '0',
+                            left: '0',
+                            background: '#12100d'
+                        }
+                    }
+                ],
+                navigation: {
+                    back: 'street_main'
+                },
+                npcs: [
+                    {
+                        id: 'bartender',
+                        name: 'MICKEY',
+                        position: { bottom: '30%', left: '50%' },
+                        size: { width: '60px', height: '140px' },
+                        dialogue: [
+                            "What'll it be?",
+                            "Bourbon? Good choice. Only thing that helps on nights like this.",
+                            "You hear about the Marlowe dame? Found her this morning. Downtown hotel."
+                        ],
+                        placeholder: '1959 bartender in vest and apron - cutout'
+                    }
+                ]
+            }
+        };
+
+        // ============================================
+        // RENDERING ENGINE
+        // ============================================
+
+        function renderScene(sceneId) {
+            const scene = SCENES[sceneId];
+            if (!scene) return;
+
+            game.currentScene = sceneId;
+            const container = document.getElementById('scene');
+            container.innerHTML = '';
+            container.style.background = scene.background;
+
+            // Render layers
+            for (const layer of scene.layers) {
+                const el = document.createElement('div');
+                el.className = 'layer';
+                el.id = layer.id;
+
+                // Apply styles
+                Object.assign(el.style, layer.style);
+
+                // Add animation class
+                if (layer.animate) {
+                    el.classList.add('animate-' + layer.animate);
+                }
+
+                // Add text content if present
+                if (layer.text) {
+                    el.textContent = layer.text;
+                }
+
+                // Make hotspots clickable
+                if (layer.hotspot) {
+                    el.classList.add('hotspot');
+                    el.dataset.action = layer.action;
+                    el.dataset.description = layer.description || '';
+                    el.addEventListener('click', () => handleLayerClick(layer));
+                }
+
+                container.appendChild(el);
+            }
+
+            // Render hotspot areas (invisible clickable zones)
+            for (const hotspot of scene.hotspots || []) {
+                const el = document.createElement('div');
+                el.className = 'hotspot';
+                el.style.position = 'absolute';
+                Object.assign(el.style, hotspot.bounds);
+                el.style.cursor = 'pointer';
+                el.dataset.action = hotspot.action;
+                el.dataset.target = hotspot.target || '';
+                el.addEventListener('click', () => handleHotspotClick(hotspot));
+                container.appendChild(el);
+            }
+
+            // Render NPCs
+            for (const npc of scene.npcs || []) {
+                const el = document.createElement('div');
+                el.className = 'layer hotspot animate-idle';
+                el.id = 'npc_' + npc.id;
+                el.style.position = 'absolute';
+                Object.assign(el.style, npc.position, npc.size);
+                el.style.background = '#1a1515';
+                el.style.cursor = 'pointer';
+                el.dataset.npcId = npc.id;
+                el.addEventListener('click', () => handleNPCClick(npc));
+                container.appendChild(el);
+            }
+
+            // Update navigation arrows
+            updateNavigation(scene.navigation || {});
+
+            // Show location name
+            showLocation(scene.name);
+        }
+
+        function updateNavigation(nav) {
+            document.getElementById('nav-left').classList.toggle('hidden', !nav.left);
+            document.getElementById('nav-right').classList.toggle('hidden', !nav.right);
+            document.getElementById('nav-back').classList.toggle('hidden', !nav.back);
+
+            if (nav.left) document.getElementById('nav-left').dataset.target = nav.left;
+            if (nav.right) document.getElementById('nav-right').dataset.target = nav.right;
+            if (nav.back) document.getElementById('nav-back').dataset.target = nav.back;
+        }
+
+        function showLocation(name) {
+            const el = document.getElementById('location');
+            el.textContent = name;
+            el.classList.add('visible');
+            setTimeout(() => el.classList.remove('visible'), 2000);
+        }
+
+        // ============================================
+        // INTERACTION HANDLERS
+        // ============================================
+
+        function handleLayerClick(layer) {
+            if (layer.description) {
+                showDialogue('NARRATOR', layer.description);
+            }
+        }
+
+        function handleHotspotClick(hotspot) {
+            if (hotspot.action === 'enter' && hotspot.target) {
+                game.previousScene = game.currentScene;
+                transitionToScene(hotspot.target);
+            }
+        }
+
+        function handleNPCClick(npc) {
+            // Show NPC dialogue
+            game.selectedObject = npc;
+            document.getElementById('btn-talk').classList.remove('hidden');
+        }
+
+        function talkToNPC() {
+            if (!game.selectedObject || !game.selectedObject.dialogue) return;
+
+            const npc = game.selectedObject;
+            const dialogueIndex = game.flags[npc.id + '_dialogue'] || 0;
+            const text = npc.dialogue[dialogueIndex];
+
+            showDialogue(npc.name, text);
+
+            // Advance dialogue for next time
+            game.flags[npc.id + '_dialogue'] = (dialogueIndex + 1) % npc.dialogue.length;
+        }
+
+        // ============================================
+        // DIALOGUE SYSTEM
+        // ============================================
+
+        let dialogueCallback = null;
+
+        function showDialogue(speaker, text, callback = null) {
+            const box = document.getElementById('dialogue');
+            box.querySelector('.speaker').textContent = speaker;
+            box.querySelector('.text').textContent = text;
+            box.classList.add('visible');
+            dialogueCallback = callback;
+        }
+
+        function closeDialogue() {
+            document.getElementById('dialogue').classList.remove('visible');
+            if (dialogueCallback) {
+                dialogueCallback();
+                dialogueCallback = null;
+            }
+        }
+
+        // ============================================
+        // SCENE TRANSITIONS
+        // ============================================
+
+        function transitionToScene(sceneId) {
+            const scene = document.getElementById('scene');
+            scene.style.opacity = '0';
+            scene.style.transition = 'opacity 0.5s';
+
+            setTimeout(() => {
+                renderScene(sceneId);
+                scene.style.opacity = '1';
+            }, 500);
+        }
+
+        // ============================================
+        // INPUT HANDLING
+        // ============================================
+
+        function setupInputHandlers() {
+            // Title screen
+            document.getElementById('title-screen').addEventListener('click', startGame);
+
+            // Navigation
+            document.getElementById('nav-left').addEventListener('click', function() {
+                if (this.dataset.target) transitionToScene(this.dataset.target);
+            });
+            document.getElementById('nav-right').addEventListener('click', function() {
+                if (this.dataset.target) transitionToScene(this.dataset.target);
+            });
+            document.getElementById('nav-back').addEventListener('click', function() {
+                if (this.dataset.target) transitionToScene(this.dataset.target);
+            });
+
+            // Actions
+            document.getElementById('btn-talk').addEventListener('click', talkToNPC);
+
+            // Close dialogue on click
+            document.getElementById('dialogue').addEventListener('click', closeDialogue);
+
+            // Keyboard
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeDialogue();
+                if (e.key === ' ' || e.key === 'Enter') {
+                    if (document.getElementById('dialogue').classList.contains('visible')) {
+                        closeDialogue();
+                    }
+                }
+            });
+        }
+
+        // ============================================
+        // GAME START
+        // ============================================
+
+        function startGame() {
+            document.getElementById('title-screen').classList.add('hidden');
+            renderScene('street_main');
+        }
+
+        // Initialize
+        setupInputHandlers();
+    </script>
+</body>
+</html>
