@@ -587,11 +587,11 @@
             CANVAS_WIDTH: 1200,
             CANVAS_HEIGHT: 700,
             TILE_SIZE: 60,
-            PLAYER_SPEED: 3,
+            PLAYER_SPEED: 4,
             CAR_SPEED: 8,
             GAME_SPEED: 1, // Time multiplier
             SHADOW_LENGTH: 2.5,
-            AMBIENT_LIGHT: 0.15
+            AMBIENT_LIGHT: 0.45 // Brighter - can actually see things
         };
 
         // Set canvas size
@@ -2918,7 +2918,7 @@
             const py = player.y - camera.y + player.height;
 
             const inLight = isInLight(player.x, player.y);
-            const lightFactor = inLight ? 1 : 0.35;
+            const lightFactor = inLight ? 1 : 0.55;
 
             drawMannequin(px, py, {
                 facing: player.facing,
@@ -2974,11 +2974,14 @@
             const ny = state.y - camera.y + 64;
 
             const inLight = isInLight(state.x, state.y);
-            const lightFactor = inLight ? 1 : 0.3;
+            const lightFactor = inLight ? 1 : 0.5; // Brighter in shadows
 
-            // Determine outfit based on role
+            // Determine outfit based on role (deterministic based on NPC id)
             let outfit = 'suit';
             let hatType = 'none';
+
+            // Simple hash of NPC id for consistent random choices
+            const idHash = npc.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 
             if (npc.role === 'bartender') { outfit = 'worker'; }
             else if (npc.role === 'cook') { outfit = 'worker'; }
@@ -2991,19 +2994,19 @@
             else if (npc.role === 'police') { outfit = 'suit'; hatType = 'none'; }
             else if (npc.role === 'secretary') { outfit = 'dress'; }
             else if (npc.role === 'pedestrian') {
-                // Pedestrians vary
+                // Pedestrians vary (deterministic based on id)
                 if (npc.appearance && npc.appearance.gender === 'f') {
                     outfit = 'dress';
                 } else {
-                    outfit = Math.random() > 0.5 ? 'suit' : 'casual';
-                    hatType = Math.random() > 0.7 ? 'fedora' : 'none';
+                    outfit = (idHash % 2 === 0) ? 'suit' : 'casual';
+                    hatType = (idHash % 3 === 0) ? 'fedora' : 'none';
                 }
             }
 
             drawMannequin(nx, ny, {
                 facing: state.facingRight ? 1 : -1,
-                isMoving: false,
-                walkCycle: 0,
+                isMoving: state.isWalking || false,
+                walkCycle: state.walkCycle || 0,
                 outfit: outfit,
                 hatType: hatType,
                 lightFactor: lightFactor,
@@ -4162,6 +4165,55 @@
         }
 
         // ============================================
+        // NPC AI MOVEMENT
+        // ============================================
+
+        function updateNPCs() {
+            for (const npc of npcs) {
+                if (npc.location !== 'street') continue;
+
+                const state = worldState.npcStates[npc.id];
+                if (!state) continue;
+
+                // Initialize movement data if needed
+                if (!state.moveTarget) {
+                    state.moveTarget = state.x;
+                    state.moveSpeed = 0.5 + Math.random() * 0.5;
+                    state.waitTime = 0;
+                    state.isWalking = false;
+                }
+
+                // If waiting, count down
+                if (state.waitTime > 0) {
+                    state.waitTime--;
+                    state.isWalking = false;
+                    continue;
+                }
+
+                // Check if at target
+                const distToTarget = Math.abs(state.x - state.moveTarget);
+                if (distToTarget < 5) {
+                    // Reached target, pick a new one
+                    state.waitTime = 60 + Math.floor(Math.random() * 180); // Wait 1-4 seconds
+                    state.isWalking = false;
+
+                    // Pick new target within reasonable range
+                    const moveRange = 200;
+                    state.moveTarget = state.x + (Math.random() - 0.5) * moveRange * 2;
+                    // Keep within map bounds
+                    state.moveTarget = Math.max(100, Math.min(currentMap.width - 100, state.moveTarget));
+                } else {
+                    // Walk towards target
+                    state.isWalking = true;
+                    const direction = state.moveTarget > state.x ? 1 : -1;
+                    state.x += direction * state.moveSpeed;
+                    state.facingRight = direction > 0;
+                    state.walkCycle = (state.walkCycle || 0) + 1;
+                }
+            }
+        }
+
+        // ============================================
         // PLAYER UPDATE
         // ============================================
 
@@ -4578,8 +4630,9 @@
                 initWorldState();
             }
 
-            if (game.state === 'playing') {
+            if (game.state === 'playing' || (game.state === 'dialogue' && !currentInterior)) {
                 updatePlayer();
+                updateNPCs();
                 updateLocationDisplay();
 
                 // Draw scene
@@ -4635,7 +4688,7 @@
 
                 // Draw minimap
                 drawMinimap();
-            } else if (game.state === 'interior' || game.state === 'dialogue') {
+            } else if (game.state === 'interior' || (game.state === 'dialogue' && currentInterior)) {
                 updatePlayer();
                 drawInterior();
                 drawActionMenu();
@@ -4694,238 +4747,259 @@
             const w = CONFIG.CANVAS_WIDTH;
             const h = CONFIG.CANVAS_HEIGHT;
 
-            // === NIGHT SKY THROUGH WINDOW ===
+            // === BRIGHT EVENING STREET SCENE (visible through window) ===
+            // Golden hour / early evening - warm light makes silhouette visible
             const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
-            skyGrad.addColorStop(0, '#030308');
-            skyGrad.addColorStop(0.3, '#0a0815');
-            skyGrad.addColorStop(0.7, '#12101a');
-            skyGrad.addColorStop(1, '#0a0a10');
+            skyGrad.addColorStop(0, '#1a2540');
+            skyGrad.addColorStop(0.3, '#2d3a5a');
+            skyGrad.addColorStop(0.5, '#4a4560');
+            skyGrad.addColorStop(0.7, '#6a5555');
+            skyGrad.addColorStop(1, '#8a6550');
             ctx.fillStyle = skyGrad;
             ctx.fillRect(0, 0, w, h);
 
-            // Stars twinkling
-            for (let i = 0; i < 60; i++) {
+            // Stars (subtle, early evening)
+            for (let i = 0; i < 30; i++) {
                 const sx = (i * 137 + 20) % w;
-                const sy = (i * 67) % (h * 0.4);
-                const twinkle = Math.sin(titleAnimTime * 2 + i * 0.5) * 0.4 + 0.6;
-                ctx.fillStyle = `rgba(255, 255, 255, ${twinkle * 0.5})`;
-                ctx.fillRect(sx, sy, 1, 1);
+                const sy = (i * 47) % (h * 0.3);
+                const twinkle = Math.sin(titleAnimTime * 2 + i * 0.5) * 0.3 + 0.5;
+                ctx.fillStyle = `rgba(255, 255, 255, ${twinkle * 0.4})`;
+                ctx.fillRect(sx, sy, 2, 2);
             }
 
-            // Moon
-            ctx.fillStyle = 'rgba(220, 215, 200, 0.08)';
+            // Large moon (bright, provides backlight)
+            ctx.fillStyle = 'rgba(255, 250, 230, 0.15)';
             ctx.beginPath();
-            ctx.arc(w * 0.8, h * 0.15, 50, 0, Math.PI * 2);
+            ctx.arc(w * 0.75, h * 0.2, 80, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = 'rgba(240, 235, 220, 0.2)';
+            ctx.fillStyle = 'rgba(255, 250, 230, 0.5)';
             ctx.beginPath();
-            ctx.arc(w * 0.8, h * 0.15, 20, 0, Math.PI * 2);
+            ctx.arc(w * 0.75, h * 0.2, 40, 0, Math.PI * 2);
             ctx.fill();
 
-            // Coastal town skyline (1959 small town - not big city)
-            ctx.fillStyle = '#08080c';
-            // Church steeple
-            ctx.beginPath();
-            ctx.moveTo(w * 0.15, h * 0.65);
-            ctx.lineTo(w * 0.17, h * 0.35);
-            ctx.lineTo(w * 0.19, h * 0.65);
-            ctx.fill();
-            ctx.fillRect(w * 0.12, h * 0.65, w * 0.1, h * 0.2);
-
-            // Small buildings
+            // 1959 Coastal town buildings (lit up, warm tones)
             const buildings = [
-                { x: 0.02, w: 0.08, h: 0.18 },
-                { x: 0.25, w: 0.1, h: 0.22 },
-                { x: 0.36, w: 0.07, h: 0.15 },
-                { x: 0.44, w: 0.12, h: 0.25 },
-                { x: 0.58, w: 0.08, h: 0.2 },
-                { x: 0.67, w: 0.1, h: 0.28 },
-                { x: 0.78, w: 0.06, h: 0.16 },
-                { x: 0.85, w: 0.15, h: 0.2 }
+                { x: 0.02, bw: 0.1, bh: 0.25, color: '#2a2535' },
+                { x: 0.14, bw: 0.08, bh: 0.2, color: '#352a30' },
+                { x: 0.24, bw: 0.12, bh: 0.35, color: '#2a2530' },
+                { x: 0.38, bw: 0.09, bh: 0.22, color: '#302830' },
+                { x: 0.49, bw: 0.14, bh: 0.4, color: '#282535' },
+                { x: 0.65, bw: 0.1, bh: 0.28, color: '#2d2832' },
+                { x: 0.77, bw: 0.08, bh: 0.2, color: '#352a35' },
+                { x: 0.87, bw: 0.13, bh: 0.32, color: '#2a2530' }
             ];
+
+            // Draw buildings with lit windows
             for (const b of buildings) {
-                ctx.fillRect(b.x * w, h * (0.85 - b.h), b.w * w, b.h * h);
-                // Lit windows
-                for (let row = 0; row < 3; row++) {
-                    for (let col = 0; col < 2; col++) {
-                        if (Math.sin(titleAnimTime + b.x * 10 + row + col) > 0.3) {
-                            ctx.fillStyle = 'rgba(255, 210, 140, 0.5)';
-                            ctx.fillRect(b.x * w + 8 + col * 15, h * (0.85 - b.h) + 10 + row * 20, 6, 8);
-                            ctx.fillStyle = '#08080c';
+                const bx = b.x * w;
+                const by = h * 0.85 - b.bh * h;
+                const bWidth = b.bw * w;
+                const bHeight = b.bh * h;
+
+                ctx.fillStyle = b.color;
+                ctx.fillRect(bx, by, bWidth, bHeight);
+
+                // Lit windows (warm glow)
+                const windowRows = Math.floor(b.bh * 8);
+                const windowCols = Math.floor(b.bw * 8);
+                for (let row = 0; row < windowRows; row++) {
+                    for (let col = 0; col < windowCols; col++) {
+                        if (Math.sin(titleAnimTime * 0.5 + b.x * 20 + row * 3 + col * 5) > 0.2) {
+                            const wx = bx + 8 + col * (bWidth - 16) / windowCols;
+                            const wy = by + 10 + row * (bHeight - 20) / windowRows;
+                            ctx.fillStyle = 'rgba(255, 220, 150, 0.8)';
+                            ctx.fillRect(wx, wy, 8, 10);
+                            // Window glow
+                            ctx.fillStyle = 'rgba(255, 200, 100, 0.2)';
+                            ctx.fillRect(wx - 3, wy - 3, 14, 16);
                         }
                     }
                 }
             }
 
-            // Water/harbor at bottom (coastal town)
-            ctx.fillStyle = '#050510';
+            // Street level with lights
+            ctx.fillStyle = '#252025';
             ctx.fillRect(0, h * 0.85, w, h * 0.15);
-            // Water reflections
-            for (let i = 0; i < 20; i++) {
-                const rx = (i * 57 + titleAnimTime * 20) % w;
-                ctx.fillStyle = 'rgba(255, 210, 140, 0.1)';
-                ctx.fillRect(rx, h * 0.87 + Math.sin(titleAnimTime + i) * 3, 20 + i % 10, 1);
-            }
 
-            // Street lights on waterfront
-            for (let i = 0; i < 4; i++) {
-                const lx = w * 0.15 + i * w * 0.22;
-                ctx.fillStyle = 'rgba(255, 200, 120, 0.7)';
+            // Street lights (bright, warm)
+            for (let i = 0; i < 6; i++) {
+                const lx = w * 0.1 + i * w * 0.16;
+                // Light glow
+                ctx.fillStyle = 'rgba(255, 230, 180, 0.4)';
                 ctx.beginPath();
-                ctx.arc(lx, h * 0.82, 3, 0, Math.PI * 2);
+                ctx.arc(lx, h * 0.82, 40, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.fillStyle = 'rgba(255, 200, 120, 0.15)';
+                // Light source
+                ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
                 ctx.beginPath();
-                ctx.arc(lx, h * 0.83, 25, 0, Math.PI * 2);
+                ctx.arc(lx, h * 0.82, 6, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            // === WINDOW FRAME ===
-            const frame = 25;
+            // Neon signs (1959 style)
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.9)';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText('BAR', w * 0.28, h * 0.58);
+            ctx.fillStyle = 'rgba(100, 200, 255, 0.9)';
+            ctx.fillText('HOTEL', w * 0.52, h * 0.48);
+            ctx.fillStyle = 'rgba(255, 255, 100, 0.9)';
+            ctx.fillText('DINER', w * 0.72, h * 0.6);
+
+            // === DARK ROOM INTERIOR (foreground) ===
+            // Room darkness around edges
+            const roomDark = ctx.createRadialGradient(w * 0.3, h * 0.6, 0, w * 0.3, h * 0.6, w * 0.8);
+            roomDark.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            roomDark.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
+            roomDark.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+            ctx.fillStyle = roomDark;
+            ctx.fillRect(0, 0, w, h);
+
+            // === WINDOW FRAME (thick, dark wood) ===
             ctx.fillStyle = '#0a0808';
-            ctx.fillRect(0, 0, w, frame);
-            ctx.fillRect(0, h - frame, w, frame);
-            ctx.fillRect(0, 0, frame, h);
-            ctx.fillRect(w - frame, 0, frame, h);
+            ctx.fillRect(0, 0, w, 35);      // top
+            ctx.fillRect(0, h - 35, w, 35); // bottom
+            ctx.fillRect(0, 0, 35, h);      // left
+            ctx.fillRect(w - 35, 0, 35, h); // right
 
-            // Window pane dividers
+            // Window pane dividers (cross)
             ctx.fillStyle = '#151210';
-            ctx.fillRect(w * 0.5 - 4, 0, 8, h);
-            ctx.fillRect(0, h * 0.5 - 4, w, 8);
+            ctx.fillRect(w * 0.5 - 5, 0, 10, h);
+            ctx.fillRect(0, h * 0.5 - 5, w, 10);
 
-            // Window frame inner edge
-            ctx.strokeStyle = '#1a1815';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(frame, frame, w - frame * 2, h - frame * 2);
+            // === DETECTIVE SILHOUETTE (clear black against bright window) ===
+            const figX = w * 0.32;
+            const figY = h * 0.95;
 
-            // === SILHOUETTE OF DETECTIVE WITH BINOCULARS ===
-            // This is viewed from BEHIND - we see his back/silhouette against the window
-            const figX = w * 0.35;
-            const figY = h * 0.75;
+            // Rim light effect (subtle edge glow from window light)
+            ctx.save();
+            ctx.shadowColor = 'rgba(200, 180, 150, 0.3)';
+            ctx.shadowBlur = 15;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 0;
 
             ctx.fillStyle = '#000000';
 
-            // Shoulders and upper body (wide, noir detective shape)
+            // Body and trench coat (wide shoulders, noir style)
             ctx.beginPath();
-            ctx.moveTo(figX - 80, figY);
-            ctx.quadraticCurveTo(figX - 90, figY - 40, figX - 70, figY - 80);
-            ctx.lineTo(figX - 50, figY - 120);
-            ctx.quadraticCurveTo(figX - 30, figY - 140, figX, figY - 145);
-            ctx.quadraticCurveTo(figX + 30, figY - 140, figX + 50, figY - 120);
-            ctx.lineTo(figX + 70, figY - 80);
-            ctx.quadraticCurveTo(figX + 90, figY - 40, figX + 80, figY);
+            ctx.moveTo(figX - 100, figY);
+            ctx.lineTo(figX - 100, figY - 50);
+            ctx.quadraticCurveTo(figX - 110, figY - 100, figX - 80, figY - 150);
+            ctx.lineTo(figX - 60, figY - 200);
+            ctx.quadraticCurveTo(figX - 40, figY - 230, figX, figY - 240);
+            ctx.quadraticCurveTo(figX + 40, figY - 230, figX + 60, figY - 200);
+            ctx.lineTo(figX + 80, figY - 150);
+            ctx.quadraticCurveTo(figX + 110, figY - 100, figX + 100, figY - 50);
+            ctx.lineTo(figX + 100, figY);
             ctx.closePath();
             ctx.fill();
 
             // Head
             ctx.beginPath();
-            ctx.ellipse(figX, figY - 170, 28, 32, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX, figY - 270, 35, 40, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Fedora hat
+            // Fedora hat (iconic detective)
             ctx.beginPath();
-            ctx.ellipse(figX, figY - 190, 38, 8, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX, figY - 298, 50, 10, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.moveTo(figX - 28, figY - 192);
-            ctx.quadraticCurveTo(figX - 25, figY - 215, figX, figY - 220);
-            ctx.quadraticCurveTo(figX + 25, figY - 215, figX + 28, figY - 192);
+            ctx.moveTo(figX - 35, figY - 300);
+            ctx.quadraticCurveTo(figX - 30, figY - 330, figX, figY - 340);
+            ctx.quadraticCurveTo(figX + 30, figY - 330, figX + 35, figY - 300);
+            ctx.closePath();
             ctx.fill();
 
             // Arms raised holding binoculars
             // Left arm
             ctx.beginPath();
-            ctx.moveTo(figX - 50, figY - 100);
-            ctx.quadraticCurveTo(figX - 80, figY - 130, figX - 60, figY - 160);
-            ctx.lineTo(figX - 45, figY - 155);
-            ctx.quadraticCurveTo(figX - 60, figY - 130, figX - 40, figY - 100);
+            ctx.moveTo(figX - 60, figY - 180);
+            ctx.quadraticCurveTo(figX - 100, figY - 220, figX - 75, figY - 270);
+            ctx.lineTo(figX - 55, figY - 260);
+            ctx.quadraticCurveTo(figX - 75, figY - 220, figX - 45, figY - 180);
             ctx.closePath();
             ctx.fill();
 
             // Right arm
             ctx.beginPath();
-            ctx.moveTo(figX + 50, figY - 100);
-            ctx.quadraticCurveTo(figX + 80, figY - 130, figX + 60, figY - 160);
-            ctx.lineTo(figX + 45, figY - 155);
-            ctx.quadraticCurveTo(figX + 60, figY - 130, figX + 40, figY - 100);
+            ctx.moveTo(figX + 60, figY - 180);
+            ctx.quadraticCurveTo(figX + 100, figY - 220, figX + 75, figY - 270);
+            ctx.lineTo(figX + 55, figY - 260);
+            ctx.quadraticCurveTo(figX + 75, figY - 220, figX + 45, figY - 180);
             ctx.closePath();
             ctx.fill();
 
-            // Binoculars (held up to face)
-            ctx.fillStyle = '#000000';
-            // Left barrel
+            // Binoculars
             ctx.beginPath();
-            ctx.ellipse(figX - 22, figY - 165, 18, 14, 0.1, 0, Math.PI * 2);
+            ctx.ellipse(figX - 28, figY - 268, 22, 18, 0.1, 0, Math.PI * 2);
             ctx.fill();
-            // Right barrel
             ctx.beginPath();
-            ctx.ellipse(figX + 22, figY - 165, 18, 14, -0.1, 0, Math.PI * 2);
+            ctx.ellipse(figX + 28, figY - 268, 22, 18, -0.1, 0, Math.PI * 2);
             ctx.fill();
-            // Bridge
-            ctx.fillRect(figX - 10, figY - 172, 20, 12);
+            ctx.fillRect(figX - 12, figY - 280, 24, 16);
 
-            // Binocular lens reflections (subtle)
-            ctx.fillStyle = 'rgba(100, 120, 150, 0.15)';
+            // Hands on binoculars
             ctx.beginPath();
-            ctx.ellipse(figX - 22, figY - 165, 12, 9, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX - 52, figY - 262, 15, 12, 0.3, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(figX + 22, figY - 165, 12, 9, 0, 0, Math.PI * 2);
+            ctx.ellipse(figX + 52, figY - 262, 15, 12, -0.3, 0, Math.PI * 2);
             ctx.fill();
 
-            // Hands gripping binoculars
-            ctx.fillStyle = '#000000';
+            ctx.restore();
+
+            // Binocular lens reflection (catches light)
+            ctx.fillStyle = 'rgba(180, 160, 140, 0.25)';
             ctx.beginPath();
-            ctx.ellipse(figX - 40, figY - 158, 12, 10, 0.3, 0, Math.PI * 2);
+            ctx.ellipse(figX - 28, figY - 268, 14, 11, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(figX + 40, figY - 158, 12, 10, -0.3, 0, Math.PI * 2);
+            ctx.ellipse(figX + 28, figY - 268, 14, 11, 0, 0, Math.PI * 2);
             ctx.fill();
 
             // === RAIN ON WINDOW ===
-            ctx.strokeStyle = 'rgba(150, 170, 200, 0.3)';
+            ctx.strokeStyle = 'rgba(200, 210, 230, 0.4)';
             ctx.lineWidth = 1;
-            for (let i = 0; i < 30; i++) {
-                const rx = (i * 43 + titleAnimTime * 100) % w;
-                const ry = (i * 71 + titleAnimTime * 150) % h;
-                const len = 8 + (i % 5) * 3;
+            for (let i = 0; i < 40; i++) {
+                const rx = (i * 37 + titleAnimTime * 80) % w;
+                const ry = (i * 53 + titleAnimTime * 120) % h;
+                const len = 10 + (i % 5) * 4;
                 ctx.beginPath();
                 ctx.moveTo(rx, ry);
-                ctx.lineTo(rx - 2, ry + len);
+                ctx.lineTo(rx - 3, ry + len);
                 ctx.stroke();
             }
 
             // === TITLE TEXT ===
             ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-            ctx.shadowBlur = 20;
-            ctx.shadowOffsetX = 3;
-            ctx.shadowOffsetY = 3;
+            ctx.shadowColor = 'rgba(0, 0, 0, 1)';
+            ctx.shadowBlur = 25;
+            ctx.shadowOffsetX = 4;
+            ctx.shadowOffsetY = 4;
 
-            // Title
-            ctx.fillStyle = '#c8b898';
-            ctx.font = `bold ${Math.min(w * 0.12, 100)}px Bebas Neue`;
+            ctx.fillStyle = '#e8d8c0';
+            ctx.font = `bold ${Math.min(w * 0.13, 120)}px Bebas Neue`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('NIGHTFALL', w * 0.7, h * 0.35);
+            ctx.fillText('NIGHTFALL', w * 0.72, h * 0.3);
             ctx.restore();
 
             // Subtitle
-            ctx.fillStyle = '#7a6a5a';
-            ctx.font = `${Math.min(w * 0.025, 18)}px Special Elite`;
-            ctx.fillText('A NOIR DETECTIVE MYSTERY', w * 0.7, h * 0.43);
+            ctx.fillStyle = '#b0a090';
+            ctx.font = `${Math.min(w * 0.028, 22)}px Special Elite`;
+            ctx.textAlign = 'center';
+            ctx.fillText('A NOIR DETECTIVE MYSTERY', w * 0.72, h * 0.4);
 
-            // Year
-            ctx.fillStyle = '#5a4a3a';
-            ctx.font = `${Math.min(w * 0.02, 14)}px Special Elite`;
-            ctx.fillText('— COASTAL CALIFORNIA • 1959 —', w * 0.7, h * 0.48);
+            // Location & Year
+            ctx.fillStyle = '#908070';
+            ctx.font = `${Math.min(w * 0.022, 16)}px Special Elite`;
+            ctx.fillText('COASTAL CALIFORNIA • 1959', w * 0.72, h * 0.46);
 
-            // Tap to start (pulsing)
+            // Tap to start (pulsing, bright)
             const pulse = Math.sin(titleAnimTime * 2.5) * 0.3 + 0.7;
             ctx.globalAlpha = pulse;
-            ctx.fillStyle = '#a09080';
-            ctx.font = `${Math.min(w * 0.022, 16)}px Special Elite`;
-            ctx.fillText('TAP TO BEGIN', w * 0.7, h * 0.9);
+            ctx.fillStyle = '#d0c0a0';
+            ctx.font = `bold ${Math.min(w * 0.025, 18)}px Special Elite`;
+            ctx.fillText('TAP TO BEGIN', w * 0.72, h * 0.88);
             ctx.globalAlpha = 1;
         }
 
