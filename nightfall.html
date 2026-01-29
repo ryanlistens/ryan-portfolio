@@ -3845,7 +3845,11 @@
         }
 
         function advanceDialogue() {
-            if (!currentDialogue) return;
+            // If no multi-part dialogue, just close the box
+            if (!currentDialogue) {
+                endDialogue();
+                return;
+            }
 
             dialogueIndex++;
             if (dialogueIndex >= currentDialogue.dialogue.length) {
@@ -3861,6 +3865,8 @@
             dialogueIndex = 0;
             game.state = currentInterior ? 'interior' : 'playing';
             hideDialogueBox();
+            // Clear any lingering interaction state
+            player.nearInteractable = null;
         }
 
         function showDialogueBox(speaker, text) {
@@ -4261,11 +4267,12 @@
                 player.walkCycle++;
             }
 
-            // Boundary checks - player stays on sidewalk/street area
+            // Boundary checks - allow full sidewalk and street movement
             player.x = Math.max(20, Math.min(currentMap.width - player.width - 20, player.x));
-            // Y boundaries: sidewalk to far sidewalk
-            // GROUND_LEVEL = 410, sidewalk starts there, street is further down
-            player.y = Math.max(GROUND_LEVEL + 30, Math.min(GROUND_LEVEL + 180, player.y));
+            // Y boundaries: from near buildings to far side of street
+            // GROUND_LEVEL = 410, buildings end there, sidewalk and street below
+            // Allow walking up close to buildings (for door entry) and down to street
+            player.y = Math.max(GROUND_LEVEL - 20, Math.min(GROUND_LEVEL + 200, player.y));
 
             // Collision with buildings
             for (const collider of currentMap.colliders || []) {
@@ -4417,10 +4424,10 @@
 
                     // Use primarily horizontal distance - player just needs to be in front of door
                     const xDist = Math.abs(player.x + player.width / 2 - doorX);
-                    // Player should be on sidewalk near building (GROUND_LEVEL + 20 to +60)
-                    const nearBuilding = player.y >= GROUND_LEVEL + 15 && player.y <= GROUND_LEVEL + 70;
+                    // Player should be near building (expanded range to allow door access)
+                    const nearBuilding = player.y >= GROUND_LEVEL - 30 && player.y <= GROUND_LEVEL + 100;
 
-                    if (xDist < 50 && nearBuilding) {
+                    if (xDist < 70 && nearBuilding) {
                         nearInteractable = { type: 'building', building: building };
                         document.getElementById('interact-prompt').textContent = `TAP ENTER: ${building.name.split('\n')[0]}`;
                         break;
@@ -5216,7 +5223,11 @@
         function init() {
             // Position player on sidewalk in front of PI office
             player.x = 250;
-            player.y = GROUND_LEVEL + 40; // On the sidewalk in front of buildings
+            player.y = GROUND_LEVEL + 50; // On the sidewalk in front of buildings
+
+            // Initialize camera to center on player
+            camera.x = player.x - CONFIG.CANVAS_WIDTH / 2 + player.width / 2;
+            camera.x = Math.max(0, Math.min(currentMap.width - CONFIG.CANVAS_WIDTH, camera.x));
 
             // Initialize world state
             initWorldState();
