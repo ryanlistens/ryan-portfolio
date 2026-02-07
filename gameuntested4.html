@@ -47,11 +47,13 @@
             bottom: 0;
             left: 0;
             right: 0;
-            padding: 10px 20px;
+            padding: 12px 20px;
+            padding-top: 20px;
             padding-bottom: max(10px, env(safe-area-inset-bottom));
             z-index: 20;
             pointer-events: none;
             display: none;
+            background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.6) 30%, rgba(0,0,0,0.8) 100%);
         }
         #controls-grid {
             display: flex;
@@ -126,7 +128,7 @@
             <span><span id="timer">60</span>s</span>
             <span id="lives"></span>
         </div>
-        <canvas id="game" width="700" height="500"></canvas>
+        <canvas id="game" width="960" height="540"></canvas>
         <div id="controls-section">
             <div id="controls-grid">
                 <div id="dpad-container">
@@ -151,6 +153,9 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Expanded canvas dimensions — game area centered with margin for extended backgrounds
+const CANVAS_W = 960, CANVAS_H = 540, GAME_W = 700, GAME_H = 500, GX = 130, GY = 20;
+
 // Full-screen canvas scaling — keeps 700x500 internal resolution, fills viewport
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const hud = document.getElementById('hud');
@@ -159,10 +164,10 @@ function resizeCanvas() {
     const vh = window.innerHeight;
     const isLandscape = vw > vh;
     const hudH = hud.offsetHeight || 0;
-    // In landscape on touch devices, reserve space below for controls
-    const controlsH = (isTouchDevice && isLandscape) ? 56 : 0;
+    // Reserve space below for controls on touch devices
+    const controlsH = isTouchDevice ? (isLandscape ? 56 : 200) : 0;
     const availH = vh - hudH - controlsH;
-    const ratio = 700 / 500;
+    const ratio = CANVAS_W / CANVAS_H;
     let w, h;
     if (vw / availH > ratio) {
         h = availH;
@@ -495,6 +500,10 @@ let level5 = {
     viewingPortrait: false,
     emailScrollOffset: 0,
     letterScrollOffset: 0,
+    redDoorLocked: true,
+    hasRedKey: false,
+    redKeyOnGround: false,
+    redKeyEverDropped: false,
     mulletPro: {
         x: 180,
         y: 380,
@@ -590,6 +599,10 @@ function initLevel(lv) {
     level5.viewingLetter = false;
     level5.emailScrollOffset = 0;
     level5.letterScrollOffset = 0;
+    level5.redDoorLocked = true;
+    level5.hasRedKey = false;
+    level5.redKeyOnGround = false;
+    level5.redKeyEverDropped = false;
     level5.mulletPro.hasDoc = false;
     level5.mulletPro.docColor = null;
     level5.mulletPro.giveTimer = 0;
@@ -735,7 +748,7 @@ function spawnBoss() {
 
 function createExplosion(x, y) {
     explosions.push({x, y, radius: 0, maxRadius: 100, alpha: 1, particles: []});
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         explosions[explosions.length - 1].particles.push({
             x: x,
             y: y,
@@ -1340,27 +1353,30 @@ function drawBoss(x, y, facing) {
     
     if(boss.needsColor) {
         const col = COLORS.find(c => c.name === boss.needsColor);
-        const bubbleX = facing === 'right' ? x + 10 : x - 70;
-        
+        // Dynamic bubble width based on text length
+        ctx.font = 'bold 18px Arial';
+        const textW = ctx.measureText(col.name).width;
+        const bubbleW = Math.max(60, textW + 20);
+        const bubbleX = facing === 'right' ? x + 10 : x - bubbleW - 10;
+
         ctx.fillStyle = '#fff';
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.roundRect(bubbleX, y - 55, 60, 30, 8);
+        ctx.roundRect(bubbleX, y - 55, bubbleW, 30, 8);
         ctx.fill();
         ctx.stroke();
-        
+
         ctx.beginPath();
-        ctx.moveTo(bubbleX + (facing === 'right' ? 5 : 55), y - 25);
-        ctx.lineTo(bubbleX + (facing === 'right' ? 0 : 60), y - 18);
-        ctx.lineTo(bubbleX + (facing === 'right' ? 15 : 45), y - 25);
+        ctx.moveTo(bubbleX + (facing === 'right' ? 5 : bubbleW - 5), y - 25);
+        ctx.lineTo(bubbleX + (facing === 'right' ? 0 : bubbleW), y - 18);
+        ctx.lineTo(bubbleX + (facing === 'right' ? 15 : bubbleW - 15), y - 25);
         ctx.closePath();
         ctx.fill();
-        
+
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 18px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(col.name, bubbleX + 30, y - 35);
+        ctx.fillText(col.name, bubbleX + bubbleW / 2, y - 35);
     }
 }
 
@@ -2144,12 +2160,12 @@ function drawCashSack(x, y) {
 // SECTION 9: Level 5 Scene Drawing Functions (Part 1)
 function drawLevel5PipeRoom() {
     ctx.fillStyle = '#e8e6dc';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#666';
             ctx.lineWidth = 1;
@@ -2195,7 +2211,7 @@ function drawLevel5PipeRoom() {
     }
     
     ctx.fillStyle = '#c4bfad';
-    ctx.fillRect(0, 410, 700, 90);
+    ctx.fillRect(-GX, 410, CANVAS_W, CANVAS_H);
     
     const comp = level5.computer;
     ctx.fillStyle = '#2b2b2b';
@@ -2331,12 +2347,12 @@ function drawLevel5PipeRoom() {
 
 function drawLevel5Hallway() {
     ctx.fillStyle = '#d4c8b0';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#a89b85';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = '#988870';
         ctx.lineWidth = 1;
         ctx.strokeRect(i * 35, 400, 35, 100);
@@ -2533,12 +2549,38 @@ function drawLevel5Hallway() {
         ctx.strokeRect(level5.hallway.rightDoor.x - 12, level5.hallway.rightDoor.y - 2, 54, 64);
     }
 
-    // White outline for office doors when in range
+    // Draw lock icon on RED door when locked
+    if(level5.redDoorLocked) {
+        const redOffice = level5.hallway.offices[0]; // RED is index 0
+        const lx = redOffice.x, ly = officeDoorY + 55;
+        // Padlock body
+        ctx.fillStyle = '#c0392b';
+        ctx.fillRect(lx - 7, ly, 14, 12);
+        // Padlock shackle
+        ctx.strokeStyle = '#c0392b';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(lx, ly - 2, 6, Math.PI, 0);
+        ctx.stroke();
+    }
+
+    // White outline for office doors when in range + lock/unlock prompts
     for(let office of level5.hallway.offices) {
         if(Math.abs(player.x - office.x) < 40) {
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(office.x - 37, officeDoorY - 2, 74, 124);
+            // RED door lock prompts
+            if(office.name === 'RED' && level5.redDoorLocked) {
+                ctx.strokeStyle = '#e74c3c';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(office.x - 37, officeDoorY - 2, 74, 124);
+                ctx.fillStyle = level5.hasRedKey ? '#ffd700' : '#e74c3c';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(level5.hasRedKey ? 'UNLOCK?' : 'LOCKED', office.x, officeDoorY - 14);
+            } else {
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(office.x - 37, officeDoorY - 2, 74, 124);
+            }
         }
     }
 
@@ -2555,12 +2597,12 @@ function drawLevel5Hallway() {
 // SECTION 10: Level 5 Scene Drawing Functions (Part 2)
 function drawLevel5FurnaceRoom() {
     ctx.fillStyle = '#2b2520';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#1a1815';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#0a0a08';
             ctx.lineWidth = 1;
@@ -2619,7 +2661,7 @@ function drawLevel5FurnaceRoom() {
         ctx.fillText('← HALLWAY', level5.furnaceRoom.leftDoor.x + 15, level5.furnaceRoom.leftDoor.y - 10);
     }
     
-    if(Math.abs(player.x - furnace.x) < 90 && !player.holding) {
+    if(Math.abs(player.x - furnace.x) < 90 && !player.holding && !level5.redKeyOnGround) {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
@@ -2631,6 +2673,43 @@ function drawLevel5FurnaceRoom() {
         ctx.textAlign = 'center';
         ctx.fillText('PRESS ACTION TO BURN DOC', furnace.x, furnace.y - 60);
     }
+
+    // Draw golden key on the ground (dropped from furnace after burning red doc)
+    if(level5.redKeyOnGround) {
+        const kx = furnace.x, ky = 385;
+        // Glow effect
+        ctx.fillStyle = 'rgba(255,215,0,0.25)';
+        ctx.beginPath();
+        ctx.arc(kx, ky, 20, 0, Math.PI * 2);
+        ctx.fill();
+        // Key ring (red keychain)
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(kx - 6, ky - 6, 6, 0, Math.PI * 2);
+        ctx.stroke();
+        // Key shaft
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(kx, ky - 2);
+        ctx.lineTo(kx + 14, ky - 2);
+        ctx.stroke();
+        // Key teeth
+        ctx.beginPath();
+        ctx.moveTo(kx + 10, ky - 2);
+        ctx.lineTo(kx + 10, ky + 4);
+        ctx.moveTo(kx + 14, ky - 2);
+        ctx.lineTo(kx + 14, ky + 4);
+        ctx.stroke();
+        // Pickup prompt
+        if(Math.abs(player.x - furnace.x) < 60 && !player.holding) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PRESS ACTION - PICK UP KEY', kx, ky - 30);
+        }
+    }
 }
 
 function drawOfficeRoom(officeName) {
@@ -2638,14 +2717,14 @@ function drawOfficeRoom(officeName) {
     const color = office.color;
     
     ctx.fillStyle = '#d4c8b0';
-    ctx.fillRect(0, 0, 700, 300);
+    ctx.fillRect(-GX, -GY, CANVAS_W, 300 + GY);
     
     ctx.fillStyle = color.hex;
     ctx.globalAlpha = 0.3;
-    ctx.fillRect(0, 300, 700, 200);
+    ctx.fillRect(-GX, 300, CANVAS_W, CANVAS_H);
     ctx.globalAlpha = 1;
-    
-    for(let i = 0; i < 20; i++) {
+
+    for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = color.hex;
         ctx.globalAlpha = 0.2;
         ctx.lineWidth = 1;
@@ -3032,12 +3111,12 @@ function drawOfficeRoom(officeName) {
 // SECTION 10: Level 6 Scene Drawing Functions
 function drawLevel6PipeRoom() {
     ctx.fillStyle = '#e8e6dc';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
 
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#666';
             ctx.lineWidth = 1;
@@ -3046,7 +3125,7 @@ function drawLevel6PipeRoom() {
     }
 
     ctx.fillStyle = '#c4bfad';
-    ctx.fillRect(0, 410, 700, 90);
+    ctx.fillRect(-GX, 410, CANVAS_W, CANVAS_H);
 
     // Wall-mounted PipeTech signage (brutalist painted text) - large, centered, edge to edge
     ctx.fillStyle = '#3a3a3a';
@@ -3058,7 +3137,7 @@ function drawLevel6PipeRoom() {
     const lineY = 85;
     for(let i = 0; i < 4; i++) {
         ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(0, lineY + i * 8, 700, 6);
+        ctx.fillRect(-GX, lineY + i * 8, CANVAS_W, 6);
     }
 
     // Draw pipes running from top wall gaskets to floor gaskets with managers
@@ -3184,13 +3263,13 @@ function drawLevel6PipeRoom() {
 function drawLevel6MegacomputerRoom() {
     // Dark room background
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // Floor
     ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
 
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#1a1a1a';
             ctx.lineWidth = 1;
@@ -3653,12 +3732,12 @@ function drawLevel6MegacomputerRoom() {
 
 function drawLevel6Entryway() {
     ctx.fillStyle = '#8b0000';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#660000';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = '#550000';
         ctx.lineWidth = 1;
         ctx.strokeRect(i * 35, 400, 35, 100);
@@ -3711,7 +3790,7 @@ function drawLevel6Entryway() {
 function drawLevel6CEOOffice() {
     // Black void background
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     // Room floor - circular rug
     const rugCenterX = 350;
@@ -4494,11 +4573,11 @@ function drawEmailUI(officeName) {
 
     // Full-screen email for mobile readability
     ctx.fillStyle = '#f5f2ec';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     const office = level5.hallway.offices.find(o => o.name === officeName);
     ctx.fillStyle = office.color.hex;
-    ctx.fillRect(0, 0, 700, 50);
+    ctx.fillRect(-GX, -GY, CANVAS_W, 50 + GY);
 
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 28px Arial';
@@ -4537,7 +4616,7 @@ function drawEmailUI(officeName) {
 
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(0, 450, 700, 50);
+    ctx.fillRect(-GX, 450, CANVAS_W, CANVAS_H);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
@@ -4547,7 +4626,7 @@ function drawEmailUI(officeName) {
 function drawLetterUI() {
     // Full-screen dark overlay
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // Display letter image at full canvas width for maximum readability
     if(letterImg.complete && letterImg.naturalWidth > 0) {
@@ -4572,7 +4651,7 @@ function drawLetterUI() {
 
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(0, 455, 700, 45);
+    ctx.fillRect(-GX, 455, CANVAS_W, CANVAS_H);
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
@@ -4582,7 +4661,7 @@ function drawLetterUI() {
 function drawDetectiveNoteUI() {
     // Full-screen dark overlay
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // Display detective note image at full canvas width for maximum readability
     if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
@@ -4609,7 +4688,7 @@ function drawDetectiveNoteUI() {
 
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(0, 455, 700, 45);
+    ctx.fillRect(-GX, 455, CANVAS_W, CANVAS_H);
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
@@ -5562,7 +5641,7 @@ function drawDeadCEO(x, y) {
 function drawPortraitUI() {
     // Full-screen dark overlay
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // Display the portrait image (already includes ornate frame)
     if(portraitImg.complete && portraitImg.naturalWidth > 0) {
@@ -5635,11 +5714,17 @@ function drawMuteIndicator() {
 }
 
 function drawScene() {
+    // Clear full expanded canvas and translate to center game area
+    ctx.save();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.translate(GX, GY);
+
     // RT Games Presents Screen
     if(state === 'rtPresents') {
         // Elegant black background
         ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
         // Fade-in effect
         const alpha = Math.min(1, frame / 60); // Fade in over 1 second
@@ -5668,7 +5753,7 @@ function drawScene() {
             ctx.fillText('PRESS ANY BUTTON', 350, 440);
         }
 
-        return;
+        ctx.restore(); return;
     }
 
     // Concept Art Screen
@@ -5683,7 +5768,7 @@ function drawScene() {
             bgGrad.addColorStop(0.5, '#ff6b35');
             bgGrad.addColorStop(1, '#1a0a2e');
             ctx.fillStyle = bgGrad;
-            ctx.fillRect(0, 0, 700, 500);
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
             // Fallback text
             ctx.fillStyle = '#ffd700';
@@ -5699,7 +5784,7 @@ function drawScene() {
         if(Math.floor(frame / 30) % 2 === 0) {
             // Semi-transparent bar for readability
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(0, 430, 700, 50);
+            ctx.fillRect(-GX, 430, CANVAS_W, CANVAS_H);
 
             ctx.fillStyle = '#ffd700';
             ctx.font = '14px "Press Start 2P", monospace';
@@ -5710,7 +5795,7 @@ function drawScene() {
             ctx.fillText('ANY BUTTON TO CONTINUE', 350, 462);
         }
 
-        return;
+        ctx.restore(); return;
     }
 
     if(state === 'menu') {
@@ -5726,7 +5811,7 @@ function drawScene() {
             bgGrad.addColorStop(0.5, '#1a1a1a');
             bgGrad.addColorStop(1, '#0f0f0f');
             ctx.fillStyle = bgGrad;
-            ctx.fillRect(0, 0, 700, 500);
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
             // Industrial pipe prison bars - vertical pipes creating dramatic prison aesthetic
             ctx.globalAlpha = 0.5;
@@ -5768,7 +5853,7 @@ function drawScene() {
         if(Math.floor(frame / 30) % 2 === 0) {
             // Semi-transparent black bar behind text for better readability
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(0, 430, 700, 50);
+            ctx.fillRect(-GX, 430, CANVAS_W, CANVAS_H);
 
             // Blinking text with arcade font
             ctx.fillStyle = '#ffd700';
@@ -5787,7 +5872,7 @@ function drawScene() {
         if(!audioUnlocked) {
             // Semi-transparent dark overlay
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(0, 0, 700, 500);
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
             // Pulsing "TAP TO START" message with retro arcade font
             const pulseAlpha = 0.7 + Math.sin(Date.now() / 400) * 0.3;
@@ -5815,12 +5900,12 @@ function drawScene() {
             ctx.fillText('🔊', 350, 400);
         }
 
-        return;
+        ctx.restore(); return;
     }
 
     if(state === 'levelCard') {
         ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
         const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
         lvlGrad.addColorStop(0, '#ff6b35');
@@ -5849,12 +5934,12 @@ function drawScene() {
 
         // Draw mute indicator on level cards
         drawMuteIndicator();
-        return;
+        ctx.restore(); return;
     }
-    
+
     if(state === 'promotion') {
         ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
         const promoGrad = ctx.createLinearGradient(200, 100, 500, 200);
         promoGrad.addColorStop(0, '#ffd700');
@@ -5888,12 +5973,12 @@ function drawScene() {
 
         // Draw mute indicator on promotion screen
         drawMuteIndicator();
-        return;
+        ctx.restore(); return;
     }
-    
+
     if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
         ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
         if(state === 'over') {
             ctx.fillStyle = '#e74c3c';
@@ -5978,9 +6063,9 @@ function drawScene() {
 
         // Draw mute indicator on end screens
         drawMuteIndicator();
-        return;
+        ctx.restore(); return;
     }
-    
+
     if(level === 5) {
     if(level5.room === 'pipeRoom') {
         drawLevel5PipeRoom();
@@ -6010,12 +6095,12 @@ function drawScene() {
     
     if(fadeAlpha > 0) {
         ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
     // Draw mute indicator for level 5
     drawMuteIndicator();
-    return;
+    ctx.restore(); return;
     }
 
     if(level === 6) {
@@ -6096,23 +6181,23 @@ function drawScene() {
 
         if(fadeAlpha > 0) {
             ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
-            ctx.fillRect(0, 0, 700, 500);
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
 
         // Draw mute indicator for level 6
         drawMuteIndicator();
-        return;
+        ctx.restore(); return;
     }
 
-    
+
     // Levels 1-4 standard pipe room
     ctx.fillStyle = '#e8e6dc';
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 400, 700, 100);
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     
-    for(let i = 0; i < 20; i++) {
+    for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#666';
             ctx.lineWidth = 1;
@@ -6165,7 +6250,7 @@ function drawScene() {
     }
     
     ctx.fillStyle = '#c4bfad';
-    ctx.fillRect(0, 410, 700, 90);
+    ctx.fillRect(-GX, 410, CANVAS_W, CANVAS_H);
     
     drawComputer(computer.x, computer.y);
     
@@ -6320,7 +6405,7 @@ function drawScene() {
 
     if(ui.show) {
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
-        ctx.fillRect(0, 340, 700, 160);
+        ctx.fillRect(-GX, 340, CANVAS_W, CANVAS_H);
         
         if(!ui.confirming) {
             ctx.fillStyle = '#f5f2ec';
@@ -6356,7 +6441,7 @@ function drawScene() {
     
     if(ui.gunUI) {
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
-        ctx.fillRect(0, 340, 700, 160);
+        ctx.fillRect(-GX, 340, CANVAS_W, CANVAS_H);
         
         if(!ui.confirming) {
             ctx.fillStyle = '#f5f2ec';
@@ -6422,13 +6507,14 @@ function drawScene() {
     
     if(fadeAlpha > 0) {
         ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
     // Draw mute indicator (always on top during gameplay)
     if(state === 'playing') {
         drawMuteIndicator();
     }
+    ctx.restore();
 }
 
 
@@ -6712,6 +6798,17 @@ function update() {
             for(let office of level5.hallway.offices) {
                 const atOfficeDoor = Math.abs(player.x - office.x) < 40;
                 if(atOfficeDoor && (keys[' '] || keys['action'])) {
+                    // RED door lock mechanic
+                    if(office.name === 'RED' && level5.redDoorLocked) {
+                        if(level5.hasRedKey) {
+                            // Unlock the door (player must press action again to enter)
+                            level5.redDoorLocked = false;
+                        }
+                        // Don't enter — just show prompt / unlock
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        break;
+                    }
                     level5.currentOffice = office.name;
                     level5.room = 'office';
                     player.x = 350;
@@ -6835,18 +6932,33 @@ function update() {
                     const atFurnace = Math.abs(player.x - furnace.x) < 80;
                     const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
             
-                            if((keys[' '] || keys['action']) && atFurnace) {
+                    // Pick up golden key from ground
+                    const atKey = level5.redKeyOnGround && Math.abs(player.x - furnace.x) < 60;
+                    if((keys[' '] || keys['action']) && atKey && !player.holding) {
+                        level5.hasRedKey = true;
+                        level5.redKeyOnGround = false;
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
+
+                    else if((keys[' '] || keys['action']) && atFurnace) {
             if(player.holding) {
+                const wasRed = player.holding === 'RED';
                 player.holding = null;
                 furnace.flameTime = Date.now();
                 level5.docsCollected++;
-        
+
+                // Drop golden key on first RED doc burn
+                if(wasRed && !level5.redKeyEverDropped) {
+                    level5.redKeyEverDropped = true;
+                    level5.redKeyOnGround = true;
+                }
+
                 if(level5.docsCollected >= 6) {
-                    // FIX: Play Level 6 music IMMEDIATELY when the 6th doc is burnt
                     playMusic('level6');
 
                     level = 6;
-                    timer = 180; // Level 6 gets 180 seconds
+                    timer = 180;
                     state = 'levelCard';
                     cardTimer = 0;
                     initLevel(6);
@@ -6859,7 +6971,7 @@ function update() {
                 // Player walked into furnace without holding document
                 furnace.flameTime = Date.now();
                 createExplosion(player.x, player.y);
-                state = 'fired'; // Special state for furnace death
+                state = 'fired';
                 menuChoice = 0;
             }
             keys[' '] = false;
@@ -7968,7 +8080,12 @@ function gameLoop() {
        state !== 'win' && state !== 'menu' && state !== 'promotion' &&
        state !== 'theend' && state !== 'victory' && state !== 'rtPresents' &&
        state !== 'conceptArt' && state !== 'fired' && state !== 'gameover') return;
-    
+
+    // Retry pending music every ~2 seconds if audio is unlocked but music didn't start
+    if(audioUnlocked && pendingMusicKey && frame % 120 === 0) {
+        resumePendingMusic();
+    }
+
     frame++;
     const now = Date.now();
     counter += now - lastTime;
@@ -8093,8 +8210,8 @@ function handleMuteClick(e) {
         clientY = e.clientY;
     }
 
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
+    const x = (clientX - rect.left) * scaleX - GX;
+    const y = (clientY - rect.top) * scaleY - GY;
 
     if(x >= 610 && x <= 690 && y >= 10 && y <= 60) {
         toggleMute();
@@ -8159,7 +8276,15 @@ dpadContainer.addEventListener('touchmove', dpadTouchHandler, {passive: false});
 dpadContainer.addEventListener('touchend', e => { if(e.cancelable) e.preventDefault(); setDpadDir(null); }, {passive: false});
 dpadContainer.addEventListener('touchcancel', () => setDpadDir(null));
 
-// Mouse fallback for d-pad buttons (desktop)
+// Global safety net: if finger lifts anywhere (slid off dpad), clear direction
+document.addEventListener('touchend', () => {
+    if (activeDpadDir) setDpadDir(null);
+});
+document.addEventListener('touchcancel', () => {
+    if (activeDpadDir) setDpadDir(null);
+});
+
+// Mouse fallback for d-pad buttons (desktop) — use setDpadDir for consistency
 document.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('mousedown', e => {
         if(e.cancelable) e.preventDefault();
@@ -8168,11 +8293,11 @@ document.querySelectorAll('.control-btn').forEach(btn => {
         if(!audioUnlocked) { audioUnlocked = true; }
         resumePendingMusic();
         tryTriggerMusicOnInput();
-        keys[btn.dataset.dir] = true;
+        setDpadDir(btn.dataset.dir);
     });
     btn.addEventListener('mouseup', e => {
         if(e.cancelable) e.preventDefault();
-        keys[btn.dataset.dir] = false;
+        setDpadDir(null);
     });
 });
 
