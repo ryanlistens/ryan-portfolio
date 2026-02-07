@@ -25,28 +25,11 @@
             align-items: center;
             justify-content: center;
         }
-        #hud {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 16px;
-            background: rgba(0, 0, 0, 0.75);
-            color: #f5f2ec;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 10;
-        }
-        .heart { color: #e74c3c; }
-        .money { color: #27ae60; }
+        /* Hide HTML HUD — the canvas draws its own */
+        #hud { display: none; }
         canvas {
             display: block;
             background: #e8e6dc;
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
         }
         /* Mobile touch controls - overlay at bottom */
         #controls-section {
@@ -54,8 +37,8 @@
             bottom: 0;
             left: 0;
             right: 0;
-            padding: 10px 20px;
-            padding-bottom: max(10px, env(safe-area-inset-bottom));
+            padding: 8px 16px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
             z-index: 20;
             pointer-events: none;
             display: none;
@@ -64,58 +47,63 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            max-width: 100%;
         }
         #dpad-container {
             display: grid;
-            grid-template: repeat(3, 52px) / repeat(3, 52px);
-            gap: 4px;
+            grid-template: repeat(3, 48px) / repeat(3, 48px);
+            gap: 3px;
             pointer-events: auto;
+            touch-action: none;
         }
         .control-btn {
-            background: rgba(0, 95, 153, 0.55);
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(0, 95, 153, 0.45);
+            border: 2px solid rgba(255, 255, 255, 0.25);
             border-radius: 10px;
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 22px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 20px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            transition: background 0.1s;
+            -webkit-tap-highlight-color: transparent;
         }
-        .control-btn:active {
-            background: rgba(0, 95, 153, 0.85);
+        .control-btn.active {
+            background: rgba(0, 140, 220, 0.85);
+            border-color: rgba(255, 255, 255, 0.6);
         }
         #action-btn {
-            width: 90px;
-            height: 90px;
+            width: 80px;
+            height: 80px;
             border-radius: 50%;
-            background: rgba(77, 68, 61, 0.6);
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 16px;
+            background: rgba(77, 68, 61, 0.5);
+            border: 3px solid rgba(255, 255, 255, 0.25);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            transition: background 0.1s;
             pointer-events: auto;
+            -webkit-tap-highlight-color: transparent;
         }
-        #action-btn:active {
-            background: rgba(77, 68, 61, 0.9);
+        #action-btn.active {
+            background: rgba(120, 100, 80, 0.85);
+            border-color: rgba(255, 255, 255, 0.6);
         }
         .empty { background: none !important; border: none !important; pointer-events: none; }
 
-        /* Show touch controls only on touch devices / small screens */
+        /* Show touch controls on touch devices or small screens */
         @media (hover: none) and (pointer: coarse) {
             #controls-section { display: block; }
         }
         @media (max-width: 600px) {
             #controls-section { display: block; }
+        }
+        /* Landscape: smaller controls */
+        @media (orientation: landscape) and (max-height: 500px) {
+            #dpad-container { grid-template: repeat(3, 38px) / repeat(3, 38px); gap: 2px; }
+            .control-btn { font-size: 16px; border-width: 1.5px; }
+            #action-btn { width: 64px; height: 64px; font-size: 13px; border-width: 2px; }
+            #controls-section { padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
         }
     </style>
 </head>
@@ -153,13 +141,19 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
 // Full-screen canvas scaling — keeps 700x500 internal resolution, fills viewport
+// On touch devices, reserves space at the bottom for the control overlay
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 function resizeCanvas() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const isLandscape = vw > vh;
+    // Reserve space for controls on touch devices
+    const controlsHeight = isTouchDevice ? (isLandscape ? 52 : 0) : 0;
+    const availH = vh - controlsHeight;
     const ratio = 700 / 500;
     let w, h;
-    if (vw / vh > ratio) {
-        h = vh;
+    if (vw / availH > ratio) {
+        h = availH;
         w = h * ratio;
     } else {
         w = vw;
@@ -167,8 +161,15 @@ function resizeCanvas() {
     }
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    // In landscape on touch devices, shift canvas up so controls sit below it
+    if (isTouchDevice && isLandscape) {
+        canvas.style.marginBottom = controlsHeight + 'px';
+    } else {
+        canvas.style.marginBottom = '0';
+    }
 }
 window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
 resizeCanvas();
 
 // Load photorealistic images
@@ -8113,54 +8114,61 @@ function handleMuteClick(e) {
 canvas.addEventListener('click', handleMuteClick);
 canvas.addEventListener('touchstart', handleMuteClick, {passive: false});
 
-// D-pad touch handling with slide support
-const dpadDirs = ['up', 'down', 'left', 'right'];
+// D-pad: zone-based touch detection for reliable taps and smooth gliding
+const dpadContainer = document.getElementById('dpad-container');
+const dpadBtnMap = {};
+document.querySelectorAll('.control-btn').forEach(btn => { dpadBtnMap[btn.dataset.dir] = btn; });
 let activeDpadDir = null;
 
-function dpadFromTouch(touch) {
-    for (const btn of document.querySelectorAll('.control-btn')) {
-        const r = btn.getBoundingClientRect();
-        if (touch.clientX >= r.left && touch.clientX <= r.right &&
-            touch.clientY >= r.top && touch.clientY <= r.bottom) {
-            return btn.dataset.dir;
-        }
+// Zone-based: divide d-pad rect into quadrants — no dead zones
+function dpadDirFromPoint(clientX, clientY) {
+    const r = dpadContainer.getBoundingClientRect();
+    if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return null;
+    const rx = (clientX - r.left) / r.width;   // 0..1
+    const ry = (clientY - r.top) / r.height;    // 0..1
+    // Center dead zone (avoids accidental input)
+    const cx = Math.abs(rx - 0.5), cy = Math.abs(ry - 0.5);
+    if (cx < 0.12 && cy < 0.12) return null;
+    // Which axis is dominant?
+    const dx = rx - 0.5, dy = ry - 0.5;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        return dx > 0 ? 'right' : 'left';
+    } else {
+        return dy > 0 ? 'down' : 'up';
     }
-    return null;
 }
 
 function setDpadDir(dir) {
     if (dir === activeDpadDir) return;
+    // Remove visual highlight from old button
+    if (activeDpadDir && dpadBtnMap[activeDpadDir]) dpadBtnMap[activeDpadDir].classList.remove('active');
     if (activeDpadDir) keys[activeDpadDir] = false;
     activeDpadDir = dir;
     if (dir) keys[dir] = true;
+    // Add visual highlight to new button
+    if (dir && dpadBtnMap[dir]) dpadBtnMap[dir].classList.add('active');
 }
 
-const dpadContainer = document.getElementById('dpad-container');
-dpadContainer.addEventListener('touchstart', e => {
+function dpadTouchHandler(e) {
     if(e.cancelable) e.preventDefault();
-    if(handleRTPresentsInteraction()) return;
-    if(handleMenuInteraction()) return;
-    if(!audioUnlocked) { audioUnlocked = true; }
-    resumePendingMusic();
-    tryTriggerMusicOnInput();
-    setDpadDir(dpadFromTouch(e.touches[0]));
-}, {passive: false});
+    const t = e.touches[0];
+    if (!t) { setDpadDir(null); return; }
+    if (e.type === 'touchstart') {
+        if(handleRTPresentsInteraction()) return;
+        if(handleMenuInteraction()) return;
+        if(!audioUnlocked) { audioUnlocked = true; }
+        resumePendingMusic();
+        tryTriggerMusicOnInput();
+    }
+    setDpadDir(dpadDirFromPoint(t.clientX, t.clientY));
+}
 
-dpadContainer.addEventListener('touchmove', e => {
-    if(e.cancelable) e.preventDefault();
-    setDpadDir(dpadFromTouch(e.touches[0]));
-}, {passive: false});
+dpadContainer.addEventListener('touchstart', dpadTouchHandler, {passive: false});
+dpadContainer.addEventListener('touchmove', dpadTouchHandler, {passive: false});
+dpadContainer.addEventListener('touchend', e => { if(e.cancelable) e.preventDefault(); setDpadDir(null); }, {passive: false});
+dpadContainer.addEventListener('touchcancel', () => setDpadDir(null));
 
-dpadContainer.addEventListener('touchend', e => {
-    if(e.cancelable) e.preventDefault();
-    setDpadDir(null);
-}, {passive: false});
-
-dpadContainer.addEventListener('touchcancel', e => {
-    setDpadDir(null);
-}, {passive: false});
-
-// Mouse fallback for d-pad buttons
+// Mouse fallback for d-pad buttons (desktop)
 document.querySelectorAll('.control-btn').forEach(btn => {
     btn.addEventListener('mousedown', e => {
         if(e.cancelable) e.preventDefault();
@@ -8177,27 +8185,28 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     });
 });
 
-document.getElementById('action-btn').addEventListener('touchstart', e => {
+const actionBtn = document.getElementById('action-btn');
+actionBtn.addEventListener('touchstart', e => {
     if(e.cancelable) e.preventDefault();
-    
     if(handleRTPresentsInteraction()) return;
     if(handleMenuInteraction()) return;
-    
-    if(!audioUnlocked) {
-        audioUnlocked = true;
-    }
-    
-    // Critical Fix: Trigger music logic directly in the touch event
+    if(!audioUnlocked) { audioUnlocked = true; }
     resumePendingMusic();
     tryTriggerMusicOnInput();
-    
     keys['action'] = true;
+    actionBtn.classList.add('active');
 }, {passive: false});
 
-document.getElementById('action-btn').addEventListener('touchend', e => {
+actionBtn.addEventListener('touchend', e => {
     if(e.cancelable) e.preventDefault();
     keys['action'] = false;
+    actionBtn.classList.remove('active');
 }, {passive: false});
+
+actionBtn.addEventListener('touchcancel', () => {
+    keys['action'] = false;
+    actionBtn.classList.remove('active');
+});
 
 document.getElementById('action-btn').addEventListener('mousedown', e => {
     if(e.cancelable) e.preventDefault();
