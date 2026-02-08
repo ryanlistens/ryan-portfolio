@@ -553,6 +553,7 @@ let level5 = {
     },
     furnaceRoom: {
         leftDoor: {x: 30, y: 340},
+        rightDoor: {x: 670, y: 340},
         furnace: {x: 350, y: 280, flameTime: 0, glowPhase: 0}
     },
     computer: {x: 180, y: 350},
@@ -685,7 +686,19 @@ function initLevel(lv) {
         level6.elevatorDoorOpen = 0;
         level6.elevatorTransition = false;
         level6.elevatorFadeAlpha = 0;
+        level6.elevatorFadeIn = false;
         level6.pistol = { dropped: false, x: 0, y: 0, pickedUp: false, ammo: 7 };
+        level6.bladeDoor = { openPct: 0, state: 'closed' }; // supercomputer blade door
+        level6.bladeDoorMega = { openPct: 0, state: 'closed' }; // megacomputer side blade door
+        level6.elevatorTarget = null; // which floor elevator is going to
+        // Employee Level / Cloning Room state
+        level6.cloningBoss = { x: 350, y: 370, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0 };
+        level6.hasKeycard = false;
+        level6.keycardOnGround = false;
+        level6.keycardX = 0;
+        level6.keycardY = 0;
+        level6.cloningDoorUnlocked = false; // concealed door to furnace room
+        level6.cloningDoorOpen = 0; // slide animation 0-1
         level6.npcPipes = [
             {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
             {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
@@ -2244,6 +2257,237 @@ function drawEdgeDoor(x, y, w, h) {
     ctx.fill();
 }
 
+// Death Star trapezoidal blast door — used for supercomputer room entry/exit
+// side: 'right' (pipe room, door on right) or 'left' (megacomputer, door on left)
+// openPct: 0 (closed) to 1 (fully open) for blade animation
+// showKeypad: whether to draw keypad panel
+// unlocked: door lock state
+function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked) {
+    const t = Date.now();
+    const frameW = 14;
+    const trapInset = 12; // trapezoidal taper amount
+
+    // Outer trapezoidal frame — dark gunmetal
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    if (side === 'right') {
+        ctx.moveTo(x - frameW - 4, y - 24 + trapInset);
+        ctx.lineTo(x + w + frameW + 4, y - 24);
+        ctx.lineTo(x + w + frameW + 4, y + h + 8);
+        ctx.lineTo(x - frameW - 4, y + h + 8 - trapInset);
+    } else {
+        ctx.moveTo(x - frameW - 4, y - 24);
+        ctx.lineTo(x + w + frameW + 4, y - 24 + trapInset);
+        ctx.lineTo(x + w + frameW + 4, y + h + 8 - trapInset);
+        ctx.lineTo(x - frameW - 4, y + h + 8);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Inner frame plate — slightly lighter
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    if (side === 'right') {
+        ctx.moveTo(x - frameW, y - 20 + trapInset * 0.8);
+        ctx.lineTo(x + w + frameW, y - 20);
+        ctx.lineTo(x + w + frameW, y + h + 4);
+        ctx.lineTo(x - frameW, y + h + 4 - trapInset * 0.8);
+    } else {
+        ctx.moveTo(x - frameW, y - 20);
+        ctx.lineTo(x + w + frameW, y - 20 + trapInset * 0.8);
+        ctx.lineTo(x + w + frameW, y + h + 4 - trapInset * 0.8);
+        ctx.lineTo(x - frameW, y + h + 4);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Side frame pillars with brushed steel gradient
+    const leftPillarX = (side === 'right') ? x - frameW : x - frameW;
+    const rightPillarX = x + w;
+    // Left pillar
+    const lpGrad = ctx.createLinearGradient(leftPillarX, 0, leftPillarX + frameW, 0);
+    lpGrad.addColorStop(0, '#2a2a2a');
+    lpGrad.addColorStop(0.5, '#444');
+    lpGrad.addColorStop(1, '#2a2a2a');
+    ctx.fillStyle = lpGrad;
+    ctx.fillRect(leftPillarX, y - 2, frameW, h + 4);
+    // Right pillar
+    const rpGrad = ctx.createLinearGradient(rightPillarX, 0, rightPillarX + frameW, 0);
+    rpGrad.addColorStop(0, '#2a2a2a');
+    rpGrad.addColorStop(0.5, '#444');
+    rpGrad.addColorStop(1, '#2a2a2a');
+    ctx.fillStyle = rpGrad;
+    ctx.fillRect(rightPillarX, y - 2, frameW, h + 4);
+
+    // Top header plate
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x - 2, y - 20, w + 4, 18);
+    // Hazard chevrons on header
+    for (let ch = 0; ch < Math.floor(w / 14); ch++) {
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x + 4 + ch * 14, y - 18, 7, 14);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x + 9 + ch * 14, y - 18, 5, 14);
+    }
+
+    // Exposed wiring conduits on left pillar
+    const wireColors = ['#ff3333', '#00ccff', '#ffd700', '#00ff88'];
+    for (let wi = 0; wi < 4; wi++) {
+        const wy = y + 10 + wi * (h / 5);
+        ctx.strokeStyle = wireColors[wi];
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(leftPillarX - 6, wy);
+        ctx.quadraticCurveTo(leftPillarX - 2, wy + 6, leftPillarX + 2, wy);
+        ctx.stroke();
+        // Small connector dot
+        ctx.fillStyle = wireColors[wi];
+        ctx.beginPath();
+        ctx.arc(leftPillarX - 6, wy, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Blinking indicator lights on right pillar
+    for (let li = 0; li < 5; li++) {
+        const ly = y + 8 + li * (h / 6);
+        const blinkOn = Math.sin(t / 350 + li * 1.3) > 0;
+        ctx.fillStyle = blinkOn ? '#00ff88' : '#0a2a0a';
+        ctx.beginPath();
+        ctx.arc(rightPillarX + frameW + 5, ly, 3, 0, Math.PI * 2);
+        ctx.fill();
+        if (blinkOn) {
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.arc(rightPillarX + frameW + 5, ly, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+    // Red warning light at top center
+    const redBlink = Math.sin(t / 500) > 0;
+    ctx.fillStyle = redBlink ? '#ff3333' : '#2a0a0a';
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y - 24 + (side === 'right' ? trapInset / 2 : trapInset / 2), 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (redBlink) {
+        ctx.shadowColor = '#ff3333';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y - 24 + trapInset / 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // Door opening / blade animation
+    if (openPct > 0.02) {
+        // Dark recessed interior behind door
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(x, y, w, h);
+        // Green LED edge strips inside
+        ctx.fillStyle = '#00ff88';
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(x + 1, y, 2, h);
+        ctx.fillRect(x + w - 3, y, 2, h);
+        ctx.shadowBlur = 0;
+    }
+
+    // Blade door panels — split top/bottom, retract into frame
+    const bladeTopH = (h / 2) * (1 - openPct);
+    const bladeBotH = (h / 2) * (1 - openPct);
+    if (bladeTopH > 1) {
+        // Top blade
+        const tGrad = ctx.createLinearGradient(x, y, x, y + bladeTopH);
+        tGrad.addColorStop(0, '#666');
+        tGrad.addColorStop(0.3, '#888');
+        tGrad.addColorStop(0.7, '#777');
+        tGrad.addColorStop(1, '#555');
+        ctx.fillStyle = tGrad;
+        ctx.fillRect(x, y, w, bladeTopH);
+        // Reinforcement ribs
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x + 3, y + bladeTopH - 4, w - 6, 3);
+        ctx.fillRect(x + 3, y + 4, w - 6, 3);
+        // Center seam
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2, y);
+        ctx.lineTo(x + w / 2, y + bladeTopH);
+        ctx.stroke();
+        // Cyan LED strip at seam edge
+        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
+        ctx.shadowColor = unlocked ? '#00ff88' : '#00ccff';
+        ctx.shadowBlur = 4;
+        ctx.fillRect(x + 4, y + bladeTopH - 2, w - 8, 2);
+        ctx.shadowBlur = 0;
+    }
+    if (bladeBotH > 1) {
+        const botY = y + h - bladeBotH;
+        // Bottom blade
+        const bGrad = ctx.createLinearGradient(x, botY, x, botY + bladeBotH);
+        bGrad.addColorStop(0, '#555');
+        bGrad.addColorStop(0.3, '#777');
+        bGrad.addColorStop(0.7, '#888');
+        bGrad.addColorStop(1, '#666');
+        ctx.fillStyle = bGrad;
+        ctx.fillRect(x, botY, w, bladeBotH);
+        // Reinforcement ribs
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x + 3, botY + 1, w - 6, 3);
+        ctx.fillRect(x + 3, botY + bladeBotH - 7, w - 6, 3);
+        // Center seam
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2, botY);
+        ctx.lineTo(x + w / 2, botY + bladeBotH);
+        ctx.stroke();
+        // Cyan LED strip at seam edge
+        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
+        ctx.shadowColor = unlocked ? '#00ff88' : '#00ccff';
+        ctx.shadowBlur = 4;
+        ctx.fillRect(x + 4, botY, w - 8, 2);
+        ctx.shadowBlur = 0;
+    }
+
+    // Keypad panel
+    if (showKeypad) {
+        const kpSide = (side === 'right') ? rightPillarX + frameW + 8 : leftPillarX - 28;
+        const kpY = y + 30;
+        // Dark mounting plate
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(kpSide - 2, kpY - 6, 24, 44);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(kpSide, kpY - 4, 20, 40);
+        // Screen
+        ctx.fillStyle = unlocked ? '#002200' : '#002211';
+        ctx.fillRect(kpSide + 2, kpY - 2, 16, 10);
+        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
+        ctx.font = 'bold 6px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpSide + 10, kpY + 6);
+        // Button grid
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const bOn = Math.sin(t / 300 + r * 2 + c) > 0.3;
+                ctx.fillStyle = unlocked ? (bOn ? '#00ff88' : '#003311') : (bOn ? '#00ccff' : '#004455');
+                ctx.fillRect(kpSide + 2 + c * 6, kpY + 12 + r * 8, 4, 6);
+            }
+        }
+        // Status indicator
+        const indColor = unlocked ? '#00ff88' : '#ff3333';
+        ctx.fillStyle = indColor;
+        ctx.shadowColor = indColor;
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(kpSide + 10, kpY - 10, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
 // Right-side gasket + boss door at pipe termination (levels 1-5 pipe rooms)
 // Pipe inserts into gasket hole — matching level 5 hallway style (dark center = depth)
 function drawPipeRoomRightWall(gasketY) {
@@ -2487,14 +2731,14 @@ function drawLevel5PipeRoom() {
         ctx.beginPath();
         ctx.moveTo(npc.x, pipeY);
         ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
-        ctx.lineTo(700 + GX + 20, pipeY + 25);
+        ctx.lineTo(694, pipeY + 25);
         ctx.stroke();
 
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(npc.x + 21, pipeY + 25);
-        ctx.lineTo(700 + GX + 20, pipeY + 25);
+        ctx.lineTo(694, pipeY + 25);
         ctx.stroke();
 
         if(npc.needsDoc && npc.crackStartTime) {
@@ -2882,6 +3126,32 @@ function drawLevel5FurnaceRoom() {
             ctx.font = 'bold 18px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('PRESS ACTION - PICK UP KEY', kx, ky - 30);
+        }
+    }
+
+    // Concealed right door — passage to cloning room (visible when unlocked)
+    const rdX = 640, rdY = 340, rdW = 50, rdH = 60;
+    if (level6.cloningDoorUnlocked) {
+        // Open passage with dark interior and green LED edge
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(rdX, rdY, rdW, rdH);
+        ctx.fillStyle = '#00ff88';
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 6;
+        ctx.fillRect(rdX, rdY, 2, rdH);
+        ctx.shadowBlur = 0;
+        // Subtle frame outline
+        ctx.strokeStyle = '#3a3a3a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rdX, rdY, rdW, rdH);
+
+        if (player.x > 600) {
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(rdX + rdW/2 - 55, rdY - 20, 110, 18);
+            ctx.fillStyle = '#00ff88';
+            ctx.fillText('CLONING LAB →', rdX + rdW/2, rdY - 6);
         }
     }
 }
@@ -3406,151 +3676,9 @@ function drawLevel6PipeRoom() {
         ctx.fillRect(pipeX - 10, 400, 20, 4);
     }
 
-    // Death Star-style gateway to megacomputer (right side)
+    // Death Star trapezoidal blast door to megacomputer (right side)
     const doorX = 618, doorY = 275, doorW = 70, doorH = 125;
-    const frameW = 12; // Thick gateway frame
-
-    // Outer gateway frame — dark gray Death Star-style surround
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(doorX - frameW - 2, doorY - 20, doorW + frameW * 2 + 4, doorH + 24);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(doorX - frameW, doorY - 18, doorW + frameW * 2, doorH + 20);
-    // Inner frame bevels
-    ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(doorX - frameW, doorY - 2, frameW, doorH + 4);
-    ctx.fillRect(doorX + doorW, doorY - 2, frameW, doorH + 4);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(doorX - 2, doorY - 18, doorW + 4, 16);
-    // Hazard chevrons on header
-    ctx.fillStyle = '#ffd700';
-    for (let ch = 0; ch < 5; ch++) {
-        ctx.fillRect(doorX + 4 + ch * 14, doorY - 16, 8, 12);
-    }
-    ctx.fillStyle = '#1a1a1a';
-    for (let ch = 0; ch < 5; ch++) {
-        ctx.fillRect(doorX + 10 + ch * 14, doorY - 16, 6, 12);
-    }
-
-    // Exposed wiring conduits on left frame
-    const wireColors = ['#ff3333', '#00ccff', '#ffd700', '#00ff88'];
-    for (let w = 0; w < 4; w++) {
-        const wy = doorY + 10 + w * 28;
-        ctx.strokeStyle = wireColors[w];
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(doorX - frameW - 8, wy);
-        ctx.lineTo(doorX - frameW - 4, wy + 5);
-        ctx.lineTo(doorX - frameW, wy);
-        ctx.stroke();
-    }
-
-    // Blinking indicator lights on right frame
-    const t = Date.now();
-    for (let li = 0; li < 4; li++) {
-        const ly = doorY + 8 + li * 28;
-        const blinkOn = Math.sin(t / 400 + li * 1.5) > 0;
-        ctx.fillStyle = blinkOn ? '#00ff88' : '#0a2a0a';
-        ctx.beginPath();
-        ctx.arc(doorX + doorW + frameW / 2, ly, 3, 0, Math.PI * 2);
-        ctx.fill();
-        if (blinkOn) {
-            ctx.shadowColor = '#00ff88';
-            ctx.shadowBlur = 6;
-            ctx.beginPath();
-            ctx.arc(doorX + doorW + frameW / 2, ly, 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-        }
-    }
-    // Red warning light at top
-    const redBlink = Math.sin(t / 600) > 0;
-    ctx.fillStyle = redBlink ? '#ff3333' : '#2a0a0a';
-    ctx.beginPath();
-    ctx.arc(doorX + doorW + frameW / 2, doorY - 10, 4, 0, Math.PI * 2);
-    ctx.fill();
-    if (redBlink) {
-        ctx.shadowColor = '#ff3333';
-        ctx.shadowBlur = 8;
-        ctx.beginPath();
-        ctx.arc(doorX + doorW + frameW / 2, doorY - 10, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-    }
-
-    if (level6.supercomputerUnlocked) {
-        // Open door — dark recessed opening with green LED strips
-        ctx.fillStyle = '#050505';
-        ctx.fillRect(doorX, doorY, doorW, doorH);
-        ctx.fillStyle = '#00ff88';
-        ctx.fillRect(doorX, doorY, 3, doorH);
-        ctx.fillRect(doorX + doorW - 3, doorY, 3, doorH);
-        ctx.shadowColor = '#00ff88';
-        ctx.shadowBlur = 12;
-        ctx.fillRect(doorX + 1, doorY, 2, doorH);
-        ctx.shadowBlur = 0;
-    } else {
-        // Closed door — heavy brushed steel blast door
-        const grad = ctx.createLinearGradient(doorX, doorY, doorX + doorW, doorY);
-        grad.addColorStop(0, '#888');
-        grad.addColorStop(0.15, '#aaa');
-        grad.addColorStop(0.5, '#bbb');
-        grad.addColorStop(0.85, '#aaa');
-        grad.addColorStop(1, '#777');
-        ctx.fillStyle = grad;
-        ctx.fillRect(doorX, doorY, doorW, doorH);
-        // Door seam (center split)
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(doorX + doorW / 2, doorY + 4);
-        ctx.lineTo(doorX + doorW / 2, doorY + doorH - 4);
-        ctx.stroke();
-        // Horizontal reinforcement bands
-        ctx.fillStyle = '#666';
-        ctx.fillRect(doorX + 2, doorY + 20, doorW - 4, 4);
-        ctx.fillRect(doorX + 2, doorY + doorH - 24, doorW - 4, 4);
-        // Cyan LED strip at top and bottom
-        ctx.fillStyle = '#00ccff';
-        ctx.shadowColor = '#00ccff';
-        ctx.shadowBlur = 6;
-        ctx.fillRect(doorX + 4, doorY + 2, doorW - 8, 3);
-        ctx.fillRect(doorX + 4, doorY + doorH - 5, doorW - 8, 3);
-        ctx.shadowBlur = 0;
-
-    }
-
-    // Keypad panel — right side of gateway, always visible (persists after unlock)
-    const kpX = doorX + doorW + frameW + 8, kpY = doorY + 30;
-    // Dark mounting plate
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(kpX - 2, kpY - 6, 24, 44);
-    ctx.fillStyle = '#111';
-    ctx.fillRect(kpX, kpY - 4, 20, 40);
-    // Screen/display area
-    const unlocked = level6.supercomputerUnlocked;
-    ctx.fillStyle = unlocked ? '#002200' : '#002211';
-    ctx.fillRect(kpX + 2, kpY - 2, 16, 10);
-    ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-    ctx.font = 'bold 6px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpX + 10, kpY + 6);
-    // Button grid (3x3)
-    for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-            const bOn = Math.sin(t / 300 + r * 2 + c) > 0.3;
-            ctx.fillStyle = unlocked ? (bOn ? '#00ff88' : '#003311') : (bOn ? '#00ccff' : '#004455');
-            ctx.fillRect(kpX + 2 + c * 6, kpY + 12 + r * 8, 4, 6);
-        }
-    }
-    // Status indicator above keypad — red when locked, green when unlocked
-    const indColor = unlocked ? '#00ff88' : '#ff3333';
-    ctx.fillStyle = indColor;
-    ctx.shadowColor = indColor;
-    ctx.shadowBlur = 4;
-    ctx.beginPath();
-    ctx.arc(kpX + 10, kpY - 10, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    drawDeathStarBlastDoor(doorX, doorY, doorW, doorH, 'right', level6.bladeDoor.openPct, true, level6.supercomputerUnlocked);
 
     // Private elevator (left side, in-frame for portrait + landscape)
     const elvX = 5, elvY = 240, elvW = 130, elvH = 160;
@@ -3704,27 +3832,9 @@ function drawLevel6MegacomputerRoom() {
         }
     }
 
-    // Death Star-style door on left — matching pipe room gateway style
-    const mcDoorX = 0, mcDoorY = 280, mcDoorW = 70, mcDoorH = 120;
-    const mcFrameW = 10;
-    // Gateway frame
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(mcDoorX - 2, mcDoorY - 16, mcDoorW + mcFrameW + 4, mcDoorH + 20);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(mcDoorX, mcDoorY - 14, mcDoorW + mcFrameW, mcDoorH + 16);
-    ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(mcDoorX + mcDoorW, mcDoorY - 2, mcFrameW, mcDoorH + 4);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(mcDoorX, mcDoorY - 14, mcDoorW + 4, 12);
-    // Open doorway — dark recessed with green LED
-    ctx.fillStyle = '#050505';
-    ctx.fillRect(mcDoorX, mcDoorY, mcDoorW, mcDoorH);
-    ctx.fillStyle = '#00ff88';
-    ctx.fillRect(mcDoorX + mcDoorW - 3, mcDoorY, 3, mcDoorH);
-    ctx.shadowColor = '#00ff88';
-    ctx.shadowBlur = 8;
-    ctx.fillRect(mcDoorX + mcDoorW - 2, mcDoorY, 2, mcDoorH);
-    ctx.shadowBlur = 0;
+    // Death Star trapezoidal blast door on left — matching pipe room gateway
+    const mcDoorX = 20, mcDoorY = 275, mcDoorW = 70, mcDoorH = 125;
+    drawDeathStarBlastDoor(mcDoorX, mcDoorY, mcDoorW, mcDoorH, 'left', level6.bladeDoorMega.openPct, false, true);
 
     // Wall-mounted brutalist slogan painted wall to wall
     ctx.fillStyle = '#ffffff';
@@ -4212,6 +4322,598 @@ function drawLevel6MegacomputerRoom() {
     }
 }
 
+function drawLevel6EmployeeLobby() {
+    // Dark industrial lobby — same aesthetic as Level 6 pipe room
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Floor tiles
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    for(let i = -4; i < 24; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+
+    // Bold brutalist PipeTech logo on wall — large painted style
+    ctx.fillStyle = '#555';
+    ctx.fillRect(80, 50, 360, 80);
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(84, 54, 352, 72);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(80, 50, 360, 80);
+    ctx.fillStyle = '#ddd';
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPETECH', 260, 100);
+    ctx.fillStyle = '#888';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 260, 122);
+    // Rainbow pipe accent under logo
+    const rainbowColors = ['#ff3333', '#33cc33', '#3388ff', '#ffcc00'];
+    for (let rc = 0; rc < 4; rc++) {
+        ctx.fillStyle = rainbowColors[rc];
+        ctx.fillRect(130 + rc * 65, 128, 55, 4);
+    }
+
+    // CEO portrait above plants — ornate golden frame
+    const pX = 260, pY = 150, pW = 100, pH = 110;
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(pX - pW/2 - 6, pY - 6, pW + 12, pH + 12);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(pX - pW/2 - 4, pY - 4, pW + 8, pH + 8);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(pX - pW/2 - 2, pY - 2, pW + 4, pH + 4);
+    if(ceoPortraitImg && ceoPortraitImg.complete && ceoPortraitImg.naturalWidth > 0) {
+        ctx.drawImage(ceoPortraitImg, pX - pW/2, pY, pW, pH);
+    } else {
+        ctx.fillStyle = '#2b2520';
+        ctx.fillRect(pX - pW/2, pY, pW, pH);
+    }
+    // Text below portrait
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 16px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Meet your founding father.', 260, pY + pH + 22);
+
+    // 4 colored fern-style potted plants next to elevator
+    const plantColors = ['#ff3333', '#33cc33', '#3388ff', '#ffcc00'];
+    const fernBaseX = 160;
+    for (let pi = 0; pi < 4; pi++) {
+        const px2 = fernBaseX + pi * 60;
+        const py2 = 390;
+        // Colored pot
+        ctx.fillStyle = plantColors[pi];
+        ctx.beginPath();
+        ctx.moveTo(px2 - 14, py2 - 4);
+        ctx.lineTo(px2 + 14, py2 - 4);
+        ctx.lineTo(px2 + 10, py2 + 16);
+        ctx.lineTo(px2 - 10, py2 + 16);
+        ctx.closePath();
+        ctx.fill();
+        // Pot rim
+        ctx.fillStyle = plantColors[pi];
+        ctx.fillRect(px2 - 16, py2 - 8, 32, 5);
+        // Darker shade for depth
+        const darker = ['#cc2222', '#228822', '#2266cc', '#cc9900'];
+        ctx.fillStyle = darker[pi];
+        ctx.fillRect(px2 - 14, py2 - 4, 28, 3);
+
+        // Fern fronds — multiple curving green shapes
+        const fernGreen = '#1a7a2a';
+        const fernLight = '#22aa33';
+        ctx.strokeStyle = fernGreen;
+        ctx.lineWidth = 2;
+        // Center frond
+        ctx.beginPath();
+        ctx.moveTo(px2, py2 - 8);
+        ctx.quadraticCurveTo(px2, py2 - 45, px2 + 3, py2 - 55);
+        ctx.stroke();
+        // Left fronds
+        for (let f = 0; f < 3; f++) {
+            ctx.strokeStyle = f % 2 === 0 ? fernGreen : fernLight;
+            ctx.beginPath();
+            ctx.moveTo(px2 - 2, py2 - 10 - f * 10);
+            ctx.quadraticCurveTo(px2 - 18 - f * 4, py2 - 25 - f * 12, px2 - 22 - f * 5, py2 - 35 - f * 8);
+            ctx.stroke();
+            // Tiny leaf tips
+            ctx.fillStyle = fernLight;
+            ctx.beginPath();
+            ctx.arc(px2 - 22 - f * 5, py2 - 35 - f * 8, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Right fronds
+        for (let f = 0; f < 3; f++) {
+            ctx.strokeStyle = f % 2 === 0 ? fernLight : fernGreen;
+            ctx.beginPath();
+            ctx.moveTo(px2 + 2, py2 - 10 - f * 10);
+            ctx.quadraticCurveTo(px2 + 18 + f * 4, py2 - 25 - f * 12, px2 + 22 + f * 5, py2 - 35 - f * 8);
+            ctx.stroke();
+            ctx.fillStyle = fernGreen;
+            ctx.beginPath();
+            ctx.arc(px2 + 22 + f * 5, py2 - 35 - f * 8, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Elevator on right side — matching pipe room elevator style
+    const elvX = 530, elvY = 240, elvW = 130, elvH = 160;
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(elvX - 6, elvY - 24, elvW + 12, elvH + 30);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(elvX - 4, elvY - 22, elvW + 8, elvH + 26);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
+    // Closed elevator doors
+    const eGrad = ctx.createLinearGradient(elvX, 0, elvX + elvW, 0);
+    eGrad.addColorStop(0, '#c0c0c0');
+    eGrad.addColorStop(0.5, '#e0e0e0');
+    eGrad.addColorStop(1, '#c0c0c0');
+    ctx.fillStyle = eGrad;
+    ctx.fillRect(elvX, elvY, elvW, elvH);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(elvX + elvW/2, elvY + 4);
+    ctx.lineTo(elvX + elvW/2, elvY + elvH - 4);
+    ctx.stroke();
+    // LED indicator
+    ctx.fillStyle = '#222';
+    ctx.fillRect(elvX + elvW/2 - 20, elvY - 18, 40, 14);
+    ctx.fillStyle = '#00ff88';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('EMPLOYEE', elvX + elvW/2, elvY - 8);
+    // Frame
+    ctx.strokeStyle = '#8a7a2a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
+
+    // Direction prompts
+    if(player.x > 560) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(elvX + elvW/2 - 80, elvY - 42, 160, 20);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText('ACTION: ELEVATOR', elvX + elvW/2, elvY - 26);
+    }
+    if(player.x < 80) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(40 - 70, 360, 140, 20);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('← CLONING LAB', 40, 376);
+    }
+}
+
+function drawLevel6CloningRoom() {
+    const t = Date.now();
+    // Dark industrial room
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Industrial floor
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    for(let i = -4; i < 24; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+
+    // === PM PRINTER LABEL ===
+    ctx.fillStyle = '#444';
+    ctx.fillRect(265, 30, 170, 30);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(265, 30, 170, 30);
+    ctx.fillStyle = '#00ccff';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PM PRINTER', 350, 52);
+
+    // === 4 STEEL VATS with colored ooze and floating fetal PMs ===
+    const vatColors = ['#ff3333', '#33cc33', '#3388ff', '#ffcc00'];
+    const vatDarkColors = ['#990000', '#006600', '#003388', '#996600'];
+    const vatX0 = 160;
+    for (let vi = 0; vi < 4; vi++) {
+        const vx = vatX0 + vi * 95;
+        const vy = 80, vw = 50, vh = 140;
+
+        // Steel vat body
+        const vatGrad = ctx.createLinearGradient(vx, 0, vx + vw, 0);
+        vatGrad.addColorStop(0, '#555');
+        vatGrad.addColorStop(0.3, '#888');
+        vatGrad.addColorStop(0.5, '#999');
+        vatGrad.addColorStop(0.7, '#888');
+        vatGrad.addColorStop(1, '#555');
+        ctx.fillStyle = vatGrad;
+        ctx.fillRect(vx, vy, vw, vh);
+
+        // Steel rim top & bottom
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(vx - 3, vy - 4, vw + 6, 8);
+        ctx.fillRect(vx - 3, vy + vh - 4, vw + 6, 8);
+        ctx.fillStyle = '#777';
+        ctx.fillRect(vx - 2, vy - 2, vw + 4, 4);
+        ctx.fillRect(vx - 2, vy + vh - 2, vw + 4, 4);
+
+        // Clear window panel
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(vx + 8, vy + 20, vw - 16, vh - 40);
+        // Colored genetic ooze
+        const oozeAlpha = 0.5 + Math.sin(t / 1000 + vi * 1.5) * 0.15;
+        ctx.fillStyle = vatColors[vi];
+        ctx.globalAlpha = oozeAlpha;
+        ctx.fillRect(vx + 9, vy + 22, vw - 18, vh - 44);
+        ctx.globalAlpha = 1;
+
+        // Floating fetal PM silhouette — bobbing animation
+        const fetalY = vy + 55 + Math.sin(t / 800 + vi * 2) * 12;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        // Head
+        ctx.beginPath();
+        ctx.arc(vx + vw/2, fetalY, 7, 0, Math.PI * 2);
+        ctx.fill();
+        // Curled body
+        ctx.beginPath();
+        ctx.arc(vx + vw/2, fetalY + 12, 9, 0, Math.PI);
+        ctx.fill();
+        // Tiny arm buds
+        ctx.fillRect(vx + vw/2 - 12, fetalY + 6, 5, 3);
+        ctx.fillRect(vx + vw/2 + 7, fetalY + 6, 5, 3);
+
+        // Bubbles
+        for (let b = 0; b < 3; b++) {
+            const bx = vx + 14 + (b * 10) + Math.sin(t / 500 + vi + b) * 3;
+            const by = vy + 30 + ((t / 15 + b * 40 + vi * 20) % (vh - 50));
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.beginPath();
+            ctx.arc(bx, by, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // === PIPE from vat going UP then LEFT to merge ===
+        ctx.strokeStyle = vatColors[vi];
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        // Vertical from vat top upward
+        ctx.moveTo(vx + vw/2, vy - 4);
+        ctx.lineTo(vx + vw/2, 50);
+        // Curve left
+        ctx.quadraticCurveTo(vx + vw/2, 35, vx + vw/2 - 20, 35);
+        // Horizontal to left wall
+        ctx.lineTo(28, 35);
+        ctx.stroke();
+        // Highlight
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(vx + vw/2, vy - 2);
+        ctx.lineTo(vx + vw/2, 50);
+        ctx.quadraticCurveTo(vx + vw/2, 37, vx + vw/2 - 20, 37);
+        ctx.lineTo(28, 37);
+        ctx.stroke();
+
+        // === ALUMINUM DRYER VENT TUBE from vat to centrifuge ===
+        const centX = 350, centY = 310;
+        const tubeEndX = centX - 60 + vi * 30;
+        const tubeEndY = centY - 20;
+        ctx.strokeStyle = '#aaa';
+        ctx.lineWidth = 8;
+        ctx.setLineDash([6, 3]); // Corrugated vent look
+        ctx.beginPath();
+        ctx.moveTo(vx + vw/2, vy + vh);
+        ctx.quadraticCurveTo(vx + vw/2, tubeEndY + 30, tubeEndX, tubeEndY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Tube shadow
+        ctx.strokeStyle = '#777';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(vx + vw/2 + 3, vy + vh);
+        ctx.quadraticCurveTo(vx + vw/2 + 3, tubeEndY + 32, tubeEndX + 2, tubeEndY + 2);
+        ctx.stroke();
+    }
+
+    // === LEFT WALL GASKET (over concealed door) ===
+    const gasketY = 35;
+    const gasketX = 17;
+    ctx.fillStyle = '#999';
+    ctx.beginPath();
+    ctx.arc(gasketX, gasketY, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.arc(gasketX, gasketY, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.arc(gasketX, gasketY, 8, 0, Math.PI * 2);
+    ctx.fill();
+    for(let b = 0; b < 6; b++) {
+        const angle = (b / 6) * Math.PI * 2;
+        const bx = gasketX + Math.cos(angle) * 12;
+        const by = gasketY + Math.sin(angle) * 12;
+        ctx.fillStyle = '#555';
+        ctx.beginPath();
+        ctx.arc(bx, by, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(bx, by, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === ROTATING CENTRIFUGE (PM Printer core) ===
+    const centX = 350, centY = 330, centR = 55;
+    const rotation = (t / 2000) % (Math.PI * 2);
+
+    // Centrifuge housing — large steel drum
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.arc(centX, centY, centR + 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(centX, centY, centR + 10, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner drum
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.arc(centX, centY, centR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Heat lamp glow in center
+    const lampGlow = 0.4 + Math.sin(t / 300) * 0.15;
+    ctx.fillStyle = `rgba(255, 120, 30, ${lampGlow})`;
+    ctx.beginPath();
+    ctx.arc(centX, centY, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff8844';
+    ctx.shadowColor = '#ff6600';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(centX, centY, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Easter egg pod capsules — 4 rotating around center
+    for (let ei = 0; ei < 4; ei++) {
+        const eggAngle = rotation + (ei / 4) * Math.PI * 2;
+        const eggX = centX + Math.cos(eggAngle) * (centR - 18);
+        const eggY = centY + Math.sin(eggAngle) * (centR - 18);
+
+        // Egg capsule — oval with color tint
+        ctx.fillStyle = vatColors[ei];
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.ellipse(eggX, eggY, 12, 16, eggAngle, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        // Shiny highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(eggX - 3, eggY - 4, 4, 6, eggAngle, 0, Math.PI * 2);
+        ctx.fill();
+        // PM silhouette visible through egg
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.arc(eggX, eggY - 3, 4, 0, Math.PI * 2); // head
+        ctx.fill();
+        ctx.fillRect(eggX - 3, eggY + 1, 6, 8); // body
+    }
+
+    // Centrifuge steel bolts around rim
+    for (let bi = 0; bi < 8; bi++) {
+        const ba = (bi / 8) * Math.PI * 2;
+        const bx = centX + Math.cos(ba) * (centR + 5);
+        const by = centY + Math.sin(ba) * (centR + 5);
+        ctx.fillStyle = '#888';
+        ctx.beginPath();
+        ctx.arc(bx, by, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#555';
+        ctx.beginPath();
+        ctx.arc(bx, by, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === CONCEALED DOOR — left wall sliding brick panel ===
+    const cdX = 0, cdY = 280, cdW = 60, cdH = 120;
+    const slideOffset = level6.cloningDoorOpen * cdW; // slides right to reveal
+
+    if (level6.cloningDoorOpen < 1) {
+        // Brick wall section that slides
+        ctx.fillStyle = '#5a3a2a';
+        ctx.fillRect(cdX + slideOffset, cdY, cdW - slideOffset, cdH);
+        // Brick pattern
+        for (let row = 0; row < 6; row++) {
+            for (let col = 0; col < 3; col++) {
+                const brickX = cdX + slideOffset + col * 22 + (row % 2) * 11;
+                const brickY = cdY + row * 20;
+                if (brickX < cdX + cdW) {
+                    ctx.strokeStyle = '#3a2a1a';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(brickX, brickY, 20, 18);
+                }
+            }
+        }
+    }
+    if (level6.cloningDoorOpen > 0.1) {
+        // Dark passage revealed behind
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(cdX, cdY, slideOffset, cdH);
+        // Green LED strips inside passage
+        ctx.fillStyle = '#00ff88';
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 6;
+        ctx.fillRect(cdX, cdY, 2, cdH);
+        ctx.shadowBlur = 0;
+    }
+
+    // Door outline visible even when closed
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cdX, cdY, cdW, cdH);
+
+    // Keycard reader beside concealed door
+    if (!level6.cloningDoorUnlocked) {
+        const krX = cdW + 8, krY = cdY + 40;
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(krX, krY, 18, 30);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(krX + 2, krY + 2, 14, 26);
+        // Card slot
+        ctx.fillStyle = '#333';
+        ctx.fillRect(krX + 4, krY + 8, 10, 3);
+        // LED — red when locked
+        ctx.fillStyle = '#ff3333';
+        ctx.shadowColor = '#ff3333';
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(krX + 9, krY + 20, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        if (player.x < 80 && level6.hasKeycard) {
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(50 - 65, cdY + cdH + 8, 130, 18);
+            ctx.fillStyle = '#00ccff';
+            ctx.fillText('ACTION: USE KEYCARD', 50, cdY + cdH + 22);
+        } else if (player.x < 80 && !level6.hasKeycard) {
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(50 - 65, cdY + cdH + 8, 130, 18);
+            ctx.fillStyle = '#ff6666';
+            ctx.fillText('KEYCARD REQUIRED', 50, cdY + cdH + 22);
+        }
+    } else {
+        // Unlocked reader — green
+        const krX = cdW + 8 + level6.cloningDoorOpen * cdW, krY = cdY + 40;
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(krX, krY, 18, 30);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(krX + 2, krY + 2, 14, 26);
+        ctx.fillStyle = '#00ff88';
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(krX + 9, krY + 20, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // === CLONING BOSS — pipe manager patrolling in front of centrifuge ===
+    const cb = level6.cloningBoss;
+    if (cb.alive) {
+        // Draw as a pipe manager NPC (using boss style — slightly larger)
+        const bx = cb.x, by = cb.y;
+        // Hard hat
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(bx - 12, by - 38, 24, 8);
+        ctx.fillRect(bx - 14, by - 32, 28, 4);
+        // Head
+        ctx.fillStyle = '#f5d5a8';
+        ctx.fillRect(bx - 8, by - 28, 16, 16);
+        // Eyes
+        ctx.fillStyle = '#000';
+        ctx.fillRect(bx - 5, by - 24, 3, 3);
+        ctx.fillRect(bx + 2, by - 24, 3, 3);
+        // Body (dark jumpsuit)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(bx - 10, by - 12, 20, 20);
+        // Clipboard
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(bx + (cb.facing === 'right' ? 10 : -18), by - 8, 8, 12);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(bx + (cb.facing === 'right' ? 11 : -17), by - 6, 6, 8);
+        // Legs
+        ctx.fillStyle = '#222';
+        ctx.fillRect(bx - 7, by + 8, 6, 12);
+        ctx.fillRect(bx + 1, by + 8, 6, 12);
+        // Boots
+        ctx.fillStyle = '#111';
+        ctx.fillRect(bx - 8, by + 18, 8, 4);
+        ctx.fillRect(bx, by + 18, 8, 4);
+    } else if (cb.deathTime > 0) {
+        // Dead boss — collapsed on ground (same style as L4 boss death)
+        const bx = cb.x, by = 395;
+        ctx.fillStyle = '#f5d5a8';
+        ctx.fillRect(bx - 6, by - 4, 12, 8);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(bx - 10, by, 20, 6);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(bx - 8, by - 8, 16, 5);
+        // X eyes
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx - 4, by - 3); ctx.lineTo(bx - 1, by);
+        ctx.moveTo(bx - 1, by - 3); ctx.lineTo(bx - 4, by);
+        ctx.moveTo(bx + 1, by - 3); ctx.lineTo(bx + 4, by);
+        ctx.moveTo(bx + 4, by - 3); ctx.lineTo(bx + 1, by);
+        ctx.stroke();
+    }
+
+    // === DROPPED KEYCARD ===
+    if (level6.keycardOnGround) {
+        const kx = level6.keycardX, ky = level6.keycardY;
+        // Card body
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(kx - 12, ky - 4, 24, 14);
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(kx - 12, ky - 4, 24, 14);
+        // Magnetic stripe
+        ctx.fillStyle = '#333';
+        ctx.fillRect(kx - 10, ky + 4, 20, 3);
+        // Blinking glow
+        const cardGlow = Math.sin(t / 300) > 0;
+        if (cardGlow) {
+            ctx.fillStyle = '#00ccff';
+            ctx.shadowColor = '#00ccff';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(kx, ky - 8, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        if (Math.abs(player.x - kx) < 50) {
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(kx - 65, ky - 24, 130, 18);
+            ctx.fillStyle = '#00ccff';
+            ctx.fillText('ACTION: TAKE KEYCARD', kx, ky - 10);
+        }
+    }
+
+    // Direction prompts
+    if (player.x > 620) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(660 - 55, 360, 110, 20);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('LOBBY →', 660, 376);
+    }
+}
+
 function drawLevel6Entryway() {
     ctx.fillStyle = '#8b0000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
@@ -4262,7 +4964,7 @@ function drawLevel6Entryway() {
     ctx.textAlign = 'center';
     ctx.fillText('ALDON PIPERSWORTH', 350, 137);
     
-    // Aesthetic elevator on right (return elevator — decorative only)
+    // Functional elevator on right (return elevator)
     const eelvX = 590, eelvY = 260, eelvW = 90, eelvH = 140;
     ctx.fillStyle = '#b8941e';
     ctx.fillRect(eelvX - 2, eelvY - 2, eelvW + 4, eelvH + 4);
@@ -4298,6 +5000,14 @@ function drawLevel6Entryway() {
         ctx.fillRect(350 - 115, 420 - 14, 230, 22);
         ctx.fillStyle = '#ffd700';
         ctx.fillText('PRESS ACTION TO ENTER', 350, 420);
+    }
+    if(player.x > 560) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(eelvX + eelvW/2 - 80, eelvY - 40, 160, 20);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText('ACTION: ELEVATOR', eelvX + eelvW/2, eelvY - 24);
     }
 }
 
@@ -5457,9 +6167,10 @@ function drawElevatorUI() {
     ctx.fillStyle = 'rgba(0,0,0,0.85)';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Elevator panel
-    const pw = 280, ph = 260;
-    const px = 350 - pw / 2, py = 120;
+    // Elevator panel — 3 floors
+    const opts = ['SMARTWARE LEVEL', 'CURRENT LEVEL', 'CEO LEVEL'];
+    const pw = 280, ph = 320;
+    const px = 350 - pw / 2, py = 90;
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(px, py, pw, ph);
     ctx.fillStyle = '#1a1a1a';
@@ -5475,24 +6186,33 @@ function drawElevatorUI() {
     ctx.fillText('PRIVATE ELEVATOR', 350, py + 32);
 
     // Floor options
-    const opts = ['CURRENT LEVEL', 'CEO LEVEL'];
-    for (let i = 0; i < 2; i++) {
-        const oy = py + 55 + i * 80;
+    for (let i = 0; i < opts.length; i++) {
+        const oy = py + 50 + i * 72;
         const sel = level6.elevatorChoice === i;
-        ctx.fillStyle = sel ? '#d4af37' : '#333';
-        ctx.fillRect(px + 30, oy, pw - 60, 60);
-        ctx.strokeStyle = sel ? '#ffd700' : '#555';
+        // Highlight current floor dimly
+        const isCurrentFloor = (level6.room === 'pipeRoom' && i === 1) ||
+                               (level6.room === 'entryway' && i === 2) ||
+                               (level6.room === 'employeeLobby' && i === 0);
+        ctx.fillStyle = sel ? '#d4af37' : (isCurrentFloor ? '#2a2a1a' : '#333');
+        ctx.fillRect(px + 30, oy, pw - 60, 54);
+        ctx.strokeStyle = sel ? '#ffd700' : (isCurrentFloor ? '#887722' : '#555');
         ctx.lineWidth = sel ? 3 : 1;
-        ctx.strokeRect(px + 30, oy, pw - 60, 60);
+        ctx.strokeRect(px + 30, oy, pw - 60, 54);
 
-        ctx.fillStyle = sel ? '#000' : '#aaa';
-        ctx.font = 'bold 20px Arial';
+        ctx.fillStyle = sel ? '#000' : (isCurrentFloor ? '#887722' : '#aaa');
+        ctx.font = 'bold 18px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(opts[i], 350, oy + 36);
+        ctx.fillText(opts[i], 350, oy + 33);
+        if (isCurrentFloor) {
+            ctx.fillStyle = '#555';
+            ctx.font = '11px Arial';
+            ctx.fillText('(YOU ARE HERE)', 350, oy + 48);
+        }
     }
 
     ctx.fillStyle = '#666';
     ctx.font = '13px Arial';
+    ctx.textAlign = 'center';
     ctx.fillText('▲▼ SELECT   ACTION CONFIRM', 350, py + ph - 15);
 }
 
@@ -6764,6 +7484,16 @@ function drawScene() {
             // Draw player in entryway
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'employeeLobby') {
+            drawLevel6EmployeeLobby();
+
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'cloningRoom') {
+            drawLevel6CloningRoom();
+
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
         } else if(level6.room === 'ceoOffice') {
             drawLevel6CEOOffice();
 
@@ -6814,8 +7544,8 @@ function drawScene() {
             drawElevatorUI();
         }
 
-        // Elevator fade-to-black transition
-        if(level6.elevatorTransition) {
+        // Elevator fade-to-black transition (both fade-out and fade-in)
+        if(level6.elevatorTransition || level6.elevatorFadeIn) {
             ctx.fillStyle = `rgba(0,0,0,${level6.elevatorFadeAlpha})`;
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
@@ -7648,6 +8378,16 @@ function update() {
                         keys[' '] = false;
                         keys['action'] = false;
                     }
+
+                    // Right door — concealed passage to cloning room (once unlocked from other side)
+                    const rightDoor = level5.furnaceRoom.rightDoor;
+                    const atRightDoor = Math.abs(player.x - (rightDoor.x - 25)) < 50;
+                    if(level6.cloningDoorUnlocked && level6.cloningDoorOpen >= 0.8 && atRightDoor && player.x > 600) {
+                        level = 6;
+                        level6.room = 'cloningRoom';
+                        player.x = 80;
+                        player.y = 380;
+                    }
                 }
         
                 // Horizontal movement for pipe room, hallway, and furnace room
@@ -8015,42 +8755,72 @@ function update() {
             // Elevator UI input handling
             if(level6.elevatorUI) {
                 if(keys['ArrowUp'] || keys['up']) {
-                    level6.elevatorChoice = 0;
+                    level6.elevatorChoice = Math.max(0, level6.elevatorChoice - 1);
                     keys['ArrowUp'] = false; keys['up'] = false;
                 }
                 if(keys['ArrowDown'] || keys['down']) {
-                    level6.elevatorChoice = 1;
+                    level6.elevatorChoice = Math.min(2, level6.elevatorChoice + 1);
                     keys['ArrowDown'] = false; keys['down'] = false;
                 }
                 if(keys[' '] || keys['action']) {
                     keys[' '] = false; keys['action'] = false;
-                    if(level6.elevatorChoice === 1) {
-                        // CEO Level — start fade transition
+                    // Determine if we're already on selected floor
+                    const onFloor = (level6.elevatorChoice === 1 && level6.room === 'pipeRoom') ||
+                                    (level6.elevatorChoice === 2 && level6.room === 'entryway') ||
+                                    (level6.elevatorChoice === 0 && level6.room === 'employeeLobby');
+                    if (onFloor) {
+                        level6.elevatorUI = false;
+                    } else {
+                        // All floor changes use dissolve fade
                         level6.elevatorUI = false;
                         level6.elevatorTransition = true;
                         level6.elevatorFadeAlpha = 0;
-                    } else {
-                        // Current Level — close elevator UI
-                        level6.elevatorUI = false;
+                        level6.elevatorTarget = level6.elevatorChoice;
                     }
                 }
                 return;
             }
 
-            // Elevator fade transition
+            // Elevator fade transition — dissolve to destination
             if(level6.elevatorTransition) {
                 level6.elevatorFadeAlpha += 0.03;
                 if(level6.elevatorFadeAlpha >= 1) {
                     level6.elevatorTransition = false;
-                    level6.room = 'entryway';
-                    player.x = 350;
-                    player.y = 400;
+                    const target = level6.elevatorTarget;
+                    if (target === 2) {
+                        // CEO Level
+                        level6.room = 'entryway';
+                        player.x = 350;
+                        player.y = 400;
+                    } else if (target === 1) {
+                        // Current Level (pipe room)
+                        level6.room = 'pipeRoom';
+                        player.x = 80;
+                        player.y = 380;
+                    } else if (target === 0) {
+                        // Smartware Level (employee lobby)
+                        level6.room = 'employeeLobby';
+                        player.x = 580;
+                        player.y = 380;
+                    }
+                    level6.elevatorTarget = null;
+                    // Fade back in
+                    level6.elevatorFadeIn = true;
+                }
+                return;
+            }
+            // Elevator fade-in after arriving
+            if(level6.elevatorFadeIn) {
+                level6.elevatorFadeAlpha -= 0.04;
+                if(level6.elevatorFadeAlpha <= 0) {
+                    level6.elevatorFadeAlpha = 0;
+                    level6.elevatorFadeIn = false;
                 }
                 return;
             }
 
-            // Movement for pipeRoom, megacomputer, and entryway (1D horizontal only)
-            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway') {
+            // Movement for horizontal-only rooms (1D)
+            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
                     player.x = Math.max(10, player.x - 5);
@@ -8094,7 +8864,7 @@ function update() {
                     keys['action'] = false;
                 }
 
-                if(level6.supercomputerUnlocked && player.x > 660) {
+                if(level6.supercomputerUnlocked && player.x > 660 && level6.bladeDoor.openPct > 0.7) {
                     level6.room = 'megacomputer';
                     player.x = 80;
                     player.y = 380;
@@ -8104,7 +8874,7 @@ function update() {
             else if(level6.room === 'megacomputer') {
                 player.y = 380;
 
-                if(player.x < 40) {
+                if(player.x < 40 && level6.bladeDoorMega.openPct > 0.7) {
                     level6.room = 'pipeRoom';
                     player.x = 640;
                     player.y = 380;
@@ -8124,7 +8894,7 @@ function update() {
                 }
 
                 // Pistol pickup — grants revolver with 7 bullets
-                if(level6.pistol.dropped && !level6.pistol.pickedUp && Math.abs(player.x - level6.pistol.x) < 40 && (keys[' '] || keys['action'])) {
+                if(level6.pistol.dropped && !level6.pistol.pickedUp && Math.abs(player.x - level6.pistol.x) < 55 && (keys[' '] || keys['action'])) {
                     level6.pistol.pickedUp = true;
                     level6.pistol.dropped = false;
                     level6.hasRevolver = true;
@@ -8149,15 +8919,107 @@ function update() {
                 }
             } 
         
-            else if(level6.room === 'entryway') {
-                player.y = 400;
-            
+            else if(level6.room === 'employeeLobby') {
+                player.y = 380;
+
+                // Elevator interaction on right side
+                if(player.x > 560 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
+                    level6.elevatorUI = true;
+                    level6.elevatorChoice = 0;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+                // Go left to cloning room
+                if(player.x < 40) {
+                    level6.room = 'cloningRoom';
+                    player.x = 640;
+                    player.y = 380;
+                }
+            }
+
+            else if(level6.room === 'cloningRoom') {
+                player.y = 380;
+
+                // Go right to employee lobby
                 if(player.x > 660) {
-                    level6.room = 'pipeRoom';
+                    level6.room = 'employeeLobby';
                     player.x = 80;
                     player.y = 380;
                 }
-            
+
+                // Concealed door to furnace room (left side) — keycard reader interaction
+                if(player.x < 60 && !level6.cloningDoorUnlocked && level6.hasKeycard && (keys[' '] || keys['action'])) {
+                    level6.cloningDoorUnlocked = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+                // Auto-transition through concealed door once open
+                if(level6.cloningDoorUnlocked && level6.cloningDoorOpen >= 0.8 && player.x < 30) {
+                    level = 5;
+                    level5.room = 'furnaceRoom';
+                    player.x = 620;
+                    player.y = 380;
+                }
+
+                // Keycard pickup
+                if(level6.keycardOnGround && !level6.hasKeycard && Math.abs(player.x - level6.keycardX) < 50 && (keys[' '] || keys['action'])) {
+                    level6.hasKeycard = true;
+                    level6.keycardOnGround = false;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+
+                // Shoot cloning boss
+                if(level6.cloningBoss && level6.cloningBoss.alive && bullets.length > 0) {
+                    const cb = level6.cloningBoss;
+                    for(let i = bullets.length - 1; i >= 0; i--) {
+                        const b = bullets[i];
+                        if(Math.abs(b.x - cb.x) < 25 && Math.abs(b.y - cb.y) < 35) {
+                            cb.alive = false;
+                            cb.deathTime = Date.now();
+                            bullets.splice(i, 1);
+                            // Drop keycard
+                            level6.keycardOnGround = true;
+                            level6.keycardX = cb.x;
+                            level6.keycardY = 385;
+                            score += 2000;
+                            break;
+                        }
+                    }
+                }
+
+                // Fire revolver in cloning room (action key when not near other interactables)
+                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    // Don't fire if near keycard or keycard reader
+                    const nearKeycard = level6.keycardOnGround && Math.abs(player.x - level6.keycardX) < 50;
+                    const nearDoor = player.x < 60;
+                    if(!nearKeycard && !nearDoor) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        let vx = 0;
+                        if(player.facing === 'left') vx = -12;
+                        else if(player.facing === 'right') vx = 12;
+                        else vx = player.x < 350 ? 12 : -12; // Default forward
+                        if(vx !== 0) {
+                            bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                            level6.revolverAmmo--;
+                            muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                        }
+                    }
+                }
+            }
+
+            else if(level6.room === 'entryway') {
+                player.y = 400;
+
+                // Elevator interaction — use the entryway elevator to go back
+                if(player.x > 580 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
+                    level6.elevatorUI = true;
+                    level6.elevatorChoice = 0;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+
                 if(Math.abs(player.x - 350) < 100 && (keys[' '] || keys['action'])) {
                     level6.room = 'ceoOffice';
                     player.x = 350;
@@ -8665,6 +9527,62 @@ if (keys[' '] || keys['action']) {
     // Slam door shut when boss exits past x=700
     if (!boss.active && bossDoor.state === 'open') {
         bossDoor.state = 'closing';
+    }
+
+    // Supercomputer blade door animations
+    if (level === 6 && level6.bladeDoor) {
+        if (level6.bladeDoor.state === 'opening') {
+            level6.bladeDoor.openPct = Math.min(1, level6.bladeDoor.openPct + 0.04);
+            if (level6.bladeDoor.openPct >= 1) level6.bladeDoor.state = 'open';
+        } else if (level6.bladeDoor.state === 'closing') {
+            level6.bladeDoor.openPct = Math.max(0, level6.bladeDoor.openPct - 0.06);
+            if (level6.bladeDoor.openPct <= 0) level6.bladeDoor.state = 'closed';
+        }
+        // Auto-open when unlocked and player is near
+        if (level6.supercomputerUnlocked && level6.room === 'pipeRoom' && player.x > 580) {
+            if (level6.bladeDoor.state === 'closed') level6.bladeDoor.state = 'opening';
+        } else if (level6.room === 'pipeRoom' && player.x <= 580 && level6.bladeDoor.state === 'open') {
+            level6.bladeDoor.state = 'closing';
+        }
+        // Megacomputer side — always open when in megacomputer room, close when leaving
+        if (level6.bladeDoorMega) {
+            if (level6.bladeDoorMega.state === 'opening') {
+                level6.bladeDoorMega.openPct = Math.min(1, level6.bladeDoorMega.openPct + 0.04);
+                if (level6.bladeDoorMega.openPct >= 1) level6.bladeDoorMega.state = 'open';
+            } else if (level6.bladeDoorMega.state === 'closing') {
+                level6.bladeDoorMega.openPct = Math.max(0, level6.bladeDoorMega.openPct - 0.06);
+                if (level6.bladeDoorMega.openPct <= 0) level6.bladeDoorMega.state = 'closed';
+            }
+            if (level6.room === 'megacomputer' && player.x < 120) {
+                if (level6.bladeDoorMega.state === 'closed') level6.bladeDoorMega.state = 'opening';
+            } else if (level6.room === 'megacomputer' && player.x >= 120 && level6.bladeDoorMega.state === 'open') {
+                level6.bladeDoorMega.state = 'closing';
+            }
+        }
+    }
+
+    // Cloning room concealed door slide animation (runs on any level since door persists)
+    if (level6.cloningDoorUnlocked && level6.cloningDoorOpen < 1) {
+        level6.cloningDoorOpen = Math.min(1, level6.cloningDoorOpen + 0.03);
+    }
+
+    // Cloning room boss AI — patrol back and forth in front of centrifuge
+    if (level === 6 && level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
+        const cb = level6.cloningBoss;
+        if (cb.paused) {
+            cb.pauseTimer--;
+            if (cb.pauseTimer <= 0) {
+                cb.paused = false;
+                cb.walkDir *= -1;
+            }
+        } else {
+            cb.x += cb.walkDir * 1.2;
+            cb.facing = cb.walkDir > 0 ? 'right' : 'left';
+            if (cb.x > 480 || cb.x < 250) {
+                cb.paused = true;
+                cb.pauseTimer = 60 + Math.random() * 60;
+            }
+        }
     }
     
     if(ghostGun.printing) {
