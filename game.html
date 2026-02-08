@@ -28,11 +28,12 @@
             display: flex;
             justify-content: space-between;
             width: 100%;
-            padding: 4px 14px;
+            padding: 6px 16px;
             background: #1a1a1a;
             color: #f5f2ec;
-            font-size: 13px;
+            font-size: 16px;
             font-weight: bold;
+            letter-spacing: 0.5px;
             flex-shrink: 0;
             z-index: 10;
         }
@@ -111,7 +112,7 @@
         }
         /* Landscape tweaks */
         @media (orientation: landscape) {
-            #hud { padding: 2px 14px; font-size: 11px; }
+            #hud { padding: 4px 16px; font-size: 14px; }
             #dpad-container { grid-template: repeat(3, 44px) / repeat(3, 44px); gap: 2px; }
             .control-btn { font-size: 17px; border-radius: 8px; }
             #action-btn { width: 68px; height: 68px; font-size: 13px; }
@@ -385,7 +386,7 @@ const OFFICE_EMAILS = {
         from: 'RED',
         to: 'BLUE',
         subject: 'Meeting Request',
-        body: 'Dear B.,\n\nI need to speak with you urgently\nabout a confidential matter. Can we\nmeet in the parking lot after hours?\n\nThis is important.\n\n—R.'
+        body: 'Dear B.,\n\nI need to speak with you urgently\nabout a confidential matter. Can we\nmeet in the parking lot after hours?\n\nI was recently contacted by a\ndetective named Khan who gave me\na number to reach him: 3546.\nStrange... it\'s not enough numbers\nfor a phone call.\n\nThis is important.\n\n—R.'
     },
     GREEN: {
         from: 'GREEN',
@@ -446,6 +447,7 @@ let keys = {};
 let explosions = [];
 let bullets = [];
 let muzzleFlashes = [];
+let bossDoor = { state: 'closed', openPct: 0 };
 
 let boss = {
     active: false,
@@ -598,13 +600,14 @@ function initLevel(lv) {
     ui = {show: false, selectedColor: 0, confirming: false, gunUI: false, gunChoice: 0};
     
     boss.active = false;
-    boss.x = 750;
+    boss.x = 690;
     boss.y = 344;
     boss.needsColor = null;
     boss.walking = false;
     boss.spawnTime = 0;
     boss.angry = false;
     boss.facing = 'left';
+    bossDoor = { state: 'closed', openPct: 0 };
     
     resetting = false;
     fadeAlpha = 0;
@@ -671,6 +674,18 @@ function initLevel(lv) {
         level6.exitingNPCs = [];
         level6.viewingDetectiveNote = false;
         level6.noteScrollOffset = 0;
+        level6.keypadUI = false;
+        level6.keypadInput = [];
+        level6.keypadSelected = 0;
+        level6.supercomputerUnlocked = false;
+        level6.keypadResult = null;
+        level6.keypadResultTime = 0;
+        level6.elevatorUI = false;
+        level6.elevatorChoice = 0;
+        level6.elevatorDoorOpen = 0;
+        level6.elevatorTransition = false;
+        level6.elevatorFadeAlpha = 0;
+        level6.pistol = { dropped: false, x: 0, y: 0, pickedUp: false, ammo: 7 };
         level6.npcPipes = [
             {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
             {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
@@ -754,13 +769,14 @@ function spawnBoss() {
     if((level !== 3 && level !== 4) || state !== 'playing' || resetting) return;
     if(!boss.active) {
         boss.active = true;
-        boss.x = 750;
+        boss.x = 690;
         boss.y = 344;
         boss.needsColor = COLORS[Math.floor(Math.random() * 4)].name;
         boss.walking = true;
         boss.spawnTime = 0;
         boss.angry = false;
         boss.facing = 'left';
+        bossDoor = { state: 'opening', openPct: 0 };
         
         const nextSpawn = level === 4 ? 12000 : 18000;
         setTimeout(() => spawnBoss(), nextSpawn);
@@ -2228,13 +2244,58 @@ function drawEdgeDoor(x, y, w, h) {
     ctx.fill();
 }
 
-// Right-side gasket + door at pipe termination (levels 1-5 pipe rooms)
+// Right-side boss door at pipe termination (levels 1-5 pipe rooms)
+// Gasket removed — horizontal pipes extend to infinite edge, no endpoint fitting needed
 function drawPipeRoomRightWall(gasketY) {
     if (GX <= 5) return;
-    // Gasket where horizontal pipes pass through the wall (at x=700)
-    drawGasket(700, gasketY, 18);
-    // Door below gasket from which boss enters
-    drawEdgeDoor(684, 320, 40, 80);
+
+    // Boss door — only from level 3 onward (company "built up")
+    if (level >= 3) {
+        // Door aligns with boss spawn Y=344, wide enough for boss to walk through
+        const doorX = 650, doorY = 290, doorW = 80, doorH = 110;
+        if (bossDoor.state === 'open' || bossDoor.openPct > 0) {
+            // Open door frame — wide dark opening boss emerges from
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(doorX, doorY, doorW, doorH);
+            // Swung door (perspective: narrow slice on the right)
+            const swingW = doorW * (1 - bossDoor.openPct) * 0.8;
+            if (swingW > 2) {
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(doorX + doorW - swingW, doorY + 2, swingW, doorH - 4);
+                ctx.fillStyle = '#4a3a1a';
+                ctx.fillRect(doorX + doorW - swingW + 3, doorY + 6, swingW - 6, doorH - 12);
+            }
+            // Door frame molding
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(doorX - 1, doorY - 1, doorW + 2, doorH + 2);
+            // Door frame header
+            ctx.fillStyle = '#666';
+            ctx.fillRect(doorX - 2, doorY - 6, doorW + 4, 6);
+        } else {
+            // Closed door — wooden with panels matching hallway style
+            ctx.fillStyle = '#654321';
+            ctx.fillRect(doorX, doorY, doorW, doorH);
+            ctx.fillStyle = '#4a3a1a';
+            ctx.fillRect(doorX + 5, doorY + 6, doorW - 10, doorH - 6);
+            // Panel insets
+            ctx.strokeStyle = '#3a2a0a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(doorX + 10, doorY + 12, doorW - 20, doorH / 2 - 18);
+            ctx.strokeRect(doorX + 10, doorY + doorH / 2 + 2, doorW - 20, doorH / 2 - 12);
+            // Gold doorknob
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.arc(doorX + 14, doorY + doorH / 2, 4, 0, Math.PI * 2);
+            ctx.fill();
+            // Frame
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(doorX - 1, doorY - 1, doorW + 2, doorH + 2);
+            ctx.fillStyle = '#666';
+            ctx.fillRect(doorX - 2, doorY - 6, doorW + 4, 6);
+        }
+    }
 }
 
 // Edge door for level 6 room transitions (matching room aesthetic)
@@ -2841,14 +2902,15 @@ function drawOfficeRoom(officeName) {
     ctx.fillStyle = '#d4c8b0';
     ctx.fillRect(-GX, -GY, CANVAS_W, 300 + GY);
     
+    // Color-coded carpet — prominent tint matching office manager color
     ctx.fillStyle = color.hex;
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.55;
     ctx.fillRect(-GX, 300, CANVAS_W, CANVAS_H);
     ctx.globalAlpha = 1;
 
     for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = color.hex;
-        ctx.globalAlpha = 0.2;
+        ctx.globalAlpha = 0.35;
         ctx.lineWidth = 1;
         ctx.strokeRect(i * 35, 300, 35, 200);
         ctx.globalAlpha = 1;
@@ -3353,36 +3415,281 @@ function drawLevel6PipeRoom() {
         ctx.fillRect(pipeX - 10, 400, 20, 4);
     }
 
-    // Left wall: door to CEO office / entryway (visible in landscape)
-    drawLevel6EdgeDoor('left', 'standard');
+    // Death Star-style gateway to megacomputer (right side)
+    const doorX = 618, doorY = 275, doorW = 70, doorH = 125;
+    const frameW = 12; // Thick gateway frame
 
-    // Right wall: door to megacomputer (visible in landscape)
-    drawLevel6EdgeDoor('right', 'dark');
-
-    // In-game right door (visible at floor level within game area)
-    ctx.fillStyle = '#3a3a3e';
-    ctx.fillRect(665, 310, 35, 90);
-    ctx.strokeStyle = '#2a2a2a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(665, 310, 35, 90);
-    ctx.fillStyle = '#666';
-    ctx.fillRect(665, 305, 38, 6);
-    ctx.fillStyle = '#888';
-    ctx.fillRect(670, 350, 6, 3);
-
-    // Direction prompts
-    if(player.x < 60) {
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('← CEO OFFICE', 350, 250);
+    // Outer gateway frame — dark gray Death Star-style surround
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(doorX - frameW - 2, doorY - 20, doorW + frameW * 2 + 4, doorH + 24);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(doorX - frameW, doorY - 18, doorW + frameW * 2, doorH + 20);
+    // Inner frame bevels
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(doorX - frameW, doorY - 2, frameW, doorH + 4);
+    ctx.fillRect(doorX + doorW, doorY - 2, frameW, doorH + 4);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(doorX - 2, doorY - 18, doorW + 4, 16);
+    // Hazard chevrons on header
+    ctx.fillStyle = '#ffd700';
+    for (let ch = 0; ch < 5; ch++) {
+        ctx.fillRect(doorX + 4 + ch * 14, doorY - 16, 8, 12);
+    }
+    ctx.fillStyle = '#1a1a1a';
+    for (let ch = 0; ch < 5; ch++) {
+        ctx.fillRect(doorX + 10 + ch * 14, doorY - 16, 6, 12);
     }
 
-    if(player.x > 640) {
-        ctx.fillStyle = '#ffd700';
+    // Exposed wiring conduits on left frame
+    const wireColors = ['#ff3333', '#00ccff', '#ffd700', '#00ff88'];
+    for (let w = 0; w < 4; w++) {
+        const wy = doorY + 10 + w * 28;
+        ctx.strokeStyle = wireColors[w];
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(doorX - frameW - 8, wy);
+        ctx.lineTo(doorX - frameW - 4, wy + 5);
+        ctx.lineTo(doorX - frameW, wy);
+        ctx.stroke();
+    }
+
+    // Blinking indicator lights on right frame
+    const t = Date.now();
+    for (let li = 0; li < 4; li++) {
+        const ly = doorY + 8 + li * 28;
+        const blinkOn = Math.sin(t / 400 + li * 1.5) > 0;
+        ctx.fillStyle = blinkOn ? '#00ff88' : '#0a2a0a';
+        ctx.beginPath();
+        ctx.arc(doorX + doorW + frameW / 2, ly, 3, 0, Math.PI * 2);
+        ctx.fill();
+        if (blinkOn) {
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.arc(doorX + doorW + frameW / 2, ly, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+    // Red warning light at top
+    const redBlink = Math.sin(t / 600) > 0;
+    ctx.fillStyle = redBlink ? '#ff3333' : '#2a0a0a';
+    ctx.beginPath();
+    ctx.arc(doorX + doorW + frameW / 2, doorY - 10, 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (redBlink) {
+        ctx.shadowColor = '#ff3333';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(doorX + doorW + frameW / 2, doorY - 10, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    if (level6.supercomputerUnlocked) {
+        // Open door — dark recessed opening with green LED strips
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(doorX, doorY, doorW, doorH);
+        ctx.fillStyle = '#00ff88';
+        ctx.fillRect(doorX, doorY, 3, doorH);
+        ctx.fillRect(doorX + doorW - 3, doorY, 3, doorH);
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 12;
+        ctx.fillRect(doorX + 1, doorY, 2, doorH);
+        ctx.shadowBlur = 0;
+    } else {
+        // Closed door — heavy brushed steel blast door
+        const grad = ctx.createLinearGradient(doorX, doorY, doorX + doorW, doorY);
+        grad.addColorStop(0, '#888');
+        grad.addColorStop(0.15, '#aaa');
+        grad.addColorStop(0.5, '#bbb');
+        grad.addColorStop(0.85, '#aaa');
+        grad.addColorStop(1, '#777');
+        ctx.fillStyle = grad;
+        ctx.fillRect(doorX, doorY, doorW, doorH);
+        // Door seam (center split)
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(doorX + doorW / 2, doorY + 4);
+        ctx.lineTo(doorX + doorW / 2, doorY + doorH - 4);
+        ctx.stroke();
+        // Horizontal reinforcement bands
+        ctx.fillStyle = '#666';
+        ctx.fillRect(doorX + 2, doorY + 20, doorW - 4, 4);
+        ctx.fillRect(doorX + 2, doorY + doorH - 24, doorW - 4, 4);
+        // Cyan LED strip at top and bottom
+        ctx.fillStyle = '#00ccff';
+        ctx.shadowColor = '#00ccff';
+        ctx.shadowBlur = 6;
+        ctx.fillRect(doorX + 4, doorY + 2, doorW - 8, 3);
+        ctx.fillRect(doorX + 4, doorY + doorH - 5, doorW - 8, 3);
+        ctx.shadowBlur = 0;
+
+        // Keypad panel to the left of gateway — dark housing, clearly visible
+        const kpX = doorX - frameW - 28, kpY = doorY + 30;
+        // Dark mounting plate
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(kpX - 2, kpY - 6, 24, 44);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(kpX, kpY - 4, 20, 40);
+        // Screen/display area
+        ctx.fillStyle = '#002211';
+        ctx.fillRect(kpX + 2, kpY - 2, 16, 10);
+        ctx.fillStyle = '#00ccff';
+        ctx.font = 'bold 6px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('LOCK', kpX + 10, kpY + 6);
+        // Button grid (3x3)
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const bOn = Math.sin(t / 300 + r * 2 + c) > 0.3;
+                ctx.fillStyle = bOn ? '#00ccff' : '#004455';
+                ctx.fillRect(kpX + 2 + c * 6, kpY + 12 + r * 8, 4, 6);
+            }
+        }
+        // Red lock indicator above keypad
+        ctx.fillStyle = '#ff3333';
+        ctx.shadowColor = '#ff3333';
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(kpX + 10, kpY - 10, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // Private elevator (left side, in-frame for portrait + landscape)
+    const elvX = 5, elvY = 240, elvW = 130, elvH = 160;
+    // Outer wall surround — dark concrete
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(elvX - 6, elvY - 24, elvW + 12, elvH + 30);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(elvX - 4, elvY - 22, elvW + 8, elvH + 26);
+    // Elevator frame — brushed gold
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
+    // Elevator shaft interior
+    const elvDoorOpen = level6.elevatorDoorOpen || 0;
+    const halfW = (elvW / 2) * (1 - elvDoorOpen);
+    if (elvDoorOpen > 0.5) {
+        // Open — bright glowing interior with depth
+        ctx.fillStyle = '#fffde8';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 20;
+        ctx.fillRect(elvX, elvY, elvW, elvH);
+        ctx.shadowBlur = 0;
+        // Interior back wall
+        ctx.fillStyle = '#e8e0c8';
+        ctx.fillRect(elvX + 8, elvY + 8, elvW - 16, elvH - 16);
+        // Interior railing
+        ctx.strokeStyle = '#d4af37';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(elvX + 12, elvY + elvH * 0.6);
+        ctx.lineTo(elvX + elvW - 12, elvY + elvH * 0.6);
+        ctx.stroke();
+    } else {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(elvX, elvY, elvW, elvH);
+    }
+    // Door panels (slide open/closed)
+    if (halfW > 1) {
+        const doorGrad = ctx.createLinearGradient(elvX, elvY, elvX + halfW, elvY);
+        doorGrad.addColorStop(0, '#c8c8c8');
+        doorGrad.addColorStop(0.5, '#e0e0e0');
+        doorGrad.addColorStop(1, '#a0a0a0');
+        ctx.fillStyle = doorGrad;
+        ctx.fillRect(elvX, elvY, halfW, elvH);
+        const doorGrad2 = ctx.createLinearGradient(elvX + elvW - halfW, elvY, elvX + elvW, elvY);
+        doorGrad2.addColorStop(0, '#a0a0a0');
+        doorGrad2.addColorStop(0.5, '#e0e0e0');
+        doorGrad2.addColorStop(1, '#c8c8c8');
+        ctx.fillStyle = doorGrad2;
+        ctx.fillRect(elvX + elvW - halfW, elvY, halfW, elvH);
+        // Center seam line
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(elvX + halfW, elvY + 4);
+        ctx.lineTo(elvX + halfW, elvY + elvH - 4);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(elvX + elvW - halfW, elvY + 4);
+        ctx.lineTo(elvX + elvW - halfW, elvY + elvH - 4);
+        ctx.stroke();
+    }
+    // Engraved letters on doors: "PI" | "PE"
+    if (halfW > 18) {
+        ctx.fillStyle = '#d4af37';
+        ctx.font = 'bold 22px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('PI', elvX + halfW / 2, elvY + elvH / 2 + 8);
+        ctx.fillText('PE', elvX + elvW - halfW / 2, elvY + elvH / 2 + 8);
+    }
+    // Frame outline
+    ctx.strokeStyle = '#8a7a2a';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
+    // LED floor indicator above door (wider)
+    ctx.fillStyle = '#111';
+    ctx.fillRect(elvX + elvW / 2 - 22, elvY - 20, 44, 16);
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(elvX + elvW / 2 - 22, elvY - 20, 44, 16);
+    ctx.fillStyle = '#00ff88';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('B1', elvX + elvW / 2, elvY - 8);
+    // Call button panel (right of door)
+    ctx.fillStyle = '#555';
+    ctx.fillRect(elvX + elvW + 8, elvY + elvH / 2 - 16, 18, 32);
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(elvX + elvW + 8, elvY + elvH / 2 - 16, 18, 32);
+    // Up arrow button
+    ctx.fillStyle = player.x < 130 ? '#ffd700' : '#444';
+    ctx.beginPath();
+    const cbx = elvX + elvW + 17;
+    ctx.moveTo(cbx, elvY + elvH / 2 - 8);
+    ctx.lineTo(cbx - 5, elvY + elvH / 2);
+    ctx.lineTo(cbx + 5, elvY + elvH / 2);
+    ctx.closePath();
+    ctx.fill();
+    // Down arrow button
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.moveTo(cbx, elvY + elvH / 2 + 10);
+    ctx.lineTo(cbx - 5, elvY + elvH / 2 + 2);
+    ctx.lineTo(cbx + 5, elvY + elvH / 2 + 2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Direction prompts — dark background pill for readability against light wall
+    if(player.x < 130) {
+        const promptText = 'ACTION: ELEVATOR';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('MEGACOMPUTER →', 350, 250);
+        const ptX = elvX + elvW / 2 + 10, ptY = elvY - 30;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(ptX - 90, ptY - 14, 180, 22);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(promptText, ptX, ptY);
+    }
+
+    if(player.x > 620 && !level6.supercomputerUnlocked) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(550 - 105, 280 - 14, 210, 22);
+        ctx.fillStyle = '#00ccff';
+        ctx.fillText('ACTION TO ENTER CODE', 550, 280);
+    } else if(player.x > 620 && level6.supercomputerUnlocked) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(550 - 85, 280 - 14, 170, 22);
+        ctx.fillStyle = '#00ff88';
+        ctx.fillText('ACCESS GRANTED →', 550, 280);
     }
 }
 
@@ -3403,8 +3710,30 @@ function drawLevel6MegacomputerRoom() {
         }
     }
 
-    // Left wall: door from pipe room (visible in landscape)
-    drawLevel6EdgeDoor('left', 'dark');
+    // Space-age door on left (matching pipe room keycode door style — entry from pipe room)
+    const mcDoorX = 0, mcDoorY = 290, mcDoorW = 44, mcDoorH = 110;
+    const mcGrad = ctx.createLinearGradient(mcDoorX, mcDoorY, mcDoorX + mcDoorW, mcDoorY);
+    mcGrad.addColorStop(0, '#909090');
+    mcGrad.addColorStop(0.3, '#c0c0c0');
+    mcGrad.addColorStop(0.7, '#d0d0d0');
+    mcGrad.addColorStop(1, '#b0b0b0');
+    ctx.fillStyle = mcGrad;
+    ctx.fillRect(mcDoorX, mcDoorY, mcDoorW, mcDoorH);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(mcDoorX + mcDoorW / 2, mcDoorY + 4);
+    ctx.lineTo(mcDoorX + mcDoorW / 2, mcDoorY + mcDoorH - 4);
+    ctx.stroke();
+    ctx.fillStyle = '#00ccff';
+    ctx.shadowColor = '#00ccff';
+    ctx.shadowBlur = 6;
+    ctx.fillRect(mcDoorX + 4, mcDoorY + 2, mcDoorW - 8, 3);
+    ctx.fillRect(mcDoorX + 4, mcDoorY + mcDoorH - 5, mcDoorW - 8, 3);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mcDoorX, mcDoorY, mcDoorW, mcDoorH);
 
     // Wall-mounted brutalist slogan painted wall to wall
     ctx.fillStyle = '#ffffff';
@@ -3840,25 +4169,55 @@ function drawLevel6MegacomputerRoom() {
         ctx.fill();
     }
 
-    // Left wall: door back to pipe room (visible in landscape)
-    drawLevel6EdgeDoor('left', 'dark');
+    // Dropped pistol near detective
+    if(level6.pistol.dropped) {
+        const gx = level6.pistol.x, gy = level6.pistol.y;
+        // Dark steel pistol body
+        ctx.fillStyle = '#333';
+        ctx.fillRect(gx - 12, gy - 3, 24, 6);
+        ctx.fillStyle = '#222';
+        ctx.fillRect(gx + 5, gy + 3, 8, 12);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(gx - 14, gy - 4, 4, 8);
+        // Glow indicator
+        ctx.fillStyle = '#ff0';
+        ctx.shadowColor = '#ff0';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(gx, gy - 8, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Pickup prompt
+        if(Math.abs(player.x - gx) < 50) {
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ACTION TO TAKE PISTOL', gx, gy - 18);
+        }
+    }
 
-    // In-game left door (visible at floor level within game area)
-    ctx.fillStyle = '#3a3a3e';
-    ctx.fillRect(0, 310, 35, 90);
-    ctx.strokeStyle = '#2a2a2a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 310, 35, 90);
-    ctx.fillStyle = '#666';
-    ctx.fillRect(0, 305, 38, 6);
-    ctx.fillStyle = '#888';
-    ctx.fillRect(25, 350, 6, 3);
+    // Space-age door on left (matching pipe room style — exit to pipe room)
+    const exitDoorX = 0, exitDoorY = 290, exitDoorW = 44, exitDoorH = 110;
+    const exitGrad = ctx.createLinearGradient(exitDoorX, 0, exitDoorX + exitDoorW, 0);
+    exitGrad.addColorStop(0, '#909090');
+    exitGrad.addColorStop(0.5, '#c0c0c0');
+    exitGrad.addColorStop(1, '#b0b0b0');
+    ctx.fillStyle = exitGrad;
+    ctx.fillRect(exitDoorX, exitDoorY, exitDoorW, exitDoorH);
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(exitDoorX + exitDoorW/2, exitDoorY+4); ctx.lineTo(exitDoorX + exitDoorW/2, exitDoorY+exitDoorH-4); ctx.stroke();
+    ctx.fillStyle = '#00ccff'; ctx.shadowColor = '#00ccff'; ctx.shadowBlur = 6;
+    ctx.fillRect(exitDoorX+4, exitDoorY+2, exitDoorW-8, 3);
+    ctx.fillRect(exitDoorX+4, exitDoorY+exitDoorH-5, exitDoorW-8, 3);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+    ctx.strokeRect(exitDoorX, exitDoorY, exitDoorW, exitDoorH);
 
     if(player.x < 60) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = '#00ccff';
+        ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('← PIPE ROOM', 350, 250);
+        ctx.fillText('← EXIT', 150, 280);
     }
 }
 
@@ -3901,23 +4260,52 @@ function drawLevel6Entryway() {
     ctx.arc(370, 300, 6, 0, Math.PI * 2);
     ctx.fill();
     
-    // Golden placard
+    // Golden placard — wide enough for full name
     ctx.fillStyle = '#d4af37';
-    ctx.fillRect(270, 120, 160, 25);
+    ctx.fillRect(230, 120, 240, 25);
     ctx.fillStyle = '#b8941e';
-    ctx.fillRect(275, 123, 150, 19);
-    
+    ctx.fillRect(235, 123, 230, 19);
+
     ctx.fillStyle = '#000';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('ALDON PIPERSWORTH', 350, 137);
     
-    // Right wall: door to pipe room (visible in landscape)
-    drawLevel6EdgeDoor('right', 'standard');
+    // Aesthetic elevator on right (return elevator — decorative only)
+    const eelvX = 590, eelvY = 260, eelvW = 90, eelvH = 140;
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(eelvX - 2, eelvY - 2, eelvW + 4, eelvH + 4);
+    // Closed elevator doors
+    const eGrad = ctx.createLinearGradient(eelvX, 0, eelvX + eelvW, 0);
+    eGrad.addColorStop(0, '#c0c0c0');
+    eGrad.addColorStop(0.5, '#e0e0e0');
+    eGrad.addColorStop(1, '#c0c0c0');
+    ctx.fillStyle = eGrad;
+    ctx.fillRect(eelvX, eelvY, eelvW, eelvH);
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(eelvX + eelvW/2, eelvY+4); ctx.lineTo(eelvX + eelvW/2, eelvY+eelvH-4); ctx.stroke();
+    // Engraved letters
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 14px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PI', eelvX + eelvW/4, eelvY + eelvH/2 + 5);
+    ctx.fillText('PE', eelvX + 3*eelvW/4, eelvY + eelvH/2 + 5);
+    // Frame
+    ctx.strokeStyle = '#8a7a2a'; ctx.lineWidth = 2;
+    ctx.strokeRect(eelvX - 2, eelvY - 2, eelvW + 4, eelvH + 4);
+    // LED indicator
+    ctx.fillStyle = '#222';
+    ctx.fillRect(eelvX + 12, eelvY - 16, 30, 12);
+    ctx.fillStyle = '#00ff88';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText('CEO', eelvX + 27, eelvY - 7);
 
     if(Math.abs(player.x - 350) < 100 && player.y > 360) {
-        ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(350 - 115, 420 - 14, 230, 22);
+        ctx.fillStyle = '#ffd700';
         ctx.fillText('PRESS ACTION TO ENTER', 350, 420);
     }
 }
@@ -4763,15 +5151,15 @@ function drawLetterUI() {
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Display letter image at full canvas width for maximum readability
+    // Display letter image scaled to fill available canvas width
     if(letterImg.complete && letterImg.naturalWidth > 0) {
-        const maxWidth = 700;
-        const viewportHeight = 455;
+        const maxWidth = CANVAS_W;
+        const viewportHeight = CANVAS_H - 45;
         const scale = maxWidth / letterImg.naturalWidth;
         const fullHeight = letterImg.naturalHeight * scale;
 
-        const letterX = 0;
-        const viewportY = 0;
+        const letterX = -GX;
+        const viewportY = -GY;
 
         ctx.save();
         ctx.beginPath();
@@ -4786,11 +5174,11 @@ function drawLetterUI() {
 
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(-GX, 455, CANVAS_W, CANVAS_H);
+    ctx.fillRect(-GX, -GY + CANVAS_H - 45, CANVAS_W, 45);
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, 484);
+    ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, -GY + CANVAS_H - 18);
 }
 
 function drawDetectiveNoteUI() {
@@ -4798,15 +5186,15 @@ function drawDetectiveNoteUI() {
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Display detective note image at full canvas width for maximum readability
+    // Display detective note image scaled to fill available canvas width
     if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
-        const maxWidth = 700;
-        const viewportHeight = 455;
+        const maxWidth = CANVAS_W;
+        const viewportHeight = CANVAS_H - 45;
         const scale = maxWidth / detectiveNoteImg.naturalWidth;
         const fullHeight = detectiveNoteImg.naturalHeight * scale;
 
-        const noteX = 0;
-        const viewportY = 0;
+        const noteX = -GX;
+        const viewportY = -GY;
 
         // Create clipping region for scrollable area
         ctx.save();
@@ -4823,11 +5211,11 @@ function drawDetectiveNoteUI() {
 
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(-GX, 455, CANVAS_W, CANVAS_H);
+    ctx.fillRect(-GX, -GY + CANVAS_H - 45, CANVAS_W, 45);
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, 484);
+    ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, -GY + CANVAS_H - 18);
 }
 
 function drawSafeUI() {
@@ -5072,6 +5460,132 @@ function drawSafeUI() {
         ctx.font = 'bold 24px Arial';
         ctx.fillText(correct ? 'ACCESS GRANTED!' : 'INCORRECT CODE', 350, 240);
     }
+}
+
+function drawElevatorUI() {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Elevator panel
+    const pw = 280, ph = 260;
+    const px = 350 - pw / 2, py = 120;
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(px + 4, py + 4, pw - 8, ph - 8);
+
+    // Gold accent strip
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(px + 20, py + 10, pw - 40, 3);
+
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 22px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PIPERSWORTH PRIVATE ELEVATOR', 350, py + 40);
+
+    // Floor options
+    const opts = ['CURRENT LEVEL', 'CEO LEVEL'];
+    for (let i = 0; i < 2; i++) {
+        const oy = py + 70 + i * 80;
+        const sel = level6.elevatorChoice === i;
+        ctx.fillStyle = sel ? '#d4af37' : '#333';
+        ctx.fillRect(px + 30, oy, pw - 60, 60);
+        ctx.strokeStyle = sel ? '#ffd700' : '#555';
+        ctx.lineWidth = sel ? 3 : 1;
+        ctx.strokeRect(px + 30, oy, pw - 60, 60);
+
+        ctx.fillStyle = sel ? '#000' : '#aaa';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(opts[i], 350, oy + 36);
+    }
+
+    ctx.fillStyle = '#888';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('▲▼ SELECT    ACTION CONFIRM', 350, py + ph - 15);
+}
+
+function drawKeypadUI() {
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Keypad panel frame — dark steel
+    const panelW = 320, panelH = 380;
+    const px = 350 - panelW / 2, py = 60;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(px + 6, py + 6, panelW - 12, panelH - 12);
+
+    // Cyan header LED strip
+    ctx.fillStyle = '#00ccff';
+    ctx.shadowColor = '#00ccff';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(px + 20, py + 12, panelW - 40, 3);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#00ccff';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('SECURITY ACCESS', 350, py + 40);
+
+    // Code display — 4 digit slots
+    const codeY = py + 60;
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(px + 40, codeY, panelW - 80, 50);
+    ctx.strokeStyle = '#00ccff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 40, codeY, panelW - 80, 50);
+
+    for (let i = 0; i < 4; i++) {
+        const slotX = px + 60 + i * 52;
+        ctx.fillStyle = level6.keypadInput[i] !== undefined ? '#00ccff' : '#111';
+        ctx.fillRect(slotX, codeY + 8, 36, 34);
+        ctx.strokeStyle = '#00ccff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(slotX, codeY + 8, 36, 34);
+        if (level6.keypadInput[i] !== undefined) {
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(level6.keypadInput[i].toString(), slotX + 18, codeY + 34);
+        }
+    }
+
+    // Result feedback
+    if (level6.keypadResult !== null) {
+        ctx.fillStyle = level6.keypadResult ? '#00ff88' : '#ff3333';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(level6.keypadResult ? 'ACCESS GRANTED' : 'ACCESS DENIED', 350, codeY + 70);
+    }
+
+    // 6 number buttons (3x2 grid)
+    const gridX = px + 50, gridY = codeY + 90;
+    const btnW = 70, btnH = 50, gap = 10;
+    for (let i = 0; i < 6; i++) {
+        const col = i % 3, row = Math.floor(i / 3);
+        const bx = gridX + col * (btnW + gap);
+        const by = gridY + row * (btnH + gap);
+        const isSelected = level6.keypadSelected === i;
+
+        ctx.fillStyle = isSelected ? '#00ccff' : '#2a2a2a';
+        ctx.fillRect(bx, by, btnW, btnH);
+        ctx.strokeStyle = isSelected ? '#fff' : '#444';
+        ctx.lineWidth = isSelected ? 3 : 1;
+        ctx.strokeRect(bx, by, btnW, btnH);
+
+        ctx.fillStyle = isSelected ? '#000' : '#00ccff';
+        ctx.font = 'bold 26px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText((i + 1).toString(), bx + btnW / 2, by + 34);
+    }
+
+    // Instructions
+    ctx.fillStyle = '#888';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('◄►▲▼ SELECT   ACTION ENTER   DOWN CLEAR', 350, gridY + 2 * (btnH + gap) + 30);
 }
 
 function drawComputerUI() {
@@ -5798,8 +6312,9 @@ function drawPortraitUI() {
 
 
 function drawMuteIndicator() {
-    const btnX = 610;
-    const btnY = 10;
+    // Position at top-right of canvas, just below HUD — outside game area in landscape
+    const btnX = -GX + CANVAS_W - 90;
+    const btnY = -GY + 5;
     const btnW = 80;
     const btnH = 50;
     const cx = btnX + btnW / 2;
@@ -6239,21 +6754,25 @@ function drawScene() {
     }
 
     if(level === 6) {
+        const l6HasGun = level6.hasRevolver && level6.revolverAmmo > 0;
         if(level6.room === 'pipeRoom') {
             drawLevel6PipeRoom();
 
             // Draw player in pipe room
-            drawBaldManager(player.x, player.y, player.facing, player.holding);
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
         } else if(level6.room === 'megacomputer') {
             drawLevel6MegacomputerRoom();
 
             // Draw player in megacomputer room
-            drawBaldManager(player.x, player.y, player.facing, player.holding);
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
         } else if(level6.room === 'entryway') {
             drawLevel6Entryway();
 
             // Draw player in entryway
-            drawBaldManager(player.x, player.y, player.facing, player.holding);
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
         } else if(level6.room === 'ceoOffice') {
             drawLevel6CEOOffice();
 
@@ -6294,6 +6813,20 @@ function drawScene() {
 
         if(level6.safeUI) {
             drawSafeUI();
+        }
+
+        if(level6.keypadUI) {
+            drawKeypadUI();
+        }
+
+        if(level6.elevatorUI) {
+            drawElevatorUI();
+        }
+
+        // Elevator fade-to-black transition
+        if(level6.elevatorTransition) {
+            ctx.fillStyle = `rgba(0,0,0,${level6.elevatorFadeAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
 
         if(level6.computerUI) {
@@ -6852,10 +7385,10 @@ function update() {
                 keys.upProcessed = true;
             }
             if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                // Calculate max scroll based on image height (matches drawLetterUI)
+                // Calculate max scroll based on image height (matches drawLetterUI using CANVAS_W/CANVAS_H)
                 if(letterImg.complete && letterImg.naturalWidth > 0) {
-                    const maxWidth = 700;
-                    const viewportHeight = 455;
+                    const maxWidth = CANVAS_W;
+                    const viewportHeight = CANVAS_H - 45;
                     const scale = maxWidth / letterImg.naturalWidth;
                     const fullHeight = letterImg.naturalHeight * scale;
                     const maxScroll = Math.max(0, fullHeight - viewportHeight);
@@ -7008,14 +7541,14 @@ function update() {
             const prevY = player.y;
     
             if(keys['ArrowLeft'] || keys['left']) {
-                player.x = Math.max(100, player.x - 5);
+                player.x = Math.max(40, player.x - 5);
                 if(player.x !== prevX) {
                     player.facing = 'left';
                     player.lastMove = Date.now();
                 }
             }
             if(keys['ArrowRight'] || keys['right']) {
-                player.x = Math.min(600, player.x + 5);
+                player.x = Math.min(660, player.x + 5);
                 if(player.x !== prevX) {
                     player.facing = 'right';
                     player.lastMove = Date.now();
@@ -7029,7 +7562,7 @@ function update() {
                 player.y = Math.min(480, player.y + 5);
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
-    
+
             // Collision with window (top wall)
             if(player.x > 160 && player.x < 540 && player.y < 260) {
                 player.x = prevX;
@@ -7131,14 +7664,14 @@ function update() {
                     player.y = 380;
                     const prevX = player.x;
                     if(keys['ArrowLeft'] || keys['left']) {
-                        player.x = Math.max(60, player.x - 5);
+                        player.x = Math.max(20, player.x - 5);
                         if(player.x !== prevX) {
                             player.facing = 'left';
                             player.lastMove = Date.now();
                         }
                     }
                     if(keys['ArrowRight'] || keys['right']) {
-                        player.x = Math.min(640, player.x + 5);
+                        player.x = Math.min(680, player.x + 5);
                         if(player.x !== prevX) {
                             player.facing = 'right';
                             player.lastMove = Date.now();
@@ -7164,10 +7697,10 @@ function update() {
                     keys.upProcessed = true;
                 }
                 if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                    // Calculate max scroll based on image height (matches drawDetectiveNoteUI)
+                    // Calculate max scroll based on image height (matches drawDetectiveNoteUI using CANVAS_W/CANVAS_H)
                     if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
-                        const maxWidth = 700;
-                        const viewportHeight = 455;
+                        const maxWidth = CANVAS_W;
+                        const viewportHeight = CANVAS_H - 45;
                         const scale = maxWidth / detectiveNoteImg.naturalWidth;
                         const fullHeight = detectiveNoteImg.naturalHeight * scale;
                         const maxScroll = Math.max(0, fullHeight - viewportHeight);
@@ -7183,6 +7716,12 @@ function update() {
                     level6.noteScrollOffset = 0;
                     keys[' '] = false;
                     keys['action'] = false;
+                    // Drop pistol near detective after reading note
+                    if(!level6.pistol.dropped && !level6.pistol.pickedUp) {
+                        level6.pistol.dropped = true;
+                        level6.pistol.x = 540;
+                        level6.pistol.y = 370;
+                    }
                 }
                 return;
             }
@@ -7410,18 +7949,109 @@ function update() {
                 }
             }
 
+            // Keypad UI input handling
+            if(level6.keypadUI) {
+                if(keys['ArrowLeft'] || keys['left']) {
+                    const col = level6.keypadSelected % 3;
+                    if(col > 0) level6.keypadSelected--;
+                    keys['ArrowLeft'] = false; keys['left'] = false;
+                }
+                if(keys['ArrowRight'] || keys['right']) {
+                    const col = level6.keypadSelected % 3;
+                    if(col < 2) level6.keypadSelected++;
+                    keys['ArrowRight'] = false; keys['right'] = false;
+                }
+                if(keys['ArrowUp'] || keys['up']) {
+                    if(level6.keypadSelected >= 3) level6.keypadSelected -= 3;
+                    keys['ArrowUp'] = false; keys['up'] = false;
+                }
+                if(keys['ArrowDown'] || keys['down']) {
+                    if(level6.keypadSelected < 3) {
+                        if(level6.keypadSelected + 3 < 6) level6.keypadSelected += 3;
+                    } else {
+                        // Down from bottom row = clear last digit
+                        if(level6.keypadInput.length > 0) level6.keypadInput.pop();
+                        level6.keypadResult = null;
+                    }
+                    keys['ArrowDown'] = false; keys['down'] = false;
+                }
+                if(keys[' '] || keys['action']) {
+                    keys[' '] = false; keys['action'] = false;
+                    if(level6.keypadInput.length < 4) {
+                        level6.keypadInput.push(level6.keypadSelected + 1);
+                        if(level6.keypadInput.length === 4) {
+                            const code = level6.keypadInput.join('');
+                            if(code === '3546') {
+                                level6.keypadResult = true;
+                                level6.keypadResultTime = Date.now();
+                                setTimeout(() => {
+                                    level6.supercomputerUnlocked = true;
+                                    level6.keypadUI = false;
+                                }, 800);
+                            } else {
+                                level6.keypadResult = false;
+                                level6.keypadResultTime = Date.now();
+                                setTimeout(() => {
+                                    level6.keypadInput = [];
+                                    level6.keypadResult = null;
+                                }, 1000);
+                            }
+                        }
+                    }
+                }
+                // Block all other input while keypad is open
+                return;
+            }
+
+            // Elevator UI input handling
+            if(level6.elevatorUI) {
+                if(keys['ArrowUp'] || keys['up']) {
+                    level6.elevatorChoice = 0;
+                    keys['ArrowUp'] = false; keys['up'] = false;
+                }
+                if(keys['ArrowDown'] || keys['down']) {
+                    level6.elevatorChoice = 1;
+                    keys['ArrowDown'] = false; keys['down'] = false;
+                }
+                if(keys[' '] || keys['action']) {
+                    keys[' '] = false; keys['action'] = false;
+                    if(level6.elevatorChoice === 1) {
+                        // CEO Level — start fade transition
+                        level6.elevatorUI = false;
+                        level6.elevatorTransition = true;
+                        level6.elevatorFadeAlpha = 0;
+                    } else {
+                        // Current Level — close elevator UI
+                        level6.elevatorUI = false;
+                    }
+                }
+                return;
+            }
+
+            // Elevator fade transition
+            if(level6.elevatorTransition) {
+                level6.elevatorFadeAlpha += 0.03;
+                if(level6.elevatorFadeAlpha >= 1) {
+                    level6.elevatorTransition = false;
+                    level6.room = 'entryway';
+                    player.x = 350;
+                    player.y = 400;
+                }
+                return;
+            }
+
             // Movement for pipeRoom, megacomputer, and entryway (1D horizontal only)
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(20, player.x - 5);
+                    player.x = Math.max(10, player.x - 5);
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(680, player.x + 5);
+                    player.x = Math.min(690, player.x + 5);
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
@@ -7438,13 +8068,24 @@ function update() {
             if(level6.room === 'pipeRoom') {
                 player.y = 380;
 
-                if(player.x < 40) {
-                    level6.room = 'entryway';
-                    player.x = 640;
-                    player.y = 400;
+                if(player.x < 130 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
+                    level6.elevatorUI = true;
+                    level6.elevatorChoice = 0;
+                    level6.elevatorDoorOpen = 1;
+                    keys[' '] = false;
+                    keys['action'] = false;
                 }
 
-                if(player.x > 660) {
+                if(player.x > 620 && !level6.supercomputerUnlocked && !level6.keypadUI && (keys[' '] || keys['action'])) {
+                    level6.keypadUI = true;
+                    level6.keypadInput = [];
+                    level6.keypadSelected = 0;
+                    level6.keypadResult = null;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+
+                if(level6.supercomputerUnlocked && player.x > 660) {
                     level6.room = 'megacomputer';
                     player.x = 80;
                     player.y = 380;
@@ -7469,6 +8110,16 @@ function update() {
                 if(!level6.viewingDetectiveNote && Math.abs(player.x - noteInteractX) < 50 && Math.abs(player.y - noteInteractY) < 50 && (keys[' '] || keys['action'])) {
                     level6.viewingDetectiveNote = true;
                     level6.noteScrollOffset = 0;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+
+                // Pistol pickup — grants revolver with 7 bullets
+                if(level6.pistol.dropped && !level6.pistol.pickedUp && Math.abs(player.x - level6.pistol.x) < 40 && (keys[' '] || keys['action'])) {
+                    level6.pistol.pickedUp = true;
+                    level6.pistol.dropped = false;
+                    level6.hasRevolver = true;
+                    level6.revolverAmmo = 7;
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -7771,21 +8422,21 @@ if (keys[' '] || keys['action']) {
                     const prevY = player.y;
 
                     if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(100, player.x - 5);
+                    player.x = Math.max(60, player.x - 5);
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(600, player.x + 5);
+                    player.x = Math.min(640, player.x + 5);
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowUp'] || keys['up']) {
-                    player.y = Math.max(100, player.y - 5);
+                    player.y = Math.max(80, player.y - 5);
                     if(player.y !== prevY) {
                         player.facing = 'up';
                         player.lastMove = Date.now();
@@ -7934,14 +8585,14 @@ if (keys[' '] || keys['action']) {
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
         if(keys['ArrowLeft'] || keys['left']) {
-            player.x = Math.max(60, player.x - 5);
+            player.x = Math.max(20, player.x - 5);
             if(player.x !== prevX) {
                 player.facing = 'left';
                 player.lastMove = Date.now();
             }
         }
         if(keys['ArrowRight'] || keys['right']) {
-            player.x = Math.min(640, player.x + 5);
+            player.x = Math.min(680, player.x + 5);
             if(player.x !== prevX) {
                 player.facing = 'right';
                 player.lastMove = Date.now();
@@ -7958,7 +8609,7 @@ if (keys[' '] || keys['action']) {
         if(boss.angry) {
             boss.x += 5;
             boss.facing = 'right';
-            if(boss.x > 750) {
+            if(boss.x > 720) {
                 boss.active = false;
                 boss.needsColor = null;
                 boss.angry = false;
@@ -7966,7 +8617,7 @@ if (keys[' '] || keys['action']) {
         } else if(boss.needsColor === null) {
             boss.x += 3;
             boss.facing = 'right';
-            if(boss.x > 750) {
+            if(boss.x > 720) {
                 boss.active = false;
             }
         } else {
@@ -7992,6 +8643,19 @@ if (keys[' '] || keys['action']) {
                 menuChoice = 0;
             }
         }
+    }
+
+    // Boss door animation
+    if (bossDoor.state === 'opening') {
+        bossDoor.openPct = Math.min(1, bossDoor.openPct + 0.08);
+        if (bossDoor.openPct >= 1) bossDoor.state = 'open';
+    } else if (bossDoor.state === 'closing') {
+        bossDoor.openPct = Math.max(0, bossDoor.openPct - 0.15);
+        if (bossDoor.openPct <= 0) bossDoor.state = 'closed';
+    }
+    // Slam door shut when boss exits past x=700
+    if (!boss.active && bossDoor.state === 'open') {
+        bossDoor.state = 'closing';
     }
     
     if(ghostGun.printing) {
@@ -8351,7 +9015,10 @@ function handleMuteClick(e) {
     const x = (clientX - rect.left) * scaleX - GX;
     const y = (clientY - rect.top) * scaleY - GY;
 
-    if(x >= 610 && x <= 690 && y >= 10 && y <= 60) {
+    // Mute button position matches drawMuteIndicator: top-right of canvas
+    const muteBtnX = -GX + CANVAS_W - 90;
+    const muteBtnY = -GY + 5;
+    if(x >= muteBtnX && x <= muteBtnX + 80 && y >= muteBtnY && y <= muteBtnY + 50) {
         toggleMute();
         if(e.cancelable) e.preventDefault();
     }
