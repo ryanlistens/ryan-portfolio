@@ -4737,32 +4737,32 @@ function drawLevel6CloningRoom() {
         ctx.fill();
     }
 
-    // === PM PRINTER LABEL (drawn after equipment so it's visible on top) ===
+    // === PM PRINTER LABEL (mounted on wall above pipes) ===
     ctx.fillStyle = '#444';
-    ctx.fillRect(265, 8, 170, 28);
+    ctx.fillRect(275, -8, 150, 26);
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 2;
-    ctx.strokeRect(265, 8, 170, 28);
+    ctx.strokeRect(275, -8, 150, 26);
     ctx.fillStyle = '#00ccff';
-    ctx.font = 'bold 18px Arial';
+    ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PM PRINTER', 350, 29);
+    ctx.fillText('PM PRINTER', 350, 12);
 
     // === CONCEALED DOOR — left wall sliding brick panel ===
     const cdX = 0, cdY = 280, cdW = 60, cdH = 120;
     const slideOffset = level6.cloningDoorOpen * cdW; // slides right to reveal
 
     if (level6.cloningDoorOpen < 1) {
-        // Brick wall section that slides
-        ctx.fillStyle = '#5a3a2a';
+        // Brick wall section that slides — matches dark room wall
+        ctx.fillStyle = '#2a2a2a';
         ctx.fillRect(cdX + slideOffset, cdY, cdW - slideOffset, cdH);
-        // Brick pattern
+        // Brick pattern (subtle, matching wall tone)
         for (let row = 0; row < 6; row++) {
             for (let col = 0; col < 3; col++) {
                 const brickX = cdX + slideOffset + col * 22 + (row % 2) * 11;
                 const brickY = cdY + row * 20;
                 if (brickX < cdX + cdW) {
-                    ctx.strokeStyle = '#3a2a1a';
+                    ctx.strokeStyle = '#1a1a1a';
                     ctx.lineWidth = 1;
                     ctx.strokeRect(brickX, brickY, 20, 18);
                 }
@@ -8762,7 +8762,7 @@ function update() {
                     if(!npc.hasSack && !npc.exiting) {
                         let nearestSack = null;
                         let nearestDist = Infinity;
-                    
+
                         for(let sack of level6.cashSacks) {
                             if(!sack.claimed) {
                                 const dist = Math.sqrt((npc.x - sack.x)**2 + (npc.y - sack.y)**2);
@@ -8772,44 +8772,88 @@ function update() {
                                 }
                             }
                         }
-                    
+
                         if(nearestSack) {
                             const dx = nearestSack.x - npc.x;
                             const dy = nearestSack.y - npc.y;
                             const dist = Math.sqrt(dx * dx + dy * dy);
 
-                            if(dist > 5) {
-                                const newX = npc.x + (dx / dist) * 2;
-                                const newY = npc.y + (dy / dist) * 2;
-                                // Navigate around obstacles (same as CEO)
+                            // Stuck detection: if not making progress, increment timer
+                            if(dist >= npc.lastDist - 0.5) {
+                                npc.stuckTimer++;
+                            } else {
+                                npc.stuckTimer = 0;
+                            }
+                            npc.lastDist = dist;
+
+                            // If stuck too long, force-claim the sack
+                            if(npc.stuckTimer > 180) {
+                                npc.hasSack = true;
+                                nearestSack.claimed = true;
+                                npc.stuckTimer = 0;
+                                npc.lastDist = Infinity;
+                            } else if(dist > 5) {
+                                const speed = 2;
+                                const newX = npc.x + (dx / dist) * speed;
+                                const newY = npc.y + (dy / dist) * speed;
+                                // Navigate around obstacles
                                 if(!ceoCollidesWithObstacle(newX, newY)) {
                                     npc.x = newX;
                                     npc.y = newY;
                                 } else {
-                                    // Try horizontal then vertical
+                                    // Try horizontal first
                                     if(!ceoCollidesWithObstacle(newX, npc.y)) {
                                         npc.x = newX;
                                     } else if(!ceoCollidesWithObstacle(npc.x, newY)) {
                                         npc.y = newY;
+                                    } else {
+                                        // Try perpendicular sidestep to escape
+                                        const perpX = npc.x + (dy > 0 ? speed : -speed);
+                                        const perpY = npc.y + (dx > 0 ? -speed : speed);
+                                        if(!ceoCollidesWithObstacle(perpX, npc.y)) {
+                                            npc.x = perpX;
+                                        } else if(!ceoCollidesWithObstacle(npc.x, perpY)) {
+                                            npc.y = perpY;
+                                        }
                                     }
                                 }
                                 npc.facing = dx > 0 ? 'right' : dx < 0 ? 'left' : 'forward';
                             } else {
                                 npc.hasSack = true;
                                 nearestSack.claimed = true;
+                                npc.stuckTimer = 0;
+                                npc.lastDist = Infinity;
                             }
                         }
                     } else if(npc.hasSack && !npc.exiting) {
                         const exitY = 460;
                         const dy = exitY - npc.y;
 
-                        if(Math.abs(dy) > 5) {
+                        // Stuck detection for exiting phase
+                        const exitDist = Math.abs(dy);
+                        if(exitDist >= npc.lastDist - 0.5) {
+                            npc.stuckTimer++;
+                        } else {
+                            npc.stuckTimer = 0;
+                        }
+                        npc.lastDist = exitDist;
+
+                        if(npc.stuckTimer > 120) {
+                            // Force exit if stuck
+                            npc.exiting = true;
+                            npc.stuckTimer = 0;
+                        } else if(Math.abs(dy) > 5) {
                             const newY = npc.y + (dy > 0 ? 2 : -2);
                             if(!ceoCollidesWithObstacle(npc.x, newY)) {
                                 npc.y = newY;
                             } else {
                                 // Sidestep horizontally to get around obstacle
-                                npc.x += npc.x < 350 ? -2 : 2;
+                                const sideDir = npc.x < 350 ? -2 : 2;
+                                if(!ceoCollidesWithObstacle(npc.x + sideDir, npc.y)) {
+                                    npc.x += sideDir;
+                                } else {
+                                    npc.x -= sideDir;
+                                }
                             }
                             npc.facing = 'forward';
                         } else {
@@ -9006,6 +9050,14 @@ function update() {
                     level6.room = 'megacomputer';
                     player.x = 80;
                     player.y = 380;
+                }
+                // Action button entry when standing near open door
+                if(level6.supercomputerUnlocked && player.x > 580 && level6.bladeDoor.openPct > 0.5 && (keys[' '] || keys['action'])) {
+                    level6.room = 'megacomputer';
+                    player.x = 80;
+                    player.y = 380;
+                    keys[' '] = false;
+                    keys['action'] = false;
                 }
             }
 
@@ -9310,11 +9362,11 @@ function update() {
                             level6.npcExitSequence = true;
 
                             level6.exitingNPCs = [
-                                {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                                {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                                {x: 330, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                                {x: 390, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false},
-                                {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, exiting: false, isMulletPro: true}
+                                {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
+                                {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
+                                {x: 330, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
+                                {x: 390, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
+                                {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, exiting: false, isMulletPro: true, stuckTimer: 0, lastDist: Infinity}
                             ];
                         }
                         keys[' '] = false;
@@ -9678,7 +9730,7 @@ if (keys[' '] || keys['action']) {
         }
         // Auto-open when unlocked and player is near
         if (level6.supercomputerUnlocked && level6.room === 'pipeRoom' && player.x > 480) {
-            if (level6.bladeDoor.state === 'closed') level6.bladeDoor.state = 'opening';
+            if (level6.bladeDoor.state === 'closed' || level6.bladeDoor.state === 'closing') level6.bladeDoor.state = 'opening';
         } else if (level6.room === 'pipeRoom' && player.x <= 480 && level6.bladeDoor.state === 'open') {
             level6.bladeDoor.state = 'closing';
         }
@@ -9704,21 +9756,23 @@ if (keys[' '] || keys['action']) {
         level6.cloningDoorOpen = Math.min(1, level6.cloningDoorOpen + 0.03);
     }
 
-    // Cloning room boss AI — patrol back and forth in front of centrifuge
+    // Cloning room boss AI — patrol back and forth examining cloning unit
     if (level === 6 && level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
         const cb = level6.cloningBoss;
         if (cb.paused) {
+            // Face toward centrifuge (x=350) when stopped to examine it
+            cb.facing = cb.x > 360 ? 'left' : cb.x < 340 ? 'right' : 'left';
             cb.pauseTimer--;
             if (cb.pauseTimer <= 0) {
                 cb.paused = false;
                 cb.walkDir *= -1;
             }
         } else {
-            cb.x += cb.walkDir * 1.2;
+            cb.x += cb.walkDir * 0.8;
             cb.facing = cb.walkDir > 0 ? 'right' : 'left';
-            if (cb.x > 480 || cb.x < 250) {
+            if (cb.x > 480 || cb.x < 220) {
                 cb.paused = true;
-                cb.pauseTimer = 60 + Math.random() * 60;
+                cb.pauseTimer = 90 + Math.random() * 90;
             }
         }
     }
