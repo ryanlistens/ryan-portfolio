@@ -9637,11 +9637,68 @@ if (keys[' '] || keys['action']) {
                     continue;
                 }
             }
-        
+
+            // Supercomputer blade door animations
+            if (level6.bladeDoor) {
+                if (level6.bladeDoor.state === 'opening') {
+                    level6.bladeDoor.openPct = Math.min(1, level6.bladeDoor.openPct + 0.06);
+                    if (level6.bladeDoor.openPct >= 1) level6.bladeDoor.state = 'open';
+                } else if (level6.bladeDoor.state === 'closing') {
+                    level6.bladeDoor.openPct = Math.max(0, level6.bladeDoor.openPct - 0.06);
+                    if (level6.bladeDoor.openPct <= 0) level6.bladeDoor.state = 'closed';
+                }
+                // Auto-open when unlocked and player is near
+                if (level6.supercomputerUnlocked && level6.room === 'pipeRoom' && player.x > 480) {
+                    if (level6.bladeDoor.state === 'closed' || level6.bladeDoor.state === 'closing') level6.bladeDoor.state = 'opening';
+                } else if (level6.room === 'pipeRoom' && player.x <= 480 && level6.bladeDoor.state === 'open') {
+                    level6.bladeDoor.state = 'closing';
+                }
+                // Megacomputer side — always open when in megacomputer room, close when leaving
+                if (level6.bladeDoorMega) {
+                    if (level6.bladeDoorMega.state === 'opening') {
+                        level6.bladeDoorMega.openPct = Math.min(1, level6.bladeDoorMega.openPct + 0.04);
+                        if (level6.bladeDoorMega.openPct >= 1) level6.bladeDoorMega.state = 'open';
+                    } else if (level6.bladeDoorMega.state === 'closing') {
+                        level6.bladeDoorMega.openPct = Math.max(0, level6.bladeDoorMega.openPct - 0.06);
+                        if (level6.bladeDoorMega.openPct <= 0) level6.bladeDoorMega.state = 'closed';
+                    }
+                    if (level6.room === 'megacomputer' && player.x < 120) {
+                        if (level6.bladeDoorMega.state === 'closed') level6.bladeDoorMega.state = 'opening';
+                    } else if (level6.room === 'megacomputer' && player.x >= 120 && level6.bladeDoorMega.state === 'open') {
+                        level6.bladeDoorMega.state = 'closing';
+                    }
+                }
+            }
+
+            // Cloning room concealed door slide animation
+            if (level6.cloningDoorUnlocked && level6.cloningDoorOpen < 1) {
+                level6.cloningDoorOpen = Math.min(1, level6.cloningDoorOpen + 0.03);
+            }
+
+            // Cloning room boss AI — patrol back and forth examining cloning unit
+            if (level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
+                const cb = level6.cloningBoss;
+                if (cb.paused) {
+                    cb.facing = cb.x > 360 ? 'left' : cb.x < 340 ? 'right' : 'left';
+                    cb.pauseTimer--;
+                    if (cb.pauseTimer <= 0) {
+                        cb.paused = false;
+                        cb.walkDir *= -1;
+                    }
+                } else {
+                    cb.x += cb.walkDir * 0.8;
+                    cb.facing = cb.walkDir > 0 ? 'right' : 'left';
+                    if (cb.x > 480 || cb.x < 220) {
+                        cb.paused = true;
+                        cb.pauseTimer = 90 + Math.random() * 90;
+                    }
+                }
+            }
+
             return;
         }
 
-    
+
     // LEVELS 1-4 LOGIC
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
@@ -9719,64 +9776,6 @@ if (keys[' '] || keys['action']) {
         bossDoor.state = 'closing';
     }
 
-    // Supercomputer blade door animations
-    if (level === 6 && level6.bladeDoor) {
-        if (level6.bladeDoor.state === 'opening') {
-            level6.bladeDoor.openPct = Math.min(1, level6.bladeDoor.openPct + 0.06);
-            if (level6.bladeDoor.openPct >= 1) level6.bladeDoor.state = 'open';
-        } else if (level6.bladeDoor.state === 'closing') {
-            level6.bladeDoor.openPct = Math.max(0, level6.bladeDoor.openPct - 0.06);
-            if (level6.bladeDoor.openPct <= 0) level6.bladeDoor.state = 'closed';
-        }
-        // Auto-open when unlocked and player is near
-        if (level6.supercomputerUnlocked && level6.room === 'pipeRoom' && player.x > 480) {
-            if (level6.bladeDoor.state === 'closed' || level6.bladeDoor.state === 'closing') level6.bladeDoor.state = 'opening';
-        } else if (level6.room === 'pipeRoom' && player.x <= 480 && level6.bladeDoor.state === 'open') {
-            level6.bladeDoor.state = 'closing';
-        }
-        // Megacomputer side — always open when in megacomputer room, close when leaving
-        if (level6.bladeDoorMega) {
-            if (level6.bladeDoorMega.state === 'opening') {
-                level6.bladeDoorMega.openPct = Math.min(1, level6.bladeDoorMega.openPct + 0.04);
-                if (level6.bladeDoorMega.openPct >= 1) level6.bladeDoorMega.state = 'open';
-            } else if (level6.bladeDoorMega.state === 'closing') {
-                level6.bladeDoorMega.openPct = Math.max(0, level6.bladeDoorMega.openPct - 0.06);
-                if (level6.bladeDoorMega.openPct <= 0) level6.bladeDoorMega.state = 'closed';
-            }
-            if (level6.room === 'megacomputer' && player.x < 120) {
-                if (level6.bladeDoorMega.state === 'closed') level6.bladeDoorMega.state = 'opening';
-            } else if (level6.room === 'megacomputer' && player.x >= 120 && level6.bladeDoorMega.state === 'open') {
-                level6.bladeDoorMega.state = 'closing';
-            }
-        }
-    }
-
-    // Cloning room concealed door slide animation (runs on any level since door persists)
-    if (level6.cloningDoorUnlocked && level6.cloningDoorOpen < 1) {
-        level6.cloningDoorOpen = Math.min(1, level6.cloningDoorOpen + 0.03);
-    }
-
-    // Cloning room boss AI — patrol back and forth examining cloning unit
-    if (level === 6 && level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
-        const cb = level6.cloningBoss;
-        if (cb.paused) {
-            // Face toward centrifuge (x=350) when stopped to examine it
-            cb.facing = cb.x > 360 ? 'left' : cb.x < 340 ? 'right' : 'left';
-            cb.pauseTimer--;
-            if (cb.pauseTimer <= 0) {
-                cb.paused = false;
-                cb.walkDir *= -1;
-            }
-        } else {
-            cb.x += cb.walkDir * 0.8;
-            cb.facing = cb.walkDir > 0 ? 'right' : 'left';
-            if (cb.x > 480 || cb.x < 220) {
-                cb.paused = true;
-                cb.pauseTimer = 90 + Math.random() * 90;
-            }
-        }
-    }
-    
     if(ghostGun.printing) {
         ghostGun.printProgress += 0.02;
         if(ghostGun.printProgress >= 1) {
