@@ -583,7 +583,11 @@ function updateLives() {
     if(level === 6) {
         let h = '';
         for(let i = 0; i < level6.moneyLives; i++) {
-            h += '<span class="money">$</span>';
+            if(level6.hasDetectiveHat) {
+                h += '<span class="money" style="color:#ffd700">?</span>';
+            } else {
+                h += '<span class="money">$</span>';
+            }
         }
         document.getElementById('lives').innerHTML = h;
         return;
@@ -699,6 +703,18 @@ function initLevel(lv) {
         level6.elevatorFadeAlpha = 0;
         level6.elevatorFadeIn = false;
         level6.pistol = { dropped: false, x: 0, y: 0, pickedUp: false, ammo: 7 };
+        level6.hasDetectiveHat = false;
+        level6.detectiveHatOnGround = false;
+        level6.detectiveTransition = false;
+        level6.detectiveTransAlpha = 0;
+        level6.detectiveTitleCard = false;
+        level6.detectiveTitleTimer = 0;
+        level6.detectiveFadeIn = false;
+        level6.ceoAngryMode = false;
+        level6.redPhoneRinging = false;
+        level6.caseClosedCard = false;
+        level6.caseClosedTimer = 0;
+        level6.caseClosedFadeIn = false;
         level6.bladeDoor = { openPct: 0, state: 'closed' }; // supercomputer blade door
         level6.bladeDoorMega = { openPct: 0, state: 'closed' }; // megacomputer side blade door
         level6.elevatorTarget = null; // which floor elevator is going to
@@ -1256,6 +1272,30 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         const leg = Math.sin(frame * 0.15) * 2;
         ctx.fillRect(x - 5*s, y + 20*s + leg, 4*s, 2*s);
         ctx.fillRect(x + s, y + 20*s - leg, 4*s, 2*s);
+    }
+
+    // === DETECTIVE FEDORA HAT — drawn on top when wearing ===
+    if(typeof level6 !== 'undefined' && level6.hasDetectiveHat) {
+        const hatTopY = y - 13*s; // Just above bald head
+        // Hat brim — wide dark gray ellipse
+        ctx.fillStyle = '#3a3a3a';
+        ctx.beginPath();
+        ctx.ellipse(x, hatTopY + 2, 14, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Hat crown — pinched fedora shape
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath();
+        ctx.moveTo(x - 9, hatTopY);
+        ctx.lineTo(x - 5, hatTopY - 8);
+        ctx.lineTo(x - 1, hatTopY - 5);
+        ctx.lineTo(x + 1, hatTopY - 5);
+        ctx.lineTo(x + 5, hatTopY - 8);
+        ctx.lineTo(x + 9, hatTopY);
+        ctx.closePath();
+        ctx.fill();
+        // Hat band
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x - 8, hatTopY - 1, 16, 2);
     }
 }
 
@@ -4172,23 +4212,25 @@ function drawLevel6MegacomputerRoom() {
     ctx.fillStyle = '#660000';
     ctx.fillRect(detectiveX - 11*s, detectiveY - 7*s, 1, 2*s);
 
-    // Fedora fallen beside head (on ground)
+    // Fedora fallen beside head (on ground) — disappears once picked up
     const hatX = detectiveX - 24*s;
     const hatY = detectiveY - 8*s;
-    ctx.fillStyle = '#3a3a3a'; // Dark gray fedora
-    ctx.beginPath();
-    ctx.ellipse(hatX, hatY, 14, 10, -0.1, 0, Math.PI * 2);
-    ctx.fill();
+    if(!level6.hasDetectiveHat) {
+        ctx.fillStyle = '#3a3a3a'; // Dark gray fedora
+        ctx.beginPath();
+        ctx.ellipse(hatX, hatY, 14, 10, -0.1, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Hat crown
-    ctx.fillStyle = '#2a2a2a';
-    ctx.beginPath();
-    ctx.ellipse(hatX - 1, hatY, 8, 6, -0.1, 0, Math.PI * 2);
-    ctx.fill();
+        // Hat crown
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath();
+        ctx.ellipse(hatX - 1, hatY, 8, 6, -0.1, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Hat band
-    ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(hatX - 7, hatY - 1, 12, 2);
+        // Hat band
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(hatX - 7, hatY - 1, 12, 2);
+    }
 
     // Neck - connecting head to torso
     ctx.fillStyle = detectiveSkin;
@@ -4272,6 +4314,28 @@ function drawLevel6MegacomputerRoom() {
     ctx.arc(noteX + 12, noteY + 18, 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
+
+    // Detective hat pickup prompt — hat becomes interactable after pistol is picked up
+    if(level6.pistol.pickedUp && !level6.hasDetectiveHat) {
+        // Highlight the fedora on ground
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(hatX, hatY, 16, 12, -0.1, 0, Math.PI * 2);
+        ctx.stroke();
+        // Prompt
+        if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 60) {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(hatX - 65, hatY - 30, 130, 20);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ACTION: TAKE HAT', hatX, hatY - 14);
+        }
+    }
+    // Hide hat from detective body once picked up (already wearing it)
+    // (The fedora drawing above is skipped implicitly since we don't modify it —
+    //  but visually the hat on ground is the one the player takes)
 
     // Interaction prompt for note (when not viewing) - aligned with note center
     const noteInteractX = noteX + 9; // Center of note
@@ -5098,8 +5162,8 @@ function drawL6FurnaceRoom() {
         ctx.fill();
     }
     // FURNACE label
-    ctx.fillStyle = '#888';
-    ctx.font = 'bold 10px Arial';
+    ctx.fillStyle = '#cc8844';
+    ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('INCINERATOR', fx, fy + 55);
 
@@ -5245,6 +5309,34 @@ function drawL6FurnaceRoom() {
     ctx.ellipse(sdX + sdW/2 - 6, sdY + sdH - 3, 3, 2, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // === STILL-BURNING CIGAR next to secret wall door ===
+    const cigX = sdX + sdW + 25, cigY = sdY + sdH - 15;
+    // Cigar body — brown cylinder
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(cigX, cigY, 18, 5);
+    // Cigar band — gold ring
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(cigX + 4, cigY, 4, 5);
+    // Ash tip — gray
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(cigX - 3, cigY + 1, 4, 3);
+    // Burning ember at tip
+    const emberGlow = 0.6 + Math.sin(Date.now() / 300) * 0.4;
+    ctx.fillStyle = `rgba(255,100,0,${emberGlow})`;
+    ctx.beginPath();
+    ctx.arc(cigX - 2, cigY + 2.5, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Smoke wisps rising from cigar
+    for(let sw = 0; sw < 3; sw++) {
+        const smokeY = cigY - 8 - sw * 12;
+        const smokeX = cigX - 2 + Math.sin(Date.now() / 600 + sw * 1.5) * 6;
+        const smokeAlpha = 0.25 - sw * 0.07;
+        ctx.fillStyle = `rgba(180,180,180,${smokeAlpha})`;
+        ctx.beginPath();
+        ctx.arc(smokeX, smokeY, 3 + sw * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     // Left door — wooden door to hallway (same style as Level 5)
     const ldX = 55, ldY = 340, ldW = 50, ldH = 60;
     ctx.fillStyle = '#654321';
@@ -5266,19 +5358,36 @@ function drawL6FurnaceRoom() {
         ctx.fillText('\u2190 HALLWAY', ldX + 15, ldY - 10);
     }
 
+    // === OPEN WALL DOOR on right side (passage back to cloning room) ===
+    const rdX = 655, rdY = 300, rdW = 45, rdH = 100;
+    // Dark interior of open doorway
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(rdX, rdY, rdW, rdH);
+    // Door frame — concrete edges
+    ctx.fillStyle = '#3a3530';
+    ctx.fillRect(rdX - 3, rdY - 3, 3, rdH + 6);
+    ctx.fillRect(rdX, rdY - 3, rdW, 3);
+    ctx.fillRect(rdX, rdY + rdH, rdW, 3);
+    // Green LED strip on doorframe edge
+    ctx.fillStyle = '#00ff88';
+    ctx.fillRect(rdX - 2, rdY, 1, rdH);
+    // Dim light spilling from doorway
+    ctx.fillStyle = 'rgba(0,255,136,0.05)';
+    ctx.fillRect(rdX - 20, rdY, 20, rdH);
+
     // Right exit direction prompt (back to cloning room)
     if(player.x > 600) {
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(660 - 55, 360, 110, 20);
+        ctx.fillRect(660 - 55, 350, 110, 20);
         ctx.fillStyle = '#fff';
-        ctx.fillText('CLONING \u2192', 660, 376);
+        ctx.fillText('CLONING \u2192', 660, 366);
     }
 
     // Ambient label
     if(player.x > 200 && player.x < 500) {
-        ctx.fillStyle = 'rgba(255,200,150,0.12)';
+        ctx.fillStyle = 'rgba(255,200,150,0.5)';
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('Someone discarded their uniform here...', 350, 280);
@@ -6237,7 +6346,69 @@ function drawLevel6CEOOffice() {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(monX + 13, monY + 27, 6, 4);
     ctx.fillRect(monX + 9, monY + 31, 14, 2);
-    
+
+    // === RED PHONE on desk (right side of desk top) ===
+    const phoneX = deskX + 45, phoneY = deskY - 18;
+    // Phone base
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(phoneX - 10, phoneY, 20, 8);
+    ctx.fillStyle = '#aa0000';
+    ctx.fillRect(phoneX - 9, phoneY + 1, 18, 6);
+    // Dial pad holes
+    ctx.fillStyle = '#880000';
+    for(let pr = 0; pr < 2; pr++) {
+        for(let pc = 0; pc < 3; pc++) {
+            ctx.beginPath();
+            ctx.arc(phoneX - 5 + pc * 5, phoneY + 3 + pr * 3, 1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    // Handset cradle
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(phoneX - 12, phoneY - 3, 24, 4);
+    // Handset on top
+    const phoneRinging = level6.ceoDefeated && !level6.caseClosedCard;
+    const ringBob = phoneRinging ? Math.sin(Date.now() / 80) * 2 : 0;
+    const ringShake = phoneRinging ? Math.sin(Date.now() / 50) * 1.5 : 0;
+    ctx.fillStyle = '#dd1111';
+    // Earpiece
+    ctx.fillRect(phoneX - 11 + ringShake, phoneY - 6 + ringBob, 7, 4);
+    // Handle bar
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(phoneX - 7 + ringShake, phoneY - 4 + ringBob, 14, 2);
+    // Mouthpiece
+    ctx.fillStyle = '#dd1111';
+    ctx.fillRect(phoneX + 4 + ringShake, phoneY - 6 + ringBob, 7, 4);
+    // Ringing glow effect
+    if(phoneRinging) {
+        const ringGlow = 0.3 + Math.sin(Date.now() / 200) * 0.3;
+        ctx.fillStyle = `rgba(255,50,50,${ringGlow})`;
+        ctx.beginPath();
+        ctx.arc(phoneX, phoneY - 2, 18, 0, Math.PI * 2);
+        ctx.fill();
+        // Ring lines (sound waves)
+        ctx.strokeStyle = `rgba(255,100,100,${ringGlow})`;
+        ctx.lineWidth = 1;
+        for(let rw = 0; rw < 3; rw++) {
+            const rwR = 20 + rw * 6 + Math.sin(Date.now() / 300) * 3;
+            ctx.beginPath();
+            ctx.arc(phoneX, phoneY - 2, rwR, -0.6, 0.6);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(phoneX, phoneY - 2, rwR, Math.PI - 0.6, Math.PI + 0.6);
+            ctx.stroke();
+        }
+    }
+    // Interaction prompt for phone
+    if(level6.ceoDefeated && !level6.caseClosedCard && Math.abs(player.x - phoneX) < 50 && Math.abs(player.y - (deskY - 10)) < 60) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(phoneX - 75, phoneY - 30, 150, 20);
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACTION: ANSWER PHONE', phoneX, phoneY - 14);
+    }
+
     // Golden trophy cabinet (right back wall) - obstacle - LARGER to show photorealistic images clearly
     const cabinetX = 560;
     const cabinetY = 50;
@@ -8222,6 +8393,78 @@ function drawScene() {
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
 
+        // Detective hat dissolve transition + title card
+        if(level6.detectiveTransition || level6.detectiveFadeIn) {
+            ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        if(level6.detectiveTitleCard) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+            // Title card text
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 42px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('You are now', 350, 200);
+            ctx.fillText('the detective!', 350, 260);
+            // Fedora icon
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.ellipse(350, 330, 40, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath();
+            ctx.moveTo(320, 330);
+            ctx.lineTo(330, 305);
+            ctx.lineTo(345, 315);
+            ctx.lineTo(355, 315);
+            ctx.lineTo(370, 305);
+            ctx.lineTo(380, 330);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#4a4a4a';
+            ctx.fillRect(325, 327, 50, 4);
+        }
+
+        // Case Closed dissolve transition + title card
+        if(level6.caseClosedCard === 'fading') {
+            ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        if(level6.caseClosedCard === true) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+            // "Case Closed." title
+            ctx.fillStyle = '#cc0000';
+            ctx.font = 'bold 64px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Case Closed.', 350, 230);
+            // Subtle gold underline
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(200, 248, 300, 3);
+            // Fedora silhouette
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.ellipse(350, 320, 35, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.moveTo(325, 320);
+            ctx.lineTo(332, 298);
+            ctx.lineTo(345, 308);
+            ctx.lineTo(355, 308);
+            ctx.lineTo(368, 298);
+            ctx.lineTo(375, 320);
+            ctx.closePath();
+            ctx.fill();
+            // Score
+            if(level6.caseClosedTimer > 60) {
+                ctx.fillStyle = '#888';
+                ctx.font = '24px Arial';
+                ctx.fillText('FINAL SCORE: ' + score, 350, 380);
+            }
+        }
+
         if(level6.computerUI) {
             drawComputerUI();
         }
@@ -9235,6 +9478,7 @@ function update() {
         
             if(ceo.state === 'hunting') {
                 ceo.moveTimer++;
+                const angryMult = level6.ceoAngryMode ? 2 : 1; // 2x speed/aggression as detective
 
                 const dx = player.x - ceo.x;
                 const dy = player.y - ceo.y;
@@ -9242,8 +9486,9 @@ function update() {
 
                 // Stop at a safe distance to avoid trapping player (collision range is 40x50)
                 if(dist > 60) {
-                    const newX = ceo.x + (dx / dist) * 2;
-                    const newY = ceo.y + (dy / dist) * 2;
+                    const moveSpeed = 2 * angryMult;
+                    const newX = ceo.x + (dx / dist) * moveSpeed;
+                    const newY = ceo.y + (dy / dist) * moveSpeed;
 
                     // Navigate around obstacles while chasing
                     if(!ceoCollidesWithObstacle(newX, newY)) {
@@ -9251,11 +9496,11 @@ function update() {
                         ceo.y = newY;
                     } else {
                         // Try moving around obstacle - prefer direction toward player
-                        const altX = ceo.x + (dx / dist) * 2;
+                        const altX = ceo.x + (dx / dist) * moveSpeed;
                         if(!ceoCollidesWithObstacle(altX, ceo.y)) {
                             ceo.x = altX;
                         } else {
-                            const altY = ceo.y + (dy / dist) * 2;
+                            const altY = ceo.y + (dy / dist) * moveSpeed;
                             if(!ceoCollidesWithObstacle(ceo.x, altY)) {
                                 ceo.y = altY;
                             }
@@ -9268,15 +9513,18 @@ function update() {
                         ceo.facing = 'forward';
                     }
                 }
-            
+
                 ceo.shootTimer++;
-                if(ceo.shootTimer > 120 && Date.now() - ceo.lastShot > 2000) {
+                const shootThreshold = level6.ceoAngryMode ? 60 : 120;
+                const shootCooldown = level6.ceoAngryMode ? 1000 : 2000;
+                const bulletSpeed = level6.ceoAngryMode ? 10 : 8;
+                if(ceo.shootTimer > shootThreshold && Date.now() - ceo.lastShot > shootCooldown) {
                     const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
                     bullets.push({
                         x: ceo.x,
                         y: ceo.y,
-                        vx: Math.cos(angle) * 8,
-                        vy: Math.sin(angle) * 8,
+                        vx: Math.cos(angle) * bulletSpeed,
+                        vy: Math.sin(angle) * bulletSpeed,
                         fromCEO: true
                     });
                     ceo.lastShot = Date.now();
@@ -9536,6 +9784,52 @@ function update() {
                 return;
             }
 
+            // Detective hat dissolve transition — fade out
+            if(level6.detectiveTransition) {
+                level6.detectiveTransAlpha += 0.03;
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.detectiveTransition = false;
+                    level6.detectiveTitleCard = true;
+                    level6.detectiveTitleTimer = 0;
+                    level6.hasDetectiveHat = true;
+                    updateLives(); // Switch $ to ?
+                }
+                return;
+            }
+            // Detective title card display
+            if(level6.detectiveTitleCard) {
+                level6.detectiveTitleTimer++;
+                if(level6.detectiveTitleTimer > 180) { // 3 seconds
+                    level6.detectiveTitleCard = false;
+                    level6.detectiveFadeIn = true;
+                }
+                return;
+            }
+            // Detective fade back in
+            if(level6.detectiveFadeIn) {
+                level6.detectiveTransAlpha -= 0.04;
+                if(level6.detectiveTransAlpha <= 0) {
+                    level6.detectiveTransAlpha = 0;
+                    level6.detectiveFadeIn = false;
+                }
+                return;
+            }
+
+            // Case Closed dissolve transition — fade out
+            if(level6.caseClosedCard === 'fading') {
+                level6.detectiveTransAlpha += 0.03;
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.caseClosedCard = true;
+                    level6.caseClosedTimer = 0;
+                }
+                return;
+            }
+            // Case Closed title card display — stays forever
+            if(level6.caseClosedCard === true) {
+                level6.caseClosedTimer++;
+                return;
+            }
+
             // Movement for horizontal-only rooms (1D)
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'l6Hallway' || level6.room === 'l6PipeRoom') {
                 const prevX = player.x;
@@ -9624,8 +9918,23 @@ function update() {
                     level6.pistol.dropped = false;
                     level6.hasRevolver = true;
                     level6.revolverAmmo = 7;
+                    level6.detectiveHatOnGround = true; // Hat becomes available
                     keys[' '] = false;
                     keys['action'] = false;
+                }
+
+                // Detective hat pickup — after pistol is picked up
+                if(level6.pistol.pickedUp && !level6.hasDetectiveHat && !level6.detectiveTransition && !level6.detectiveTitleCard) {
+                    const detectiveX = 540, detectiveY = 445, s = 2;
+                    const hatX = detectiveX - 24*s;
+                    const hatY = detectiveY - 8*s;
+                    if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 60 && (keys[' '] || keys['action'])) {
+                        // Start dissolve transition
+                        level6.detectiveTransition = true;
+                        level6.detectiveTransAlpha = 0;
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
                 }
 
                 // Radiation damage - lose 1 money life every 2 seconds in center zone
@@ -9808,8 +10117,17 @@ function update() {
                     keys[' '] = false;
                     keys['action'] = false;
 
-                    // Set CEO to walk to middle rug on entry
-                    ceo.walkTarget = {x: 350, y: 340};
+                    if(level6.hasDetectiveHat && ceo.state !== 'dead') {
+                        // Detective entering! CEO immediately goes into murder mode
+                        ceo.state = 'hunting';
+                        ceo.walkTarget = null;
+                        level6.ceoAngryMode = true;
+                        ceo.shootTimer = 100; // Start shooting almost immediately
+                        ceo.health = 6; // Full health still
+                    } else {
+                        // Normal entry — Set CEO to walk to middle rug on entry
+                        ceo.walkTarget = {x: 350, y: 340};
+                    }
                 }
             } 
         
@@ -9980,15 +10298,25 @@ if (keys[' '] || keys['action']) {
         return; // Return to prevent triggering other objects
     }
 
+    // 1.5. Red Phone Interaction — answer to end the case
+    const phoneX = 350 + 45, phoneDeskY = 250 - 10;
+    if (level6.ceoDefeated && !level6.caseClosedCard &&
+        Math.abs(player.x - phoneX) < 50 && Math.abs(player.y - phoneDeskY) < 60) {
+        // Start Case Closed transition
+        level6.caseClosedCard = 'fading';
+        level6.detectiveTransAlpha = 0;
+        return;
+    }
+
     // 2. Monitor/Computer Interaction (PRIORITY: CHECK THIS BEFORE SAFE)
     // The monitor is on the desk at Y ~ 205.
-    const monX = 390; 
-    const monY = 205; 
-    
+    const monX = 390;
+    const monY = 205;
+
     // We strictly check player.y > 180 to ensure they are at the DESK, not the wall
-    if (level6.ceoDefeated && !level6.computerUI && 
-        Math.abs(player.x - monX) < 50 && 
-        Math.abs(player.y - monY) < 60 && 
+    if (level6.ceoDefeated && !level6.computerUI &&
+        Math.abs(player.x - monX) < 50 &&
+        Math.abs(player.y - monY) < 60 &&
         player.y > 180) { // Added strict Y check
             level6.computerUI = true;
             return; // Stop checking other interactions
