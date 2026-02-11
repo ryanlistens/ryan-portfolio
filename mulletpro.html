@@ -8067,6 +8067,43 @@ function drawScene() {
             ctx.fillStyle = '#27ae60';
             ctx.fillText('YOU WIN!', 350, 220);
         }
+        if(state === 'caseclosed') {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        
+        // "Case Closed." title
+        ctx.fillStyle = '#cc0000';
+        ctx.font = 'bold 64px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Case Closed.', 350, 180);
+        
+        // Subtle gold underline
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(200, 198, 300, 4);
+        
+        // Fedora icon
+        const hatY = 260;
+        ctx.fillStyle = '#3a3a3a';
+        ctx.beginPath(); ctx.ellipse(350, hatY+20, 45, 15, 0, 0, Math.PI * 2); ctx.fill(); // Brim
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath(); ctx.moveTo(320, hatY+20); ctx.lineTo(330, hatY-15); ctx.lineTo(370, hatY-15); ctx.lineTo(380, hatY+20); ctx.fill(); // Crown
+        ctx.fillStyle = '#4a4a4a'; ctx.fillRect(325, hatY+15, 50, 5); // Band
+
+        // Menu Options
+        ctx.font = 'bold 24px Arial';
+        const yOffset = 360;
+        
+        // Option 1
+        ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#666';
+        ctx.fillText('▶ Await reassignment?', 350, yOffset);
+        
+        // Option 2
+        ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#666';
+        ctx.fillText('▶ Visit the Speakeasy', 350, yOffset + 50);
+        
+        drawMuteIndicator();
+        ctx.restore(); return;
+    }
         
         if(state !== 'victory' && state !== 'theend' && state !== 'gameover' && state !== 'fired') {
             ctx.fillStyle = '#f5f2ec';
@@ -8179,7 +8216,7 @@ function drawScene() {
 
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
-        } else if(level6.room === 'employeeHallway') {
+        } } else if(level6.room === 'employeeHallway') {
             drawLevel5Hallway();
 
             // Draw Hallway Boss (if alive or dead)
@@ -8886,43 +8923,6 @@ function update() {
             }
         }
         return;
-    }
-    if(state === 'caseclosed') {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-        
-        // "Case Closed." title
-        ctx.fillStyle = '#cc0000';
-        ctx.font = 'bold 64px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Case Closed.', 350, 180);
-        
-        // Subtle gold underline
-        ctx.fillStyle = '#ffd700';
-        ctx.fillRect(200, 198, 300, 4);
-        
-        // Fedora icon
-        const hatY = 260;
-        ctx.fillStyle = '#3a3a3a';
-        ctx.beginPath(); ctx.ellipse(350, hatY+20, 45, 15, 0, 0, Math.PI * 2); ctx.fill(); // Brim
-        ctx.fillStyle = '#2a2a2a';
-        ctx.beginPath(); ctx.moveTo(320, hatY+20); ctx.lineTo(330, hatY-15); ctx.lineTo(370, hatY-15); ctx.lineTo(380, hatY+20); ctx.fill(); // Crown
-        ctx.fillStyle = '#4a4a4a'; ctx.fillRect(325, hatY+15, 50, 5); // Band
-
-        // Menu Options
-        ctx.font = 'bold 24px Arial';
-        const yOffset = 360;
-        
-        // Option 1
-        ctx.fillStyle = menuChoice === 0 ? '#ffd700' : '#666';
-        ctx.fillText('▶ Await reassignment?', 350, yOffset);
-        
-        // Option 2
-        ctx.fillStyle = menuChoice === 1 ? '#ffd700' : '#666';
-        ctx.fillText('▶ Visit the Speakeasy', 350, yOffset + 50);
-        
-        drawMuteIndicator();
-        ctx.restore(); return;
     }
     
     if(state !== 'playing') return;
@@ -9856,17 +9856,14 @@ function update() {
                 return;
             }
 
-            // Case Closed dissolve transition — fade out to new state
+            // Case Closed dissolve transition — fade out
             if(level6.caseClosedCard === 'fading') {
-                level6.detectiveTransAlpha += 0.02; // Slower fade for drama
+                level6.detectiveTransAlpha += 0.03;
                 if(level6.detectiveTransAlpha >= 1) {
-                    state = 'caseclosed'; // Switch to actual end game state
-                    level6.caseClosedCard = true; 
-                    menuChoice = 0;
-                    playMusic('level5'); // Queue Level 5 music
+                    level6.caseClosedCard = true;
+                    level6.caseClosedTimer = 0;
                 }
                 return;
-            }
             }
             // Case Closed title card display — stays forever
             if(level6.caseClosedCard === true) {
@@ -10114,71 +10111,7 @@ function update() {
 
             // === Employee Hallway (original Level 5 hallway revisited from Level 6) ===
             else if(level6.room === 'employeeHallway') {
-                player.y = 380; // Correct Y plane
-
-                // --- Armed Hallway Boss AI ---
-                const hb = level6.hallwayBoss;
-                if(hb && hb.alive) {
-                    // Walk Logic
-                    hb.x += hb.walkDir * 1.8;
-                    hb.walkTimer++;
-                    if(hb.x < 150 || hb.x > 550 || hb.walkTimer > 100) {
-                        hb.walkDir *= -1;
-                        hb.walkTimer = 0;
-                        hb.facing = hb.walkDir > 0 ? 'right' : 'left';
-                    }
-
-                    // Shoot Logic
-                    hb.shootTimer++;
-                    if(hb.shootTimer > 90 && Math.abs(player.x - hb.x) < 400) {
-                        const angle = player.x < hb.x ? Math.PI : 0;
-                        bullets.push({
-                            x: hb.x, y: hb.y - 25, 
-                            vx: Math.cos(angle) * 7, vy: 0, 
-                            fromCEO: true // Hurts player
-                        });
-                        muzzleFlashes.push({x: hb.x + (angle===0?20:-20), y: hb.y-25, facing: angle===0?'right':'left', life: 5});
-                        hb.shootTimer = 0;
-                        hb.facing = player.x < hb.x ? 'left' : 'right'; // Turn to shoot
-                    }
-                }
-
-                // Bullet collision with Hallway Boss
-                if(hb && hb.alive && bullets.length > 0) {
-                    for(let i = bullets.length - 1; i >= 0; i--) {
-                        if(bullets[i].fromCEO) continue; // Don't hit self
-                        if(Math.abs(bullets[i].x - hb.x) < 40 && Math.abs(bullets[i].y - hb.y) < 50) {
-                            bullets.splice(i, 1);
-                            hb.health--;
-                            if(hb.health <= 0) {
-                                hb.alive = false;
-                                hb.deathTime = Date.now();
-                                score += 5000;
-                                // Drop 6 bullets and ? life
-                                level6.hallwayDrops = [
-                                    { type: 'ammo', x: hb.x - 20, y: 380, claimed: false },
-                                    { type: 'life', x: hb.x + 20, y: 380, claimed: false }
-                                ];
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // Pick up Drops
-                if(level6.hallwayDrops) {
-                    for(let drop of level6.hallwayDrops) {
-                        if(drop.claimed) continue;
-                        if(Math.abs(player.x - drop.x) < 40) {
-                            drop.claimed = true;
-                            if(drop.type === 'ammo') level6.revolverAmmo += 6;
-                            if(drop.type === 'life') {
-                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
-                                updateLives();
-                            }
-                        }
-                    }
-                }
+                player.y = 380;
 
                 // Left — to original pipe room (auto)
                 if(player.x < 40) {
