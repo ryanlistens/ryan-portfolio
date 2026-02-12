@@ -9856,14 +9856,17 @@ function update() {
                 return;
             }
 
-            // Case Closed dissolve transition — fade out
+            // Case Closed dissolve transition — fade out to new state
             if(level6.caseClosedCard === 'fading') {
-                level6.detectiveTransAlpha += 0.03;
+                level6.detectiveTransAlpha += 0.02; // Slower fade for drama
                 if(level6.detectiveTransAlpha >= 1) {
-                    level6.caseClosedCard = true;
-                    level6.caseClosedTimer = 0;
+                    state = 'caseclosed'; // Switch to actual end game state
+                    level6.caseClosedCard = true; 
+                    menuChoice = 0;
+                    playMusic('level5'); // Queue Level 5 music
                 }
                 return;
+            }
             }
             // Case Closed title card display — stays forever
             if(level6.caseClosedCard === true) {
@@ -10111,7 +10114,71 @@ function update() {
 
             // === Employee Hallway (original Level 5 hallway revisited from Level 6) ===
             else if(level6.room === 'employeeHallway') {
-                player.y = 380;
+                player.y = 380; // Correct Y plane
+
+                // --- Armed Hallway Boss AI ---
+                const hb = level6.hallwayBoss;
+                if(hb && hb.alive) {
+                    // Walk Logic
+                    hb.x += hb.walkDir * 1.8;
+                    hb.walkTimer++;
+                    if(hb.x < 150 || hb.x > 550 || hb.walkTimer > 100) {
+                        hb.walkDir *= -1;
+                        hb.walkTimer = 0;
+                        hb.facing = hb.walkDir > 0 ? 'right' : 'left';
+                    }
+
+                    // Shoot Logic
+                    hb.shootTimer++;
+                    if(hb.shootTimer > 90 && Math.abs(player.x - hb.x) < 400) {
+                        const angle = player.x < hb.x ? Math.PI : 0;
+                        bullets.push({
+                            x: hb.x, y: hb.y - 25, 
+                            vx: Math.cos(angle) * 7, vy: 0, 
+                            fromCEO: true // Hurts player
+                        });
+                        muzzleFlashes.push({x: hb.x + (angle===0?20:-20), y: hb.y-25, facing: angle===0?'right':'left', life: 5});
+                        hb.shootTimer = 0;
+                        hb.facing = player.x < hb.x ? 'left' : 'right'; // Turn to shoot
+                    }
+                }
+
+                // Bullet collision with Hallway Boss
+                if(hb && hb.alive && bullets.length > 0) {
+                    for(let i = bullets.length - 1; i >= 0; i--) {
+                        if(bullets[i].fromCEO) continue; // Don't hit self
+                        if(Math.abs(bullets[i].x - hb.x) < 40 && Math.abs(bullets[i].y - hb.y) < 50) {
+                            bullets.splice(i, 1);
+                            hb.health--;
+                            if(hb.health <= 0) {
+                                hb.alive = false;
+                                hb.deathTime = Date.now();
+                                score += 5000;
+                                // Drop 6 bullets and ? life
+                                level6.hallwayDrops = [
+                                    { type: 'ammo', x: hb.x - 20, y: 380, claimed: false },
+                                    { type: 'life', x: hb.x + 20, y: 380, claimed: false }
+                                ];
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // Pick up Drops
+                if(level6.hallwayDrops) {
+                    for(let drop of level6.hallwayDrops) {
+                        if(drop.claimed) continue;
+                        if(Math.abs(player.x - drop.x) < 40) {
+                            drop.claimed = true;
+                            if(drop.type === 'ammo') level6.revolverAmmo += 6;
+                            if(drop.type === 'life') {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                            }
+                        }
+                    }
+                }
 
                 // Left — to original pipe room (auto)
                 if(player.x < 40) {
@@ -10128,6 +10195,7 @@ function update() {
                 }
             }
 
+
             // === Employee Pipe Room (original Level 5 pipe room revisited from Level 6) ===
             else if(level6.room === 'employeePipeRoom') {
                 player.y = 380;
@@ -10141,7 +10209,7 @@ function update() {
             }
 
             else if(level6.room === 'entryway') {
-                player.y = 400;
+                player.y = 380;
 
                 // --- Entryway Pipe Boss AI ---
                 const eb = level6.entrywayBoss;
