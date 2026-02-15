@@ -276,6 +276,9 @@ let audioUnlocked = false;
 let pendingMusicKey = null; // Track music that should play after user interaction
 
 function playMusic(musicKey) {
+    // Already playing this track — don't restart (prevents double-call issues)
+    if(currentMusic === levelMusic[musicKey] && !currentMusic.paused) return;
+
     // Stop current music
     if(currentMusic) {
         currentMusic.pause();
@@ -285,22 +288,16 @@ function playMusic(musicKey) {
     // Play new music if not muted
     if(!musicMuted && levelMusic[musicKey]) {
         currentMusic = levelMusic[musicKey];
+        // Set pending immediately so resumePendingMusic can retry from user gesture
+        pendingMusicKey = musicKey;
 
-        // If audio has been unlocked by user interaction, play immediately
-        if(audioUnlocked) {
-            currentMusic.play().catch(err => {
-                console.log('Audio playback error:', err);
-                // Store as pending so it can be retried on next interaction
-                pendingMusicKey = musicKey;
-            });
-        } else {
-            // Try to play, but if blocked, store for later
-            currentMusic.play().catch(err => {
-                console.log('Audio playback prevented (autoplay policy):', err);
-                // Store the pending music to play after user interaction
-                pendingMusicKey = musicKey;
-            });
-        }
+        currentMusic.play().then(() => {
+            // Playback started successfully — clear pending
+            if(pendingMusicKey === musicKey) pendingMusicKey = null;
+        }).catch(err => {
+            console.log('Audio playback prevented:', err);
+            // pendingMusicKey already set — will be retried on next user interaction
+        });
     } else {
         // Store pending music key if muted
         pendingMusicKey = musicKey;
@@ -311,10 +308,17 @@ function playMusic(musicKey) {
 function resumePendingMusic() {
     if(pendingMusicKey && !musicMuted && levelMusic[pendingMusicKey]) {
         currentMusic = levelMusic[pendingMusicKey];
-        currentMusic.play().catch(err => {
-            console.log('Audio playback still prevented:', err);
-        });
+        const key = pendingMusicKey;
         pendingMusicKey = null;
+        currentMusic.play().then(() => {
+            // Success
+        }).catch(err => {
+            console.log('Audio playback still prevented:', err);
+            pendingMusicKey = key; // Re-store for next retry
+        });
+    } else if(currentMusic && currentMusic.paused && !musicMuted) {
+        // Music object was set but never started — try again from user gesture
+        currentMusic.play().catch(() => {});
     }
 }
 
@@ -580,7 +584,11 @@ function updateLives() {
     if(level === 6) {
         let h = '';
         for(let i = 0; i < level6.moneyLives; i++) {
-            h += '<span class="money">$</span>';
+            if(level6.hasDetectiveHat) {
+                h += '<span class="money" style="color:#ffd700">?</span>';
+            } else {
+                h += '<span class="money">$</span>';
+            }
         }
         document.getElementById('lives').innerHTML = h;
         return;
@@ -696,11 +704,26 @@ function initLevel(lv) {
         level6.elevatorFadeAlpha = 0;
         level6.elevatorFadeIn = false;
         level6.pistol = { dropped: false, x: 0, y: 0, pickedUp: false, ammo: 7 };
+        level6.hasDetectiveHat = false;
+        level6.detectiveHatOnGround = false;
+        level6.detectiveTransition = false;
+        level6.detectiveTransAlpha = 0;
+        level6.detectiveTitleCard = false;
+        level6.detectiveTitleTimer = 0;
+        level6.detectiveFadeIn = false;
+        level6.ceoAngryMode = false;
+        level6.redPhoneRinging = false;
+        level6.caseClosedCard = false;
+        level6.caseClosedTimer = 0;
+        level6.caseClosedFadeIn = false;
+        level6.caseClosedChoice = 0;
         level6.bladeDoor = { openPct: 0, state: 'closed' }; // supercomputer blade door
         level6.bladeDoorMega = { openPct: 0, state: 'closed' }; // megacomputer side blade door
         level6.elevatorTarget = null; // which floor elevator is going to
         // Employee Level / Cloning Room state
         level6.cloningBoss = { x: 350, y: 365, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0 };
+        // Employee hallway cloning boss - patrols hallway past cloning room
+        level6.hallwayCloningBoss = { x: 350, y: 365, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0, shootTimer: 0, lastShot: 0 };
         level6.hasKeycard = false;
         level6.keycardOnGround = false;
         level6.keycardX = 0;
@@ -1253,6 +1276,30 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         const leg = Math.sin(frame * 0.15) * 2;
         ctx.fillRect(x - 5*s, y + 20*s + leg, 4*s, 2*s);
         ctx.fillRect(x + s, y + 20*s - leg, 4*s, 2*s);
+    }
+
+    // === DETECTIVE FEDORA HAT — drawn on top when wearing ===
+    if(typeof level6 !== 'undefined' && level6.hasDetectiveHat) {
+        const hatTopY = y - 13*s; // Just above bald head
+        // Hat brim — wide dark gray ellipse
+        ctx.fillStyle = '#3a3a3a';
+        ctx.beginPath();
+        ctx.ellipse(x, hatTopY + 2, 14, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Hat crown — pinched fedora shape
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath();
+        ctx.moveTo(x - 9, hatTopY);
+        ctx.lineTo(x - 5, hatTopY - 8);
+        ctx.lineTo(x - 1, hatTopY - 5);
+        ctx.lineTo(x + 1, hatTopY - 5);
+        ctx.lineTo(x + 5, hatTopY - 8);
+        ctx.lineTo(x + 9, hatTopY);
+        ctx.closePath();
+        ctx.fill();
+        // Hat band
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(x - 8, hatTopY - 1, 16, 2);
     }
 }
 
@@ -2749,6 +2796,19 @@ function drawLevel5PipeRoom() {
         ctx.lineTo(694, pipeY + 25);
         ctx.stroke();
 
+        // Animated flow effect on horizontal pipe section
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 6;
+        ctx.setLineDash([12, 18]);
+        ctx.lineDashOffset = -Date.now() / 150;
+        ctx.beginPath();
+        ctx.moveTo(npc.x + 25, pipeY + 25);
+        ctx.lineTo(694, pipeY + 25);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
         if(npc.needsDoc && npc.crackStartTime) {
             const crackTime = Date.now() - npc.crackStartTime;
             const pct = Math.min(crackTime / 15000, 1);
@@ -3659,29 +3719,13 @@ function drawLevel6PipeRoom() {
         ctx.lineTo(pipeX, 400);
         ctx.stroke();
 
-        // Primary highlight (bright metallic shine)
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 3;
+        // Simple highlight (matching levels 1-5)
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(pipeX - 5, 138);
-        ctx.lineTo(pipeX - 5, 400);
-        ctx.stroke();
-
-        // Secondary highlight (subtle)
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(pipeX - 3, 138);
-        ctx.lineTo(pipeX - 3, 400);
-        ctx.stroke();
-
-        // Shadow on opposite side for depth
-        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(pipeX + 5, 138);
-        ctx.lineTo(pipeX + 5, 400);
+        ctx.moveTo(pipeX - 4, 138);
+        ctx.lineTo(pipeX - 4, 400);
         ctx.stroke();
 
         ctx.lineCap = 'butt';
@@ -4169,23 +4213,25 @@ function drawLevel6MegacomputerRoom() {
     ctx.fillStyle = '#660000';
     ctx.fillRect(detectiveX - 11*s, detectiveY - 7*s, 1, 2*s);
 
-    // Fedora fallen beside head (on ground)
+    // Fedora fallen beside head (on ground) — disappears once picked up
     const hatX = detectiveX - 24*s;
     const hatY = detectiveY - 8*s;
-    ctx.fillStyle = '#3a3a3a'; // Dark gray fedora
-    ctx.beginPath();
-    ctx.ellipse(hatX, hatY, 14, 10, -0.1, 0, Math.PI * 2);
-    ctx.fill();
+    if(!level6.hasDetectiveHat) {
+        ctx.fillStyle = '#3a3a3a'; // Dark gray fedora
+        ctx.beginPath();
+        ctx.ellipse(hatX, hatY, 14, 10, -0.1, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Hat crown
-    ctx.fillStyle = '#2a2a2a';
-    ctx.beginPath();
-    ctx.ellipse(hatX - 1, hatY, 8, 6, -0.1, 0, Math.PI * 2);
-    ctx.fill();
+        // Hat crown
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath();
+        ctx.ellipse(hatX - 1, hatY, 8, 6, -0.1, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Hat band
-    ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(hatX - 7, hatY - 1, 12, 2);
+        // Hat band
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(hatX - 7, hatY - 1, 12, 2);
+    }
 
     // Neck - connecting head to torso
     ctx.fillStyle = detectiveSkin;
@@ -4270,6 +4316,28 @@ function drawLevel6MegacomputerRoom() {
     ctx.fill();
     ctx.globalAlpha = 1;
 
+    // Detective hat pickup prompt — hat becomes interactable after pistol is picked up
+    if(level6.pistol.pickedUp && !level6.hasDetectiveHat) {
+        // Highlight the fedora on ground
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(hatX, hatY, 16, 12, -0.1, 0, Math.PI * 2);
+        ctx.stroke();
+        // Prompt
+        if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 60) {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(hatX - 65, hatY - 30, 130, 20);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ACTION: TAKE HAT', hatX, hatY - 14);
+        }
+    }
+    // Hide hat from detective body once picked up (already wearing it)
+    // (The fedora drawing above is skipped implicitly since we don't modify it —
+    //  but visually the hat on ground is the one the player takes)
+
     // Interaction prompt for note (when not viewing) - aligned with note center
     const noteInteractX = noteX + 9; // Center of note
     const noteInteractY = noteY + 12; // Center of note
@@ -4315,29 +4383,6 @@ function drawLevel6MegacomputerRoom() {
         }
     }
 
-    // Space-age door on left (matching pipe room style — exit to pipe room)
-    const exitDoorX = 0, exitDoorY = 290, exitDoorW = 44, exitDoorH = 110;
-    const exitGrad = ctx.createLinearGradient(exitDoorX, 0, exitDoorX + exitDoorW, 0);
-    exitGrad.addColorStop(0, '#909090');
-    exitGrad.addColorStop(0.5, '#c0c0c0');
-    exitGrad.addColorStop(1, '#b0b0b0');
-    ctx.fillStyle = exitGrad;
-    ctx.fillRect(exitDoorX, exitDoorY, exitDoorW, exitDoorH);
-    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(exitDoorX + exitDoorW/2, exitDoorY+4); ctx.lineTo(exitDoorX + exitDoorW/2, exitDoorY+exitDoorH-4); ctx.stroke();
-    ctx.fillStyle = '#00ccff'; ctx.shadowColor = '#00ccff'; ctx.shadowBlur = 6;
-    ctx.fillRect(exitDoorX+4, exitDoorY+2, exitDoorW-8, 3);
-    ctx.fillRect(exitDoorX+4, exitDoorY+exitDoorH-5, exitDoorW-8, 3);
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
-    ctx.strokeRect(exitDoorX, exitDoorY, exitDoorW, exitDoorH);
-
-    if(player.x < 60) {
-        ctx.fillStyle = '#00ccff';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('← EXIT', 150, 280);
-    }
 }
 
 function drawLevel6EmployeeLobby() {
@@ -4628,8 +4673,8 @@ function drawLevel6CloningRoom() {
         ctx.lineTo(vx + vw/2, 50);
         // Curve left
         ctx.quadraticCurveTo(vx + vw/2, 35, vx + vw/2 - 20, 35);
-        // Horizontal to left wall
-        ctx.lineTo(28, 35);
+        // Horizontal to left wall gasket center
+        ctx.lineTo(gasketX, 35);
         ctx.stroke();
         // Highlight
         ctx.strokeStyle = 'rgba(255,255,255,0.2)';
@@ -4638,7 +4683,7 @@ function drawLevel6CloningRoom() {
         ctx.moveTo(vx + vw/2, vy - 2);
         ctx.lineTo(vx + vw/2, 50);
         ctx.quadraticCurveTo(vx + vw/2, 37, vx + vw/2 - 20, 37);
-        ctx.lineTo(28, 37);
+        ctx.lineTo(gasketX, 37);
         ctx.stroke();
 
         // === ALUMINUM DRYER VENT TUBE from vat to centrifuge ===
@@ -4743,7 +4788,7 @@ function drawLevel6CloningRoom() {
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 2;
     ctx.strokeRect(275, -8, 150, 26);
-    ctx.fillStyle = '#00ccff';
+    ctx.fillStyle = '#fff';
     ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('PM PRINTER', 350, 12);
@@ -4906,62 +4951,43 @@ function drawLevel6CloningRoom() {
         ctx.arc(bx, by - 34 - bob, 4, 0.2, Math.PI - 0.2);
         ctx.stroke();
 
-        // White lab coat (open, extends past hips)
-        ctx.fillStyle = '#f5f5f5';
-        ctx.fillRect(bx - 16, by - 28 - bob, 32, 36);
-        // Coat lapels
-        ctx.fillStyle = '#e8e8e8';
-        ctx.beginPath();
-        ctx.moveTo(bx - 16, by - 28 - bob);
-        ctx.lineTo(bx - 4, by - 18 - bob);
-        ctx.lineTo(bx - 16, by - 18 - bob);
-        ctx.closePath();
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(bx + 16, by - 28 - bob);
-        ctx.lineTo(bx + 4, by - 18 - bob);
-        ctx.lineTo(bx + 16, by - 18 - bob);
-        ctx.closePath();
-        ctx.fill();
-        // Red shirt underneath (visible between lapels)
+        // Red shirt (full torso — no lab coat)
         ctx.fillStyle = '#cc2222';
-        ctx.fillRect(bx - 6, by - 28 - bob, 12, 28);
-        // Black tie
+        ctx.fillRect(bx - 14, by - 28 - bob, 28, 36);
+        // Shirt collar notch
+        ctx.fillStyle = '#b01e1e';
+        ctx.beginPath();
+        ctx.moveTo(bx - 8, by - 28 - bob);
+        ctx.lineTo(bx, by - 22 - bob);
+        ctx.lineTo(bx + 8, by - 28 - bob);
+        ctx.closePath();
+        ctx.fill();
+        // Black tie (prominent)
         ctx.fillStyle = '#111';
         ctx.beginPath();
-        ctx.moveTo(bx - 3, by - 28 - bob);
-        ctx.lineTo(bx + 3, by - 28 - bob);
-        ctx.lineTo(bx + 2, by - 6 - bob);
-        ctx.lineTo(bx, by - 2 - bob);
-        ctx.lineTo(bx - 2, by - 6 - bob);
+        ctx.moveTo(bx - 4, by - 28 - bob);
+        ctx.lineTo(bx + 4, by - 28 - bob);
+        ctx.lineTo(bx + 3, by - 6 - bob);
+        ctx.lineTo(bx, by - 1 - bob);
+        ctx.lineTo(bx - 3, by - 6 - bob);
         ctx.closePath();
         ctx.fill();
-        // Coat pocket with pen
-        ctx.fillStyle = '#ddd';
-        ctx.fillRect(bx + 6, by - 16 - bob, 8, 10);
-        ctx.strokeStyle = '#bbb';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx + 6, by - 16 - bob, 8, 10);
-        ctx.fillStyle = '#2244cc';
-        ctx.fillRect(bx + 9, by - 20 - bob, 2, 8);
+        // Tie knot
+        ctx.fillStyle = '#222';
+        ctx.fillRect(bx - 3, by - 28 - bob, 6, 4);
 
-        // Arms — animated swing when walking
+        // Arms — animated swing when walking (red shirt sleeves)
         const armSwing = walkCycle * 0.6;
         // Left arm
-        ctx.fillStyle = '#f5f5f5';
-        ctx.fillRect(bx - 20, by - 26 - bob + armSwing, 6, 22);
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(bx - 20, by - 26 - bob + armSwing, 6, 18);
         ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx - 20, by - 6 - bob + armSwing, 6, 6);
-        // Right arm + clipboard
-        ctx.fillStyle = '#f5f5f5';
-        ctx.fillRect(bx + 14, by - 26 - bob - armSwing, 6, 22);
+        ctx.fillRect(bx - 20, by - 8 - bob + armSwing, 6, 8);
+        // Right arm
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(bx + 14, by - 26 - bob - armSwing, 6, 18);
         ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx + 14, by - 6 - bob - armSwing, 6, 6);
-        // Clipboard in right hand
-        ctx.fillStyle = '#8B4513';
-        ctx.fillRect(bx + (cb.facing === 'right' ? 18 : -24), by - 10 - bob - armSwing, 10, 16);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(bx + (cb.facing === 'right' ? 19 : -23), by - 8 - bob - armSwing, 8, 12);
+        ctx.fillRect(bx + 14, by - 8 - bob - armSwing, 6, 8);
 
         // Dark pants
         ctx.fillStyle = '#2a2a2a';
@@ -5050,13 +5076,313 @@ function drawLevel6CloningRoom() {
     }
 }
 
+// === Level 6 Furnace Room — dark industrial furnace with evidence of CEO's escape ===
+function drawL6FurnaceRoom() {
+    // Dark industrial walls
+    ctx.fillStyle = '#2b2520';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Dark floor tiles
+    ctx.fillStyle = '#1a1815';
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    for(let i = -4; i < 24; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#0a0a08';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
+
+    // === FURNACE (center-right, prominent) ===
+    const fx = 420, fy = 340;
+    // Radial heat glow
+    const glowPhase = Math.sin(Date.now() / 800) * 0.3 + 0.7;
+    const gradient = ctx.createRadialGradient(fx, fy, 20, fx, fy, 140);
+    gradient.addColorStop(0, `rgba(255,100,0,${glowPhase * 0.5})`);
+    gradient.addColorStop(0.5, `rgba(255,50,0,${glowPhase * 0.2})`);
+    gradient.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(fx, fy, 140, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Furnace body (industrial steel)
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(fx - 65, fy - 45, 130, 90);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(fx - 55, fy - 35, 110, 70);
+    // Fire window
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(fx - 42, fy - 22, 84, 44);
+    // Perpetual glow inside
+    ctx.fillStyle = `rgba(255,100,0,${glowPhase})`;
+    ctx.fillRect(fx - 38, fy - 18, 76, 36);
+    // Flickering flames
+    for(let i = 0; i < 6; i++) {
+        const flameX = fx - 30 + i * 12;
+        const flameH = 20 + Math.sin(Date.now() / 150 + i * 1.3) * 10;
+        const flameY = fy + 10 - flameH;
+        ctx.fillStyle = `rgba(255,${150 + i * 15},0,0.8)`;
+        ctx.fillRect(flameX, flameY, 6, flameH);
+    }
+    // Chimney/exhaust pipe going up
+    ctx.fillStyle = '#444';
+    ctx.fillRect(fx - 12, fy - 130, 24, 90);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(fx - 15, fy - 135, 30, 10);
+    // Heat shimmer from chimney
+    ctx.fillStyle = `rgba(255,80,0,${0.15 + Math.sin(Date.now() / 400) * 0.1})`;
+    ctx.fillRect(fx - 8, fy - 180, 16, 50);
+    // Steel rivets on furnace
+    for(let r = 0; r < 4; r++) {
+        ctx.fillStyle = '#555';
+        ctx.beginPath();
+        ctx.arc(fx - 55 + r * 38, fy - 40, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(fx - 55 + r * 38, fy + 40, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // FURNACE label
+    ctx.fillStyle = '#cc8844';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('INCINERATOR', fx, fy + 55);
+
+    // === DISCARDED RED JUMPSUIT on floor in front of furnace ===
+    const jsX = fx - 30, jsY = 388;
+    // Crumpled jumpsuit body — irregularly shaped heap
+    ctx.fillStyle = '#cc2222';
+    // Main body mass
+    ctx.beginPath();
+    ctx.moveTo(jsX, jsY);
+    ctx.lineTo(jsX + 35, jsY - 4);
+    ctx.lineTo(jsX + 40, jsY + 8);
+    ctx.lineTo(jsX + 32, jsY + 16);
+    ctx.lineTo(jsX + 10, jsY + 18);
+    ctx.lineTo(jsX - 5, jsY + 12);
+    ctx.closePath();
+    ctx.fill();
+    // Darker fold shadows
+    ctx.fillStyle = '#991a1a';
+    ctx.beginPath();
+    ctx.moveTo(jsX + 8, jsY + 2);
+    ctx.lineTo(jsX + 22, jsY);
+    ctx.lineTo(jsX + 25, jsY + 10);
+    ctx.lineTo(jsX + 12, jsY + 12);
+    ctx.closePath();
+    ctx.fill();
+    // Sleeve hanging out
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(jsX + 36, jsY + 2, 14, 6);
+    ctx.fillStyle = '#991a1a';
+    ctx.fillRect(jsX + 36, jsY + 4, 14, 2);
+    // Collar detail
+    ctx.fillStyle = '#e63333';
+    ctx.fillRect(jsX + 10, jsY - 4, 12, 5);
+    // PipeTech logo patch (small white square on shoulder area)
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(jsX + 28, jsY, 6, 5);
+    ctx.fillStyle = '#cc2222';
+    ctx.font = '3px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PT', jsX + 31, jsY + 4);
+
+    // === BLOODY WHITE BOOTS next to jumpsuit ===
+    const bx1 = fx + 18, by1 = 392;
+    // Left boot
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(bx1, by1, 10, 14);
+    ctx.fillRect(bx1 - 3, by1 + 10, 16, 5);
+    // Boot sole
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bx1 - 3, by1 + 14, 16, 2);
+    // Blood stains on left boot
+    ctx.fillStyle = '#8b0000';
+    ctx.fillRect(bx1, by1 + 6, 6, 4);
+    ctx.fillStyle = '#6a0000';
+    ctx.beginPath();
+    ctx.arc(bx1 + 2, by1 + 12, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Right boot (fallen sideways)
+    const bx2 = bx1 + 18, by2 = 394;
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(bx2, by2, 14, 8);
+    ctx.fillRect(bx2 + 10, by2 - 3, 5, 14);
+    // Boot sole (visible, sideways)
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bx2, by2 + 7, 14, 2);
+    // Blood stains on right boot
+    ctx.fillStyle = '#8b0000';
+    ctx.fillRect(bx2 + 2, by2 + 2, 8, 3);
+    ctx.fillStyle = '#6a0000';
+    ctx.beginPath();
+    ctx.arc(bx2 + 8, by2 + 5, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // === BLOODY FOOTPRINTS leading from boots toward secret door (left wall) ===
+    const fpSteps = [
+        {x: fx + 5, y: 400, rot: -0.3, size: 1},
+        {x: fx - 30, y: 398, rot: -0.2, size: 0.95},
+        {x: fx - 70, y: 400, rot: -0.15, size: 0.9},
+        {x: fx - 115, y: 397, rot: -0.1, size: 0.85},
+        {x: fx - 160, y: 399, rot: -0.1, size: 0.8},
+        {x: fx - 205, y: 398, rot: -0.05, size: 0.75},
+        {x: fx - 245, y: 400, rot: 0, size: 0.7},
+        {x: fx - 280, y: 397, rot: 0, size: 0.65},
+        {x: fx - 310, y: 399, rot: 0, size: 0.55},
+        {x: fx - 340, y: 398, rot: 0, size: 0.45},
+    ];
+    for(let fp of fpSteps) {
+        ctx.save();
+        ctx.translate(fp.x, fp.y);
+        ctx.rotate(fp.rot);
+        ctx.globalAlpha = 0.3 + fp.size * 0.5;
+        // Barefoot print — heel + ball + toes
+        ctx.fillStyle = '#6a0000';
+        const s = fp.size;
+        // Heel
+        ctx.beginPath();
+        ctx.ellipse(0, 6 * s, 4 * s, 5 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Ball of foot
+        ctx.beginPath();
+        ctx.ellipse(0, -4 * s, 5 * s, 4 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Toes (5 small dots)
+        for(let t = 0; t < 5; t++) {
+            const tx = -4 * s + t * 2 * s;
+            const ty = -9 * s + Math.abs(t - 2) * 0.5 * s;
+            ctx.beginPath();
+            ctx.arc(tx, ty, 1.2 * s, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
+
+    // === SECRET DOOR (left wall) — concealed panel the CEO escaped through ===
+    const sdX = 10, sdY = 300, sdW = 45, sdH = 100;
+    // Door outline barely visible — hairline crack in wall
+    ctx.strokeStyle = '#3a3530';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sdX, sdY, sdW, sdH);
+    // Subtle handle scratch marks
+    ctx.strokeStyle = '#4a4540';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(sdX + sdW - 5, sdY + 40);
+    ctx.lineTo(sdX + sdW - 5, sdY + 60);
+    ctx.stroke();
+    // Bloody handprint on wall near secret door
+    ctx.fillStyle = 'rgba(106,0,0,0.4)';
+    ctx.fillRect(sdX + sdW + 5, sdY + 30, 14, 18);
+    // Finger smears
+    for(let f = 0; f < 4; f++) {
+        ctx.fillRect(sdX + sdW + 7 + f * 3, sdY + 20, 2, 12);
+    }
+    // Fading bloody footprints disappear into door crack
+    ctx.fillStyle = 'rgba(106,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(sdX + sdW/2, sdY + sdH - 8, 4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(106,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(sdX + sdW/2 - 6, sdY + sdH - 3, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // === STILL-BURNING CIGAR next to secret wall door ===
+    const cigX = sdX + sdW + 25, cigY = sdY + sdH - 15;
+    // Cigar body — brown cylinder
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(cigX, cigY, 18, 5);
+    // Cigar band — gold ring
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(cigX + 4, cigY, 4, 5);
+    // Ash tip — gray
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(cigX - 3, cigY + 1, 4, 3);
+    // Burning ember at tip
+    const emberGlow = 0.6 + Math.sin(Date.now() / 300) * 0.4;
+    ctx.fillStyle = `rgba(255,100,0,${emberGlow})`;
+    ctx.beginPath();
+    ctx.arc(cigX - 2, cigY + 2.5, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Smoke wisps rising from cigar
+    for(let sw = 0; sw < 3; sw++) {
+        const smokeY = cigY - 8 - sw * 12;
+        const smokeX = cigX - 2 + Math.sin(Date.now() / 600 + sw * 1.5) * 6;
+        const smokeAlpha = 0.25 - sw * 0.07;
+        ctx.fillStyle = `rgba(180,180,180,${smokeAlpha})`;
+        ctx.beginPath();
+        ctx.arc(smokeX, smokeY, 3 + sw * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Left door — wooden door to hallway (same style as Level 5)
+    const ldX = 55, ldY = 340, ldW = 50, ldH = 60;
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(ldX - 10, ldY, ldW, ldH);
+    ctx.fillStyle = '#4a3a1a';
+    ctx.fillRect(ldX - 5, ldY + 5, ldW - 10, ldH - 10);
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(ldX + 30, ldY + 30, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Highlight when near
+    if(player.x < 100) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(ldX - 12, ldY - 2, ldW + 4, ldH + 4);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u2190 HALLWAY', ldX + 15, ldY - 10);
+    }
+
+    // === OPEN WALL DOOR on right side (passage back to cloning room) ===
+    const rdX = 655, rdY = 300, rdW = 45, rdH = 100;
+    // Dark interior of open doorway
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(rdX, rdY, rdW, rdH);
+    // Door frame — concrete edges
+    ctx.fillStyle = '#3a3530';
+    ctx.fillRect(rdX - 3, rdY - 3, 3, rdH + 6);
+    ctx.fillRect(rdX, rdY - 3, rdW, 3);
+    ctx.fillRect(rdX, rdY + rdH, rdW, 3);
+    // Green LED strip on doorframe edge
+    ctx.fillStyle = '#00ff88';
+    ctx.fillRect(rdX - 2, rdY, 1, rdH);
+    // Dim light spilling from doorway
+    ctx.fillStyle = 'rgba(0,255,136,0.05)';
+    ctx.fillRect(rdX - 20, rdY, 20, rdH);
+
+    // Right exit direction prompt (back to cloning room)
+    if(player.x > 600) {
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(660 - 55, 350, 110, 20);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('CLONING \u2192', 660, 366);
+    }
+
+    // Ambient label
+    if(player.x > 200 && player.x < 500) {
+        ctx.fillStyle = 'rgba(255,200,150,0.5)';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Someone discarded their uniform here...', 350, 280);
+    }
+}
+
 function drawLevel6Entryway() {
     ctx.fillStyle = '#8b0000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
+
     ctx.fillStyle = '#660000';
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
-    
+
     for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = '#550000';
         ctx.lineWidth = 1;
@@ -5716,7 +6042,69 @@ function drawLevel6CEOOffice() {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(monX + 13, monY + 27, 6, 4);
     ctx.fillRect(monX + 9, monY + 31, 14, 2);
-    
+
+    // === RED PHONE on desk (center, between brandy and monitor) ===
+    const phoneX = deskX, phoneY = deskY - 18;
+    // Phone base
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(phoneX - 10, phoneY, 20, 8);
+    ctx.fillStyle = '#aa0000';
+    ctx.fillRect(phoneX - 9, phoneY + 1, 18, 6);
+    // Dial pad holes
+    ctx.fillStyle = '#880000';
+    for(let pr = 0; pr < 2; pr++) {
+        for(let pc = 0; pc < 3; pc++) {
+            ctx.beginPath();
+            ctx.arc(phoneX - 5 + pc * 5, phoneY + 3 + pr * 3, 1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    // Handset cradle
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(phoneX - 12, phoneY - 3, 24, 4);
+    // Handset on top
+    const phoneRinging = level6.ceoDefeated && !level6.caseClosedCard && level6.hasDetectiveHat;
+    const ringBob = phoneRinging ? Math.sin(Date.now() / 80) * 2 : 0;
+    const ringShake = phoneRinging ? Math.sin(Date.now() / 50) * 1.5 : 0;
+    ctx.fillStyle = '#dd1111';
+    // Earpiece
+    ctx.fillRect(phoneX - 11 + ringShake, phoneY - 6 + ringBob, 7, 4);
+    // Handle bar
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(phoneX - 7 + ringShake, phoneY - 4 + ringBob, 14, 2);
+    // Mouthpiece
+    ctx.fillStyle = '#dd1111';
+    ctx.fillRect(phoneX + 4 + ringShake, phoneY - 6 + ringBob, 7, 4);
+    // Ringing glow effect
+    if(phoneRinging) {
+        const ringGlow = 0.3 + Math.sin(Date.now() / 200) * 0.3;
+        ctx.fillStyle = `rgba(255,50,50,${ringGlow})`;
+        ctx.beginPath();
+        ctx.arc(phoneX, phoneY - 2, 18, 0, Math.PI * 2);
+        ctx.fill();
+        // Ring lines (sound waves)
+        ctx.strokeStyle = `rgba(255,100,100,${ringGlow})`;
+        ctx.lineWidth = 1;
+        for(let rw = 0; rw < 3; rw++) {
+            const rwR = 20 + rw * 6 + Math.sin(Date.now() / 300) * 3;
+            ctx.beginPath();
+            ctx.arc(phoneX, phoneY - 2, rwR, -0.6, 0.6);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(phoneX, phoneY - 2, rwR, Math.PI - 0.6, Math.PI + 0.6);
+            ctx.stroke();
+        }
+    }
+    // Interaction prompt for phone
+    if(level6.ceoDefeated && !level6.caseClosedCard && level6.hasDetectiveHat && Math.abs(player.x - phoneX) < 50 && Math.abs(player.y - (deskY - 10)) < 60) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(phoneX - 75, phoneY - 30, 150, 20);
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACTION: ANSWER PHONE', phoneX, phoneY - 14);
+    }
+
     // Golden trophy cabinet (right back wall) - obstacle - LARGER to show photorealistic images clearly
     const cabinetX = 560;
     const cabinetY = 50;
@@ -7630,8 +8018,222 @@ function drawScene() {
 
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'l6Furnace') {
+            drawL6FurnaceRoom();
+
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'employeeHallway') {
+            drawLevel5Hallway();
+
+            // Draw employee hallway cloning boss if alive
+            const hallCB = level6.hallwayCloningBoss;
+            if(hallCB && hallCB.alive) {
+                const bx = hallCB.x, by = hallCB.y;
+                const walkCycle = hallCB.paused ? 0 : Math.sin(Date.now() / 150) * 5;
+                const bob = hallCB.paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
+
+                // White hard hat (taller, wider — supervisor style)
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(bx - 16, by - 64 - bob, 32, 10);
+                ctx.fillStyle = '#e0e0e0';
+                ctx.fillRect(bx - 18, by - 56 - bob, 36, 5);
+                // Hat brim shadow
+                ctx.fillStyle = '#ccc';
+                ctx.fillRect(bx - 17, by - 52 - bob, 34, 2);
+
+                // Head
+                ctx.fillStyle = '#f5d5a8';
+                ctx.fillRect(bx - 11, by - 50 - bob, 22, 22);
+                // Eyes — stern expression
+                ctx.fillStyle = '#000';
+                ctx.fillRect(bx - 7, by - 44 - bob, 4, 4);
+                ctx.fillRect(bx + 3, by - 44 - bob, 4, 4);
+                // Angry eyebrows
+                ctx.strokeStyle = '#4a3520';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(bx - 8, by - 48 - bob); ctx.lineTo(bx - 3, by - 46 - bob);
+                ctx.moveTo(bx + 8, by - 48 - bob); ctx.lineTo(bx + 3, by - 46 - bob);
+                ctx.stroke();
+                // Mouth — frown
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(bx, by - 34 - bob, 4, 0.2, Math.PI - 0.2);
+                ctx.stroke();
+
+                // Red shirt (full torso — no lab coat)
+                ctx.fillStyle = '#cc2222';
+                ctx.fillRect(bx - 14, by - 28 - bob, 28, 36);
+                // Shirt collar notch
+                ctx.fillStyle = '#b01e1e';
+                ctx.beginPath();
+                ctx.moveTo(bx - 8, by - 28 - bob);
+                ctx.lineTo(bx, by - 22 - bob);
+                ctx.lineTo(bx + 8, by - 28 - bob);
+                ctx.closePath();
+                ctx.fill();
+                // Black tie (prominent)
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.moveTo(bx - 4, by - 28 - bob);
+                ctx.lineTo(bx + 4, by - 28 - bob);
+                ctx.lineTo(bx + 3, by - 6 - bob);
+                ctx.lineTo(bx, by - 1 - bob);
+                ctx.lineTo(bx - 3, by - 6 - bob);
+                ctx.closePath();
+                ctx.fill();
+                // Tie knot
+                ctx.fillStyle = '#222';
+                ctx.fillRect(bx - 3, by - 28 - bob, 6, 4);
+
+                // Arms — animated swing when walking (red shirt sleeves)
+                const armSwing = walkCycle * 0.6;
+                // Left arm
+                ctx.fillStyle = '#cc2222';
+                ctx.fillRect(bx - 20, by - 26 - bob + armSwing, 6, 18);
+                ctx.fillStyle = '#f5d5a8';
+                ctx.fillRect(bx - 20, by - 8 - bob + armSwing, 6, 8);
+                // Right arm
+                ctx.fillStyle = '#cc2222';
+                ctx.fillRect(bx + 14, by - 26 - bob - armSwing, 6, 18);
+                ctx.fillStyle = '#f5d5a8';
+                ctx.fillRect(bx + 14, by - 8 - bob - armSwing, 6, 8);
+
+                // Dark pants
+                ctx.fillStyle = '#2a2a2a';
+                const legOffset = walkCycle;
+                ctx.fillRect(bx - 10, by + 8 - bob, 9, 18 + legOffset);
+                ctx.fillRect(bx + 1, by + 8 - bob, 9, 18 - legOffset);
+                // Black steel-toe boots
+                ctx.fillStyle = '#111';
+                ctx.fillRect(bx - 12, by + 26 - bob + legOffset, 12, 5);
+                ctx.fillRect(bx, by + 26 - bob - legOffset, 12, 5);
+                // Boot steel toe caps
+                ctx.fillStyle = '#444';
+                ctx.fillRect(bx - 12, by + 26 - bob + legOffset, 4, 3);
+                ctx.fillRect(bx + 8, by + 26 - bob - legOffset, 4, 3);
+                
+                // Gun in hand (detective mode only)
+                if(level6.hasDetectiveHat) {
+                    const gunX = hallCB.facing === 'left' ? bx - 28 : bx + 28;
+                    const gunY = by - 10;
+                    
+                    // Revolver
+                    ctx.fillStyle = '#4a4a4a';
+                    if(hallCB.facing === 'left') {
+                        ctx.fillRect(gunX - 12, gunY, 14, 4);
+                    } else {
+                        ctx.fillRect(gunX - 2, gunY, 14, 4);
+                    }
+                    ctx.fillStyle = '#5a5a5a';
+                    ctx.beginPath();
+                    ctx.arc(hallCB.facing === 'left' ? gunX - 2 : gunX, gunY + 2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+            } else if(hallCB && hallCB.deathTime > 0) {
+                // Dead boss — collapsed on ground
+                const bx = hallCB.x, by = 392;
+                // Body on ground
+                ctx.fillStyle = '#f5f5f5'; // lab coat
+                ctx.fillRect(bx - 18, by - 2, 36, 8);
+                // Head
+                ctx.fillStyle = '#f5d5a8';
+                ctx.fillRect(bx - 10, by - 8, 16, 10);
+                // Hard hat knocked off
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(bx + 16, by - 4, 14, 6);
+                // X eyes
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx - 2, by - 2);
+                ctx.moveTo(bx - 2, by - 6); ctx.lineTo(bx - 6, by - 2);
+                ctx.moveTo(bx + 2, by - 6); ctx.lineTo(bx + 6, by - 2);
+                ctx.moveTo(bx + 6, by - 6); ctx.lineTo(bx + 2, by - 2);
+                ctx.stroke();
+                // Red shirt visible
+                ctx.fillStyle = '#cc2222';
+                ctx.fillRect(bx - 6, by, 12, 4);
+                // Black tie askew
+                ctx.fillStyle = '#111';
+                ctx.fillRect(bx - 1, by - 1, 3, 6);
+            }
+
+            // Draw hallway boss drops
+            if(level6.hallwayDrops && level6.hallwayDrops.length > 0) {
+                for(let drop of level6.hallwayDrops) {
+                    if(drop.claimed) continue;
+                    const dropBob = Math.sin(Date.now() / 300) * 3;
+                    
+                    if(drop.type === 'life') {
+                        // ? life icon
+                        ctx.fillStyle = '#ffd700';
+                        ctx.font = 'bold 18px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('?', drop.x, drop.y + 5 + dropBob);
+                        ctx.fillStyle = 'rgba(255,215,0,0.2)';
+                        ctx.beginPath();
+                        ctx.arc(drop.x, drop.y + dropBob, 14, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if(drop.type === 'ammo') {
+                        // 3 bullets icon
+                        ctx.fillStyle = '#d4af37';
+                        for(let i = 0; i < 3; i++) {
+                            const bx = drop.x - 8 + i * 8;
+                            ctx.fillRect(bx, drop.y - 8 + dropBob, 4, 10);
+                            ctx.fillStyle = '#aa8822';
+                            ctx.fillRect(bx, drop.y + 0 + dropBob, 4, 3);
+                            ctx.fillStyle = '#d4af37';
+                        }
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('x3', drop.x, drop.y + 16 + dropBob);
+                    }
+                }
+            }
+
+            // Direction prompts for L6 revisit — auto transitions
+            if(player.x < 80) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(10, 310, 120, 20);
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('\u2190 PIPE ROOM', 70, 326);
+            }
+            if(player.x > 600) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(600, 310, 100, 20);
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('FURNACE \u2192', 650, 326);
+            }
+
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'employeePipeRoom') {
+            drawLevel5PipeRoom();
+
+            if(player.x > 600) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(600, 310, 100, 20);
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('HALLWAY \u2192', 650, 326);
+            }
+
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
         } else if(level6.room === 'ceoOffice') {
             drawLevel6CEOOffice();
+
+            // Draw CEO Office doorway cloning boss if alive
 
             if(ceo.state !== 'dead') {
                 drawCEO(ceo.x, ceo.y, ceo.facing);
@@ -7684,6 +8286,99 @@ function drawScene() {
         if(level6.elevatorTransition || level6.elevatorFadeIn) {
             ctx.fillStyle = `rgba(0,0,0,${level6.elevatorFadeAlpha})`;
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+
+        // Detective hat dissolve transition + title card
+        if(level6.detectiveTransition || level6.detectiveFadeIn) {
+            ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        if(level6.detectiveTitleCard) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+            // Title card text
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 42px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('You are now', 350, 200);
+            ctx.fillText('the detective!', 350, 260);
+            // Fedora icon
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.ellipse(350, 330, 40, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath();
+            ctx.moveTo(320, 330);
+            ctx.lineTo(330, 305);
+            ctx.lineTo(345, 315);
+            ctx.lineTo(355, 315);
+            ctx.lineTo(370, 305);
+            ctx.lineTo(380, 330);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#4a4a4a';
+            ctx.fillRect(325, 327, 50, 4);
+        }
+
+        // Case Closed dissolve transition + title card
+        if(level6.caseClosedCard === 'fading') {
+            ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        if(level6.caseClosedCard === true) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+            // "Case Closed." title
+            ctx.fillStyle = '#cc0000';
+            ctx.font = 'bold 64px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Case Closed.', 350, 230);
+            // Subtle gold underline
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(200, 248, 300, 3);
+            // Fedora silhouette
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.ellipse(350, 320, 35, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.moveTo(325, 320);
+            ctx.lineTo(332, 298);
+            ctx.lineTo(345, 308);
+            ctx.lineTo(355, 308);
+            ctx.lineTo(368, 298);
+            ctx.lineTo(375, 320);
+            ctx.closePath();
+            ctx.fill();
+            // Score
+            if(level6.caseClosedTimer >= 60) {
+                ctx.fillStyle = '#888';
+                ctx.font = '24px Arial';
+                ctx.fillText('FINAL SCORE: ' + score, 350, 380);
+                
+                // Menu choice - 0 = Await reassignment, 1 = Visit Speakeasy
+                if(!level6.caseClosedChoice) level6.caseClosedChoice = 0;
+                
+                // "Await reassignment?" button
+                const btn1Y = 420;
+                ctx.fillStyle = level6.caseClosedChoice === 0 ? '#ffd700' : '#666';
+                ctx.fillRect(180, btn1Y, 160, 40);
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText('AWAIT', 260, btn1Y + 18);
+                ctx.fillText('REASSIGNMENT?', 260, btn1Y + 34);
+                
+                // "Visit the Speakeasy" button
+                const btn2Y = 420;
+                ctx.fillStyle = level6.caseClosedChoice === 1 ? '#ffd700' : '#666';
+                ctx.fillRect(360, btn2Y, 160, 40);
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText('VISIT THE', 440, btn2Y + 18);
+                ctx.fillText('SPEAKEASY', 440, btn2Y + 34);
+            }
         }
 
         if(level6.computerUI) {
@@ -8277,7 +8972,6 @@ function update() {
         // PIPE ROOM
         if(level5.room === 'pipeRoom') {
             player.y = 380;
-            const atRightEdge = player.x >= 630;
             const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
 
             // Steal doc from Mullet Pro directly
@@ -8292,8 +8986,8 @@ function update() {
                 keys['action'] = false;
             }
 
-            // Transition to hallway when action pressed at right edge door
-            if(atRightEdge && (keys[' '] || keys['action'])) {
+            // Transition to hallway — auto when revisiting from level 6, action-based in normal level 5
+            if(level6.cloningDoorUnlocked ? player.x > 660 : (player.x >= 630 && (keys[' '] || keys['action']))) {
                 level5.room = 'hallway';
                 player.x = 80;
                 keys[' '] = false;
@@ -8305,10 +8999,9 @@ function update() {
         else if(level5.room === 'hallway') {
             player.y = 380;
 
-            const atLeftDoor = player.x < 80;
-            const atRightDoor = player.x > 620;
-
-            if((keys[' '] || keys['action']) && atLeftDoor) {
+            // Door transitions — auto when revisiting from level 6, action-based in normal level 5
+            const fromL6 = level6.cloningDoorUnlocked;
+            if(fromL6 ? player.x < 40 : (player.x < 80 && (keys[' '] || keys['action']))) {
                 level5.room = 'pipeRoom';
                 player.x = 620;
                 player.y = 380;
@@ -8316,7 +9009,7 @@ function update() {
                 keys['action'] = false;
             }
 
-            if((keys[' '] || keys['action']) && atRightDoor) {
+            if(fromL6 ? player.x > 660 : (player.x > 620 && (keys[' '] || keys['action']))) {
                 level5.room = 'furnaceRoom';
                 player.x = 80;
                 player.y = 380;
@@ -8460,8 +9153,7 @@ function update() {
                     const leftDoor = level5.furnaceRoom.leftDoor;
             
                     const atFurnace = Math.abs(player.x - furnace.x) < 80;
-                    const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
-            
+
                     // Pick up golden key from ground
                     const atKey = level5.redKeyOnGround && Math.abs(player.x - furnace.x) < 60;
                     if((keys[' '] || keys['action']) && atKey && !player.holding) {
@@ -8488,7 +9180,7 @@ function update() {
                     playMusic('level6');
 
                     level = 6;
-                    timer = 180;
+                    timer = 240;
                     state = 'levelCard';
                     cardTimer = 0;
                     initLevel(6);
@@ -8509,7 +9201,9 @@ function update() {
         }
 
             
-                    if((keys[' '] || keys['action']) && atDoor) {
+                    // Left door to hallway — auto when revisiting from level 6, action-based in normal level 5
+                    const atDoor = Math.abs(player.x - (leftDoor.x + 25)) < 50;
+                    if(level6.cloningDoorUnlocked ? player.x < 40 : ((keys[' '] || keys['action']) && atDoor)) {
                         level5.room = 'hallway';
                         player.x = 620;
                         player.y = 380;
@@ -8558,6 +9252,37 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // Run Mullet Pro AI when revisiting employee pipe room
+            if(level6.room === 'employeePipeRoom') {
+                if(level5.mulletPro.state === 'walkingToComputer') {
+                    if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
+                        const direction = level5.mulletPro.x < level5.computer.x ? 1 : -1;
+                        level5.mulletPro.x += direction * 2;
+                        level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
+                    } else {
+                        level5.mulletPro.hasDoc = true;
+                        level5.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
+                        level5.mulletPro.state = 'walkingToNPC';
+                        const targetNPC = level5.npcPipes.find(n => n.color.name === level5.mulletPro.docColor.name);
+                        level5.mulletPro.walkTarget = targetNPC;
+                        level5.mulletPro.facing = 'forward';
+                    }
+                }
+                if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
+                    if(Math.abs(level5.mulletPro.x - level5.mulletPro.walkTarget.x) > 5) {
+                        const direction = level5.mulletPro.x < level5.mulletPro.walkTarget.x ? 1 : -1;
+                        level5.mulletPro.x += direction * 2;
+                        level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
+                    } else {
+                        level5.mulletPro.hasDoc = false;
+                        level5.mulletPro.docColor = null;
+                        level5.mulletPro.state = 'walkingToComputer';
+                        level5.mulletPro.walkTarget = null;
+                        level5.mulletPro.facing = 'forward';
+                    }
+                }
+            }
+
             // Handle viewing detective note
             if(level6.viewingDetectiveNote) {
                 // Handle note scrolling
@@ -8700,6 +9425,7 @@ function update() {
         
             if(ceo.state === 'hunting') {
                 ceo.moveTimer++;
+                const angryMult = level6.ceoAngryMode ? 2 : 1; // 2x speed/aggression as detective
 
                 const dx = player.x - ceo.x;
                 const dy = player.y - ceo.y;
@@ -8707,8 +9433,9 @@ function update() {
 
                 // Stop at a safe distance to avoid trapping player (collision range is 40x50)
                 if(dist > 60) {
-                    const newX = ceo.x + (dx / dist) * 2;
-                    const newY = ceo.y + (dy / dist) * 2;
+                    const moveSpeed = 2 * angryMult;
+                    const newX = ceo.x + (dx / dist) * moveSpeed;
+                    const newY = ceo.y + (dy / dist) * moveSpeed;
 
                     // Navigate around obstacles while chasing
                     if(!ceoCollidesWithObstacle(newX, newY)) {
@@ -8716,11 +9443,11 @@ function update() {
                         ceo.y = newY;
                     } else {
                         // Try moving around obstacle - prefer direction toward player
-                        const altX = ceo.x + (dx / dist) * 2;
+                        const altX = ceo.x + (dx / dist) * moveSpeed;
                         if(!ceoCollidesWithObstacle(altX, ceo.y)) {
                             ceo.x = altX;
                         } else {
-                            const altY = ceo.y + (dy / dist) * 2;
+                            const altY = ceo.y + (dy / dist) * moveSpeed;
                             if(!ceoCollidesWithObstacle(ceo.x, altY)) {
                                 ceo.y = altY;
                             }
@@ -8733,15 +9460,18 @@ function update() {
                         ceo.facing = 'forward';
                     }
                 }
-            
+
                 ceo.shootTimer++;
-                if(ceo.shootTimer > 120 && Date.now() - ceo.lastShot > 2000) {
+                const shootThreshold = level6.ceoAngryMode ? 60 : 120;
+                const shootCooldown = level6.ceoAngryMode ? 1000 : 2000;
+                const bulletSpeed = level6.ceoAngryMode ? 10 : 8;
+                if(ceo.shootTimer > shootThreshold && Date.now() - ceo.lastShot > shootCooldown) {
                     const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
                     bullets.push({
                         x: ceo.x,
                         y: ceo.y,
-                        vx: Math.cos(angle) * 8,
-                        vy: Math.sin(angle) * 8,
+                        vx: Math.cos(angle) * bulletSpeed,
+                        vy: Math.sin(angle) * bulletSpeed,
                         fromCEO: true
                     });
                     ceo.lastShot = Date.now();
@@ -9001,8 +9731,92 @@ function update() {
                 return;
             }
 
+            // Detective hat dissolve transition — fade out
+            if(level6.detectiveTransition) {
+                level6.detectiveTransAlpha += 0.03;
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.detectiveTransition = false;
+                    level6.detectiveTitleCard = true;
+                    level6.detectiveTitleTimer = 0;
+                    level6.hasDetectiveHat = true;
+                    timer = 240; // Reset timer for detective phase
+                    document.getElementById('timer').textContent = timer;
+                    updateLives(); // Switch $ to ?
+                }
+                return;
+            }
+            // Detective title card display
+            if(level6.detectiveTitleCard) {
+                level6.detectiveTitleTimer++;
+                if(level6.detectiveTitleTimer > 180) { // 3 seconds
+                    level6.detectiveTitleCard = false;
+                    level6.detectiveFadeIn = true;
+                }
+                return;
+            }
+            // Detective fade back in
+            if(level6.detectiveFadeIn) {
+                level6.detectiveTransAlpha -= 0.04;
+                if(level6.detectiveTransAlpha <= 0) {
+                    level6.detectiveTransAlpha = 0;
+                    level6.detectiveFadeIn = false;
+                }
+                return;
+            }
+
+            // Case Closed dissolve transition — fade out
+            if(level6.caseClosedCard === 'fading') {
+                level6.detectiveTransAlpha += 0.03;
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.caseClosedCard = true;
+                    level6.caseClosedTimer = 0;
+                    level6.caseClosedFadeIn = true;
+                    // Play level 5 music for Case Closed ending
+                    playMusic('level5');
+                }
+                return;
+            }
+            // Case Closed title card display — stays forever with buttons
+            if(level6.caseClosedCard === true) {
+                // Fade in score
+                if(level6.caseClosedFadeIn && level6.caseClosedTimer < 60) {
+                    level6.caseClosedTimer++;
+                }
+                
+                // Handle menu navigation after score appears
+                if(level6.caseClosedTimer >= 60) {
+                    if(!level6.caseClosedChoice) level6.caseClosedChoice = 0;
+                    
+                    // Left/Right to choose
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.caseClosedChoice = 0;
+                        keys['ArrowLeft'] = false;
+                        keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.caseClosedChoice = 1;
+                        keys['ArrowRight'] = false;
+                        keys['right'] = false;
+                    }
+                    
+                    // Action/Space to select
+                    if(keys[' '] || keys['action']) {
+                        if(level6.caseClosedChoice === 0) {
+                            // Restart game - properly reset everything
+                            startGame();
+                        } else {
+                            // Visit the Speakeasy
+                            window.location.href = 'https://mullet.pro/speakeasy';
+                        }
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
+                }
+                return;
+            }
+
             // Movement for horizontal-only rooms (1D)
-            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom') {
+            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
                     player.x = Math.max(10, player.x - 5);
@@ -9089,8 +9903,23 @@ function update() {
                     level6.pistol.dropped = false;
                     level6.hasRevolver = true;
                     level6.revolverAmmo = 7;
+                    level6.detectiveHatOnGround = true; // Hat becomes available
                     keys[' '] = false;
                     keys['action'] = false;
+                }
+
+                // Detective hat pickup — after pistol is picked up
+                if(level6.pistol.pickedUp && !level6.hasDetectiveHat && !level6.detectiveTransition && !level6.detectiveTitleCard) {
+                    const detectiveX = 540, detectiveY = 445, s = 2;
+                    const hatX = detectiveX - 24*s;
+                    const hatY = detectiveY - 8*s;
+                    if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 60 && (keys[' '] || keys['action'])) {
+                        // Start dissolve transition
+                        level6.detectiveTransition = true;
+                        level6.detectiveTransAlpha = 0;
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
                 }
 
                 // Radiation damage - lose 1 money life every 2 seconds in center zone
@@ -9145,26 +9974,17 @@ function update() {
                 }
                 // Auto-transition through concealed door once open
                 if(level6.cloningDoorUnlocked && level6.cloningDoorOpen >= 0.8 && player.x < 30) {
-                    level = 5;
-                    level5.room = 'furnaceRoom';
+                    level6.room = 'l6Furnace';
                     player.x = 620;
                     player.y = 380;
                 }
 
-                // Keycard pickup
-                if(level6.keycardOnGround && !level6.hasKeycard && Math.abs(player.x - level6.keycardX) < 50 && (keys[' '] || keys['action'])) {
-                    level6.hasKeycard = true;
-                    level6.keycardOnGround = false;
-                    keys[' '] = false;
-                    keys['action'] = false;
-                }
-
-                // Shoot cloning boss
+                // Shoot cloning boss — ALWAYS check bullet collision (independent of action key)
                 if(level6.cloningBoss && level6.cloningBoss.alive && bullets.length > 0) {
                     const cb = level6.cloningBoss;
                     for(let i = bullets.length - 1; i >= 0; i--) {
                         const b = bullets[i];
-                        if(Math.abs(b.x - cb.x) < 30 && Math.abs(b.y - cb.y) < 45) {
+                        if(Math.abs(b.x - cb.x) < 50 && Math.abs(b.y - cb.y) < 60) {
                             cb.alive = false;
                             cb.deathTime = Date.now();
                             bullets.splice(i, 1);
@@ -9178,18 +9998,31 @@ function update() {
                     }
                 }
 
-                // Fire revolver in cloning room (action key when not near other interactables)
-                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
-                    // Don't fire if near keycard or keycard reader
+                // Track whether action was consumed this frame
+                let actionConsumed = false;
+
+                // Keycard pickup
+                if(level6.keycardOnGround && !level6.hasKeycard && Math.abs(player.x - level6.keycardX) < 50 && (keys[' '] || keys['action'])) {
+                    level6.hasKeycard = true;
+                    level6.keycardOnGround = false;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    actionConsumed = true;
+                }
+
+                // Fire revolver in cloning room (action key when not near interactables)
+                if(!actionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    // Don't fire if near keycard, left door, right exit, or concealed door
                     const nearKeycard = level6.keycardOnGround && Math.abs(player.x - level6.keycardX) < 50;
-                    const nearDoor = player.x < 60;
-                    if(!nearKeycard && !nearDoor) {
+                    const nearLeftDoor = player.x < 100;
+                    const nearRightExit = player.x > 580;
+                    if(!nearKeycard && !nearLeftDoor && !nearRightExit) {
                         keys[' '] = false;
                         keys['action'] = false;
                         let vx = 0;
                         if(player.facing === 'left') vx = -12;
                         else if(player.facing === 'right') vx = 12;
-                        else vx = player.x < 350 ? 12 : -12; // Default forward
+                        else vx = player.x < 350 ? 12 : -12; // Default toward boss
                         if(vx !== 0) {
                             bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
                             level6.revolverAmmo--;
@@ -9199,8 +10032,92 @@ function update() {
                 }
             }
 
+            // === Level 6 Furnace Room (accessed from cloning room concealed door) ===
+            else if(level6.room === 'l6Furnace') {
+                player.y = 380;
+
+                // Left door to Employee Level hallway — action-based (trigger aligned with door highlight at x<100)
+                if(player.x < 100 && (keys[' '] || keys['action'])) {
+                    level6.room = 'employeeHallway';
+                    player.x = 620;
+                    player.y = 380;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+
+                // Right exit — back to cloning room (auto)
+                if(player.x > 660) {
+                    level6.room = 'cloningRoom';
+                    player.x = 80;
+                    player.y = 380;
+                }
+            }
+
+            // === Employee Hallway (original Level 5 hallway revisited from Level 6) ===
+            else if(level6.room === 'employeeHallway') {
+                player.y = 380;
+
+                // Fire detective pistol in hallway
+                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    let vx = 0;
+                    if(player.facing === 'left') vx = -12;
+                    else if(player.facing === 'right') vx = 12;
+                    else vx = player.x < 350 ? 12 : -12;
+                    if(vx !== 0) {
+                        bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                        level6.revolverAmmo--;
+                        muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                    }
+                }
+
+                // Pick up hallway boss drops
+                if(level6.hallwayDrops && level6.hallwayDrops.length > 0) {
+                    for(let drop of level6.hallwayDrops) {
+                        if(drop.claimed) continue;
+                        if(Math.abs(player.x - drop.x) < 40 && Math.abs(player.y - drop.y) < 40) {
+                            drop.claimed = true;
+                            if(drop.type === 'ammo') {
+                                level6.revolverAmmo += (drop.amount || 3);
+                            } else if(drop.type === 'life') {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                            }
+                        }
+                    }
+                }
+
+                // Left — to original pipe room (auto)
+                if(player.x < 40) {
+                    level6.room = 'employeePipeRoom';
+                    player.x = 620;
+                    player.y = 380;
+                }
+
+                // Right — back to l6 furnace room (auto)
+                if(player.x > 660) {
+                    level6.room = 'l6Furnace';
+                    player.x = 80;
+                    player.y = 380;
+                }
+            }
+
+            // === Employee Pipe Room (original Level 5 pipe room revisited from Level 6) ===
+            else if(level6.room === 'employeePipeRoom') {
+                player.y = 380;
+
+                // Right — back to Employee hallway (auto)
+                if(player.x > 660) {
+                    level6.room = 'employeeHallway';
+                    player.x = 80;
+                    player.y = 380;
+                }
+            }
+
             else if(level6.room === 'entryway') {
                 player.y = 400;
+
 
                 // Elevator interaction — use the entryway elevator to go back
                 if(player.x > 580 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
@@ -9217,8 +10134,17 @@ function update() {
                     keys[' '] = false;
                     keys['action'] = false;
 
-                    // Set CEO to walk to middle rug on entry
-                    ceo.walkTarget = {x: 350, y: 340};
+                    if(level6.hasDetectiveHat && ceo.state !== 'dead') {
+                        // Detective entering — normal murder mode (not angry)
+                        ceo.state = 'hunting';
+                        ceo.walkTarget = null;
+                        ceo.ceoAngryMode = false;
+                        ceo.shootTimer = 0;
+                        ceo.health = 6;
+                    } else {
+                        // Normal entry — Set CEO to walk to middle rug on entry
+                        ceo.walkTarget = {x: 350, y: 340};
+                    }
                 }
             } 
         
@@ -9389,15 +10315,27 @@ if (keys[' '] || keys['action']) {
         return; // Return to prevent triggering other objects
     }
 
+    // 1.5. Red Phone Interaction — answer to end the case (ONLY if detective mode active)
+    const phoneX = 350, phoneDeskY = 250 - 10;
+    if (level6.ceoDefeated && !level6.caseClosedCard && level6.hasDetectiveHat &&
+        Math.abs(player.x - phoneX) < 50 && Math.abs(player.y - phoneDeskY) < 60) {
+        // Start Case Closed transition
+        level6.caseClosedCard = 'fading';
+        level6.detectiveTransAlpha = 0;
+        playMusic('level5'); // Play level 5 music for detective ending
+        return;
+    }
+
     // 2. Monitor/Computer Interaction (PRIORITY: CHECK THIS BEFORE SAFE)
     // The monitor is on the desk at Y ~ 205.
-    const monX = 390; 
-    const monY = 205; 
-    
+    // Only available if NOT in detective mode (detective uses red phone instead)
+    const monX = 390;
+    const monY = 205;
+
     // We strictly check player.y > 180 to ensure they are at the DESK, not the wall
-    if (level6.ceoDefeated && !level6.computerUI && 
-        Math.abs(player.x - monX) < 50 && 
-        Math.abs(player.y - monY) < 60 && 
+    if (level6.ceoDefeated && !level6.computerUI && !level6.hasDetectiveHat &&
+        Math.abs(player.x - monX) < 50 &&
+        Math.abs(player.y - monY) < 60 &&
         player.y > 180) { // Added strict Y check
             level6.computerUI = true;
             return; // Stop checking other interactions
@@ -9602,6 +10540,40 @@ if (keys[' '] || keys['action']) {
                     continue;
                 }
             
+                // Cloning boss collision — belt-and-suspenders check after bullet movement
+                if(!bullets[i].fromCEO && level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
+                    const cb = level6.cloningBoss;
+                    if(Math.abs(bullets[i].x - cb.x) < 30 && Math.abs(bullets[i].y - cb.y) < 40) {
+                        cb.alive = false;
+                        cb.deathTime = Date.now();
+                        bullets.splice(i, 1);
+                        level6.keycardOnGround = true;
+                        level6.keycardX = cb.x;
+                        level6.keycardY = 385;
+                        score += 2000;
+                        continue;
+                    }
+                }
+
+
+                // Employee hallway cloning boss collision
+                if(!bullets[i].fromCEO && level6.room === 'employeeHallway' && level6.hallwayCloningBoss && level6.hallwayCloningBoss.alive) {
+                    const hallCB = level6.hallwayCloningBoss;
+                    if(Math.abs(bullets[i].x - hallCB.x) < 30 && Math.abs(bullets[i].y - hallCB.y) < 40) {
+                        hallCB.alive = false;
+                        hallCB.deathTime = Date.now();
+                        bullets.splice(i, 1);
+                        score += 3000;
+                        // Drop 1 ? life + 3 ammo
+                        if(!level6.hallwayDrops) level6.hallwayDrops = [];
+                        level6.hallwayDrops.push(
+                            { type: 'life', x: hallCB.x - 20, y: 385, claimed: false },
+                            { type: 'ammo', x: hallCB.x + 20, y: 385, claimed: false, amount: 3 }
+                        );
+                        continue;
+                    }
+                }
+
                 if(!bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
                     ceo.health--;
                     ceo.blinkTimer = 10;
@@ -9637,11 +10609,106 @@ if (keys[' '] || keys['action']) {
                     continue;
                 }
             }
-        
+
+            // Supercomputer blade door animations
+            if (level6.bladeDoor) {
+                if (level6.bladeDoor.state === 'opening') {
+                    level6.bladeDoor.openPct = Math.min(1, level6.bladeDoor.openPct + 0.06);
+                    if (level6.bladeDoor.openPct >= 1) level6.bladeDoor.state = 'open';
+                } else if (level6.bladeDoor.state === 'closing') {
+                    level6.bladeDoor.openPct = Math.max(0, level6.bladeDoor.openPct - 0.06);
+                    if (level6.bladeDoor.openPct <= 0) level6.bladeDoor.state = 'closed';
+                }
+                // Auto-open when unlocked and player is near
+                if (level6.supercomputerUnlocked && level6.room === 'pipeRoom' && player.x > 480) {
+                    if (level6.bladeDoor.state === 'closed' || level6.bladeDoor.state === 'closing') level6.bladeDoor.state = 'opening';
+                } else if (level6.room === 'pipeRoom' && player.x <= 480 && level6.bladeDoor.state === 'open') {
+                    level6.bladeDoor.state = 'closing';
+                }
+                // Megacomputer side — always open when in megacomputer room, close when leaving
+                if (level6.bladeDoorMega) {
+                    if (level6.bladeDoorMega.state === 'opening') {
+                        level6.bladeDoorMega.openPct = Math.min(1, level6.bladeDoorMega.openPct + 0.04);
+                        if (level6.bladeDoorMega.openPct >= 1) level6.bladeDoorMega.state = 'open';
+                    } else if (level6.bladeDoorMega.state === 'closing') {
+                        level6.bladeDoorMega.openPct = Math.max(0, level6.bladeDoorMega.openPct - 0.06);
+                        if (level6.bladeDoorMega.openPct <= 0) level6.bladeDoorMega.state = 'closed';
+                    }
+                    if (level6.room === 'megacomputer' && player.x < 120) {
+                        if (level6.bladeDoorMega.state === 'closed') level6.bladeDoorMega.state = 'opening';
+                    } else if (level6.room === 'megacomputer' && player.x >= 120 && level6.bladeDoorMega.state === 'open') {
+                        level6.bladeDoorMega.state = 'closing';
+                    }
+                }
+            }
+
+            // Cloning room concealed door slide animation
+            if (level6.cloningDoorUnlocked && level6.cloningDoorOpen < 1) {
+                level6.cloningDoorOpen = Math.min(1, level6.cloningDoorOpen + 0.03);
+            }
+
+            // Cloning room boss AI — patrol back and forth examining cloning unit
+            if (level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
+                const cb = level6.cloningBoss;
+                if (cb.paused) {
+                    cb.facing = cb.x > 360 ? 'left' : cb.x < 340 ? 'right' : 'left';
+                    cb.pauseTimer--;
+                    if (cb.pauseTimer <= 0) {
+                        cb.paused = false;
+                        cb.walkDir *= -1;
+                    }
+                } else {
+                    cb.x += cb.walkDir * 0.8;
+                    cb.facing = cb.walkDir > 0 ? 'right' : 'left';
+                    if (cb.x > 480 || cb.x < 220) {
+                        cb.paused = true;
+                        cb.pauseTimer = 90 + Math.random() * 90;
+                    }
+                }
+            }
+
+
+            // Employee hallway cloning boss AI — patrol in hallway
+            if (level6.room === 'employeeHallway' && level6.hallwayCloningBoss && level6.hallwayCloningBoss.alive) {
+                const hallCB = level6.hallwayCloningBoss;
+                if (hallCB.paused) {
+                    hallCB.facing = hallCB.x > 360 ? 'left' : hallCB.x < 340 ? 'right' : 'left';
+                    hallCB.pauseTimer--;
+                    if (hallCB.pauseTimer <= 0) {
+                        hallCB.paused = false;
+                        hallCB.walkDir *= -1;
+                    }
+                } else {
+                    hallCB.x += hallCB.walkDir * 0.8;
+                    hallCB.facing = hallCB.walkDir > 0 ? 'right' : 'left';
+                    if (hallCB.x > 480 || hallCB.x < 220) {
+                        hallCB.paused = true;
+                        hallCB.pauseTimer = 90 + Math.random() * 90;
+                    }
+                }
+                
+                // Shooting at player (detective mode only)
+                if(level6.hasDetectiveHat) {
+                    hallCB.shootTimer++;
+                    if(hallCB.shootTimer > 90 && Date.now() - hallCB.lastShot > 2000) {
+                        const angle = Math.atan2(player.y - hallCB.y, player.x - hallCB.x);
+                        bullets.push({
+                            x: hallCB.x,
+                            y: hallCB.y,
+                            vx: Math.cos(angle) * 8,
+                            vy: Math.sin(angle) * 8,
+                            fromCEO: true
+                        });
+                        hallCB.lastShot = Date.now();
+                        hallCB.shootTimer = 0;
+                    }
+                }
+            }
+
             return;
         }
 
-    
+
     // LEVELS 1-4 LOGIC
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
@@ -9719,64 +10786,6 @@ if (keys[' '] || keys['action']) {
         bossDoor.state = 'closing';
     }
 
-    // Supercomputer blade door animations
-    if (level === 6 && level6.bladeDoor) {
-        if (level6.bladeDoor.state === 'opening') {
-            level6.bladeDoor.openPct = Math.min(1, level6.bladeDoor.openPct + 0.06);
-            if (level6.bladeDoor.openPct >= 1) level6.bladeDoor.state = 'open';
-        } else if (level6.bladeDoor.state === 'closing') {
-            level6.bladeDoor.openPct = Math.max(0, level6.bladeDoor.openPct - 0.06);
-            if (level6.bladeDoor.openPct <= 0) level6.bladeDoor.state = 'closed';
-        }
-        // Auto-open when unlocked and player is near
-        if (level6.supercomputerUnlocked && level6.room === 'pipeRoom' && player.x > 480) {
-            if (level6.bladeDoor.state === 'closed' || level6.bladeDoor.state === 'closing') level6.bladeDoor.state = 'opening';
-        } else if (level6.room === 'pipeRoom' && player.x <= 480 && level6.bladeDoor.state === 'open') {
-            level6.bladeDoor.state = 'closing';
-        }
-        // Megacomputer side — always open when in megacomputer room, close when leaving
-        if (level6.bladeDoorMega) {
-            if (level6.bladeDoorMega.state === 'opening') {
-                level6.bladeDoorMega.openPct = Math.min(1, level6.bladeDoorMega.openPct + 0.04);
-                if (level6.bladeDoorMega.openPct >= 1) level6.bladeDoorMega.state = 'open';
-            } else if (level6.bladeDoorMega.state === 'closing') {
-                level6.bladeDoorMega.openPct = Math.max(0, level6.bladeDoorMega.openPct - 0.06);
-                if (level6.bladeDoorMega.openPct <= 0) level6.bladeDoorMega.state = 'closed';
-            }
-            if (level6.room === 'megacomputer' && player.x < 120) {
-                if (level6.bladeDoorMega.state === 'closed') level6.bladeDoorMega.state = 'opening';
-            } else if (level6.room === 'megacomputer' && player.x >= 120 && level6.bladeDoorMega.state === 'open') {
-                level6.bladeDoorMega.state = 'closing';
-            }
-        }
-    }
-
-    // Cloning room concealed door slide animation (runs on any level since door persists)
-    if (level6.cloningDoorUnlocked && level6.cloningDoorOpen < 1) {
-        level6.cloningDoorOpen = Math.min(1, level6.cloningDoorOpen + 0.03);
-    }
-
-    // Cloning room boss AI — patrol back and forth examining cloning unit
-    if (level === 6 && level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
-        const cb = level6.cloningBoss;
-        if (cb.paused) {
-            // Face toward centrifuge (x=350) when stopped to examine it
-            cb.facing = cb.x > 360 ? 'left' : cb.x < 340 ? 'right' : 'left';
-            cb.pauseTimer--;
-            if (cb.pauseTimer <= 0) {
-                cb.paused = false;
-                cb.walkDir *= -1;
-            }
-        } else {
-            cb.x += cb.walkDir * 0.8;
-            cb.facing = cb.walkDir > 0 ? 'right' : 'left';
-            if (cb.x > 480 || cb.x < 220) {
-                cb.paused = true;
-                cb.pauseTimer = 90 + Math.random() * 90;
-            }
-        }
-    }
-    
     if(ghostGun.printing) {
         ghostGun.printProgress += 0.02;
         if(ghostGun.printProgress >= 1) {
@@ -10012,7 +11021,7 @@ function gameLoop() {
     counter += now - lastTime;
     lastTime = now;
     
-    if(state === 'playing' && !resetting && counter >= 1000) {
+    if(state === 'playing' && !resetting && counter >= 1000 && !(level === 6 && level6.caseClosedCard)) {
         timer--;
         counter = 0;
         document.getElementById('timer').textContent = timer;
@@ -10089,8 +11098,10 @@ document.addEventListener('keydown', e => {
     // Unlock audio on first interaction
     if(!audioUnlocked) {
         audioUnlocked = true;
-        resumePendingMusic();
     }
+
+    // Always try to resume pending music from user gesture context
+    resumePendingMusic();
 
     // Try to pre-trigger music for level transitions
     tryTriggerMusicOnInput();
