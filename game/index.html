@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>NIGHTFALL — A Cinematic Noir</title>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Special Elite',monospace;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+        #canvas-wrap{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0}
+        #canvas-wrap canvas{display:block;width:100%;height:100%;filter:sepia(0.08) contrast(1.08) brightness(0.95)}
+        .lbox{position:fixed;left:0;width:100%;height:0;background:#000;z-index:800;transition:height 1.2s ease}
+        #lbox-top{top:0}#lbox-bot{bottom:0}.lbox.on{height:7%}
+        #vignette{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,.75) 100%);z-index:810}
+        #grain{position:fixed;top:-50%;left:-50%;width:200%;height:200%;pointer-events:none;opacity:.045;z-index:815;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:grainDrift 0.5s steps(4) infinite}
+        @keyframes grainDrift{0%{transform:translate(0,0)}25%{transform:translate(-2%,3%)}50%{transform:translate(3%,-1%)}75%{transform:translate(-1%,-3%)}100%{transform:translate(2%,1%)}}
+        #fade-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:900;opacity:1;transition:opacity 1.5s ease;pointer-events:none}
+        #fade-overlay.clear{opacity:0}
+        #scene-title{position:fixed;top:10%;left:50%;transform:translateX(-50%);font-family:'Playfair Display',serif;font-size:clamp(14px,4vw,26px);font-weight:700;color:#b0a080;letter-spacing:8px;text-transform:uppercase;text-shadow:0 2px 20px rgba(0,0,0,.9);opacity:0;transition:opacity 1.5s;pointer-events:none;z-index:820;white-space:nowrap}
+        #scene-title.vis{opacity:1}
+        #dlg{position:fixed;bottom:11%;left:50%;transform:translateX(-50%);width:88%;max-width:580px;background:rgba(8,6,4,.94);border:1px solid rgba(100,80,40,.25);border-left:4px solid #c4a35a;padding:16px 20px;opacity:0;pointer-events:none;transition:opacity .4s;z-index:850;box-shadow:0 8px 40px rgba(0,0,0,.8)}
+        #dlg.vis{opacity:1;pointer-events:auto}
+        .dlg-name{font-family:'Playfair Display',serif;font-size:11px;color:#c4a35a;letter-spacing:4px;margin-bottom:6px;text-transform:uppercase;min-height:14px}
+        .dlg-text{font-size:15px;color:#d4c5a9;line-height:1.7;min-height:24px}
+        .dlg-text.italic{font-style:italic;color:#9aacba}
+        .dlg-cont{font-size:9px;color:rgba(100,80,40,.4);text-align:right;margin-top:8px;animation:pulse 2s ease-in-out infinite}
+        @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+        #choices{position:fixed;bottom:12%;left:50%;transform:translateX(-50%);width:88%;max-width:520px;display:none;flex-direction:column;gap:8px;z-index:855}
+        #choices.vis{display:flex}
+        .choice-btn{background:rgba(12,10,6,.92);border:1px solid rgba(100,80,40,.2);border-left:3px solid transparent;color:#a09070;font-family:'Special Elite',monospace;font-size:14px;padding:12px 18px;cursor:pointer;text-align:left;transition:all .3s;letter-spacing:1px}
+        .choice-btn:hover,.choice-btn:active{border-left-color:#c4a35a;color:#d4c5a9;background:rgba(20,16,10,.96)}
+        #hotspot-layer{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:830}
+        .hs-marker{position:absolute;pointer-events:auto;cursor:pointer;transform:translate(-50%,-50%);text-align:center}
+        .hs-ring{width:36px;height:36px;border:2px solid rgba(196,163,90,.45);border-radius:50%;margin:0 auto;animation:hsPulse 2.2s ease-in-out infinite;box-shadow:0 0 12px rgba(196,163,90,.15)}
+        @keyframes hsPulse{0%,100%{transform:scale(1);border-color:rgba(196,163,90,.3)}50%{transform:scale(1.15);border-color:rgba(196,163,90,.7);box-shadow:0 0 20px rgba(196,163,90,.3)}}
+        .hs-label{font-size:8px;color:#c4a35a;letter-spacing:2px;margin-top:4px;white-space:nowrap;opacity:0;transition:opacity .3s}
+        .hs-marker:hover .hs-label{opacity:1}
+        #investigate-hint{position:fixed;bottom:28%;left:50%;transform:translateX(-50%);font-size:10px;color:#4a3a2a;letter-spacing:3px;opacity:0;transition:opacity 1s;pointer-events:none;z-index:835;white-space:nowrap}
+        #investigate-hint.vis{opacity:1}
+        #inventory{position:fixed;top:14px;left:14px;display:flex;gap:4px;z-index:840}
+        .inv-slot{width:34px;height:34px;background:rgba(12,10,6,.85);border:1px solid rgba(100,80,40,.25);display:flex;align-items:center;justify-content:center;font-size:15px}
+        #notes-btn{position:fixed;top:14px;right:14px;padding:5px 12px;background:rgba(12,10,6,.85);border:1px solid rgba(100,80,40,.25);color:#8a7a5a;font-family:'Special Elite',monospace;font-size:10px;letter-spacing:2px;cursor:pointer;z-index:840;display:none}
+        #notes-btn:hover{border-color:#c4a35a;color:#c4a35a}
+        #case-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:85%;max-width:480px;max-height:70vh;overflow-y:auto;background:#f5f0e6;border:3px solid #3d3428;padding:24px;z-index:870;box-shadow:0 20px 60px rgba(0,0,0,.8);display:none}
+        #case-panel.vis{display:block}
+        #case-panel h2{font-family:'Playfair Display',serif;color:#2a2015;margin-bottom:14px;border-bottom:2px solid #3d3428;padding-bottom:8px;font-size:15px;letter-spacing:3px}
+        .cnote{font-family:'Special Elite',monospace;color:#3a3025;font-size:12px;margin-bottom:8px;padding-left:12px;border-left:3px solid #8a7a5a;line-height:1.5}
+        .close-x{position:absolute;top:8px;right:12px;font-size:20px;cursor:pointer;color:#3a3025}
+        #title-screen{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(4,3,2,.88);z-index:950;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity 1.8s}
+        #title-screen.gone{opacity:0;pointer-events:none}
+        #title-screen h1{font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(44px,14vw,120px);color:transparent;-webkit-text-stroke:2px #8a7050;letter-spacing:12px;z-index:1}
+        .ts-sub{font-family:'Special Elite',monospace;font-size:clamp(9px,2.5vw,14px);color:#2a1a0a;letter-spacing:10px;margin-top:12px;z-index:1}
+        .ts-tag{font-family:'Special Elite',monospace;font-size:clamp(8px,2vw,12px);color:#1a1008;letter-spacing:3px;margin-top:28px;max-width:80%;text-align:center;line-height:1.9;z-index:1}
+        .ts-tap{font-size:11px;color:#1a0a00;letter-spacing:4px;margin-top:45px;animation:pulse 2.5s ease-in-out infinite;z-index:1}
+        .ts-year{position:absolute;bottom:22px;font-family:'Playfair Display',serif;font-size:14px;color:#140a00;letter-spacing:5px;z-index:1}
+        #debug{display:none;position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,.85);color:#0f0;font-family:monospace;font-size:9px;padding:8px 12px;z-index:999;max-width:300px;line-height:1.5;border:1px solid #0a0}
+        #debug.vis{display:block}
+    </style>
+</head>
+<body>
+<div id="canvas-wrap"></div>
+<div id="lbox-top" class="lbox on"></div>
+<div id="lbox-bot" class="lbox on"></div>
+<div id="vignette"></div>
+<div id="grain"></div>
+<div id="fade-overlay"></div>
+<div id="scene-title"></div>
+<div id="dlg"><div class="dlg-name"></div><div class="dlg-text"></div><div class="dlg-cont">▼</div></div>
+<div id="choices"></div>
+<div id="hotspot-layer"></div>
+<div id="investigate-hint">EXAMINE YOUR SURROUNDINGS</div>
+<div id="inventory"></div>
+<button id="notes-btn">CASE NOTES</button>
+<div id="case-panel"><span class="close-x">&times;</span><h2>CASE NOTES</h2><div id="notes-list"></div></div>
+<div id="title-screen">
+    <h1 id="ts-title"></h1>
+    <div class="ts-sub" id="ts-sub"></div>
+    <div class="ts-tag" id="ts-tag"></div>
+    <div class="ts-tap">TAP TO BEGIN</div>
+    <div class="ts-year" id="ts-year"></div>
+</div>
+<div id="debug"></div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  STORY DATA — EDIT YOUR STORY, CHARACTERS, AND SCENES BELOW   ║
+     ║  The engine reads this data to build and run the game.         ║
+     ║                                                                ║
+     ║  BEAT TYPES (use one per object):                              ║
+     ║    { narrate: "text" }           — narrator voiceover          ║
+     ║    { speak: "charId", line: "" } — character dialogue          ║
+     ║    { pause: seconds }            — timed pause                 ║
+     ║    { camera: "presetName" }      — change camera angle         ║
+     ║    { choice: [{text,goto},...] } — player choice               ║
+     ║    { goto: "sceneId" }           — jump to scene               ║
+     ║    { flag: "name" }              — set a story flag            ║
+     ║    { note: "text" }              — add case note               ║
+     ║    { collect: "id", icon: "X" }  — add to inventory            ║
+     ║    { location: "locId" }         — change location mid-scene   ║
+     ║    { investigate: {...} }        — enter investigation mode    ║
+     ║    { effect: "fade" }            — screen effect               ║
+     ║    { if: "flag", then: "scene", else: "scene" }               ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<script>
+window.STORY = {
+    title: "NIGHTFALL",
+    subtitle: "A NOIR IN FIVE ACTS",
+    tagline: "A woman is dead. The police say suicide.\nHer sister says murder.\nYou say fifty a day plus expenses.",
+    year: "1 9 5 9",
+
+    characters: {
+        narrator: { name: "",                color: "#8a9aaa", italic: true },
+        jack:     { name: "JACK MALONE",     color: "#c4a35a" },
+        vivian:   { name: "VIVIAN MARLOWE",  color: "#d4738a" },
+        mickey:   { name: "MICKEY",          color: "#7a9a6a" },
+        clerk:    { name: "HOTEL CLERK",     color: "#a09060" }
+    },
+
+    locations: {
+        street:  { name: "MAIN STREET",         env: "street",  weather: "rain", fog: 0.032 },
+        bar:     { name: "THE BLUE MOON",       env: "bar",     weather: "none", fog: 0.055 },
+        office:  { name: "NOIR INVESTIGATIONS", env: "office",  weather: "none", fog: 0.018 },
+        hotel:   { name: "AVALON HOTEL",        env: "hotel",   weather: "none", fog: 0.022 },
+        room214: { name: "ROOM 214",            env: "room",    weather: "none", fog: 0.038 }
+    },
+
+    scenes: [
+        /* ─── ACT I : THE SETUP ─── */
+        { id: "opening", location: "street", beats: [
+            { pause: 2.5 },
+            { camera: "street-establishing" },
+            { narrate: "The rain hadn't stopped in three days." },
+            { narrate: "Neither had the feeling someone was watching." },
+            { camera: "street-dutch", over: 3 },
+            { narrate: "52nd Street. The kind of place where neon signs promise more than anyone delivers." },
+            { camera: "street-level", over: 2 },
+            { narrate: "I needed a drink. I needed a case. The night was about to give me both." },
+            { goto: "meet_vivian" }
+        ]},
+
+        { id: "meet_vivian", location: "street", beats: [
+            { camera: "street-vivian", over: 2 },
+            { pause: 0.8 },
+            { speak: "vivian", line: "You must be the detective. I\u2019ve heard you take cases the police won\u2019t touch." },
+            { speak: "vivian", line: "My name is Vivian. My sister Eleanor was found dead this morning at the Avalon Hotel. Room 214." },
+            { speak: "vivian", line: "They\u2019re calling it suicide. Eleanor would never do that. She was afraid of something\u2014someone." },
+            { camera: "street-two-shot", over: 2 },
+            { speak: "vivian", line: "I need you to find who really killed her. I\u2019ll pay whatever it takes." },
+            { choice: [
+                { text: "\u201cWho were her friends? Her enemies?\u201d", goto: "vivian_details" },
+                { text: "\u201cTell me about the Blue Moon.\u201d", goto: "vivian_details" }
+            ]}
+        ]},
+
+        { id: "vivian_details", location: "street", beats: [
+            { speak: "jack", line: "Start from the beginning. Everything you know." },
+            { speak: "vivian", line: "Start at the Blue Moon bar. She spent her last evening there. Ask for a man called Mickey." },
+            { speak: "vivian", line: "And detective\u2014be careful. Eleanor told me she was being followed." },
+            { flag: "met_vivian" },
+            { note: "Vivian Marlowe hired me to investigate her sister Eleanor\u2019s death at the Avalon Hotel." },
+            { note: "Eleanor found dead in Room 214. Police say suicide." },
+            { note: "Lead: the Blue Moon bar. Ask for Mickey." },
+            { goto: "street_explore" }
+        ]},
+
+        /* ─── STREET INVESTIGATION ─── */
+        { id: "street_explore", location: "street", beats: [
+            { camera: "street-level", over: 2 },
+            { narrate: "Time to look around before heading inside." },
+            { investigate: {
+                hint: "TAP OBJECTS TO EXAMINE \u2022 TAP EXIT TO ENTER THE BAR",
+                hotspots: [
+                    { id: "car",       label: "CAR",       pos: [4, 1.2, 5],    scene: "ex_car" },
+                    { id: "newspaper", label: "NEWSPAPER", pos: [-3.5, 0.3, 2], scene: "ex_newspaper", collect: { id: "newspaper", icon: "\uD83D\uDCF0" }},
+                    { id: "matchbook", label: "MATCHBOOK", pos: [2.5, 0.3, -3], scene: "ex_matchbook", collect: { id: "matchbook", icon: "\uD83D\uDD25" }}
+                ],
+                exits: [
+                    { label: "ENTER BAR", pos: [-7.2, 4, -5], goto: "bar_enter" }
+                ],
+                doneGoto: "bar_enter"
+            }}
+        ]},
+
+        { id: "ex_car", location: "street", beats: [
+            { camera: "street-car", over: 1.5 },
+            { narrate: "A \u201957 Bel Air. Chrome catching neon like fresh blood on a switchblade." },
+            { narrate: "Someone parked in a hurry. The door\u2019s not quite closed." },
+            { note: "Vintage Bel Air parked on the street. Someone left in a hurry." }
+        ]},
+
+        { id: "ex_newspaper", location: "street", beats: [
+            { narrate: "Today\u2019s Daily Herald. Front page: \u2018WOMAN FOUND DEAD AT AVALON HOTEL.\u2019" },
+            { narrate: "Police calling it suicide. Funny how suicides don\u2019t usually have bruises on their wrists." },
+            { note: "Newspaper: Eleanor Marlowe found dead. Bruises on wrists suggest foul play." }
+        ]},
+
+        { id: "ex_matchbook", location: "street", beats: [
+            { narrate: "A matchbook. \u2018The Blue Moon\u2019 in gold on crimson." },
+            { narrate: "Barely damp. Dropped tonight. Someone was here recently who knows the bar." },
+            { note: "Blue Moon matchbook found on the street. Dropped recently." }
+        ]},
+
+        /* ─── ACT II : THE BLUE MOON ─── */
+        { id: "bar_enter", location: "bar", beats: [
+            { pause: 1.5 },
+            { camera: "bar-wide" },
+            { narrate: "The Blue Moon. Bourbon and bad decisions since 1932." },
+            { camera: "bar-counter", over: 2.5 },
+            { narrate: "The kind of place where the shadows have shadows." },
+            { goto: "talk_mickey" }
+        ]},
+
+        { id: "talk_mickey", location: "bar", beats: [
+            { camera: "bar-close", over: 1.5 },
+            { speak: "mickey", line: "What can I get ya?" },
+            { speak: "jack", line: "Information. I\u2019m looking into the Marlowe case." },
+            { speak: "mickey", line: "Eleanor? She was in here last night. Looked scared. Kept watching the door." },
+            { speak: "mickey", line: "She was meeting someone. Big guy, gray suit. Expensive. They argued." },
+            { speak: "jack", line: "You get a name?" },
+            { speak: "mickey", line: "Didn\u2019t catch one. But he dropped a business card when he left. I still got it." },
+            { speak: "mickey", line: "Here. \u2018Vincent Castellano \u2013 Castellano Holdings.\u2019 Guy\u2019s connected. Watch your back." },
+            { flag: "talked_mickey" },
+            { note: "Mickey: Eleanor was scared. Met a big man in a gray suit who argued with her." },
+            { note: "Business card: Vincent Castellano \u2013 Castellano Holdings." },
+            { collect: "card", icon: "\uD83C\uDFF7\uFE0F" },
+            { goto: "bar_investigate" }
+        ]},
+
+        { id: "bar_investigate", location: "bar", beats: [
+            { camera: "bar-wide", over: 2 },
+            { investigate: {
+                hint: "LOOK AROUND THE BAR",
+                hotspots: [
+                    { id: "glass", label: "WHISKEY GLASS", pos: [1.5, 1.5, -2], scene: "ex_glass" }
+                ],
+                exits: [
+                    { label: "HEAD TO HOTEL", pos: [0, 2, 6], goto: "hotel_enter" }
+                ],
+                doneGoto: "hotel_enter"
+            }}
+        ]},
+
+        { id: "ex_glass", location: "bar", beats: [
+            { narrate: "A whiskey glass with lipstick on the rim. Deep red. Eleanor\u2019s shade." },
+            { narrate: "She was sitting right here, hours before she died." },
+            { note: "Lipstick on whiskey glass at the bar. Eleanor was here." }
+        ]},
+
+        /* ─── ACT III : THE AVALON ─── */
+        { id: "hotel_enter", location: "hotel", beats: [
+            { pause: 1.5 },
+            { camera: "hotel-wide" },
+            { narrate: "The Avalon Hotel. Faded grandeur and secrets behind every door." },
+            { camera: "hotel-desk", over: 2 },
+            { goto: "talk_clerk" }
+        ]},
+
+        { id: "talk_clerk", location: "hotel", beats: [
+            { speak: "clerk", line: "Can I help you, sir?" },
+            { speak: "jack", line: "I\u2019m investigating the death in room 214. Eleanor Marlowe." },
+            { speak: "clerk", line: "The police already came and went. Said it was suicide. Case closed." },
+            { speak: "jack", line: "I\u2019m not the police. Her sister hired me. I need to see that room." },
+            { speak: "clerk", line: "I\u2019m not supposed to let anyone up there\u2026" },
+            { speak: "jack", line: "Twenty dollars says you can make an exception." },
+            { speak: "clerk", line: "\u2026Second floor. End of the hall. The door\u2019s unlocked. Police were sloppy." },
+            { flag: "room_access" },
+            { note: "Hotel clerk bribed. Room 214 accessible." },
+            { note: "Room key is missing. Door left unlocked by police." },
+            { goto: "room_enter" }
+        ]},
+
+        /* ─── ACT IV : ROOM 214 ─── */
+        { id: "room_enter", location: "room214", beats: [
+            { pause: 2 },
+            { camera: "room-door" },
+            { narrate: "Room 214. The air is thick with something that isn\u2019t dust." },
+            { camera: "room-overview", over: 3 },
+            { narrate: "Chalk outline on the floor. Evidence markers the police left behind." },
+            { narrate: "They closed the case before the body was cold." },
+            { goto: "room_investigate" }
+        ]},
+
+        { id: "room_investigate", location: "room214", beats: [
+            { camera: "room-overview" },
+            { investigate: {
+                hint: "EXAMINE THE CRIME SCENE",
+                hotspots: [
+                    { id: "ev1",   label: "EVIDENCE #1", pos: [-1.8, 0.4, 0.8],  scene: "ex_ev1" },
+                    { id: "ev2",   label: "EVIDENCE #2", pos: [1, 0.4, -0.5],    scene: "ex_ev2" },
+                    { id: "ev3",   label: "EVIDENCE #3", pos: [2.2, 0.4, 1.8],   scene: "ex_ev3" },
+                    { id: "diary", label: "DIARY",       pos: [3, 1.3, -1.5],    scene: "ex_diary", collect: { id: "diary", icon: "\uD83D\uDCD5" }},
+                    { id: "phone", label: "PHONE",       pos: [3, 1.5, 1],       scene: "ex_phone" }
+                ],
+                doneGoto: "case_solved"
+            }}
+        ]},
+
+        { id: "ex_ev1", location: "room214", beats: [
+            { camera: "room-evidence-close", over: 1 },
+            { narrate: "Evidence marker 1. A single earring. Pearl. Expensive. Ripped from the lobe." },
+            { narrate: "This wasn\u2019t suicide. This was a struggle." },
+            { note: "Evidence #1: Pearl earring ripped from earlobe. Signs of struggle." }
+        ]},
+
+        { id: "ex_ev2", location: "room214", beats: [
+            { narrate: "Evidence marker 2. Scuff marks on the hardwood. Two sets of shoes." },
+            { narrate: "Someone dragged her. The smaller prints lead to the window." },
+            { note: "Evidence #2: Scuff marks. Two shoe sizes. Dragging pattern." }
+        ]},
+
+        { id: "ex_ev3", location: "room214", beats: [
+            { narrate: "Evidence marker 3. A cufflink under the nightstand. Monogrammed. \u2018V.C.\u2019" },
+            { narrate: "Vincent Castellano. He was here. And now Eleanor Marlowe is dead." },
+            { flag: "found_cufflink" },
+            { note: "Evidence #3: Cufflink monogrammed V.C. \u2014 Castellano was in this room." }
+        ]},
+
+        { id: "ex_diary", location: "room214", beats: [
+            { narrate: "A leather diary. Eleanor\u2019s handwriting." },
+            { narrate: "\u2018V. won\u2019t stop calling. He says if I talk to anyone about the Harbor deal, I\u2019ll regret it.\u2019" },
+            { narrate: "\u2018I told Vivian to hire someone if anything happens to me. Someone who can\u2019t be bought.\u2019" },
+            { narrate: "The last entry is dated yesterday. The ink is still fresh." },
+            { flag: "found_diary" },
+            { note: "Eleanor\u2019s diary: Castellano threatened her over the Harbor deal." },
+            { note: "Eleanor told Vivian to hire a detective if anything happened." }
+        ]},
+
+        { id: "ex_phone", location: "room214", beats: [
+            { narrate: "Hotel phone. The receiver is off the hook." },
+            { narrate: "The last number dialed is still on the rotary. A downtown exchange. Castellano\u2019s office." },
+            { flag: "found_phone" },
+            { note: "Hotel phone: last number dialed was Castellano\u2019s office." }
+        ]},
+
+        /* ─── ACT V : THE TRUTH ─── */
+        { id: "case_solved", location: "room214", beats: [
+            { camera: "room-window", over: 2 },
+            { pause: 1.5 },
+            { narrate: "The cufflink. The diary. The phone records. The witness at the bar. The torn register page." },
+            { narrate: "Vincent Castellano killed Eleanor Marlowe because she knew about the Harbor deal." },
+            { narrate: "Not suicide. Murder. And now I have enough to prove it." },
+            { camera: "room-door", over: 3 },
+            { narrate: "Time to make a phone call to someone at the Herald who isn\u2019t on Castellano\u2019s payroll." },
+            { narrate: "Eleanor Marlowe deserved better than a chalk outline and a closed case." },
+            { effect: "slow-fade" },
+            { pause: 2 },
+            { narrate: "CASE CLOSED." },
+            { note: "\u2014\u2014\u2014 CASE CLOSED \u2014\u2014\u2014" },
+            { note: "Vincent Castellano murdered Eleanor Marlowe to silence her about the Harbor deal." }
+        ]}
+    ]
+};
+
+/* ── CAMERA PRESETS ──
+   Add your own: { pos:[x,y,z], look:[x,y,z], fov:45, roll:0 }
+   roll is in radians — 0.1 gives a subtle dutch angle                */
+window.CAMERAS = {
+    'street-establishing': { pos:[0,14,28],    look:[0,3,-10],  fov:48 },
+    'street-level':        { pos:[0,2.5,14],   look:[0,3,-5],   fov:55 },
+    'street-dutch':        { pos:[-5,2,10],    look:[3,6,-8],   fov:56, roll:0.12 },
+    'street-vivian':       { pos:[2,3,8],      look:[4,3.5,2],  fov:38 },
+    'street-two-shot':     { pos:[0,3.2,10],   look:[1,3,0],    fov:42 },
+    'street-car':          { pos:[5,2,7],      look:[4,1,5],    fov:32 },
+    'bar-wide':            { pos:[0,3.5,7],    look:[0,2,-1],   fov:50 },
+    'bar-counter':         { pos:[0,2.5,4],    look:[0,2.2,-1], fov:42 },
+    'bar-close':           { pos:[1.5,2.8,2],  look:[0,2.5,0],  fov:30 },
+    'hotel-wide':          { pos:[0,4.5,9],    look:[0,2.5,0],  fov:46 },
+    'hotel-desk':          { pos:[0,3,5],      look:[0,2.2,-1], fov:38 },
+    'room-door':           { pos:[0,3,7],      look:[0,2,0],    fov:44 },
+    'room-overview':       { pos:[0,6,4],      look:[0,0.5,0],  fov:50 },
+    'room-evidence-close': { pos:[-1,2,2],     look:[-1,0.3,0], fov:30 },
+    'room-window':         { pos:[-2,3,2],     look:[3,3,-2],   fov:34 }
+};
+</script>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  GAME ENGINE — edit below if you know what you're doing        ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+const $ = id => document.getElementById(id);
+const STORY = window.STORY;
+const PRESETS = window.CAMERAS;
+
+/* ── Game State ── */
+const G = {
+    scene: null, beatIdx: 0, locId: null,
+    flags: {}, inventory: [], notes: [],
+    investigating: false, invConfig: null,
+    dlgCallback: null, typeTimer: null, dlgDone: false,
+    subScene: null, subBeat: 0, subCallback: null,
+    camPos: new THREE.Vector3(0,5,15),
+    camLook: new THREE.Vector3(0,3,0),
+    camFov: 50, camRoll: 0,
+    tgtPos: new THREE.Vector3(0,5,15),
+    tgtLook: new THREE.Vector3(0,3,0),
+    tgtFov: 50, tgtRoll: 0,
+    camSpeed: 1.8,
+    envGroup: null, rainObj: null, particlesObj: null,
+    neonLights: [], flickerPhases: [],
+    clock: new THREE.Clock(),
+    started: false, titleDone: false,
+    audioCtx: null, rainGain: null, audioStarted: false
+};
+
+/* ── Three.js Setup ── */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.65;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+$('canvas-wrap').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x040410);
+scene.fog = new THREE.FogExp2(0x040410, 0.032);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 120);
+camera.position.set(0, 10, 25);
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ══════════════════════════════════════
+   ENVIRONMENT BUILDERS
+   ══════════════════════════════════════ */
+
+function clearEnv() {
+    if (G.envGroup) { scene.remove(G.envGroup); G.envGroup = null; }
+    if (G.rainObj) { scene.remove(G.rainObj); G.rainObj = null; }
+    if (G.particlesObj) { scene.remove(G.particlesObj); G.particlesObj = null; }
+    G.neonLights = []; G.flickerPhases = [];
+}
+
+function neonTexture(text, color, w, h) {
+    const c = document.createElement('canvas');
+    c.width = w || 256; c.height = h || 64;
+    const x = c.getContext('2d');
+    x.clearRect(0, 0, c.width, c.height);
+    x.font = 'bold ' + Math.floor(c.height * 0.65) + 'px sans-serif';
+    x.fillStyle = color;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.shadowColor = color; x.shadowBlur = c.height * 0.3;
+    x.fillText(text, c.width/2, c.height/2);
+    x.fillText(text, c.width/2, c.height/2);
+    return new THREE.CanvasTexture(c);
+}
+
+function addNeon(g, text, color, pos, size, faceDir) {
+    const tex = neonTexture(text, color);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size[0], size[1]), mat);
+    mesh.position.set(pos[0], pos[1], pos[2]);
+    if (faceDir === 'x+') mesh.rotation.y = Math.PI / 2;
+    else if (faceDir === 'x-') mesh.rotation.y = -Math.PI / 2;
+    g.add(mesh);
+    const c = new THREE.Color(color);
+    const light = new THREE.PointLight(c, 2.5, 14, 2);
+    light.position.set(pos[0] + (faceDir === 'x+' ? 1.5 : faceDir === 'x-' ? -1.5 : 0), pos[1], pos[2]);
+    g.add(light);
+    G.neonLights.push(light);
+    G.flickerPhases.push(Math.random() * 10);
+}
+
+function addLamp(g, x, z) {
+    const pm = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 5, 6), pm);
+    pole.position.set(x, 2.5, z); pole.castShadow = true;
+    g.add(pole);
+    const hood = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.15, 0.18, 8), pm);
+    hood.position.set(x, 5.05, z); g.add(hood);
+    const lt = new THREE.PointLight(0xffe0a0, 1.2, 12, 2);
+    lt.position.set(x, 4.9, z);
+    lt.castShadow = true; lt.shadow.mapSize.set(256, 256);
+    lt.shadow.bias = -0.002;
+    g.add(lt);
+}
+
+function addWindows(g, bx, by, bz, bw, bh, bd, faceDir) {
+    const wm = new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true });
+    const wg = new THREE.PlaneGeometry(0.5, 0.7);
+    const floors = Math.floor((bh - 3) / 3);
+    const cols = Math.max(1, Math.floor(bd / 2.5));
+    for (let f = 0; f < floors; f++) {
+        for (let c = 0; c < cols; c++) {
+            if (Math.random() < 0.35) continue;
+            const m = wm.clone();
+            m.opacity = 0.15 + Math.random() * 0.45;
+            const w = new THREE.Mesh(wg, m);
+            const yy = 3 + f * 3;
+            const zz = bz + (c - (cols-1)/2) * 2.5;
+            const xx = bx + (faceDir > 0 ? bw/2 + 0.02 : -bw/2 - 0.02);
+            w.position.set(xx, yy, zz);
+            w.rotation.y = faceDir > 0 ? Math.PI/2 : -Math.PI/2;
+            g.add(w);
+        }
+    }
+}
+
+/* ─── STREET ─── */
+function buildStreet() {
+    const g = new THREE.Group();
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(50, 70),
+        new THREE.MeshStandardMaterial({ color: 0x141418, roughness: 0.2, metalness: 0.65 })
+    );
+    ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
+    g.add(ground);
+
+    const swMat = new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.7, metalness: 0.2 });
+    [[-5.5, 0.08, 0, 3, 0.16, 70], [5.5, 0.08, 0, 3, 0.16, 70]].forEach(s => {
+        const sw = new THREE.Mesh(new THREE.BoxGeometry(s[3], s[4], s[5]), swMat);
+        sw.position.set(s[0], s[1], s[2]); sw.receiveShadow = true;
+        g.add(sw);
+    });
+
+    const bMat = new THREE.MeshStandardMaterial({ color: 0x0a0a14, roughness: 0.85, metalness: 0.1 });
+    const leftB = [
+        { x:-10, z:-20, w:6, h:18, d:9 }, { x:-11, z:-9, w:8, h:24, d:10 },
+        { x:-10, z:2, w:6, h:16, d:9 },   { x:-11, z:12, w:8, h:21, d:8 },
+        { x:-10, z:22, w:6, h:17, d:10 }
+    ];
+    leftB.forEach(b => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bMat);
+        m.position.set(b.x, b.h/2, b.z); m.castShadow = true; m.receiveShadow = true;
+        g.add(m);
+        addWindows(g, b.x, 0, b.z, b.w, b.h, b.d, 1);
+    });
+    const rightB = leftB.map(b => ({...b, x: -b.x + (Math.random()-0.5)*2, h: b.h + (Math.random()-0.5)*6}));
+    rightB.forEach(b => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bMat);
+        m.position.set(b.x, b.h/2, b.z); m.castShadow = true; m.receiveShadow = true;
+        g.add(m);
+        addWindows(g, b.x, 0, b.z, b.w, b.h, b.d, -1);
+    });
+
+    addNeon(g, "BAR", "#ff2020", [-7, 8, -5], [3.5, 1.2], 'x+');
+    addNeon(g, "HOTEL", "#4499ff", [7, 10, 5], [4.5, 1.4], 'x-');
+    addNeon(g, "EATS", "#ffaa30", [7, 7, 16], [3, 1], 'x-');
+    addNeon(g, "DRUGS", "#44dd66", [-7, 7, 1], [3.5, 0.9], 'x+');
+
+    addLamp(g, -4.2, -10); addLamp(g, 4.2, 0);
+    addLamp(g, -4.2, 10); addLamp(g, 4.2, 20);
+
+    const carMat = new THREE.MeshStandardMaterial({ color: 0x1a1520, roughness: 0.3, metalness: 0.7 });
+    const carBody = new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 4.5), carMat);
+    carBody.position.set(3.5, 0.6, 5); carBody.castShadow = true;
+    g.add(carBody);
+    const carTop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 2.5), carMat);
+    carTop.position.set(3.5, 1.25, 4.8); g.add(carTop);
+    const chromeMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.1, metalness: 0.9 });
+    const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.15, 0.15), chromeMat);
+    bumper.position.set(3.5, 0.35, 7.3); g.add(bumper);
+
+    const moon = new THREE.DirectionalLight(0x334488, 0.35);
+    moon.position.set(-15, 25, -10); moon.castShadow = true;
+    moon.shadow.mapSize.set(1024, 1024);
+    moon.shadow.camera.near = 1; moon.shadow.camera.far = 60;
+    moon.shadow.camera.left = -25; moon.shadow.camera.right = 25;
+    moon.shadow.camera.top = 25; moon.shadow.camera.bottom = -25;
+    moon.shadow.bias = -0.001;
+    g.add(moon); g.add(moon.target);
+
+    g.add(new THREE.AmbientLight(0x080818, 0.2));
+    return g;
+}
+
+/* ─── BAR ─── */
+function buildBar() {
+    const g = new THREE.Group();
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: 0.8, metalness: 0.15 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x18100c, roughness: 0.9 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), floorMat);
+    floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; g.add(floor);
+
+    [[-6, 2.5, 0, 0.2, 5, 12], [6, 2.5, 0, 0.2, 5, 12], [0, 2.5, -6, 12, 5, 0.2]].forEach(w => {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), wallMat);
+        wall.position.set(w[0], w[1], w[2]); wall.receiveShadow = true; g.add(wall);
+    });
+
+    const barMat = new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.5, metalness: 0.2 });
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(7, 1.2, 1), barMat);
+    counter.position.set(0, 0.6, -3.5); counter.castShadow = true; counter.receiveShadow = true;
+    g.add(counter);
+    const cTop = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.08, 1.3),
+        new THREE.MeshStandardMaterial({ color: 0x4a2a14, roughness: 0.3, metalness: 0.4 }));
+    cTop.position.set(0, 1.22, -3.5); g.add(cTop);
+
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 0.5), barMat);
+    shelf.position.set(0, 2.5, -5.7); g.add(shelf);
+    const bottleMat = new THREE.MeshStandardMaterial({ color: 0x2a4028, roughness: 0.2, metalness: 0.5 });
+    for (let i = -2.5; i <= 2.5; i += 0.7) {
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.6, 6), bottleMat.clone());
+        b.material.color.setHSL(0.05 + Math.random()*0.15, 0.4, 0.15 + Math.random()*0.1);
+        b.position.set(i, 2.85, -5.7); g.add(b);
+    }
+
+    const pendant = new THREE.PointLight(0xffcc66, 2, 10, 2);
+    pendant.position.set(0, 4, -1); pendant.castShadow = true;
+    pendant.shadow.mapSize.set(256, 256); g.add(pendant);
+    const redAccent = new THREE.PointLight(0x881111, 0.8, 8, 2);
+    redAccent.position.set(-4, 2, -4); g.add(redAccent);
+    g.add(new THREE.AmbientLight(0x0a0804, 0.15));
+
+    addNeon(g, "Schlitz", "#ff8800", [-5.8, 3.5, -3], [2, 0.6], 'x+');
+    return g;
+}
+
+/* ─── OFFICE ─── */
+function buildOffice() {
+    const g = new THREE.Group();
+    const flMat = new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 0.8 });
+    const wMat = new THREE.MeshStandardMaterial({ color: 0x1e1a12, roughness: 0.9 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), flMat);
+    floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; g.add(floor);
+
+    [[-5, 2.5, 0, 0.2, 5, 10], [5, 2.5, 0, 0.2, 5, 10], [0, 2.5, -5, 10, 5, 0.2]].forEach(w => {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), wMat);
+        wall.position.set(w[0], w[1], w[2]); wall.receiveShadow = true; g.add(wall);
+    });
+
+    const winLight = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2),
+        new THREE.MeshBasicMaterial({ color: 0x1a2540 }));
+    winLight.position.set(0, 3, -4.89); g.add(winLight);
+    for (let i = 0; i < 8; i++) {
+        const blind = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.04),
+            new THREE.MeshBasicMaterial({ color: 0x1a1510 }));
+        blind.position.set(0, 2.2 + i * 0.25, -4.88); g.add(blind);
+    }
+
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x3a2515, roughness: 0.5, metalness: 0.2 });
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 1.5), deskMat);
+    desk.position.set(0, 0.4, -2); desk.castShadow = true; desk.receiveShadow = true; g.add(desk);
+    const deskTop = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.06, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.4, metalness: 0.3 }));
+    deskTop.position.set(0, 0.82, -2); g.add(deskTop);
+
+    const filing = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.6, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.4 }));
+    filing.position.set(-3.5, 0.8, -3); filing.castShadow = true; g.add(filing);
+
+    const deskLamp = new THREE.SpotLight(0xffe8c0, 3, 6, Math.PI/4, 0.5, 2);
+    deskLamp.position.set(-0.5, 1.8, -2); deskLamp.target.position.set(0.5, 0, -1);
+    deskLamp.castShadow = true; deskLamp.shadow.mapSize.set(256, 256);
+    g.add(deskLamp); g.add(deskLamp.target);
+
+    const winSpot = new THREE.SpotLight(0x334466, 1.5, 12, Math.PI/5, 0.8, 2);
+    winSpot.position.set(0, 4, -4.5); winSpot.target.position.set(1, 0, 2);
+    g.add(winSpot); g.add(winSpot.target);
+
+    g.add(new THREE.AmbientLight(0x0a0808, 0.1));
+    return g;
+}
+
+/* ─── HOTEL LOBBY ─── */
+function buildHotel() {
+    const g = new THREE.Group();
+    const flMat = new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 0.7, metalness: 0.2 });
+    const wMat = new THREE.MeshStandardMaterial({ color: 0x201a10, roughness: 0.85 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), flMat);
+    floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; g.add(floor);
+
+    [[-7, 3, 0, 0.2, 6, 14], [7, 3, 0, 0.2, 6, 14], [0, 3, -7, 14, 6, 0.2]].forEach(w => {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), wMat);
+        wall.position.set(w[0], w[1], w[2]); wall.receiveShadow = true; g.add(wall);
+    });
+
+    const wains = new THREE.Mesh(new THREE.BoxGeometry(14, 1.8, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x16120a, roughness: 0.7 }));
+    wains.position.set(0, 0.9, -6.85); g.add(wains);
+
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x3a2515, roughness: 0.5, metalness: 0.3 });
+    const rDesk = new THREE.Mesh(new THREE.BoxGeometry(5, 1.2, 1.2), deskMat);
+    rDesk.position.set(0, 0.6, -4); rDesk.castShadow = true; rDesk.receiveShadow = true; g.add(rDesk);
+
+    const keyBoard = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 0.1),
+        new THREE.MeshStandardMaterial({ color: 0x0e0a06, roughness: 0.9 }));
+    keyBoard.position.set(0, 3.5, -6.85); g.add(keyBoard);
+
+    const colMat = new THREE.MeshStandardMaterial({ color: 0x201a14, roughness: 0.6, metalness: 0.3 });
+    [[-5, 0], [5, 0]].forEach(([cx, cz]) => {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 6, 8), colMat);
+        col.position.set(cx, 3, cz); col.castShadow = true; g.add(col);
+    });
+
+    const chandelier = new THREE.PointLight(0xffe0a0, 2, 14, 1.5);
+    chandelier.position.set(0, 5.5, 0); chandelier.castShadow = true;
+    chandelier.shadow.mapSize.set(512, 512); g.add(chandelier);
+    g.add(new THREE.AmbientLight(0x0a0806, 0.15));
+
+    addNeon(g, "AVALON", "#c4a35a", [0, 5.2, -6.75], [4, 0.8], null);
+    return g;
+}
+
+/* ─── HOTEL ROOM ─── */
+function buildRoom() {
+    const g = new THREE.Group();
+    const flMat = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: 0.8 });
+    const wMat = new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 0.9 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), flMat);
+    floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; g.add(floor);
+
+    [[-5, 2.5, 0, 0.2, 5, 10], [5, 2.5, 0, 0.2, 5, 10], [0, 2.5, -5, 10, 5, 0.2]].forEach(w => {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), wMat);
+        wall.position.set(w[0], w[1], w[2]); wall.receiveShadow = true; g.add(wall);
+    });
+
+    const winGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2),
+        new THREE.MeshBasicMaterial({ color: 0x182838, transparent: true, opacity: 0.8 }));
+    winGlow.position.set(3, 3, -4.89); g.add(winGlow);
+
+    const bedMat = new THREE.MeshStandardMaterial({ color: 0xc8c0b0, roughness: 0.7 });
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.5, 3.5), bedMat);
+    bed.position.set(-2.5, 0.5, -1); bed.castShadow = true; bed.receiveShadow = true; g.add(bed);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x3a2515, roughness: 0.6 }));
+    frame.position.set(-2.5, 0.6, -2.7); g.add(frame);
+
+    const nightstand = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x2a1a0e, roughness: 0.6, metalness: 0.2 }));
+    nightstand.position.set(3, 0.35, -2); nightstand.castShadow = true; g.add(nightstand);
+
+    const chalkGeo = new THREE.PlaneGeometry(2, 1);
+    const chalkCanvas = document.createElement('canvas');
+    chalkCanvas.width = 200; chalkCanvas.height = 100;
+    const cx = chalkCanvas.getContext('2d');
+    cx.strokeStyle = 'rgba(255,255,255,0.15)'; cx.lineWidth = 2;
+    cx.setLineDash([4, 4]);
+    cx.beginPath();
+    cx.moveTo(60, 10); cx.lineTo(50, 30); cx.lineTo(20, 50); cx.lineTo(50, 50);
+    cx.lineTo(40, 90); cx.moveTo(50, 50); cx.lineTo(80, 90);
+    cx.moveTo(50, 30); cx.lineTo(90, 40); cx.moveTo(50, 30); cx.lineTo(80, 15);
+    cx.moveTo(60, 10); cx.arc(70, 12, 10, Math.PI, 0); cx.stroke();
+    const chalkTex = new THREE.CanvasTexture(chalkCanvas);
+    const chalk = new THREE.Mesh(chalkGeo, new THREE.MeshBasicMaterial({ map: chalkTex, transparent: true, depthWrite: false }));
+    chalk.rotation.x = -Math.PI/2; chalk.position.set(-1, 0.02, 0); g.add(chalk);
+
+    const evMat = new THREE.MeshBasicMaterial({ color: 0xddcc00 });
+    [[-1.8, 0.8], [1, -0.5], [2.2, 1.8]].forEach(([ex, ez], i) => {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 4), evMat);
+        cone.position.set(ex, 0.15, ez); g.add(cone);
+    });
+
+    const moonlight = new THREE.SpotLight(0x2244aa, 3, 12, Math.PI/5, 0.7, 2);
+    moonlight.position.set(3.5, 4.5, -4); moonlight.target.position.set(-1, 0, 1);
+    moonlight.castShadow = true; moonlight.shadow.mapSize.set(512, 512);
+    g.add(moonlight); g.add(moonlight.target);
+    g.add(new THREE.AmbientLight(0x060810, 0.12));
+
+    const tapeCanvas = document.createElement('canvas');
+    tapeCanvas.width = 400; tapeCanvas.height = 10;
+    const tcx = tapeCanvas.getContext('2d');
+    for (let i = 0; i < 400; i += 20) {
+        tcx.fillStyle = i % 40 < 20 ? '#ddcc00' : '#111111';
+        tcx.fillRect(i, 0, 20, 10);
+    }
+    const tapeTex = new THREE.CanvasTexture(tapeCanvas);
+    tapeTex.wrapS = THREE.RepeatWrapping;
+    const tape = new THREE.Mesh(new THREE.PlaneGeometry(10, 0.08),
+        new THREE.MeshBasicMaterial({ map: tapeTex, transparent: true, opacity: 0.15, depthWrite: false }));
+    tape.rotation.x = -Math.PI/2; tape.rotation.z = 0.05;
+    tape.position.set(0, 0.01, 0.5); g.add(tape);
+
+    return g;
+}
+
+const ENV_BUILDERS = { street: buildStreet, bar: buildBar, office: buildOffice, hotel: buildHotel, room: buildRoom };
+
+/* ══════════════════════════════════════
+   RAIN / PARTICLE SYSTEM
+   ══════════════════════════════════════ */
+
+function createRain() {
+    const count = 6000;
+    const positions = new Float32Array(count * 6);
+    const windX = 1.5;
+    for (let i = 0; i < count; i++) {
+        const x = (Math.random() - 0.5) * 50;
+        const y = Math.random() * 20 + 2;
+        const z = (Math.random() - 0.5) * 50;
+        positions[i*6]   = x;
+        positions[i*6+1] = y;
+        positions[i*6+2] = z;
+        positions[i*6+3] = x + windX * 0.015;
+        positions[i*6+4] = y - 0.35;
+        positions[i*6+5] = z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0x8899bb, transparent: true, opacity: 0.18 });
+    const rain = new THREE.LineSegments(geo, mat);
+    scene.add(rain);
+    G.rainObj = rain;
+}
+
+function updateRain(dt) {
+    if (!G.rainObj) return;
+    const p = G.rainObj.geometry.attributes.position.array;
+    const speed = 18, windX = 1.5;
+    for (let i = 0; i < p.length; i += 6) {
+        p[i]   += windX * dt;
+        p[i+1] -= speed * dt;
+        p[i+3] += windX * dt;
+        p[i+4] -= speed * dt;
+        if (p[i+1] < -1) {
+            const x = (Math.random() - 0.5) * 50 + G.camPos.x * 0.3;
+            const z = (Math.random() - 0.5) * 50 + G.camPos.z * 0.3;
+            const y = 18 + Math.random() * 8;
+            p[i] = x; p[i+1] = y; p[i+2] = z;
+            p[i+3] = x + windX * 0.015; p[i+4] = y - 0.35; p[i+5] = z;
+        }
+    }
+    G.rainObj.geometry.attributes.position.needsUpdate = true;
+}
+
+function createDustMotes(count) {
+    count = count || 200;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+        pos[i*3] = (Math.random() - 0.5) * 10;
+        pos[i*3+1] = Math.random() * 4 + 0.5;
+        pos[i*3+2] = (Math.random() - 0.5) * 10;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xddd8c0, size: 0.04, transparent: true, opacity: 0.3 });
+    const pts = new THREE.Points(geo, mat);
+    scene.add(pts);
+    G.particlesObj = pts;
+}
+
+function updateDust(dt, time) {
+    if (!G.particlesObj) return;
+    const p = G.particlesObj.geometry.attributes.position.array;
+    for (let i = 0; i < p.length; i += 3) {
+        p[i]   += Math.sin(time + i) * 0.002;
+        p[i+1] += Math.cos(time * 0.7 + i * 0.5) * 0.001;
+        p[i+2] += Math.sin(time * 0.5 + i * 0.3) * 0.002;
+    }
+    G.particlesObj.geometry.attributes.position.needsUpdate = true;
+}
+
+/* ══════════════════════════════════════
+   CAMERA DIRECTOR
+   ══════════════════════════════════════ */
+
+function setCameraInstant(presetName) {
+    const p = PRESETS[presetName];
+    if (!p) return;
+    G.camPos.set(p.pos[0], p.pos[1], p.pos[2]);
+    G.camLook.set(p.look[0], p.look[1], p.look[2]);
+    G.camFov = p.fov || 50; G.camRoll = p.roll || 0;
+    G.tgtPos.copy(G.camPos); G.tgtLook.copy(G.camLook);
+    G.tgtFov = G.camFov; G.tgtRoll = G.camRoll;
+    applyCamera();
+}
+
+function moveCamera(presetName, duration) {
+    const p = PRESETS[presetName];
+    if (!p) return;
+    G.tgtPos.set(p.pos[0], p.pos[1], p.pos[2]);
+    G.tgtLook.set(p.look[0], p.look[1], p.look[2]);
+    G.tgtFov = p.fov || 50; G.tgtRoll = p.roll || 0;
+    G.camSpeed = duration ? (1 / duration) * 2.5 : 1.8;
+}
+
+function updateCamera(dt) {
+    const s = Math.min(1, G.camSpeed * dt);
+    G.camPos.lerp(G.tgtPos, s);
+    G.camLook.lerp(G.tgtLook, s);
+    G.camFov += (G.tgtFov - G.camFov) * s;
+    G.camRoll += (G.tgtRoll - G.camRoll) * s;
+    applyCamera();
+}
+
+function applyCamera() {
+    camera.position.copy(G.camPos);
+    camera.fov = G.camFov;
+    camera.updateProjectionMatrix();
+    camera.up.set(Math.sin(G.camRoll), Math.cos(G.camRoll), 0);
+    camera.lookAt(G.camLook);
+}
+
+/* ══════════════════════════════════════
+   DIALOGUE SYSTEM
+   ══════════════════════════════════════ */
+
+function showDialogue(charId, text, callback) {
+    const dlg = $('dlg');
+    const nameEl = dlg.querySelector('.dlg-name');
+    const textEl = dlg.querySelector('.dlg-text');
+    const char = charId ? STORY.characters[charId] : null;
+
+    nameEl.textContent = char ? char.name : '';
+    nameEl.style.color = char ? char.color : '#c4a35a';
+    textEl.textContent = '';
+    textEl.className = 'dlg-text' + (char && char.italic ? ' italic' : '');
+    dlg.classList.add('vis');
+    G.dlgDone = false;
+
+    let idx = 0;
+    if (G.typeTimer) clearInterval(G.typeTimer);
+    G.typeTimer = setInterval(() => {
+        if (idx < text.length) {
+            textEl.textContent += text[idx]; idx++;
+        } else {
+            clearInterval(G.typeTimer); G.typeTimer = null;
+            G.dlgDone = true;
+        }
+    }, 30);
+
+    G.dlgCallback = () => {
+        if (!G.dlgDone) {
+            clearInterval(G.typeTimer); G.typeTimer = null;
+            textEl.textContent = text; G.dlgDone = true;
+        } else {
+            dlg.classList.remove('vis');
+            G.dlgCallback = null;
+            if (callback) callback();
+        }
+    };
+}
+
+function hideDialogue() {
+    $('dlg').classList.remove('vis');
+    if (G.typeTimer) { clearInterval(G.typeTimer); G.typeTimer = null; }
+    G.dlgCallback = null;
+}
+
+function showChoices(options) {
+    const el = $('choices');
+    el.innerHTML = '';
+    options.forEach(opt => {
+        const btn = document.createElement('div');
+        btn.className = 'choice-btn';
+        btn.textContent = opt.text;
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            el.classList.remove('vis');
+            if (opt.flag) G.flags[opt.flag] = true;
+            if (opt.goto) startScene(opt.goto);
+        });
+        btn.addEventListener('touchend', e => e.stopPropagation());
+        el.appendChild(btn);
+    });
+    el.classList.add('vis');
+}
+
+/* ══════════════════════════════════════
+   STORY / BEAT ENGINE
+   ══════════════════════════════════════ */
+
+function findScene(id) { return STORY.scenes.find(s => s.id === id); }
+
+function startScene(sceneId) {
+    const sc = findScene(sceneId);
+    if (!sc) { console.warn('Scene not found:', sceneId); return; }
+    G.scene = sc; G.beatIdx = 0;
+    G.investigating = false;
+    hideDialogue(); hideChoices(); hideHotspots();
+
+    const loc = STORY.locations[sc.location];
+    if (G.locId !== sc.location) {
+        transitionTo(sc.location, () => {
+            showSceneTitle(loc.name);
+            processNextBeat();
+        });
+    } else {
+        processNextBeat();
+    }
+    updateDebug();
+}
+
+function processNextBeat() {
+    if (!G.scene) return;
+    if (G.beatIdx >= G.scene.beats.length) {
+        if (G.subCallback) { const cb = G.subCallback; G.subCallback = null; cb(); }
+        return;
+    }
+    const beat = G.scene.beats[G.beatIdx];
+    G.beatIdx++;
+    processBeat(beat);
+}
+
+function processBeat(b) {
+    updateDebug();
+
+    if (b.narrate !== undefined) {
+        showDialogue('narrator', b.narrate, processNextBeat);
+    } else if (b.speak) {
+        showDialogue(b.speak, b.line, processNextBeat);
+    } else if (b.pause !== undefined) {
+        setTimeout(processNextBeat, b.pause * 1000);
+    } else if (b.camera) {
+        if (G.beatIdx === 1 || b.instant) setCameraInstant(b.camera);
+        else moveCamera(b.camera, b.over || 2);
+        processNextBeat();
+    } else if (b.choice) {
+        showChoices(b.choice);
+    } else if (b.goto) {
+        startScene(b.goto);
+    } else if (b.flag) {
+        G.flags[b.flag] = true;
+        processNextBeat();
+    } else if (b.note) {
+        addNote(b.note);
+        processNextBeat();
+    } else if (b.collect) {
+        addInventoryItem(b.collect, b.icon);
+        processNextBeat();
+    } else if (b.location) {
+        transitionTo(b.location, processNextBeat);
+    } else if (b.investigate) {
+        enterInvestigation(b.investigate);
+    } else if (b.effect) {
+        playEffect(b.effect, processNextBeat);
+    } else if (b.if !== undefined) {
+        if (G.flags[b.if]) startScene(b.then);
+        else if (b.else) startScene(b.else);
+        else processNextBeat();
+    } else {
+        processNextBeat();
+    }
+}
+
+/* Sub-scene playback for investigation hotspots */
+function playSubScene(sceneId, callback) {
+    const sc = findScene(sceneId);
+    if (!sc) { callback(); return; }
+    const savedScene = G.scene;
+    const savedBeat = G.beatIdx;
+    G.scene = sc; G.beatIdx = 0;
+    G.subCallback = () => {
+        G.scene = savedScene;
+        G.beatIdx = savedBeat;
+        callback();
+    };
+    processNextBeat();
+}
+
+/* ══════════════════════════════════════
+   INVESTIGATION SYSTEM
+   ══════════════════════════════════════ */
+
+function enterInvestigation(config) {
+    G.investigating = true;
+    G.invConfig = config;
+    updateInvestigation();
+}
+
+function updateInvestigation() {
+    if (!G.investigating || !G.invConfig) return;
+    const cfg = G.invConfig;
+    const remaining = (cfg.hotspots || []).filter(h => !G.flags['examined_' + h.id]);
+
+    if (remaining.length === 0 && cfg.doneGoto) {
+        G.investigating = false;
+        hideHotspots();
+        startScene(cfg.doneGoto);
+        return;
+    }
+
+    showHotspots(remaining, cfg.exits || []);
+    const hintEl = $('investigate-hint');
+    hintEl.textContent = cfg.hint || 'EXAMINE YOUR SURROUNDINGS';
+    hintEl.classList.add('vis');
+}
+
+function onHotspotClick(hotspot) {
+    hideHotspots();
+    $('investigate-hint').classList.remove('vis');
+
+    if (hotspot.collect) addInventoryItem(hotspot.collect.id, hotspot.collect.icon);
+    G.flags['examined_' + hotspot.id] = true;
+
+    playSubScene(hotspot.scene, () => {
+        updateInvestigation();
+    });
+}
+
+function onExitClick(exit) {
+    G.investigating = false;
+    hideHotspots();
+    $('investigate-hint').classList.remove('vis');
+    startScene(exit.goto);
+}
+
+function showHotspots(hotspots, exits) {
+    const layer = $('hotspot-layer');
+    layer.innerHTML = '';
+    const all = [
+        ...hotspots.map(h => ({ ...h, type: 'hotspot' })),
+        ...exits.map(e => ({ ...e, type: 'exit' }))
+    ];
+    all.forEach(h => {
+        const marker = document.createElement('div');
+        marker.className = 'hs-marker';
+        marker.innerHTML = '<div class="hs-ring"></div><div class="hs-label">' + (h.label || '') + '</div>';
+        marker.dataset.posX = h.pos[0];
+        marker.dataset.posY = h.pos[1];
+        marker.dataset.posZ = h.pos[2];
+        marker.dataset.type = h.type;
+        if (h.type === 'exit') {
+            marker.querySelector('.hs-ring').style.borderColor = 'rgba(120,180,120,.5)';
+            marker.querySelector('.hs-label').style.color = '#8aba8a';
+        }
+        marker.addEventListener('click', e => {
+            e.stopPropagation();
+            if (h.type === 'hotspot') onHotspotClick(h);
+            else onExitClick(h);
+        });
+        marker.addEventListener('touchend', e => e.stopPropagation());
+        layer.appendChild(marker);
+    });
+    layer.style.pointerEvents = 'none';
+    updateHotspotPositions();
+}
+
+function hideHotspots() {
+    $('hotspot-layer').innerHTML = '';
+    $('investigate-hint').classList.remove('vis');
+}
+
+function updateHotspotPositions() {
+    const markers = $('hotspot-layer').querySelectorAll('.hs-marker');
+    markers.forEach(m => {
+        const v = new THREE.Vector3(
+            parseFloat(m.dataset.posX),
+            parseFloat(m.dataset.posY),
+            parseFloat(m.dataset.posZ)
+        );
+        v.project(camera);
+        if (v.z > 1) { m.style.display = 'none'; return; }
+        m.style.display = '';
+        m.style.left = ((v.x * 0.5 + 0.5) * window.innerWidth) + 'px';
+        m.style.top = ((-v.y * 0.5 + 0.5) * window.innerHeight) + 'px';
+        m.style.pointerEvents = 'auto';
+    });
+}
+
+function hideChoices() { $('choices').classList.remove('vis'); $('choices').innerHTML = ''; }
+
+/* ══════════════════════════════════════
+   INVENTORY / NOTES
+   ══════════════════════════════════════ */
+
+function addInventoryItem(id, icon) {
+    if (G.inventory.find(i => i.id === id)) return;
+    G.inventory.push({ id, icon });
+    renderInventory();
+}
+
+function renderInventory() {
+    const el = $('inventory');
+    el.innerHTML = '';
+    G.inventory.forEach(item => {
+        const slot = document.createElement('div');
+        slot.className = 'inv-slot';
+        slot.textContent = item.icon || '?';
+        slot.title = item.id;
+        el.appendChild(slot);
+    });
+}
+
+function addNote(text) {
+    if (G.notes.includes(text)) return;
+    G.notes.push(text);
+    renderNotes();
+    $('notes-btn').style.display = 'block';
+}
+
+function renderNotes() {
+    const el = $('notes-list');
+    el.innerHTML = '';
+    G.notes.forEach(n => {
+        const d = document.createElement('div');
+        d.className = 'cnote';
+        d.textContent = n;
+        el.appendChild(d);
+    });
+}
+
+/* ══════════════════════════════════════
+   SCENE TRANSITIONS & EFFECTS
+   ══════════════════════════════════════ */
+
+function transitionTo(locId, callback) {
+    const loc = STORY.locations[locId];
+    if (!loc) { if (callback) callback(); return; }
+
+    const fade = $('fade-overlay');
+    fade.classList.remove('clear');
+    fade.style.transition = 'opacity 1s ease';
+
+    setTimeout(() => {
+        clearEnv();
+        const builder = ENV_BUILDERS[loc.env];
+        if (builder) {
+            G.envGroup = builder();
+            scene.add(G.envGroup);
+        }
+
+        scene.fog.density = loc.fog || 0.03;
+
+        if (loc.weather === 'rain') createRain();
+        else createDustMotes(loc.env === 'bar' ? 300 : 150);
+
+        G.locId = locId;
+
+        const defaultCam = Object.keys(PRESETS).find(k => k.startsWith(loc.env));
+        if (defaultCam) setCameraInstant(defaultCam);
+
+        setTimeout(() => {
+            fade.classList.add('clear');
+            if (callback) setTimeout(callback, 800);
+        }, 200);
+    }, 1000);
+}
+
+function showSceneTitle(name) {
+    const el = $('scene-title');
+    el.textContent = name;
+    el.classList.add('vis');
+    setTimeout(() => el.classList.remove('vis'), 3500);
+}
+
+function playEffect(name, callback) {
+    if (name === 'fade' || name === 'slow-fade') {
+        const fade = $('fade-overlay');
+        fade.style.transition = name === 'slow-fade' ? 'opacity 3s ease' : 'opacity 1.5s ease';
+        fade.classList.remove('clear');
+        setTimeout(() => {
+            fade.classList.add('clear');
+            if (callback) setTimeout(callback, 1500);
+        }, name === 'slow-fade' ? 3000 : 1500);
+    } else {
+        if (callback) callback();
+    }
+}
+
+/* ══════════════════════════════════════
+   AUDIO (procedural rain ambience)
+   ══════════════════════════════════════ */
+
+function initAudio() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufSize = 2 * ctx.sampleRate;
+        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 4500; bp.Q.value = 0.4;
+
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 8000;
+
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+
+        src.connect(bp); bp.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+        G.audioCtx = ctx; G.rainGain = gain; G.rainSource = src;
+    } catch(e) {}
+}
+
+function setAudioWeather(weather) {
+    if (!G.audioCtx || !G.rainGain) return;
+    if (!G.audioStarted) {
+        try { G.audioCtx.resume(); G.rainSource.start(); G.audioStarted = true; } catch(e) {}
+    }
+    const target = weather === 'rain' ? 0.06 : 0.0;
+    G.rainGain.gain.linearRampToValueAtTime(target, G.audioCtx.currentTime + 1.5);
+}
+
+/* ══════════════════════════════════════
+   INPUT HANDLING
+   ══════════════════════════════════════ */
+
+function handleAdvance(e) {
+    if (!G.started) return;
+    if (e) e.preventDefault();
+
+    if (G.dlgCallback) {
+        G.dlgCallback();
+        return;
+    }
+
+    if ($('case-panel').classList.contains('vis')) {
+        $('case-panel').classList.remove('vis');
+        return;
+    }
+}
+
+function initInput() {
+    document.addEventListener('click', handleAdvance);
+    document.addEventListener('touchend', e => {
+        if (e.target.closest('.choice-btn') || e.target.closest('.hs-marker') ||
+            e.target.closest('#notes-btn') || e.target.closest('#case-panel') ||
+            e.target.closest('#title-screen')) return;
+        handleAdvance(e);
+    });
+
+    document.addEventListener('keydown', e => {
+        if (e.key === ' ' || e.key === 'Enter') handleAdvance(e);
+        if (e.key === 'Escape') {
+            hideDialogue(); hideChoices();
+            $('case-panel').classList.remove('vis');
+        }
+        if (e.key === 'n' || e.key === 'N') $('case-panel').classList.toggle('vis');
+        if (e.key === 'd' || e.key === 'D') $('debug').classList.toggle('vis');
+    });
+
+    $('notes-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        $('case-panel').classList.toggle('vis');
+    });
+    $('case-panel').querySelector('.close-x').addEventListener('click', e => {
+        e.stopPropagation();
+        $('case-panel').classList.remove('vis');
+    });
+
+    $('title-screen').addEventListener('click', e => {
+        e.stopPropagation();
+        if (G.titleDone) return;
+        G.titleDone = true;
+        $('title-screen').classList.add('gone');
+        G.started = true;
+        initAudio();
+        setTimeout(() => {
+            startScene(STORY.scenes[0].id);
+        }, 800);
+    });
+}
+
+/* ══════════════════════════════════════
+   DEBUG / DIRECTOR TOOLS
+   ══════════════════════════════════════ */
+
+function updateDebug() {
+    const el = $('debug');
+    if (!el.classList.contains('vis')) return;
+    el.innerHTML = [
+        '<b>DIRECTOR MODE</b>',
+        'Scene: ' + (G.scene ? G.scene.id : 'none'),
+        'Beat: ' + G.beatIdx + '/' + (G.scene ? G.scene.beats.length : 0),
+        'Location: ' + (G.locId || 'none'),
+        'Flags: ' + Object.keys(G.flags).join(', '),
+        'Items: ' + G.inventory.map(i => i.id).join(', '),
+        'Cam: [' + G.camPos.x.toFixed(1) + ',' + G.camPos.y.toFixed(1) + ',' + G.camPos.z.toFixed(1) + ']',
+        'Look: [' + G.camLook.x.toFixed(1) + ',' + G.camLook.y.toFixed(1) + ',' + G.camLook.z.toFixed(1) + ']',
+        'FOV: ' + G.camFov.toFixed(0) + '  Roll: ' + G.camRoll.toFixed(2),
+        '<i>Press D to toggle</i>'
+    ].join('<br>');
+}
+
+/* Console API for story authoring */
+window.game = {
+    goto: id => { G.started = true; startScene(id); },
+    flag: name => { G.flags[name] = true; console.log('Flag set:', name); },
+    flags: () => console.table(G.flags),
+    scenes: () => { console.log(STORY.scenes.map(s => s.id).join('\n')); return STORY.scenes.map(s => s.id); },
+    cam: (preset, dur) => { if (dur) moveCamera(preset, dur); else setCameraInstant(preset); },
+    cams: () => { console.log(Object.keys(PRESETS).join('\n')); return Object.keys(PRESETS); },
+    loc: id => transitionTo(id, () => console.log('At:', id)),
+    note: text => addNote(text),
+    item: (id, icon) => addInventoryItem(id, icon || '?'),
+    reset: () => { G.flags = {}; G.inventory = []; G.notes = []; renderInventory(); renderNotes(); console.log('Reset.'); },
+    state: () => ({ flags: {...G.flags}, inventory: [...G.inventory], notes: [...G.notes], scene: G.scene?.id, beat: G.beatIdx })
+};
+
+/* ══════════════════════════════════════
+   ANIMATION LOOP
+   ══════════════════════════════════════ */
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(G.clock.getDelta(), 0.1);
+    const time = G.clock.getElapsedTime();
+
+    updateCamera(dt);
+    updateRain(dt);
+    updateDust(dt, time);
+
+    G.neonLights.forEach((light, i) => {
+        const phase = G.flickerPhases[i];
+        light.intensity = 2.5 * (0.82 + 0.18 * Math.sin(time * 2.5 + phase * 6.28));
+        if (Math.random() < 0.001) light.intensity *= 0.2;
+    });
+
+    updateHotspotPositions();
+    renderer.render(scene, camera);
+}
+
+/* ══════════════════════════════════════
+   INITIALIZATION
+   ══════════════════════════════════════ */
+
+function init() {
+    $('ts-title').textContent = STORY.title;
+    $('ts-sub').textContent = STORY.subtitle;
+    $('ts-tag').innerHTML = STORY.tagline.replace(/\n/g, '<br>');
+    $('ts-year').textContent = STORY.year;
+
+    clearEnv();
+    G.envGroup = buildStreet();
+    scene.add(G.envGroup);
+    G.locId = 'street';
+    scene.fog.density = 0.032;
+    createRain();
+    setCameraInstant('street-establishing');
+
+    initInput();
+
+    setTimeout(() => $('fade-overlay').classList.add('clear'), 500);
+
+    animate();
+
+    console.log(
+        '%c NIGHTFALL ENGINE ',
+        'background:#1a1510;color:#c4a35a;font-size:14px;padding:6px 12px;font-family:serif',
+        '\nType game.scenes() to list scenes',
+        '\nType game.goto("scene_id") to jump',
+        '\nType game.cam("preset") to set camera',
+        '\nType game.cams() to list camera presets',
+        '\nPress D for director overlay'
+    );
+}
+
+init();
+
+})();
+</script>
+</body>
+</html>
