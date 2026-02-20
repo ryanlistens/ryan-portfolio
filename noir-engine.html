@@ -183,18 +183,18 @@ const SCENES = {
         spawn: { x: 0, z: 14 },
         camOffset: { x: 0, y: 5, z: 10 },
         buildings: [
-            { x:-9, z:-8, w:7, h:16, d:8, color: 0x12161e, face: 1 },
+            { x:-9, z:-10,w:7, h:16, d:8, color: 0x12161e, face: 1 },
             { x:-9, z: 1, w:7, h:12, d:8, color: 0x141820, face: 1 },
-            { x:-9, z: 9, w:7, h: 9, d:6, color: 0x141820, face: 1 },
+            { x:-9, z: 10,w:7, h: 9, d:6, color: 0x141820, face: 1 },
             { x: 9, z:-10,w:7, h:14, d:8, color: 0x141a22, face:-1 },
             { x: 9, z: 0, w:7, h:11, d:10,color: 0x12161e, face:-1 },
-            { x: 9, z: 9, w:7, h: 8, d:6, color: 0x141820, face:-1 },
+            { x: 9, z: 10,w:7, h: 8, d:6, color: 0x141820, face:-1 },
         ],
         lamps: [{ x:-2.5, z: 5 }, { x: 2.5, z:-5 }],
         neons: [
             { text: "BAR", color: 0xff2040, x:-5.4, y:6.5, z:1, ry: Math.PI/2 },
             { text: "HOTEL", color: 0x4488ff, x:5.4, y:7, z:0, ry:-Math.PI/2 },
-            { text: "DRUGS", color: 0x44ff88, x:-5.4, y:5, z:-5, ry: Math.PI/2, size: 0.6 },
+            { text: "DRUGS", color: 0x44ff88, x:-5.4, y:5, z:-8, ry: Math.PI/2, size: 0.6 },
         ],
         policeCar: { x: 3, z:-1 },
         npcs: [
@@ -203,7 +203,7 @@ const SCENES = {
         hotspots: [
             { id:"hs-car", x:3, z:-1, r:2.2, dialogue:"police_car", label:"EXAMINE CAR" },
             { id:"hs-paper", x:-3.5, z:8, r:1.5, dialogue:"newspaper_find", item:"newspaper", label:"PICK UP" },
-            { id:"hs-alley", x:-5.5, z:-3.5, r:1.8, door:"alley", requires:"talked_to_cop", lockedDialogue:"alley_locked", label:"ENTER ALLEY" },
+            { id:"hs-alley", x:-5.5, z:-4.5, r:2, door:"alley", requires:"talked_to_cop", lockedDialogue:"alley_locked", label:"ENTER ALLEY" },
             { id:"hs-bar", x:-5.4, z:1, r:2, dialogue:"bar_sign", label:"LOOK" },
         ],
         onEnter: [
@@ -232,7 +232,7 @@ const SCENES = {
             { id:"hs-outline", x:0, z:-2.5, r:1.5, dialogue:"chalk_exam", label:"EXAMINE BODY" },
             { id:"hs-dumpster", x:-2.2, z:2, r:1.5, dialogue:"dumpster_exam", item:"receipt", label:"SEARCH DUMPSTER" },
             { id:"hs-escape", x:3, z:-4, r:2, dialogue:"fire_escape_exam", label:"LOOK UP" },
-            { id:"hs-exit", x:0, z:7.5, r:1.5, door:"street", label:"EXIT ALLEY" },
+            { id:"hs-exit", x:0, z:7.5, r:1.5, door:"street", spawnAt:{x:-3, z:-4.5}, label:"EXIT ALLEY" },
         ],
         onEnter: [
             { type:"narrate", key:"alley_entrance" },
@@ -336,6 +336,7 @@ let policeCarLights = null;
 let camOffset = new THREE.Vector3(0, 5, 10);
 let camTarget = new THREE.Vector3();
 let camLookTarget = new THREE.Vector3();
+let pendingSpawnOverride = null;
 
 const input = { move: { x:0, z:0 }, interact: false, _interactPrev: false };
 
@@ -510,7 +511,7 @@ function createCharacter(cfg) {
 function createCrimeTape(x1, z1, x2, z2, y) {
     const dx = x2 - x1, dz = z2 - z1;
     const len = Math.sqrt(dx * dx + dz * dz);
-    const angle = Math.atan2(dx, dz);
+    const angle = Math.atan2(-dz, dx);
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 16;
     const ctx = canvas.getContext('2d');
@@ -682,7 +683,9 @@ function buildScene(id) {
     }
 
     playerGroup = createCharacter(CHARACTERS.player);
-    playerPos = new THREE.Vector3(sd.spawn.x, 0, sd.spawn.z);
+    const sp = pendingSpawnOverride || sd.spawn;
+    pendingSpawnOverride = null;
+    playerPos = new THREE.Vector3(sp.x, 0, sp.z);
     playerGroup.position.copy(playerPos);
     scene3d.add(playerGroup);
 
@@ -738,8 +741,8 @@ function buildStreet(sd) {
         policeCarLights = pc;
     }
 
-    scene3d.add(createCrimeTape(-5.5, -1.5, -5.5, -5.5, 0.9));
-    scene3d.add(createCrimeTape(-5.5, -1.5, -5.5, -5.5, 0.5));
+    scene3d.add(createCrimeTape(-5.5, -3, -5.5, -6, 0.9));
+    scene3d.add(createCrimeTape(-5.5, -3, -5.5, -6, 0.5));
 
     for (const hsDef of sd.hotspots) {
         hotspots3d.push({ ...hsDef, pos: new THREE.Vector3(hsDef.x, 0, hsDef.z) });
@@ -1032,7 +1035,9 @@ async function loadScene(id) {
     await delay(800);
     state.paused = false;
 
-    if (sd.onEnter) {
+    const enteredKey = 'entered_' + id;
+    if (sd.onEnter && !state.flags[enteredKey]) {
+        state.flags[enteredKey] = true;
         for (const action of sd.onEnter) {
             if (action.type === 'narrate') {
                 startDialogue(action.key);
@@ -1174,6 +1179,7 @@ function handleInteract() {
                 if (hs.lockedDialogue) startDialogue(hs.lockedDialogue);
                 return;
             }
+            if (hs.spawnAt) pendingSpawnOverride = hs.spawnAt;
             loadScene(hs.door);
             return;
         }
