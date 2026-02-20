@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Cinematic Noir — Story-First Dev</title>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:wght@700;900&family=Libre+Baskerville&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #080706; font-family: 'Special Elite', monospace; touch-action: manipulation; }
+        #game { position: fixed; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; cursor: default; }
+        .scene { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
+        .scene.active { display: block; }
+        .scene-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        .scene-bg img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(60%) contrast(1.3) sepia(25%) brightness(.45); }
+        .scene-fade { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to bottom, rgba(5,6,8,.2) 0%, transparent 15%, rgba(5,6,8,.5) 60%, rgba(5,6,8,.92) 78%, #080a10 88%); pointer-events: none; }
+        .scene-side { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(5,6,8,.6) 0%, transparent 15%, transparent 85%, rgba(5,6,8,.6) 100%); pointer-events: none; }
+        .hotspot, .exit-zone { position: absolute; cursor: pointer; z-index: 20; transition: box-shadow .3s, filter .2s; }
+        .hotspot:hover, .exit-zone:hover { box-shadow: 0 0 30px rgba(255,200,100,.25); filter: brightness(1.2); }
+        .exit-zone::after { content: attr(data-label); position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); font-size: clamp(8px, 2vw, 11px); color: #8a7a5a; letter-spacing: 2px; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+        .exit-zone:hover::after { opacity: 1; }
+        #dlg { position: absolute; bottom: clamp(30px, 6vw, 50px); left: 50%; transform: translateX(-50%); width: 90%; max-width: 540px; background: rgba(8,6,4,.96); border: 2px solid #2d2418; border-left: 5px solid #c4a35a; padding: 18px 20px; display: none; box-shadow: 0 10px 50px rgba(0,0,0,.9); z-index: 100; }
+        #dlg.vis { display: block; animation: dlgIn .35s ease-out; }
+        @keyframes dlgIn { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        .ds { font-family: 'Playfair Display', serif; font-size: clamp(10px, 2.5vw, 12px); color: #c4a35a; letter-spacing: 4px; margin-bottom: 8px; text-transform: uppercase; }
+        .dt { font-family: 'Special Elite', monospace; font-size: clamp(13px, 3.2vw, 16px); color: #d4c5a9; line-height: 1.7; }
+        .dc { font-size: 9px; color: #4a3a2a; margin-top: 10px; text-align: right; animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+        #title { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #060506; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: opacity 1.8s; overflow: hidden; }
+        #title.gone { opacity: 0; pointer-events: none; }
+        #title h1 { font-family: 'Playfair Display', serif; font-weight: 900; font-size: clamp(48px, 16vw, 120px); color: transparent; -webkit-text-stroke: 2px #8a7050; letter-spacing: 12px; }
+        #title .sub { font-family: 'Special Elite', monospace; font-size: clamp(10px, 3vw, 16px); color: #2a1a0a; letter-spacing: 10px; margin-top: 15px; }
+        #title .tag { font-family: 'Libre Baskerville', serif; font-size: clamp(10px, 2.5vw, 14px); color: #1a1008; letter-spacing: 2px; margin-top: 30px; max-width: 80%; text-align: center; line-height: 1.8; }
+        #title .tap { font-size: 11px; color: #1a0a00; letter-spacing: 4px; margin-top: 50px; animation: pulse 2.5s ease-in-out infinite; }
+        #title .yr { position: absolute; bottom: 25px; font-family: 'Playfair Display', serif; font-size: 14px; color: #140a00; letter-spacing: 5px; }
+        #grain { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; opacity: .05; z-index: 999; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+        #hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #3a2a1a; letter-spacing: 2px; transition: opacity 2s; z-index: 50; }
+    </style>
+</head>
+<body>
+<div id="game"></div>
+<div id="dlg"><div class="ds" id="dlg-speaker"></div><div class="dt" id="dlg-text"></div><div class="dc" id="dlg-continue">tap to continue</div></div>
+<div id="hint">TAP TO MOVE · TAP OBJECTS TO EXAMINE</div>
+<div id="grain"></div>
+<div id="title">
+    <h1 id="title-h1">NIGHTFALL</h1>
+    <div class="sub" id="title-sub">A COLLAGE NOIR</div>
+    <div class="tag" id="title-tag">A woman is dead. The police say suicide.<br>Her sister says murder. You say fifty a day plus expenses.</div>
+    <div class="tap">TAP TO BEGIN</div>
+    <div class="yr" id="title-yr">1 9 5 9</div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+// ============ STORY LOADER ============
+// Edit story/*.json files and refresh to see changes. No build step.
+
+const STORY_BASE = 'story';
+let storyIndex = null;
+let scenes = {};
+let dialogue = {};
+let flags = {};
+let inventory = [];
+
+async function loadJSON(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error(`Failed to load ${path}`);
+    return r.json();
+}
+
+async function loadStory() {
+    storyIndex = await loadJSON(`${STORY_BASE}/index.json`);
+    for (const id of storyIndex.scenes || []) {
+        try {
+            scenes[id] = await loadJSON(`${STORY_BASE}/scenes/${id}.json`);
+        } catch (e) {
+            console.warn(`Scene ${id} not found, skipping`);
+        }
+    }
+    // Preload dialogue referenced in scenes
+    const dialogueIds = new Set();
+    for (const sc of Object.values(scenes)) {
+        (sc.hotspots || []).forEach(h => h.look_dialogue && dialogueIds.add(h.look_dialogue));
+        (sc.npcs || []).forEach(n => {
+            dialogueIds.add(n.default_dialogue);
+            if (n.state_dialogue) Object.values(n.state_dialogue).forEach(d => dialogueIds.add(d));
+        });
+    }
+    for (const id of dialogueIds) {
+        try {
+            dialogue[id] = await loadJSON(`${STORY_BASE}/dialogue/${id}.json`);
+        } catch (e) {
+            console.warn(`Dialogue ${id} not found`);
+        }
+    }
+    return storyIndex;
+}
+
+// ============ GAME STATE ============
+let state = {
+    currentScene: null,
+    dialogueQueue: [],
+    dialogueIndex: 0,
+    waitingForTap: false,
+    titleShown: true
+};
+
+// ============ SCENE RENDERER ============
+function renderScene(sceneId) {
+    const sc = scenes[sceneId];
+    if (!sc) return;
+
+    const game = document.getElementById('game');
+    game.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'scene active';
+    wrap.id = `sc-${sc.id}`;
+
+    // Background
+    const bg = document.createElement('div');
+    bg.className = 'scene-bg';
+    const img = document.createElement('img');
+    img.src = sc.background || '';
+    img.alt = sc.setting || '';
+    img.onerror = () => { img.style.display = 'none'; bg.style.background = 'linear-gradient(170deg, #080810, #121220, #0a0a14)'; };
+    bg.appendChild(img);
+    wrap.appendChild(bg);
+    const fade = document.createElement('div');
+    fade.className = 'scene-fade';
+    wrap.appendChild(fade);
+    const side = document.createElement('div');
+    side.className = 'scene-side';
+    wrap.appendChild(side);
+
+    // Exit zones
+    (sc.exits || []).forEach(exit => {
+        const zone = document.createElement('div');
+        zone.className = 'exit-zone';
+        zone.dataset.target = exit.target;
+        zone.dataset.label = exit.label;
+        const [l, b, w, h] = exit.area || [0, 0, 10, 10];
+        zone.style.left = l + '%';
+        zone.style.bottom = b + '%';
+        zone.style.width = w + '%';
+        zone.style.height = h + '%';
+        zone.style.background = 'rgba(255,200,100,.03)';
+        zone.addEventListener('click', () => goToScene(exit.target));
+        wrap.appendChild(zone);
+    });
+
+    // Hotspots
+    (sc.hotspots || []).forEach(hs => {
+        const el = document.createElement('div');
+        el.className = 'hotspot';
+        const [l, b, w, h] = hs.area || [0, 0, 5, 5];
+        el.style.left = l + '%';
+        el.style.bottom = b + '%';
+        el.style.width = w + '%';
+        el.style.height = h + '%';
+        el.style.background = 'rgba(255,200,100,.02)';
+        el.dataset.dialogue = hs.look_dialogue || '';
+        el.dataset.item = hs.item || '';
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (hs.look_dialogue) showDialogue(hs.look_dialogue, hs.item);
+        });
+        wrap.appendChild(el);
+    });
+
+    // NPCs (simplified — click to talk)
+    (sc.npcs || []).forEach(npc => {
+        const flagKey = Object.keys(npc.state_dialogue || {}).find(k => k !== 'default' && flags[k]);
+        const dkey = flagKey ? npc.state_dialogue[flagKey] : (npc.state_dialogue?.default || npc.default_dialogue);
+        const el = document.createElement('div');
+        el.className = 'hotspot';
+        const [px, py] = npc.position || [50, 20];
+        el.style.left = (px - 4) + '%';
+        el.style.bottom = py + '%';
+        el.style.width = '8%';
+        el.style.height = '25%';
+        el.style.background = 'rgba(180,160,120,.05)';
+        el.style.borderRadius = '4px';
+        el.dataset.dialogue = dkey;
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (dkey) showDialogue(dkey);
+        });
+        wrap.appendChild(el);
+    });
+
+    game.appendChild(wrap);
+    state.currentScene = sceneId;
+}
+
+function goToScene(id) {
+    if (scenes[id]) renderScene(id);
+}
+
+// ============ DIALOGUE ============
+function showDialogue(key, itemToAdd) {
+    let lines = dialogue[key];
+    if (!lines) return;
+    if (Array.isArray(lines) === false && lines.lines) lines = lines.lines;
+    if (!lines || lines.length === 0) return;
+    if (itemToAdd && !inventory.includes(itemToAdd)) inventory.push(itemToAdd);
+
+    currentDialogueKey = key;
+    state.dialogueQueue = lines;
+    state.dialogueIndex = 0;
+    state.waitingForTap = true;
+    advanceDialogue();
+}
+
+let currentDialogueKey = null;
+function advanceDialogue() {
+    const dlg = document.getElementById('dlg');
+    const speaker = document.getElementById('dlg-speaker');
+    const text = document.getElementById('dlg-text');
+
+    if (state.dialogueIndex >= state.dialogueQueue.length) {
+        dlg.classList.remove('vis');
+        state.waitingForTap = false;
+        if (currentDialogueKey && storyIndex?.dialogue_flags?.[currentDialogueKey]) {
+            storyIndex.dialogue_flags[currentDialogueKey].forEach(f => flags[f] = true);
+        }
+        currentDialogueKey = null;
+        return;
+    }
+
+    const line = state.dialogueQueue[state.dialogueIndex];
+    speaker.textContent = line.speaker || '';
+    text.textContent = line.text || '';
+    dlg.classList.add('vis');
+    state.dialogueIndex++;
+}
+
+// ============ INPUT ============
+function onTap(e) {
+    if (state.titleShown) {
+        state.titleShown = false;
+        document.getElementById('title').classList.add('gone');
+        loadStory().then(() => renderScene(storyIndex.start_scene || 'street'));
+        return;
+    }
+    if (state.waitingForTap) {
+        advanceDialogue();
+        return;
+    }
+}
+
+document.getElementById('title').addEventListener('click', onTap);
+document.getElementById('title').addEventListener('touchend', (e) => { e.preventDefault(); onTap(e); });
+document.getElementById('game').addEventListener('click', (e) => { if (e.target === e.currentTarget) onTap(e); });
+document.getElementById('dlg').addEventListener('click', () => { if (state.waitingForTap) advanceDialogue(); });
+document.getElementById('dlg').addEventListener('touchend', (e) => { e.preventDefault(); if (state.waitingForTap) advanceDialogue(); });
+
+// Hide hint after first interaction
+let hintHidden = false;
+document.addEventListener('click', () => { if (!hintHidden) { document.getElementById('hint').style.opacity = '0'; hintHidden = true; } }, { once: true });
+
+// ============ INIT ============
+document.getElementById('title-h1').textContent = 'NIGHTFALL';
+document.getElementById('title-sub').textContent = 'A COLLAGE NOIR';
+document.getElementById('title-tag').textContent = "A woman is dead. The police say suicide.\nHer sister says murder. You say fifty a day plus expenses.";
+document.getElementById('title-yr').textContent = '1 9 5 9';
+
+// Optional: load story for direct scene testing (e.g. ?scene=street)
+const params = new URLSearchParams(location.search);
+if (params.get('scene') && !state.titleShown) {
+    loadStory().then(() => {
+        document.getElementById('title').classList.add('gone');
+        state.titleShown = false;
+        renderScene(params.get('scene') || 'street');
+    });
+}
+
+})();
+</script>
+</body>
+</html>
