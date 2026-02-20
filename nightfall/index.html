@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nightfall</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;600&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* --- Loading Screen --- */
+        #loading-screen {
+            position: fixed; inset: 0; z-index: 100;
+            background: #000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            transition: opacity 1.5s ease;
+        }
+        #loading-screen.hidden { opacity: 0; pointer-events: none; }
+        #loading-screen h1 {
+            font-family: 'EB Garamond', Georgia, serif;
+            font-size: 3.5rem; font-weight: 400;
+            color: #c8b89a; letter-spacing: 0.3em;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+        #loading-bar-container {
+            width: 200px; height: 2px;
+            background: rgba(200,184,154,0.15);
+        }
+        #loading-bar {
+            width: 0%; height: 100%;
+            background: #c8b89a;
+            transition: width 0.3s ease;
+        }
+        #loading-hint {
+            margin-top: 1.5rem;
+            font-size: 0.75rem; color: rgba(200,184,154,0.4);
+            letter-spacing: 0.15em;
+        }
+
+        /* --- Title Card (scene transitions) --- */
+        #title-card {
+            position: fixed; inset: 0; z-index: 50;
+            background: #000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 1.5s ease;
+        }
+        #title-card.visible { opacity: 1; pointer-events: auto; }
+        #title-card h2 {
+            font-family: 'EB Garamond', Georgia, serif;
+            font-size: 2.2rem; font-weight: 400;
+            color: #c8b89a; letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        #title-card .subtitle {
+            font-size: 0.85rem; color: rgba(200,184,154,0.5);
+            letter-spacing: 0.15em; margin-top: 0.8rem;
+        }
+
+        /* --- Dialogue Overlay --- */
+        #dialogue-overlay {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            z-index: 30;
+            padding: 0 1.5rem 2rem;
+            opacity: 0; transform: translateY(20px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            pointer-events: none;
+        }
+        #dialogue-overlay.visible {
+            opacity: 1; transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        #dialogue-box {
+            max-width: 680px; margin: 0 auto;
+            background: rgba(0, 0, 0, 0.88);
+            border: 1px solid rgba(200, 184, 154, 0.12);
+            border-radius: 4px;
+            padding: 1.5rem 2rem;
+            backdrop-filter: blur(12px);
+        }
+
+        #dialogue-speaker {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.7rem; font-weight: 600;
+            color: #c8b89a;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 0.6rem;
+        }
+        #dialogue-speaker:empty { display: none; }
+
+        #dialogue-text {
+            font-family: 'EB Garamond', Georgia, serif;
+            font-size: 1.15rem; line-height: 1.7;
+            color: rgba(245, 240, 230, 0.92);
+        }
+
+        #dialogue-text.narration {
+            font-style: italic;
+            color: rgba(200, 184, 154, 0.8);
+        }
+
+        #dialogue-advance {
+            font-size: 0.65rem; color: rgba(200,184,154,0.3);
+            text-align: right; margin-top: 0.8rem;
+            letter-spacing: 0.1em;
+        }
+        #dialogue-advance.hidden { display: none; }
+
+        /* --- Choices --- */
+        #choices-container {
+            max-width: 680px; margin: 0 auto;
+            display: none; gap: 0.5rem;
+            padding-top: 0.8rem;
+        }
+        #choices-container.visible { display: flex; flex-direction: column; }
+
+        .choice-btn {
+            background: rgba(200, 184, 154, 0.06);
+            border: 1px solid rgba(200, 184, 154, 0.15);
+            border-radius: 3px;
+            padding: 0.9rem 1.4rem;
+            font-family: 'EB Garamond', Georgia, serif;
+            font-size: 1.05rem; color: rgba(245, 240, 230, 0.85);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-align: left;
+        }
+        .choice-btn:hover, .choice-btn:active {
+            background: rgba(200, 184, 154, 0.12);
+            border-color: rgba(200, 184, 154, 0.3);
+            color: #c8b89a;
+        }
+
+        /* --- Investigation Prompt --- */
+        #interact-prompt {
+            position: fixed;
+            bottom: 50%; left: 50%;
+            transform: translate(-50%, 50%);
+            z-index: 25;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem; font-weight: 400;
+            color: rgba(200, 184, 154, 0.7);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            background: rgba(0,0,0,0.6);
+            padding: 0.5rem 1.2rem;
+            border: 1px solid rgba(200,184,154,0.15);
+            border-radius: 3px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        #interact-prompt.visible { opacity: 1; }
+
+        /* --- Clue Discovered --- */
+        #clue-popup {
+            position: fixed;
+            top: 15%; left: 50%;
+            transform: translateX(-50%);
+            z-index: 35;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+            pointer-events: none;
+        }
+        #clue-popup.visible { opacity: 1; }
+        #clue-popup .label {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.6rem; font-weight: 600;
+            color: #c8b89a;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+        }
+        #clue-popup .clue-name {
+            font-family: 'EB Garamond', Georgia, serif;
+            font-size: 1.3rem; color: rgba(245,240,230,0.9);
+            margin-top: 0.3rem;
+        }
+
+        /* --- HUD --- */
+        #hud {
+            position: fixed; top: 0; left: 0; right: 0;
+            z-index: 20;
+            display: flex; justify-content: space-between;
+            padding: 1.2rem 1.5rem;
+            pointer-events: none;
+        }
+        #scene-location {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.65rem; font-weight: 300;
+            color: rgba(200,184,154,0.35);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+        #clue-count {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.65rem; font-weight: 300;
+            color: rgba(200,184,154,0.35);
+            letter-spacing: 0.1em;
+        }
+
+        /* --- Touch Joystick --- */
+        #touch-joystick {
+            position: fixed;
+            bottom: 80px; left: 40px;
+            width: 120px; height: 120px;
+            z-index: 40;
+            display: none;
+            pointer-events: auto;
+        }
+        #touch-joystick.active { display: block; }
+        #joystick-base {
+            position: absolute; inset: 0;
+            border: 1px solid rgba(200,184,154,0.15);
+            border-radius: 50%;
+            background: rgba(0,0,0,0.2);
+        }
+        #joystick-thumb {
+            position: absolute;
+            width: 44px; height: 44px;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: rgba(200,184,154,0.2);
+            border: 1px solid rgba(200,184,154,0.3);
+        }
+
+        /* --- Fade overlay for scene transitions --- */
+        #fade-overlay {
+            position: fixed; inset: 0; z-index: 45;
+            background: #000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1.5s ease;
+        }
+        #fade-overlay.visible { opacity: 1; }
+
+        @media (max-width: 600px) {
+            #dialogue-box { padding: 1.2rem 1.4rem; }
+            #dialogue-text { font-size: 1rem; }
+            #loading-screen h1 { font-size: 2.4rem; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+    </div>
+
+    <div id="loading-screen">
+        <h1>Nightfall</h1>
+        <div id="loading-bar-container"><div id="loading-bar"></div></div>
+        <div id="loading-hint">loading</div>
+    </div>
+
+    <div id="title-card">
+        <h2 id="title-card-title"></h2>
+        <div class="subtitle" id="title-card-subtitle"></div>
+    </div>
+
+    <div id="fade-overlay"></div>
+
+    <div id="hud">
+        <div id="scene-location"></div>
+        <div id="clue-count"></div>
+    </div>
+
+    <div id="dialogue-overlay">
+        <div id="dialogue-box">
+            <div id="dialogue-speaker"></div>
+            <div id="dialogue-text"></div>
+            <div id="dialogue-advance">TAP TO CONTINUE</div>
+        </div>
+        <div id="choices-container"></div>
+    </div>
+
+    <div id="interact-prompt"></div>
+
+    <div id="clue-popup">
+        <div class="label">Clue Discovered</div>
+        <div class="clue-name" id="clue-name"></div>
+    </div>
+
+    <div id="touch-joystick">
+        <div id="joystick-base"></div>
+        <div id="joystick-thumb"></div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="engine/Game.js"></script>
+</body>
+</html>
