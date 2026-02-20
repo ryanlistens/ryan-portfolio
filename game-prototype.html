@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>NIGHTFALL - A Cinematic Noir</title>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+        @keyframes typeFlicker{0%,100%{opacity:1}50%{opacity:0}}
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Special Elite',monospace;cursor:crosshair;touch-action:none}
+        #canvas-container{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0}
+        #canvas-container canvas{display:block;width:100%;height:100%}
+        #letterbox-top,#letterbox-bot{position:fixed;left:0;width:100%;background:#000;z-index:50;transition:height .8s cubic-bezier(.4,0,.2,1);pointer-events:none}
+        #letterbox-top{top:0;height:0}
+        #letterbox-bot{bottom:0;height:0}
+        .cinematic #letterbox-top,.cinematic #letterbox-bot{height:8vh}
+        #fade-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;opacity:0;pointer-events:none;transition:opacity .6s ease}
+        #fade-overlay.active{opacity:1}
+        #ui{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:200}
+        #ui>*{pointer-events:auto}
+        #location-title{position:absolute;top:12vh;left:50%;transform:translateX(-50%);font-family:'Playfair Display',serif;font-size:clamp(16px,4.5vw,28px);font-weight:900;color:#b0a080;letter-spacing:8px;text-transform:uppercase;text-shadow:0 2px 20px rgba(0,0,0,.9);opacity:0;transition:opacity 1s;pointer-events:none;white-space:nowrap}
+        #location-title.show{opacity:1}
+        #dlg-panel{position:absolute;bottom:10vh;left:50%;transform:translateX(-50%);width:88%;max-width:580px;background:rgba(8,6,4,.94);border:1px solid #2d2418;border-left:4px solid #c4a35a;padding:18px 22px;display:none;box-shadow:0 10px 50px rgba(0,0,0,.9);animation:slideUp .3s ease-out}
+        #dlg-panel.vis{display:block}
+        #dlg-speaker{font-family:'Playfair Display',serif;font-size:11px;color:#c4a35a;letter-spacing:4px;margin-bottom:8px;text-transform:uppercase}
+        #dlg-text{font-family:'Special Elite',monospace;font-size:15px;color:#d4c5a9;line-height:1.7;min-height:2.4em}
+        #dlg-text .cursor{display:inline-block;width:2px;height:14px;background:#c4a35a;margin-left:2px;animation:typeFlicker .6s step-end infinite;vertical-align:text-bottom}
+        #dlg-continue{font-size:9px;color:#4a3a2a;margin-top:10px;text-align:right;animation:pulse 2s ease-in-out infinite}
+        #choice-panel{position:absolute;bottom:10vh;left:50%;transform:translateX(-50%);width:88%;max-width:580px;display:none;flex-direction:column;gap:6px;animation:slideUp .3s ease-out}
+        #choice-panel.vis{display:flex}
+        .choice-btn{background:rgba(8,6,4,.92);border:1px solid #2d2418;border-left:4px solid #6a5a3a;padding:12px 18px;color:#d4c5a9;font-family:'Special Elite',monospace;font-size:14px;cursor:pointer;text-align:left;transition:border-color .2s,color .2s}
+        .choice-btn:hover{border-left-color:#c4a35a;color:#fff}
+        #inv-bar{position:absolute;top:16px;left:16px;display:flex;gap:5px}
+        .inv-slot{width:38px;height:38px;background:rgba(15,12,8,.85);border:1px solid #3a2a1a;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:border-color .2s}
+        .inv-slot:hover{border-color:#c4a35a}
+        #case-btn{position:absolute;top:16px;right:16px;padding:6px 14px;background:rgba(15,12,8,.85);border:1px solid #3a2a1a;color:#8a7a5a;font-family:'Special Elite',monospace;font-size:10px;letter-spacing:2px;cursor:pointer;transition:all .2s}
+        #case-btn:hover{border-color:#c4a35a;color:#c4a35a}
+        #case-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:85%;max-width:500px;max-height:70vh;overflow-y:auto;background:#f5f0e6;border:3px solid #3d3428;padding:28px;z-index:600;box-shadow:0 20px 60px rgba(0,0,0,.8);display:none}
+        #case-panel.vis{display:block}
+        #case-panel h2{font-family:'Playfair Display',serif;color:#2a2015;margin-bottom:16px;border-bottom:2px solid #3d3428;padding-bottom:8px;font-size:16px;letter-spacing:3px}
+        .cnote{font-family:'Special Elite',monospace;color:#3a3025;font-size:13px;margin-bottom:10px;padding-left:14px;border-left:3px solid #8a7a5a;line-height:1.5}
+        .cnote.new{animation:slideUp .4s ease-out}
+        #case-panel .close-x{position:absolute;top:10px;right:14px;font-size:20px;cursor:pointer;color:#3a3025}
+        #interact-prompt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Special Elite',monospace;font-size:11px;color:#c4a35a;letter-spacing:3px;opacity:0;transition:opacity .3s;pointer-events:none;text-shadow:0 0 10px rgba(196,163,90,.4)}
+        #interact-prompt.vis{opacity:1}
+        #hint-bar{position:absolute;bottom:3vh;left:50%;transform:translateX(-50%);font-size:10px;color:#3a2a1a;letter-spacing:2px;white-space:nowrap;transition:opacity 2s;pointer-events:none}
+        #dev-toggle{position:absolute;bottom:16px;right:16px;padding:4px 10px;background:rgba(15,12,8,.7);border:1px solid #2a2a2a;color:#555;font-size:9px;cursor:pointer;font-family:monospace;letter-spacing:1px}
+        #dev-toggle:hover{color:#888;border-color:#555}
+        #dev-panel{position:fixed;top:0;right:0;width:280px;height:100%;background:rgba(10,10,12,.96);border-left:1px solid #2a2a2a;padding:16px;overflow-y:auto;z-index:800;display:none;font-family:monospace;font-size:11px;color:#8a8a8a}
+        #dev-panel.vis{display:block}
+        #dev-panel h3{color:#c4a35a;font-family:'Playfair Display',serif;margin-bottom:12px;font-size:13px;letter-spacing:2px}
+        #dev-panel label{display:block;margin:8px 0 3px;color:#6a6a6a;font-size:9px;letter-spacing:1px;text-transform:uppercase}
+        #dev-panel select,#dev-panel button{background:#1a1a1e;border:1px solid #333;color:#aaa;padding:5px 8px;width:100%;font-size:11px;cursor:pointer;font-family:monospace;margin-bottom:4px}
+        #dev-panel select:hover,#dev-panel button:hover{border-color:#555}
+        #dev-panel .dev-info{margin-top:12px;padding:8px;background:#0e0e10;border:1px solid #222;font-size:9px;line-height:1.6;color:#666;white-space:pre-wrap;max-height:200px;overflow-y:auto}
+        #dev-panel .dev-section{margin-top:16px;padding-top:12px;border-top:1px solid #222}
+        #title-screen{position:fixed;top:0;left:0;width:100%;height:100%;background:#060506;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity 1.8s;overflow:hidden}
+        #title-screen.gone{opacity:0;pointer-events:none}
+        #title-screen h1{font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(48px,14vw,120px);color:transparent;-webkit-text-stroke:2px #8a7050;letter-spacing:12px;z-index:1;text-align:center}
+        #title-screen .sub{font-family:'Special Elite',monospace;font-size:clamp(10px,3vw,16px);color:#2a1a0a;letter-spacing:10px;margin-top:15px;z-index:1}
+        #title-screen .tag{font-family:'Special Elite',monospace;font-size:clamp(9px,2vw,13px);color:#1a1008;letter-spacing:3px;margin-top:30px;max-width:80%;text-align:center;line-height:1.8;z-index:1}
+        #title-screen .tap{font-size:11px;color:#1a0a00;letter-spacing:4px;margin-top:50px;animation:pulse 2.5s ease-in-out infinite;z-index:1}
+        #title-screen .yr{position:absolute;bottom:25px;font-family:'Playfair Display',serif;font-size:14px;color:#140a00;letter-spacing:5px;z-index:1}
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="letterbox-top"></div>
+    <div id="letterbox-bot"></div>
+    <div id="fade-overlay"></div>
+
+    <div id="ui">
+        <div id="location-title"></div>
+        <div id="dlg-panel">
+            <div id="dlg-speaker"></div>
+            <div id="dlg-text"></div>
+            <div id="dlg-continue">tap to continue</div>
+        </div>
+        <div id="choice-panel"></div>
+        <div id="inv-bar"></div>
+        <button id="case-btn">CASE NOTES</button>
+        <div id="case-panel"><span class="close-x">&times;</span><h2>CASE NOTES</h2><div id="notes-list"></div></div>
+        <div id="interact-prompt"></div>
+        <div id="hint-bar">CLICK TO MOVE &bull; CLICK OBJECTS TO INTERACT</div>
+        <button id="dev-toggle">DEV</button>
+        <div id="dev-panel">
+            <h3>DIRECTOR'S CONSOLE</h3>
+            <label>Jump to Scene</label>
+            <select id="dev-scene-select"></select>
+            <label>Trigger Dialogue</label>
+            <select id="dev-dlg-select"></select>
+            <button id="dev-dlg-go">Play Dialogue</button>
+            <label>Camera Preset</label>
+            <select id="dev-cam-select"></select>
+            <button id="dev-cam-go">Set Camera</button>
+            <div class="dev-section">
+                <label>Flags</label>
+                <div id="dev-flags" class="dev-info">No flags set</div>
+            </div>
+            <div class="dev-section">
+                <label>Camera Position</label>
+                <div id="dev-cam-info" class="dev-info">-</div>
+            </div>
+            <div class="dev-section">
+                <button id="dev-reset">Reset Game State</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="title-screen">
+        <h1>NIGHTFALL</h1>
+        <div class="sub">A CINEMATIC NOIR</div>
+        <div class="tag">A woman is dead. The police say suicide.<br>Her sister says murder. You say fifty a day plus expenses.</div>
+        <div class="tap">TAP TO BEGIN</div>
+        <div class="yr">1 9 5 9</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+// ════════════════════════════════════════════════════════════════
+//  STORY DATA — EDIT THIS SECTION TO BUILD YOUR GAME
+//  All scenes, dialogue, characters, and evidence live here.
+//  Change anything below and refresh to see it in-game.
+// ════════════════════════════════════════════════════════════════
+
+const STORY = {
+
+title: 'NIGHTFALL',
+subtitle: 'A CINEMATIC NOIR',
+
+style: {
+    grain: 0.07,
+    vignette: 1.3,
+    saturation: 0.4,
+    contrast: 1.12,
+    bloom: { strength: 0.5, radius: 0.35, threshold: 0.82 },
+    fog: { color: 0x0a0a12, density: 0.045 },
+    tint: [1.0, 0.95, 0.88]
+},
+
+characters: {
+    player:    { name: 'YOU',             color: 0x2a2520, hat: true,  height: 1.8  },
+    vivian:    { name: 'VIVIAN MARLOWE',  color: 0x8a2030, hat: false, height: 1.65, smoke: true },
+    bartender: { name: 'MICKEY',          color: 0x3a3a3a, hat: false, height: 1.85, broad: true },
+    clerk:     { name: 'HOTEL CLERK',     color: 0x4a4540, hat: false, height: 1.7  }
+},
+
+scenes: {
+    street: {
+        label: 'MAIN STREET',
+        type: 'exterior',
+        fog: { color: 0x080810, density: 0.035 },
+        ambient: { color: 0x151220, intensity: 0.12 },
+        moon: { dir: [0.4, 0.8, 0.2], color: 0xb8b8e0, intensity: 0.35 },
+        neons: [
+            { text: 'BAR',   x: -9, y: 5.5, z: -6, color: 0xff2020, intensity: 2.5, door: 'bar' },
+            { text: 'HOTEL', x: 6,  y: 6.5, z: -6, color: 0x4499ff, intensity: 2.0, door: 'hotel' },
+            { text: 'EATS',  x: 12, y: 5,   z: -6, color: 0xffaa30, intensity: 1.5 },
+            { text: 'DRUGS', x: -1, y: 4.8, z: -6, color: 0x44dd66, intensity: 1.2 }
+        ],
+        lamps: [
+            { x: -5, z: 3, color: 0xffe8c0, intensity: 1.2, height: 5 },
+            { x: 7,  z: 3, color: 0xffe8c0, intensity: 1.2, height: 5 }
+        ],
+        buildings: [
+            { x: -12, z: -8, w: 5, d: 6, h: 14, color: 0x0e0e16 },
+            { x: -7,  z: -8, w: 5, d: 6, h: 11, color: 0x121218 },
+            { x: -2,  z: -8, w: 4, d: 6, h: 16, color: 0x0c0c14 },
+            { x: 3,   z: -8, w: 5, d: 6, h: 12, color: 0x101018 },
+            { x: 8,   z: -8, w: 5, d: 6, h: 18, color: 0x0e0e14 },
+            { x: 13,  z: -8, w: 5, d: 6, h: 10, color: 0x141420 }
+        ],
+        characters: [
+            { id: 'player', x: 0, z: 4 },
+            { id: 'vivian', x: -3, z: 2 }
+        ],
+        interactables: [
+            { id: 'newspaper', type: 'item', x: 1.5, y: 0.05, z: 5, size: [0.4, 0.02, 0.3], color: 0xd8d0c0, prompt: 'EXAMINE', dialogue: 'newspaper' },
+            { id: 'matchbook', type: 'item', x: 5, y: 0.05, z: 4.5, size: [0.15, 0.12, 0.1], color: 0x8b0000, prompt: 'PICK UP', dialogue: 'matchbook' },
+            { id: 'car', type: 'look', x: 8, y: 0.4, z: 5, size: [2.8, 0.8, 1.3], color: 0x1a1a22, prompt: 'EXAMINE', dialogue: 'car' }
+        ],
+        doors: [
+            { id: 'bar_entrance',   target: 'bar',   x: -9,  z: -3, requires: null },
+            { id: 'office_entrance', target: 'office', x: -1,  z: -3, requires: null },
+            { id: 'hotel_entrance',  target: 'hotel',  x: 6,   z: -3, requires: 'talked_bart' }
+        ],
+        cameras: {
+            establishing: { pos: [0, 10, 22],  target: [0, 3, 0],   fov: 48 },
+            medium:       { pos: [0, 4, 14],   target: [0, 2, 0],   fov: 42 },
+            follow:       { pos: [3, 3.5, 10], target: [0, 1.5, 2], fov: 40 },
+            low_wide:     { pos: [0, 1.2, 12], target: [0, 4, -3],  fov: 55 },
+            neon_closeup: { pos: [-7, 5, -2],  target: [-9, 5.5, -6], fov: 30 }
+        },
+        enterCamera: ['establishing', 2.5, 'medium']
+    },
+    bar: {
+        label: 'THE BLUE MOON',
+        type: 'interior',
+        fog: { color: 0x0a0810, density: 0.06 },
+        ambient: { color: 0x1a1018, intensity: 0.08 },
+        lights: [
+            { x: 0, y: 3, z: -1, color: 0xffcc80, intensity: 0.8, distance: 8 },
+            { x: -4, y: 2.5, z: 1, color: 0xff6600, intensity: 0.6, distance: 5 },
+            { x: 4, y: 3, z: -2, color: 0xff4444, intensity: 0.3, distance: 6 }
+        ],
+        characters: [
+            { id: 'bartender', x: 0, z: -2 }
+        ],
+        interactables: [
+            { id: 'whiskey_glass', type: 'look', x: 2, y: 1.05, z: 0, size: [0.08, 0.15, 0.08], color: 0xc8a060, prompt: 'EXAMINE', dialogue: 'glass' }
+        ],
+        doors: [
+            { id: 'bar_exit', target: 'street', x: 5, z: 4, label: 'EXIT' }
+        ],
+        cameras: {
+            establishing: { pos: [4, 3, 6],    target: [0, 1.5, -1], fov: 50 },
+            medium:       { pos: [2, 2.2, 3],  target: [0, 1.5, -1], fov: 42 },
+            bartender_cu: { pos: [0.5, 2, 0.5], target: [0, 1.8, -2], fov: 35 },
+            over_bar:     { pos: [-3, 3, -3],  target: [2, 1, 1],    fov: 45 }
+        },
+        enterCamera: ['establishing', 2, 'medium']
+    },
+    office: {
+        label: 'NOIR INVESTIGATIONS',
+        type: 'interior',
+        fog: { color: 0x0c0a08, density: 0.05 },
+        ambient: { color: 0x1a1510, intensity: 0.06 },
+        lights: [
+            { x: -1, y: 2.2, z: 0, color: 0xffe0a0, intensity: 1.0, distance: 5 },
+            { x: 3, y: 4, z: -3, color: 0x8090b0, intensity: 0.4, distance: 10 }
+        ],
+        characters: [],
+        interactables: [
+            { id: 'typewriter', type: 'look', x: -1, y: 1.02, z: 0, size: [0.5, 0.3, 0.4], color: 0x1a1a1a, prompt: 'EXAMINE', dialogue: 'typewriter' },
+            { id: 'filing', type: 'look', x: -4, y: 0.6, z: -2, size: [0.6, 1.2, 0.4], color: 0x3a3a3a, prompt: 'SEARCH', dialogue: 'filing' },
+            { id: 'desk_drawer', type: 'look', x: 0, y: 0.65, z: 0.6, size: [0.5, 0.1, 0.3], color: 0x3a2215, prompt: 'OPEN', dialogue: 'drawer' },
+            { id: 'office_phone', type: 'look', x: 1.5, y: 1.05, z: -0.5, size: [0.25, 0.2, 0.2], color: 0x111111, prompt: 'USE', dialogue: 'phone_office' }
+        ],
+        doors: [
+            { id: 'office_exit', target: 'street', x: 3, z: 4, label: 'EXIT' }
+        ],
+        cameras: {
+            establishing: { pos: [3, 3.5, 5], target: [-1, 1.5, 0], fov: 48 },
+            medium:       { pos: [1, 2.2, 3], target: [-1, 1.5, 0], fov: 42 },
+            desk_cu:      { pos: [0, 2, 1.5], target: [-0.5, 1, 0], fov: 35 },
+            window:       { pos: [-2, 2.5, 1], target: [3, 3, -3],  fov: 40 }
+        },
+        enterCamera: ['establishing', 2, 'medium']
+    },
+    hotel: {
+        label: 'AVALON HOTEL — ROOM 214',
+        type: 'interior',
+        fog: { color: 0x0a0808, density: 0.04 },
+        ambient: { color: 0x141010, intensity: 0.05 },
+        lights: [
+            { x: 0, y: 3.5, z: 0, color: 0xffe8c0, intensity: 0.3, distance: 8 },
+            { x: 3, y: 3, z: -3, color: 0x8090c0, intensity: 0.25, distance: 6 }
+        ],
+        characters: [],
+        interactables: [
+            { id: 'evidence1', type: 'look', x: -2, y: 0.05, z: 1, size: [0.12, 0.15, 0.12], color: 0xdddd30, prompt: 'EXAMINE', dialogue: 'evidence1', marker: '1' },
+            { id: 'evidence2', type: 'look', x: 1, y: 0.05, z: 0, size: [0.12, 0.15, 0.12], color: 0xdddd30, prompt: 'EXAMINE', dialogue: 'evidence2', marker: '2' },
+            { id: 'evidence3', type: 'look', x: 3, y: 0.05, z: 1.5, size: [0.12, 0.15, 0.12], color: 0xdddd30, prompt: 'EXAMINE', dialogue: 'evidence3', marker: '3' },
+            { id: 'hotel_phone', type: 'look', x: 3.2, y: 0.82, z: -1.5, size: [0.25, 0.2, 0.2], color: 0x111111, prompt: 'EXAMINE', dialogue: 'phone' },
+            { id: 'diary', type: 'item', x: 3.5, y: 0.82, z: -1, size: [0.2, 0.15, 0.15], color: 0x4a2020, prompt: 'READ', dialogue: 'diary' },
+            { id: 'underbed', type: 'look', x: -2.5, y: 0.1, z: -1, size: [1.5, 0.05, 0.8], color: 0x0a0a0a, prompt: 'SEARCH', dialogue: 'underbed' },
+            { id: 'wastebasket', type: 'look', x: 4, y: 0.15, z: 1, size: [0.25, 0.3, 0.25], color: 0x2a2a2a, prompt: 'SEARCH', dialogue: 'wastebasket' }
+        ],
+        doors: [
+            { id: 'hotel_exit', target: 'street', x: 4, z: 4, label: 'EXIT' }
+        ],
+        cameras: {
+            establishing: { pos: [3, 4, 6],    target: [0, 1, 0],    fov: 50 },
+            medium:       { pos: [1, 2.5, 4],  target: [0, 1, 0],    fov: 42 },
+            bed_cu:       { pos: [-2, 2, 1],   target: [-2.5, 0.5, -1], fov: 35 },
+            evidence_cu:  { pos: [1, 1.5, 2],  target: [1, 0.1, 0],  fov: 30 },
+            window_look:  { pos: [2, 2.5, -1], target: [3, 3, -3],   fov: 38 }
+        },
+        enterCamera: ['establishing', 2.5, 'medium']
+    }
+},
+
+dialogues: {
+    vivian_intro: {
+        lines: [
+            { s: '???',    t: "You must be the detective. I\u2019ve heard you take cases the police won\u2019t touch.", cam: 'medium' },
+            { s: 'VIVIAN MARLOWE', t: "My name is Vivian. My sister Eleanor was found dead this morning at the Avalon Hotel. Room 214.", cam: 'medium' },
+            { s: 'VIVIAN', t: "They\u2019re calling it suicide. Eleanor would never do that. She was afraid of something\u2014someone." },
+            { s: 'VIVIAN', t: "I need you to find who really killed her. I\u2019ll pay whatever it takes." },
+            { s: 'YOU',    t: "Who were her friends? Enemies?" },
+            { s: 'VIVIAN', t: "Start at the Blue Moon bar. She spent her last evening there. Ask for a man called Mickey." },
+            { s: 'VIVIAN', t: "And detective\u2014be careful. Eleanor told me she was being followed." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'met_vivian', val: true },
+            { action: 'note', text: 'Vivian Marlowe hired me to investigate her sister Eleanor\u2019s death at the Avalon Hotel.' },
+            { action: 'note', text: 'Eleanor was found dead in Room 214. Police say suicide.' },
+            { action: 'note', text: 'Vivian says: start at the Blue Moon bar, ask for Mickey.' }
+        ]
+    },
+    vivian_return: {
+        lines: [
+            { s: 'VIVIAN', t: "Have you spoken to Mickey yet?" },
+            { s: 'YOU',    t: "Working on it. These things take time, Miss Marlowe." },
+            { s: 'VIVIAN', t: "Time is something Eleanor doesn\u2019t have anymore." }
+        ]
+    },
+    vivian_progress: {
+        lines: [
+            { s: 'VIVIAN', t: "What have you found?" },
+            { s: 'YOU',    t: "Your sister was meeting someone at the Blue Moon. Big man, gray suit. Works for someone named Castellano." },
+            { s: 'VIVIAN', t: "Castellano\u2026 Eleanor mentioned that name. She was terrified of him." },
+            { s: 'VIVIAN', t: "He runs half the waterfront. Real estate, shipping. The kind of man who makes problems disappear." },
+            { s: 'YOU',    t: "Including your sister?" },
+            { s: 'VIVIAN', t: "Find the proof, detective. That\u2019s what I\u2019m paying you for." }
+        ],
+        onDone: [
+            { action: 'note', text: 'Vivian confirms: Castellano runs the waterfront. Eleanor was terrified of him.' }
+        ]
+    },
+    bartender_intro: {
+        lines: [
+            { s: 'MICKEY', t: "What can I get ya?" },
+            { s: 'YOU',    t: "Information. I\u2019m looking into the Marlowe case." },
+            { s: 'MICKEY', t: "Eleanor? She was in here last night. Looked scared. Kept watching the door." },
+            { s: 'MICKEY', t: "She was meeting someone. Big guy, gray suit. Expensive. They argued." },
+            { s: 'YOU',    t: "You get a name?" },
+            { s: 'MICKEY', t: "Didn\u2019t catch one. But he dropped a business card when he left. I still got it." },
+            { s: 'MICKEY', t: "Here. \u2018Vincent Castellano \u2013 Castellano Holdings.\u2019 Guy\u2019s connected. Watch your back." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'talked_bart', val: true },
+            { action: 'note', text: 'Mickey says Eleanor was at the bar last night. Scared. Meeting a big man in a gray suit.' },
+            { action: 'note', text: 'Business card found: Vincent Castellano \u2013 Castellano Holdings.' }
+        ]
+    },
+    bartender_return: {
+        lines: [
+            { s: 'MICKEY', t: "Still working that case?" },
+            { s: 'YOU',    t: "Castellano. Where do I find him?" },
+            { s: 'MICKEY', t: "You don\u2019t find Castellano. He finds you. That\u2019s usually bad news." },
+            { s: 'MICKEY', t: "But his office is on the fifth floor of the Harbor Building. Downtown." }
+        ],
+        onDone: [
+            { action: 'note', text: 'Mickey says Castellano\u2019s office is in the Harbor Building, 5th floor.' }
+        ]
+    },
+    bartender_late: {
+        lines: [
+            { s: 'MICKEY', t: "You look like a man who\u2019s seen a ghost." },
+            { s: 'YOU',    t: "Worse. I\u2019ve seen the truth." },
+            { s: 'MICKEY', t: "That\u2019ll do it. Drink?" }
+        ]
+    },
+    clerk_intro: {
+        lines: [
+            { s: 'HOTEL CLERK', t: "Can I help you, sir?" },
+            { s: 'YOU',    t: "I\u2019m investigating the death in room 214. Eleanor Marlowe." },
+            { s: 'CLERK',  t: "The police already came and went. Said it was suicide. Case closed." },
+            { s: 'YOU',    t: "I\u2019m not the police. Her sister hired me. I need to see that room." },
+            { s: 'CLERK',  t: "I\u2019m not supposed to let anyone up there\u2026" },
+            { s: 'YOU',    t: "Twenty dollars says you can make an exception." },
+            { s: 'CLERK',  t: "\u2026Second floor. End of the hall on the right. The key\u2019s missing but the door\u2019s unlocked. Police were sloppy." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'talked_clerk', val: true },
+            { action: 'flag', key: 'room_access', val: true },
+            { action: 'note', text: 'Hotel clerk let me into Room 214 for $20.' },
+            { action: 'note', text: 'Key to 214 is missing. Door unlocked. Police were sloppy.' }
+        ]
+    },
+    clerk_return: {
+        lines: [
+            { s: 'CLERK', t: "Find what you were looking for up there?" },
+            { s: 'YOU',   t: "Still looking. Did anyone visit her that night?" },
+            { s: 'CLERK', t: "A man came in around 10 PM. Big. Gray suit. Didn\u2019t sign the register." },
+            { s: 'CLERK', t: "He left about an hour later. Walking fast. Didn\u2019t look at me." }
+        ],
+        onDone: [
+            { action: 'note', text: 'Clerk confirms: a big man in a gray suit visited Eleanor around 10 PM. Left an hour later.' }
+        ]
+    },
+    hotel_locked: {
+        lines: [
+            { s: 'NARRATOR', t: "The Avalon Hotel. Room 214 is up there somewhere behind dark curtains." },
+            { s: 'NARRATOR', t: "I\u2019ll need to talk to someone to get inside. Maybe try the bar first." }
+        ]
+    },
+    car: {
+        lines: [
+            { s: 'NARRATOR', t: "A \u201957 Bel Air. Chrome catching neon like fresh blood on a switchblade." },
+            { s: 'NARRATOR', t: "Someone parked in a hurry. The door\u2019s not quite closed." }
+        ]
+    },
+    newspaper: {
+        lines: [
+            { s: 'NARRATOR', t: "Today\u2019s Daily Herald. Front page: \u2018WOMAN FOUND DEAD AT AVALON HOTEL.\u2019" },
+            { s: 'NARRATOR', t: "Police calling it suicide. Funny how suicides don\u2019t usually have bruises on their wrists." }
+        ],
+        onDone: [
+            { action: 'collect', item: 'newspaper' },
+            { action: 'note', text: 'Newspaper: Eleanor Marlowe found dead. Bruises on wrists suggest otherwise.' }
+        ]
+    },
+    matchbook: {
+        lines: [
+            { s: 'NARRATOR', t: "A matchbook. \u2018The Blue Moon\u2019 in gold on crimson." },
+            { s: 'NARRATOR', t: "Barely damp. Dropped tonight. Someone was here recently who knows the bar." }
+        ],
+        onDone: [
+            { action: 'collect', item: 'matchbook' },
+            { action: 'note', text: 'Blue Moon matchbook found on the street. Dropped recently.' }
+        ]
+    },
+    typewriter: {
+        lines: [
+            { s: 'NARRATOR', t: "My old Underwood. The \u2018e\u2019 key sticks, but it still tells the truth." },
+            { s: 'NARRATOR', t: "Half-finished case reports. Unpaid bills. A bottle of rye in the drawer." }
+        ]
+    },
+    filing: {
+        lines: [
+            { s: 'NARRATOR', t: "Case files. Most of them cold. Just like the trails that led nowhere." },
+            { s: 'NARRATOR', t: "Eleanor Marlowe\u2019s folder is empty. Time to change that." }
+        ]
+    },
+    phone_office: {
+        lines: [
+            { s: 'NARRATOR', t: "The phone. Dead line. Nobody\u2019s calling with good news at this hour." }
+        ]
+    },
+    drawer: {
+        lines: [
+            { s: 'NARRATOR', t: "The desk drawer. Under the rye bottle and some old receipts\u2026 a photograph." },
+            { s: 'NARRATOR', t: "Eleanor Marlowe. Young, dark-haired, serious eyes." },
+            { s: 'NARRATOR', t: "Now I know what the victim looked like." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_photo', val: true },
+            { action: 'collect', item: 'photo' },
+            { action: 'note', text: 'Found photograph of Eleanor Marlowe in desk drawer.' }
+        ]
+    },
+    glass: {
+        lines: [
+            { s: 'NARRATOR', t: "A whiskey glass with lipstick on the rim. Deep red. Eleanor\u2019s shade." },
+            { s: 'NARRATOR', t: "She was sitting right here, hours before she died." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_glass', val: true },
+            { action: 'note', text: 'Lipstick on whiskey glass at the bar. Eleanor was here.' }
+        ]
+    },
+    phone: {
+        lines: [
+            { s: 'NARRATOR', t: "Hotel phone. The receiver is off the hook." },
+            { s: 'NARRATOR', t: "The last number dialed is still on the rotary. A downtown exchange. Castellano\u2019s office." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_phone', val: true },
+            { action: 'note', text: 'Hotel phone off the hook. Last number dialed: Castellano\u2019s office.' }
+        ]
+    },
+    evidence1: {
+        lines: [
+            { s: 'NARRATOR', t: "Marker 1. A single earring. Pearl. Expensive. Ripped from the lobe." },
+            { s: 'NARRATOR', t: "This wasn\u2019t suicide. This was a struggle." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_earring', val: true },
+            { action: 'note', text: 'Evidence #1: Pearl earring ripped from earlobe. This was a struggle.' }
+        ]
+    },
+    evidence2: {
+        lines: [
+            { s: 'NARRATOR', t: "Marker 2. Scuff marks on the hardwood. Two sets of shoes. One large, one small." },
+            { s: 'NARRATOR', t: "Someone dragged her. The smaller prints lead to the window." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_scuffs', val: true },
+            { action: 'note', text: 'Evidence #2: Two sets of shoe scuffs. Someone dragged her.' }
+        ]
+    },
+    evidence3: {
+        lines: [
+            { s: 'NARRATOR', t: "Marker 3. A cufflink under the nightstand. Monogrammed. \u2018V.C.\u2019" },
+            { s: 'NARRATOR', t: "Vincent Castellano. He was here. And now Eleanor Marlowe is dead." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_cufflink', val: true },
+            { action: 'note', text: 'Evidence #3: Cufflink monogrammed V.C. \u2014 Vincent Castellano was in this room.' }
+        ]
+    },
+    diary: {
+        lines: [
+            { s: 'NARRATOR', t: "A leather diary. Eleanor\u2019s handwriting." },
+            { s: 'NARRATOR', t: "\u2018V. won\u2019t stop calling. He says if I talk to anyone about the Harbor deal, I\u2019ll regret it.\u2019" },
+            { s: 'NARRATOR', t: "\u2018I told Vivian to hire someone if anything happens to me. Someone who can\u2019t be bought.\u2019" },
+            { s: 'NARRATOR', t: "The last entry is dated yesterday. The ink is still fresh. She knew she was in danger." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_diary', val: true },
+            { action: 'collect', item: 'diary' },
+            { action: 'note', text: 'Eleanor\u2019s diary: Castellano threatened her about the Harbor deal.' },
+            { action: 'note', text: 'Eleanor told Vivian to hire someone if anything happened.' }
+        ]
+    },
+    underbed: {
+        lines: [
+            { s: 'NARRATOR', t: "Under the bed. Dust and shadow. But there\u2014a crumpled note." },
+            { s: 'NARRATOR', t: "\u2018Meet me at the Avalon. Bring the documents. Tell no one. \u2014V.C.\u2019" },
+            { s: 'NARRATOR', t: "Castellano lured her here. This was premeditated." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_note', val: true },
+            { action: 'note', text: 'Crumpled note under bed: Meet me at the Avalon. Bring the documents. \u2014V.C.' }
+        ]
+    },
+    wastebasket: {
+        lines: [
+            { s: 'NARRATOR', t: "The wastebasket. A torn envelope from Castellano Holdings." },
+            { s: 'NARRATOR', t: "And a receipt from a locksmith. Someone had a copy of the room key made last week." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'found_envelope', val: true },
+            { action: 'note', text: 'Torn envelope from Castellano Holdings found in wastebasket.' },
+            { action: 'note', text: 'Locksmith receipt: someone had a copy of the room key made.' }
+        ]
+    },
+    case_solved: {
+        lines: [
+            { s: 'NARRATOR', t: "The cufflink. The diary. The phone records. The witness at the bar. The torn register page." },
+            { s: 'NARRATOR', t: "Vincent Castellano killed Eleanor Marlowe because she knew about the Harbor deal." },
+            { s: 'NARRATOR', t: "Not suicide. Murder. And now I have enough to prove it." },
+            { s: 'NARRATOR', t: "Time to make a phone call to someone at the Herald who isn\u2019t on Castellano\u2019s payroll." },
+            { s: 'NARRATOR', t: "Eleanor Marlowe deserved better than a chalk outline and a closed case." },
+            { s: 'NARRATOR', t: "CASE CLOSED." }
+        ],
+        onDone: [
+            { action: 'flag', key: 'case_solved', val: true },
+            { action: 'note', text: '\u2014\u2014\u2014 CASE CLOSED \u2014\u2014\u2014' },
+            { action: 'note', text: 'Vincent Castellano murdered Eleanor Marlowe to silence her about the Harbor real estate deal.' }
+        ]
+    }
+},
+
+npcLogic: {
+    vivian(flags) {
+        if (!flags.met_vivian) return 'vivian_intro';
+        if (flags.talked_bart) return 'vivian_progress';
+        return 'vivian_return';
+    },
+    bartender(flags) {
+        if (!flags.talked_bart) return 'bartender_intro';
+        if (flags.found_cufflink) return 'bartender_late';
+        return 'bartender_return';
+    },
+    clerk(flags) {
+        if (!flags.talked_clerk) return 'clerk_intro';
+        return 'clerk_return';
+    }
+},
+
+caseCheck(flags) {
+    return flags.found_cufflink && flags.found_diary && flags.found_phone && !flags.case_solved;
+},
+
+evidence: {
+    newspaper:  { icon: '\u{1F4F0}', name: 'Newspaper' },
+    matchbook:  { icon: '\u{1F525}', name: 'Matchbook' },
+    diary:      { icon: '\u{1F4D5}', name: 'Diary' },
+    photo:      { icon: '\u{1F4F7}', name: 'Photo' }
+}
+
+};
+
+// ════════════════════════════════════════════════════════════════
+//  ENGINE — CORE SETUP
+// ════════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+$('canvas-container').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 5, 15);
+
+const clock = new THREE.Clock();
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2(-9, -9);
+
+const STATE = {
+    currentScene: null,
+    flags: {},
+    inventory: [],
+    notes: [],
+    inDialogue: false,
+    playerPos: new THREE.Vector3(0, 0, 4),
+    playerMoving: false,
+    started: false,
+    devMode: false
+};
+
+const sceneGroups = {};
+const sceneCharacters = {};
+const sceneInteractables = {};
+const sceneDoors = {};
+const sceneGround = {};
+let currentSceneGroup = null;
+let playerMesh = null;
+let hoveredObject = null;
+let rainSystem = null;
+
+// ════════════════════════════════════════════════════════════════
+//  POST-PROCESSING
+// ════════════════════════════════════════════════════════════════
+
+const NoirShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        time: { value: 0 },
+        grainIntensity: { value: STORY.style.grain },
+        vignetteStrength: { value: STORY.style.vignette },
+        saturation: { value: STORY.style.saturation },
+        contrast: { value: STORY.style.contrast },
+        tintColor: { value: new THREE.Vector3(...STORY.style.tint) }
+    },
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float time, grainIntensity, vignetteStrength, saturation, contrast;
+        uniform vec3 tintColor;
+        varying vec2 vUv;
+        float rand(vec2 co){ return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453); }
+        void main(){
+            vec4 c = texture2D(tDiffuse, vUv);
+            c.rgb = (c.rgb - 0.5) * contrast + 0.5;
+            float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+            c.rgb = mix(vec3(luma), c.rgb, saturation);
+            c.rgb *= tintColor;
+            vec2 center = vUv - 0.5;
+            float d = length(center);
+            c.rgb *= 1.0 - smoothstep(0.3, 0.85, d * vignetteStrength);
+            float grain = rand(vUv * vec2(time * 97.0 + 1.0, time * 131.0 + 1.0));
+            c.rgb += (grain - 0.5) * grainIntensity;
+            gl_FragColor = c;
+        }`
+};
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    STORY.style.bloom.strength,
+    STORY.style.bloom.radius,
+    STORY.style.bloom.threshold
+);
+composer.addPass(bloomPass);
+const noirPass = new ShaderPass(NoirShader);
+composer.addPass(noirPass);
+
+// ════════════════════════════════════════════════════════════════
+//  CAMERA DIRECTOR
+// ════════════════════════════════════════════════════════════════
+
+const Director = {
+    targetPos: new THREE.Vector3(),
+    targetLook: new THREE.Vector3(),
+    currentPos: new THREE.Vector3(0, 5, 15),
+    currentLook: new THREE.Vector3(0, 2, 0),
+    targetFov: 45,
+    lerpSpeed: 1.8,
+    driftEnabled: true,
+    queue: [],
+    queueTimer: 0,
+
+    cut(preset) {
+        if (!preset) return;
+        this.targetPos.set(preset.pos[0], preset.pos[1], preset.pos[2]);
+        this.targetLook.set(preset.target[0], preset.target[1], preset.target[2]);
+        this.targetFov = preset.fov || 45;
+        this.currentPos.copy(this.targetPos);
+        this.currentLook.copy(this.targetLook);
+        camera.position.copy(this.currentPos);
+        camera.lookAt(this.currentLook);
+        camera.fov = this.targetFov;
+        camera.updateProjectionMatrix();
+    },
+
+    moveTo(preset, speed) {
+        if (!preset) return;
+        this.targetPos.set(preset.pos[0], preset.pos[1], preset.pos[2]);
+        this.targetLook.set(preset.target[0], preset.target[1], preset.target[2]);
+        this.targetFov = preset.fov || 45;
+        if (speed) this.lerpSpeed = speed;
+    },
+
+    runSequence(seq, cameras) {
+        this.queue = [];
+        let i = 0;
+        while (i < seq.length) {
+            const item = seq[i];
+            if (typeof item === 'string') {
+                this.queue.push({ type: 'move', preset: cameras[item] });
+            } else if (typeof item === 'number') {
+                this.queue.push({ type: 'wait', duration: item });
+            }
+            i++;
+        }
+        if (this.queue.length > 0) {
+            const first = this.queue.shift();
+            if (first.type === 'move') this.cut(first.preset);
+            this.queueTimer = 0;
+        }
+    },
+
+    update(dt, elapsed) {
+        if (this.queue.length > 0) {
+            this.queueTimer += dt;
+            const next = this.queue[0];
+            if (next.type === 'wait' && this.queueTimer >= next.duration) {
+                this.queue.shift();
+                this.queueTimer = 0;
+                if (this.queue.length > 0) {
+                    const n = this.queue.shift();
+                    if (n.type === 'move') this.moveTo(n.preset, 1.5);
+                }
+            }
+        }
+
+        this.currentPos.lerp(this.targetPos, Math.min(1, this.lerpSpeed * dt));
+        this.currentLook.lerp(this.targetLook, Math.min(1, this.lerpSpeed * dt));
+        camera.position.copy(this.currentPos);
+        if (this.driftEnabled) {
+            camera.position.x += Math.sin(elapsed * 0.25) * 0.015;
+            camera.position.y += Math.sin(elapsed * 0.18) * 0.01;
+        }
+        camera.lookAt(this.currentLook);
+        camera.fov += (this.targetFov - camera.fov) * Math.min(1, 2.0 * dt);
+        camera.updateProjectionMatrix();
+    }
+};
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE BUILDER — GEOMETRY HELPERS
+// ════════════════════════════════════════════════════════════════
+
+function makeBox(w, h, d, color, x, y, z, shadows = true) {
+    const m = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0 })
+    );
+    m.position.set(x, y, z);
+    if (shadows) { m.castShadow = true; m.receiveShadow = true; }
+    return m;
+}
+
+function makeCharacter(config) {
+    const g = new THREE.Group();
+    const bodyW = config.broad ? 0.38 : 0.28;
+    const bodyH = config.height * 0.55;
+    const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(bodyW * 0.85, bodyW, bodyH, 8),
+        new THREE.MeshStandardMaterial({ color: config.color, roughness: 0.8 })
+    );
+    body.position.y = bodyH / 2 + 0.05;
+    body.castShadow = true;
+    g.add(body);
+
+    const headR = config.broad ? 0.2 : 0.17;
+    const head = new THREE.Mesh(
+        new THREE.SphereGeometry(headR, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: 0.7 })
+    );
+    head.position.y = bodyH + headR + 0.08;
+    head.castShadow = true;
+    g.add(head);
+
+    if (config.hat) {
+        const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.025, 12), hatMat);
+        brim.position.y = head.position.y + headR * 0.75;
+        g.add(brim);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.17, 0.13, 8), hatMat);
+        crown.position.y = brim.position.y + 0.08;
+        g.add(crown);
+    }
+
+    if (config.smoke) {
+        const smokeMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.2 });
+        for (let i = 0; i < 3; i++) {
+            const puff = new THREE.Mesh(new THREE.SphereGeometry(0.04 + i * 0.02, 6, 6), smokeMat.clone());
+            puff.position.set(bodyW + 0.1, bodyH * 0.7 + i * 0.15, 0);
+            puff.userData.smokeOffset = i * 0.7;
+            g.add(puff);
+        }
+    }
+
+    const shadow = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.7, 0.4),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.01;
+    g.add(shadow);
+
+    return g;
+}
+
+function makeNeonSign(text, color, x, y, z) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 64;
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillStyle = '#' + new THREE.Color(color).getHexString();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 15;
+    ctx.fillText(text, 128, 32);
+    ctx.shadowBlur = 30;
+    ctx.fillText(text, 128, 32);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 0.6), mat);
+    plane.position.set(x, y, z);
+    return plane;
+}
+
+function makeStreetLamp(x, z, color, intensity, height) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.05, height, 6),
+        new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.3 })
+    );
+    pole.position.y = height / 2;
+    pole.castShadow = true;
+    g.add(pole);
+
+    const hood = new THREE.Mesh(
+        new THREE.ConeGeometry(0.2, 0.15, 8, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4, metalness: 0.2 })
+    );
+    hood.position.y = height;
+    hood.rotation.x = Math.PI;
+    g.add(hood);
+
+    const light = new THREE.PointLight(color, intensity, 10, 1.5);
+    light.position.y = height - 0.1;
+    light.castShadow = true;
+    light.shadow.mapSize.set(512, 512);
+    light.shadow.bias = -0.002;
+    g.add(light);
+    return g;
+}
+
+function makeWindow(w, h, x, y, z, litChance) {
+    const on = Math.random() < litChance;
+    const mat = new THREE.MeshBasicMaterial({
+        color: on ? 0xffe8a0 : 0x0a0a10,
+        transparent: true,
+        opacity: on ? 0.5 + Math.random() * 0.3 : 0.15
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    m.position.set(x, y, z);
+    if (on) m.userData.flicker = true;
+    return m;
+}
+
+function makeRain(count, spread, height) {
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * spread;
+        positions[i * 3 + 1] = Math.random() * height;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+        velocities[i] = 6 + Math.random() * 6;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({ color: 0x8888aa, size: 0.03, transparent: true, opacity: 0.35 });
+    const points = new THREE.Points(geo, mat);
+    points.userData.velocities = velocities;
+    points.userData.spread = spread;
+    points.userData.height = height;
+    return points;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE BUILDER — STREET
+// ════════════════════════════════════════════════════════════════
+
+function buildStreet() {
+    const g = new THREE.Group();
+    const sd = STORY.scenes.street;
+
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(40, 30),
+        new THREE.MeshStandardMaterial({ color: 0x141418, roughness: 0.15, metalness: 0.1 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    ground.userData.isGround = true;
+    g.add(ground);
+    sceneGround.street = ground;
+
+    const sidewalk = new THREE.Mesh(
+        new THREE.BoxGeometry(40, 0.12, 5),
+        new THREE.MeshStandardMaterial({ color: 0x252530, roughness: 0.8 })
+    );
+    sidewalk.position.set(0, 0.06, -1.5);
+    sidewalk.receiveShadow = true;
+    g.add(sidewalk);
+
+    sd.buildings.forEach(b => {
+        const bld = makeBox(b.w, b.h, b.d, b.color, b.x, b.h / 2, b.z);
+        g.add(bld);
+        for (let row = 0; row < Math.floor(b.h / 2); row++) {
+            for (let col = 0; col < Math.floor(b.w / 1.5); col++) {
+                const wx = b.x - b.w / 2 + 0.8 + col * 1.4;
+                const wy = 1.5 + row * 2;
+                const wz = b.z + b.d / 2 + 0.01;
+                g.add(makeWindow(0.5, 0.7, wx, wy, wz, 0.35));
+            }
+        }
+    });
+
+    sd.neons.forEach(n => g.add(makeNeonSign(n.text, n.color, n.x, n.y, n.z)));
+    sd.neons.forEach(n => {
+        const nl = new THREE.PointLight(n.color, n.intensity || 1.5, 8, 2);
+        nl.position.set(n.x, n.y - 0.5, n.z + 1);
+        g.add(nl);
+    });
+    sd.lamps.forEach(l => g.add(makeStreetLamp(l.x, l.z, l.color, l.intensity, l.height)));
+
+    const ambient = new THREE.AmbientLight(sd.ambient.color, sd.ambient.intensity);
+    g.add(ambient);
+    const moon = new THREE.DirectionalLight(sd.moon.color, sd.moon.intensity);
+    moon.position.set(sd.moon.dir[0] * 20, sd.moon.dir[1] * 20, sd.moon.dir[2] * 20);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(1024, 1024);
+    moon.shadow.camera.left = -15; moon.shadow.camera.right = 15;
+    moon.shadow.camera.top = 15; moon.shadow.camera.bottom = -5;
+    moon.shadow.camera.near = 1; moon.shadow.camera.far = 50;
+    moon.shadow.bias = -0.002;
+    g.add(moon);
+
+    rainSystem = makeRain(1500, 30, 15);
+    g.add(rainSystem);
+
+    return g;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE BUILDER — BAR
+// ════════════════════════════════════════════════════════════════
+
+function buildBar() {
+    const g = new THREE.Group();
+    const sd = STORY.scenes.bar;
+
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 0.7 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 12), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    floor.userData.isGround = true;
+    g.add(floor);
+    sceneGround.bar = floor;
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1215, roughness: 0.9 });
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(14, 5), wallMat).translateZ(-5).translateY(2.5));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(12, 5), wallMat.clone()).translateX(-7).translateY(2.5).rotateY(Math.PI / 2));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(12, 5), wallMat.clone()).translateX(7).translateY(2.5).rotateY(-Math.PI / 2));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(14, 12), new THREE.MeshStandardMaterial({ color: 0x0e0a08, roughness: 1 }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.y = 4.5; g.add(ceil);
+
+    const barTop = makeBox(6, 0.1, 1.2, 0x4a3018, 0, 1.0, -1);
+    g.add(barTop);
+    const barFront = makeBox(6, 1.0, 0.1, 0x3a2010, 0, 0.5, -0.4);
+    g.add(barFront);
+
+    for (let i = 0; i < 5; i++) {
+        const bottle = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.04, 0.05, 0.25, 6),
+            new THREE.MeshStandardMaterial({ color: [0x3a2010, 0x2a4030, 0x4a2020, 0x3a3020, 0x2a2040][i], roughness: 0.3, metalness: 0.1 })
+        );
+        bottle.position.set(-2 + i * 1, 2.2, -4.5);
+        g.add(bottle);
+    }
+
+    for (let i = 0; i < 3; i++) {
+        const stool = new THREE.Group();
+        const seat = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.18, 0.06, 8),
+            new THREE.MeshStandardMaterial({ color: 0x4a2a15, roughness: 0.7 })
+        );
+        seat.position.y = 0.65;
+        stool.add(seat);
+        const leg = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.03, 0.04, 0.65, 6),
+            new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.3 })
+        );
+        leg.position.y = 0.32;
+        stool.add(leg);
+        stool.position.set(-2 + i * 2, 0, 0.8);
+        g.add(stool);
+    }
+
+    const neonSign = makeNeonSign('Schlitz', 0xff8800, 3, 3.5, -4.8);
+    g.add(neonSign);
+    const neonLight = new THREE.PointLight(0xff8800, 0.8, 6, 2);
+    neonLight.position.set(3, 3, -4);
+    g.add(neonLight);
+
+    const ambient = new THREE.AmbientLight(sd.ambient.color, sd.ambient.intensity);
+    g.add(ambient);
+    sd.lights.forEach(l => {
+        const pl = new THREE.PointLight(l.color, l.intensity, l.distance, 2);
+        pl.position.set(l.x, l.y, l.z);
+        pl.castShadow = true;
+        pl.shadow.mapSize.set(512, 512);
+        g.add(pl);
+    });
+
+    for (let i = 0; i < 20; i++) {
+        const puff = new THREE.Mesh(
+            new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 5, 5),
+            new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.04 + Math.random() * 0.04 })
+        );
+        puff.position.set((Math.random() - 0.5) * 10, 2.5 + Math.random() * 1.5, (Math.random() - 0.5) * 8);
+        puff.userData.hazeFloat = true;
+        g.add(puff);
+    }
+
+    return g;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE BUILDER — OFFICE
+// ════════════════════════════════════════════════════════════════
+
+function buildOffice() {
+    const g = new THREE.Group();
+    const sd = STORY.scenes.office;
+
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(10, 10),
+        new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 0.75 })
+    );
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+    floor.userData.isGround = true;
+    g.add(floor);
+    sceneGround.office = floor;
+
+    const wallColor = 0x28221a;
+    const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.9 });
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMat).translateZ(-4).translateY(2));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMat.clone()).translateX(-5).translateY(2).rotateY(Math.PI / 2));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMat.clone()).translateX(5).translateY(2).rotateY(-Math.PI / 2));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 1 }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.y = 3.8; g.add(ceil);
+
+    const desk = makeBox(2.5, 0.08, 1.2, 0x4a3220, -0.5, 1.0, 0);
+    g.add(desk);
+    const deskLegs = [[-.5 - 1, 0.5, -0.4], [-.5 + 1, 0.5, -0.4], [-.5 - 1, 0.5, 0.4], [-.5 + 1, 0.5, 0.4]];
+    deskLegs.forEach(p => g.add(makeBox(0.06, 1.0, 0.06, 0x3a2215, p[0], p[1], p[2], false)));
+
+    const windowFrame = makeBox(1.8, 2.0, 0.08, 0x2a2015, 3, 2.5, -3.95, false);
+    g.add(windowFrame);
+    const windowGlass = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.6, 1.8),
+        new THREE.MeshBasicMaterial({ color: 0x0e1828, transparent: true, opacity: 0.5 })
+    );
+    windowGlass.position.set(3, 2.5, -3.9);
+    g.add(windowGlass);
+
+    for (let i = 0; i < 8; i++) {
+        const blind = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.6, 0.02),
+            new THREE.MeshStandardMaterial({ color: 0x2a2015, roughness: 0.8 })
+        );
+        blind.position.set(3, 1.7 + i * 0.22, -3.88);
+        g.add(blind);
+    }
+
+    const windowLight = new THREE.SpotLight(0x8090b0, 0.8, 12, Math.PI / 5, 0.4, 1.5);
+    windowLight.position.set(3, 4, -3);
+    windowLight.target.position.set(-2, 0, 2);
+    windowLight.castShadow = true;
+    windowLight.shadow.mapSize.set(512, 512);
+    g.add(windowLight);
+    g.add(windowLight.target);
+
+    const ambient = new THREE.AmbientLight(sd.ambient.color, sd.ambient.intensity);
+    g.add(ambient);
+    sd.lights.forEach(l => {
+        const pl = new THREE.PointLight(l.color, l.intensity, l.distance, 2);
+        pl.position.set(l.x, l.y, l.z);
+        pl.castShadow = true;
+        pl.shadow.mapSize.set(512, 512);
+        g.add(pl);
+    });
+
+    const chair = new THREE.Group();
+    const chairSeat = makeBox(0.5, 0.06, 0.5, 0x3a2215, 0, 0.55, 1.2, false);
+    chair.add(chairSeat);
+    const chairBack = makeBox(0.5, 0.6, 0.06, 0x3a2215, 0, 0.88, 0.95, false);
+    chair.add(chairBack);
+    g.add(chair);
+
+    return g;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE BUILDER — HOTEL ROOM
+// ════════════════════════════════════════════════════════════════
+
+function buildHotel() {
+    const g = new THREE.Group();
+    const sd = STORY.scenes.hotel;
+
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(10, 10),
+        new THREE.MeshStandardMaterial({ color: 0x1a1510, roughness: 0.7 })
+    );
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+    floor.userData.isGround = true;
+    g.add(floor);
+    sceneGround.hotel = floor;
+
+    const wallColor = 0x1a1510;
+    const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.9 });
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMat).translateZ(-4).translateY(2));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMat.clone()).translateX(-5).translateY(2).rotateY(Math.PI / 2));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 4), wallMat.clone()).translateX(5).translateY(2).rotateY(-Math.PI / 2));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial({ color: 0x12100c, roughness: 1 }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.y = 3.8; g.add(ceil);
+
+    const bed = makeBox(2.5, 0.5, 1.8, 0xd8d0c0, -2.5, 0.35, -1);
+    g.add(bed);
+    const bedFrame = makeBox(2.6, 0.8, 0.12, 0x5a4a30, -2.5, 0.5, -1.9);
+    g.add(bedFrame);
+    const pillow = makeBox(0.5, 0.12, 0.35, 0xf0e8d8, -3.2, 0.65, -1.5, false);
+    g.add(pillow);
+
+    const nightstand = makeBox(0.5, 0.7, 0.5, 0x3d2a18, 3, 0.35, -1.5);
+    g.add(nightstand);
+
+    const windowFrame = makeBox(1.4, 1.6, 0.08, 0x2a2015, 3, 2.5, -3.95, false);
+    g.add(windowFrame);
+    const curtainMat = new THREE.MeshStandardMaterial({ color: 0x3a1515, roughness: 0.9 });
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.8), curtainMat).translateX(2.4).translateY(2.4).translateZ(-3.88));
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.8), curtainMat.clone()).translateX(3.6).translateY(2.4).translateZ(-3.88));
+
+    const chalkMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08 });
+    const chalkOutline = new THREE.Group();
+    const chalkParts = [
+        [0.6, 0.02, 0.1, 0, 0.01, 0],
+        [0.1, 0.02, 0.5, -0.3, 0.01, -0.35],
+        [0.1, 0.02, 0.5, 0.3, 0.01, -0.35],
+        [0.3, 0.02, 0.08, 0, 0.01, -0.55],
+        [0.12, 0.02, 0.4, -0.2, 0.01, 0.3],
+        [0.12, 0.02, 0.4, 0.2, 0.01, 0.3]
+    ];
+    chalkParts.forEach(p => {
+        const part = new THREE.Mesh(new THREE.BoxGeometry(p[0], p[1], p[2]), chalkMat);
+        part.position.set(p[3], p[4], p[5]);
+        chalkOutline.add(part);
+    });
+    chalkOutline.position.set(-1.5, 0, 0.5);
+    g.add(chalkOutline);
+
+    const tapeMat = new THREE.MeshBasicMaterial({ color: 0xddcc00, transparent: true, opacity: 0.15 });
+    const tape1 = new THREE.Mesh(new THREE.PlaneGeometry(12, 0.08), tapeMat);
+    tape1.position.set(0, 2.2, -0.5); tape1.rotation.z = 0.03;
+    g.add(tape1);
+    const tape2 = new THREE.Mesh(new THREE.PlaneGeometry(12, 0.08), tapeMat.clone());
+    tape2.position.set(0, 1.5, 0.5); tape2.rotation.z = -0.02;
+    g.add(tape2);
+
+    const ambient = new THREE.AmbientLight(sd.ambient.color, sd.ambient.intensity);
+    g.add(ambient);
+    sd.lights.forEach(l => {
+        const pl = new THREE.PointLight(l.color, l.intensity, l.distance, 2);
+        pl.position.set(l.x, l.y, l.z);
+        pl.castShadow = true;
+        pl.shadow.mapSize.set(512, 512);
+        g.add(pl);
+    });
+
+    return g;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE BUILDER — INTERACTABLES & CHARACTERS PER SCENE
+// ════════════════════════════════════════════════════════════════
+
+function populateScene(sceneId) {
+    const sd = STORY.scenes[sceneId];
+    const g = sceneGroups[sceneId];
+    if (!g) return;
+
+    sceneCharacters[sceneId] = {};
+    sceneInteractables[sceneId] = [];
+    sceneDoors[sceneId] = [];
+
+    (sd.characters || []).forEach(ch => {
+        const config = STORY.characters[ch.id];
+        if (!config) return;
+        const mesh = makeCharacter(config);
+        mesh.position.set(ch.x, 0, ch.z);
+        mesh.userData.npcId = ch.id;
+        mesh.userData.isNPC = true;
+        g.add(mesh);
+        sceneCharacters[sceneId][ch.id] = mesh;
+    });
+
+    (sd.interactables || []).forEach(obj => {
+        const mat = new THREE.MeshStandardMaterial({
+            color: obj.color,
+            roughness: 0.7,
+            emissive: 0x000000,
+            emissiveIntensity: 0
+        });
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(...obj.size), mat);
+        mesh.position.set(obj.x, obj.y + obj.size[1] / 2, obj.z);
+        mesh.castShadow = true;
+        mesh.userData.interactId = obj.id;
+        mesh.userData.interactType = obj.type;
+        mesh.userData.prompt = obj.prompt;
+        mesh.userData.dialogue = obj.dialogue;
+        mesh.userData.isInteractable = true;
+        if (obj.marker) {
+            const markerCanvas = document.createElement('canvas');
+            const mctx = markerCanvas.getContext('2d');
+            markerCanvas.width = 32; markerCanvas.height = 32;
+            mctx.fillStyle = '#dddd30';
+            mctx.beginPath(); mctx.moveTo(16, 2); mctx.lineTo(30, 30); mctx.lineTo(2, 30); mctx.fill();
+            mctx.fillStyle = '#111';
+            mctx.font = 'bold 14px sans-serif';
+            mctx.textAlign = 'center';
+            mctx.fillText(obj.marker, 16, 26);
+            const mtex = new THREE.CanvasTexture(markerCanvas);
+            const mSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: mtex, transparent: true }));
+            mSprite.position.set(0, obj.size[1] + 0.2, 0);
+            mSprite.scale.set(0.3, 0.3, 1);
+            mesh.add(mSprite);
+        }
+        g.add(mesh);
+        sceneInteractables[sceneId].push(mesh);
+    });
+
+    (sd.doors || []).forEach(door => {
+        const doorMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 2.2, 0.15),
+            new THREE.MeshStandardMaterial({ color: 0x2a2015, roughness: 0.8, emissive: 0x000000, emissiveIntensity: 0 })
+        );
+        doorMesh.position.set(door.x, 1.1, door.z);
+        doorMesh.userData.isDoor = true;
+        doorMesh.userData.doorTarget = door.target;
+        doorMesh.userData.doorRequires = door.requires || null;
+        doorMesh.userData.doorLabel = door.label || '';
+        doorMesh.userData.prompt = door.label || ('GO TO ' + (STORY.scenes[door.target]?.label || door.target.toUpperCase()));
+        doorMesh.userData.isInteractable = true;
+        g.add(doorMesh);
+        sceneDoors[sceneId].push(doorMesh);
+        sceneInteractables[sceneId].push(doorMesh);
+    });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENE MANAGER
+// ════════════════════════════════════════════════════════════════
+
+function initScenes() {
+    sceneGroups.street = buildStreet();
+    sceneGroups.bar = buildBar();
+    sceneGroups.office = buildOffice();
+    sceneGroups.hotel = buildHotel();
+    Object.keys(sceneGroups).forEach(id => populateScene(id));
+}
+
+function goToScene(sceneId, instant) {
+    const sd = STORY.scenes[sceneId];
+    if (!sd) return;
+
+    const doSwitch = () => {
+        if (currentSceneGroup) scene.remove(currentSceneGroup);
+        currentSceneGroup = sceneGroups[sceneId];
+        scene.add(currentSceneGroup);
+        STATE.currentScene = sceneId;
+
+        const fogCfg = sd.fog || STORY.style.fog;
+        scene.fog = new THREE.FogExp2(fogCfg.color, fogCfg.density);
+        scene.background = new THREE.Color(fogCfg.color);
+
+        if (sd.type === 'exterior') {
+            STATE.playerPos.set(
+                sd.characters?.find(c => c.id === 'player')?.x || 0,
+                0,
+                sd.characters?.find(c => c.id === 'player')?.z || 4
+            );
+        } else {
+            STATE.playerPos.set(3, 0, 3);
+        }
+
+        if (playerMesh && currentSceneGroup) {
+            const existingPlayer = sceneCharacters[sceneId]?.player;
+            if (existingPlayer) {
+                playerMesh = existingPlayer;
+            }
+        }
+
+        if (sd.enterCamera && sd.cameras) {
+            Director.runSequence(sd.enterCamera, sd.cameras);
+        }
+
+        showLocation(sd.label);
+        updateDevPanel();
+    };
+
+    if (instant) {
+        doSwitch();
+    } else {
+        const overlay = $('fade-overlay');
+        overlay.classList.add('active');
+        setTimeout(() => {
+            doSwitch();
+            setTimeout(() => overlay.classList.remove('active'), 50);
+        }, 600);
+    }
+}
+
+function showLocation(name) {
+    const el = $('location-title');
+    el.textContent = name;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  DIALOGUE ENGINE
+// ════════════════════════════════════════════════════════════════
+
+const Dialogue = {
+    queue: [],
+    lineIdx: 0,
+    typing: false,
+    charIdx: 0,
+    typeSpeed: 30,
+    typeTimer: null,
+    afterFn: null,
+
+    start(key, afterFn) {
+        const d = STORY.dialogues[key];
+        if (!d) return;
+        this.queue = d.lines;
+        this.lineIdx = 0;
+        this.afterFn = afterFn || null;
+        this._onDone = d.onDone || null;
+        STATE.inDialogue = true;
+        document.body.classList.add('cinematic');
+        this.showLine();
+    },
+
+    showLine() {
+        if (this.lineIdx >= this.queue.length) {
+            this.close();
+            return;
+        }
+        const line = this.queue[this.lineIdx];
+        $('dlg-speaker').textContent = line.s;
+        $('dlg-text').innerHTML = '<span class="cursor"></span>';
+        $('dlg-panel').classList.add('vis');
+        this.charIdx = 0;
+        this.typing = true;
+
+        if (line.cam && STATE.currentScene) {
+            const cameras = STORY.scenes[STATE.currentScene].cameras;
+            if (cameras && cameras[line.cam]) {
+                Director.moveTo(cameras[line.cam], 2.0);
+            }
+        }
+
+        this.typeNext(line.t);
+    },
+
+    typeNext(fullText) {
+        if (!this.typing) return;
+        if (this.charIdx < fullText.length) {
+            const textSoFar = fullText.substring(0, this.charIdx + 1);
+            $('dlg-text').innerHTML = textSoFar + '<span class="cursor"></span>';
+            this.charIdx++;
+            const ch = fullText[this.charIdx - 1];
+            const delay = (ch === '.' || ch === ',' || ch === '\u2014' || ch === '\u2026') ? this.typeSpeed * 4 : this.typeSpeed;
+            this.typeTimer = setTimeout(() => this.typeNext(fullText), delay);
+        } else {
+            this.typing = false;
+            $('dlg-text').textContent = fullText;
+        }
+    },
+
+    advance() {
+        if (this.typing) {
+            clearTimeout(this.typeTimer);
+            this.typing = false;
+            const fullText = this.queue[this.lineIdx].t;
+            $('dlg-text').textContent = fullText;
+            return;
+        }
+        this.lineIdx++;
+        this.showLine();
+    },
+
+    close() {
+        $('dlg-panel').classList.remove('vis');
+        STATE.inDialogue = false;
+        document.body.classList.remove('cinematic');
+        this.queue = [];
+        this.lineIdx = 0;
+
+        if (this._onDone) {
+            this._onDone.forEach(action => {
+                if (action.action === 'flag') STATE.flags[action.key] = action.val;
+                if (action.action === 'note') addNote(action.text);
+                if (action.action === 'collect') collectItem(action.item);
+            });
+            this._onDone = null;
+        }
+
+        if (this.afterFn) {
+            const fn = this.afterFn;
+            this.afterFn = null;
+            fn();
+        }
+
+        checkCaseSolved();
+        updateDevPanel();
+    }
+};
+
+// ════════════════════════════════════════════════════════════════
+//  INVESTIGATION SYSTEM
+// ════════════════════════════════════════════════════════════════
+
+function collectItem(itemId) {
+    if (STATE.inventory.includes(itemId)) return;
+    STATE.inventory.push(itemId);
+    renderInventory();
+    const sid = STATE.currentScene;
+    const objs = sceneInteractables[sid] || [];
+    objs.forEach(o => {
+        if (o.userData.interactId === itemId) {
+            o.visible = false;
+        }
+    });
+}
+
+function addNote(text) {
+    if (STATE.notes.includes(text)) return;
+    STATE.notes.push(text);
+    renderNotes();
+}
+
+function renderInventory() {
+    const bar = $('inv-bar');
+    bar.innerHTML = '';
+    STATE.inventory.forEach(item => {
+        const info = STORY.evidence[item];
+        if (!info) return;
+        const slot = document.createElement('div');
+        slot.className = 'inv-slot';
+        slot.textContent = info.icon;
+        slot.title = info.name;
+        bar.appendChild(slot);
+    });
+}
+
+function renderNotes() {
+    const list = $('notes-list');
+    list.innerHTML = '';
+    STATE.notes.forEach((n, i) => {
+        const div = document.createElement('div');
+        div.className = 'cnote' + (i === STATE.notes.length - 1 ? ' new' : '');
+        div.textContent = n;
+        list.appendChild(div);
+    });
+}
+
+function checkCaseSolved() {
+    if (STORY.caseCheck(STATE.flags)) {
+        setTimeout(() => Dialogue.start('case_solved'), 1200);
+    }
+}
+
+function handleNPC(npcId) {
+    const logic = STORY.npcLogic[npcId];
+    if (!logic) return;
+    const dlgKey = logic(STATE.flags);
+    if (dlgKey) Dialogue.start(dlgKey);
+}
+
+function handleInteraction(mesh) {
+    if (!mesh) return;
+
+    if (mesh.userData.isNPC) {
+        handleNPC(mesh.userData.npcId);
+        return;
+    }
+
+    if (mesh.userData.isDoor) {
+        const req = mesh.userData.doorRequires;
+        if (req && !STATE.flags[req]) {
+            const lockedKey = mesh.userData.doorTarget + '_locked';
+            if (STORY.dialogues[lockedKey]) {
+                Dialogue.start(lockedKey);
+            } else if (STORY.dialogues['hotel_locked'] && mesh.userData.doorTarget === 'hotel') {
+                Dialogue.start('hotel_locked');
+            }
+            return;
+        }
+        goToScene(mesh.userData.doorTarget);
+        return;
+    }
+
+    if (mesh.userData.dialogue) {
+        const key = mesh.userData.dialogue;
+        if (mesh.userData.interactType === 'item' && STATE.inventory.includes(mesh.userData.interactId)) return;
+        if (STORY.dialogues[key]) {
+            Dialogue.start(key);
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  INPUT HANDLING
+// ════════════════════════════════════════════════════════════════
+
+function getInteractablesForRaycast() {
+    const sid = STATE.currentScene;
+    if (!sid) return [];
+    const all = [];
+    const chars = sceneCharacters[sid] || {};
+    Object.values(chars).forEach(ch => {
+        if (ch.userData.npcId !== 'player') {
+            ch.traverse(child => { if (child.isMesh) all.push(child); });
+        }
+    });
+    (sceneInteractables[sid] || []).forEach(obj => {
+        if (obj.visible) all.push(obj);
+    });
+    return all;
+}
+
+function onPointerMove(e) {
+    const x = e.clientX ?? e.touches?.[0]?.clientX;
+    const y = e.clientY ?? e.touches?.[0]?.clientY;
+    if (x == null) return;
+    pointer.x = (x / window.innerWidth) * 2 - 1;
+    pointer.y = -(y / window.innerHeight) * 2 + 1;
+}
+
+function onPointerDown(e) {
+    if (!STATE.started) return;
+    const x = e.clientX ?? e.touches?.[0]?.clientX;
+    const y = e.clientY ?? e.touches?.[0]?.clientY;
+    if (x == null) return;
+
+    if (STATE.inDialogue) {
+        Dialogue.advance();
+        return;
+    }
+
+    const cp = $('case-panel');
+    if (cp.classList.contains('vis')) return;
+
+    const px = (x / window.innerWidth) * 2 - 1;
+    const py = -(y / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(new THREE.Vector2(px, py), camera);
+
+    const targets = getInteractablesForRaycast();
+    const hits = raycaster.intersectObjects(targets, true);
+    if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj && !obj.userData.isInteractable && !obj.userData.isNPC && obj.parent) {
+            obj = obj.parent;
+        }
+        if (obj.userData.isNPC || obj.userData.isInteractable) {
+            handleInteraction(obj);
+            return;
+        }
+    }
+
+    const ground = sceneGround[STATE.currentScene];
+    if (ground) {
+        const groundHits = raycaster.intersectObject(ground);
+        if (groundHits.length > 0) {
+            const pt = groundHits[0].point;
+            movePlayerTo(pt.x, pt.z);
+        }
+    }
+}
+
+function movePlayerTo(tx, tz) {
+    if (!playerMesh || STATE.playerMoving) return;
+    const target = new THREE.Vector3(tx, 0, tz);
+    const start = playerMesh.position.clone();
+    const dist = start.distanceTo(target);
+    if (dist < 0.3) return;
+
+    STATE.playerMoving = true;
+    const speed = 3.5;
+    const duration = dist / speed;
+    const startTime = clock.getElapsedTime();
+
+    if (tx < playerMesh.position.x) playerMesh.scale.x = -1;
+    else playerMesh.scale.x = 1;
+
+    function step() {
+        const elapsed = clock.getElapsedTime() - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        playerMesh.position.lerpVectors(start, target, eased);
+
+        playerMesh.position.y = Math.sin(elapsed * 8) * 0.03;
+
+        if (t < 1) {
+            requestAnimationFrame(step);
+        } else {
+            playerMesh.position.y = 0;
+            STATE.playerMoving = false;
+            STATE.playerPos.copy(playerMesh.position);
+        }
+    }
+    step();
+}
+
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'Enter') {
+        if (STATE.inDialogue) Dialogue.advance();
+    }
+    if (e.key === 'Escape') {
+        if (STATE.inDialogue) Dialogue.close();
+        $('case-panel').classList.remove('vis');
+    }
+    if (e.key === 'n' || e.key === 'N') {
+        $('case-panel').classList.toggle('vis');
+    }
+    if (e.key === '`') {
+        STATE.devMode = !STATE.devMode;
+        $('dev-panel').classList.toggle('vis', STATE.devMode);
+    }
+});
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ════════════════════════════════════════════════════════════════
+//  DEV TOOLS
+// ════════════════════════════════════════════════════════════════
+
+function initDevPanel() {
+    const sceneSelect = $('dev-scene-select');
+    Object.keys(STORY.scenes).forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = STORY.scenes[id].label;
+        sceneSelect.appendChild(opt);
+    });
+    sceneSelect.addEventListener('change', () => goToScene(sceneSelect.value));
+
+    const dlgSelect = $('dev-dlg-select');
+    Object.keys(STORY.dialogues).forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id;
+        dlgSelect.appendChild(opt);
+    });
+    $('dev-dlg-go').addEventListener('click', () => Dialogue.start(dlgSelect.value));
+
+    const camSelect = $('dev-cam-select');
+    $('dev-cam-go').addEventListener('click', () => {
+        const sid = STATE.currentScene;
+        const cameras = STORY.scenes[sid]?.cameras;
+        if (cameras && cameras[camSelect.value]) {
+            Director.moveTo(cameras[camSelect.value], 2.0);
+        }
+    });
+
+    $('dev-reset').addEventListener('click', () => {
+        STATE.flags = {};
+        STATE.inventory = [];
+        STATE.notes = [];
+        renderInventory();
+        renderNotes();
+        goToScene('street');
+        updateDevPanel();
+    });
+
+    $('dev-toggle').addEventListener('click', () => {
+        STATE.devMode = !STATE.devMode;
+        $('dev-panel').classList.toggle('vis', STATE.devMode);
+    });
+
+    $('case-btn').addEventListener('click', () => $('case-panel').classList.toggle('vis'));
+    $('case-panel').querySelector('.close-x').addEventListener('click', () => $('case-panel').classList.remove('vis'));
+}
+
+function updateDevPanel() {
+    const sid = STATE.currentScene;
+    const flags = $('dev-flags');
+    const entries = Object.entries(STATE.flags);
+    flags.textContent = entries.length === 0 ? 'No flags set' : entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+
+    const camSelect = $('dev-cam-select');
+    camSelect.innerHTML = '';
+    const cameras = STORY.scenes[sid]?.cameras || {};
+    Object.keys(cameras).forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id;
+        camSelect.appendChild(opt);
+    });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  HOVER / HIGHLIGHT SYSTEM
+// ════════════════════════════════════════════════════════════════
+
+function updateHover() {
+    raycaster.setFromCamera(pointer, camera);
+    const targets = getInteractablesForRaycast();
+    const hits = raycaster.intersectObjects(targets, true);
+
+    let newHover = null;
+    if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj && !obj.userData.isInteractable && !obj.userData.isNPC && obj.parent) {
+            obj = obj.parent;
+        }
+        if (obj.userData.isInteractable || obj.userData.isNPC) newHover = obj;
+    }
+
+    if (hoveredObject !== newHover) {
+        if (hoveredObject && hoveredObject.userData.isInteractable) {
+            hoveredObject.traverse(child => {
+                if (child.material && child.material.emissive) {
+                    child.material.emissiveIntensity = 0;
+                }
+            });
+        }
+        hoveredObject = newHover;
+        const prompt = $('interact-prompt');
+        if (hoveredObject) {
+            const label = hoveredObject.userData.prompt ||
+                         (hoveredObject.userData.isNPC ? 'TALK' : 'INTERACT');
+            prompt.textContent = label;
+            prompt.classList.add('vis');
+            document.body.style.cursor = 'pointer';
+        } else {
+            prompt.classList.remove('vis');
+            document.body.style.cursor = 'crosshair';
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ════════════════════════════════════════════════════════════════
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+    const elapsed = clock.getElapsedTime();
+
+    Director.update(dt, elapsed);
+    noirPass.uniforms.time.value = elapsed;
+
+    if (rainSystem && STATE.currentScene === 'street') {
+        const pos = rainSystem.geometry.attributes.position;
+        const vels = rainSystem.userData.velocities;
+        for (let i = 0; i < pos.count; i++) {
+            let y = pos.getY(i) - vels[i] * dt;
+            if (y < 0) {
+                y = rainSystem.userData.height;
+                pos.setX(i, (Math.random() - 0.5) * rainSystem.userData.spread);
+                pos.setZ(i, (Math.random() - 0.5) * rainSystem.userData.spread);
+            }
+            pos.setY(i, y);
+        }
+        pos.needsUpdate = true;
+    }
+
+    if (currentSceneGroup) {
+        currentSceneGroup.traverse(child => {
+            if (child.userData.flicker) {
+                child.material.opacity = 0.4 + Math.sin(elapsed * (2 + Math.random())) * 0.15;
+            }
+            if (child.userData.hazeFloat) {
+                child.position.y += Math.sin(elapsed * 0.3 + child.position.x) * 0.001;
+                child.position.x += Math.sin(elapsed * 0.15 + child.position.z) * 0.0005;
+            }
+            if (child.userData.smokeOffset !== undefined) {
+                const t = (elapsed + child.userData.smokeOffset) % 3;
+                child.position.y = child.parent ? (child.parent.userData || child).position?.y || 0 : 0;
+                child.position.y = 0.8 + t * 0.3;
+                child.material.opacity = Math.max(0, 0.2 - t * 0.07);
+                child.scale.setScalar(1 + t * 0.3);
+            }
+        });
+    }
+
+    const sid = STATE.currentScene;
+    if (sid) {
+        const interactables = sceneInteractables[sid] || [];
+        interactables.forEach(obj => {
+            if (obj === hoveredObject && obj.material && obj.material.emissive) {
+                obj.material.emissive.setHex(0xc4a35a);
+                obj.material.emissiveIntensity = 0.15 + Math.sin(elapsed * 3) * 0.1;
+            }
+        });
+
+        const chars = sceneCharacters[sid] || {};
+        Object.values(chars).forEach(ch => {
+            if (!ch.userData.isNPC) return;
+            ch.position.y = Math.sin(elapsed * 0.8 + ch.position.x) * 0.01;
+        });
+    }
+
+    updateHover();
+
+    if (STATE.devMode) {
+        $('dev-cam-info').textContent =
+            `pos: ${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}\n` +
+            `fov: ${camera.fov.toFixed(0)}\n` +
+            `scene: ${STATE.currentScene}`;
+    }
+
+    composer.render();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  INITIALIZATION
+// ════════════════════════════════════════════════════════════════
+
+function init() {
+    initScenes();
+    initDevPanel();
+
+    $('title-screen').addEventListener('click', () => {
+        if (STATE.started) return;
+        STATE.started = true;
+        $('title-screen').classList.add('gone');
+        goToScene('street', true);
+        setTimeout(() => $('hint-bar').style.opacity = '0', 6000);
+    });
+
+    goToScene('street', true);
+    Director.cut(STORY.scenes.street.cameras.establishing);
+
+    animate();
+}
+
+init();
+
+    </script>
+</body>
+</html>
