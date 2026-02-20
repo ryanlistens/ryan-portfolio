@@ -18,6 +18,7 @@ export class World {
     this.canvas = canvas;
     this.onHotspotInteract = onHotspotInteract;
     this.onEmptyClick = onEmptyClick;
+    this.onEnemyDown = null;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x050406);
@@ -40,6 +41,8 @@ export class World {
     this.pointer = new THREE.Vector2();
 
     this._interactables = [];
+    this._objectsByHotspotId = new Map();
+    this._enemies = new Map();
     this._ground = null;
     this._player = null;
     this._playerTarget = null;
@@ -58,6 +61,8 @@ export class World {
     // Clear scene objects but keep camera/renderer.
     for (const obj of [...this.scene.children]) this.scene.remove(obj);
     this._interactables = [];
+    this._objectsByHotspotId.clear();
+    this._enemies.clear();
 
     const fog = setDef?.fog;
     if (fog?.color) this.scene.fog.color = new THREE.Color(fog.color);
@@ -104,7 +109,10 @@ export class World {
       const obj = this._makeObject(o);
       if (!obj) continue;
       this.scene.add(obj);
-      if (o.hotspotId) this._interactables.push(obj);
+      if (o.hotspotId) {
+        this._interactables.push(obj);
+        this._objectsByHotspotId.set(o.hotspotId, obj);
+      }
     }
 
     // Default camera framing
@@ -150,6 +158,57 @@ export class World {
     const p = point.clone();
     p.y = this._player.position.y;
     this._playerTarget = p;
+  }
+
+  setHotspotVisible(hotspotId, visible) {
+    const obj = this._objectsByHotspotId.get(hotspotId);
+    if (!obj) return;
+    obj.visible = Boolean(visible);
+  }
+
+  attack() {
+    if (!this._player) return null;
+    const playerPos = this._player.position;
+
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const [enemyId, e] of this._enemies.entries()) {
+      if (!e?.obj?.visible) continue;
+      const d = e.obj.position.distanceTo(playerPos);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { enemyId, ...e };
+      }
+    }
+
+    if (!best || bestDist > 1.7) return null;
+
+    // Require roughly in front of the player.
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this._player.quaternion).normalize();
+    const toEnemy = best.obj.position.clone().sub(playerPos);
+    toEnemy.y = 0;
+    const len = toEnemy.length();
+    if (len > 0.0001) {
+      toEnemy.normalize();
+      const dot = fwd.dot(toEnemy);
+      if (dot < 0.25) return null;
+    }
+
+    best.hp -= 1;
+    this._enemies.set(best.enemyId, { obj: best.obj, hp: best.hp });
+
+    // Tiny hit reaction.
+    best.obj.scale.setScalar(1.06);
+    setTimeout(() => best.obj.scale.setScalar(1.0), 70);
+
+    const down = best.hp <= 0;
+    if (down) {
+      best.obj.visible = false;
+      this.onEnemyDown?.(best.enemyId);
+    }
+
+    return { enemyId: best.enemyId, hp: best.hp, down };
   }
 
   _bindEvents() {
@@ -225,6 +284,15 @@ export class World {
         emissive: def.emissive || 0x000000,
       });
       mesh.position.copy(pos);
+    } else if (type === "enemy") {
+      mesh = this._makeCharacter({
+        color: def.color || 0x2a1a1a,
+        emissive: def.emissive || 0xb7443b,
+      });
+      mesh.position.copy(pos);
+      const enemyId = def.enemyId || def.hotspotId || "enemy";
+      mesh.userData.enemyId = enemyId;
+      this._enemies.set(enemyId, { obj: mesh, hp: Math.max(1, Number(def.hp) || 3) });
     } else if (type === "prop") {
       const size = def.size || [0.6, 0.6, 0.6];
       const geo = new THREE.BoxGeometry(size[0], size[1], size[2]);

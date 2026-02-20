@@ -55,6 +55,8 @@ async function boot() {
     caseUi,
   });
 
+  world.onEnemyDown = (enemyId) => runtime.onEnemyDown(enemyId);
+
   const devUi = new DevUi({
     rootEl: $("#dev"),
     reloadBtn: $("#reloadContentBtn"),
@@ -74,6 +76,15 @@ async function boot() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "`" || e.key === "~") devUi.toggle();
+  });
+
+  const actionBtn = $("#actionBtn");
+  actionBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    runtime.action();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "f" || e.key === "F") runtime.action();
   });
 
   await runtime.start(DEFAULT_SCENE_PATH);

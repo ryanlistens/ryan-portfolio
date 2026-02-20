@@ -78,6 +78,20 @@ export class StoryRuntime {
     await this.start(this.scenePath);
   }
 
+  action() {
+    if (this.dialogueUi.isOpen()) {
+      this.dialogueUi.advance();
+      return;
+    }
+    this.world.attack?.();
+  }
+
+  onEnemyDown(enemyId) {
+    if (!enemyId) return;
+    this._setFlag(`enemyDown:${enemyId}`, true);
+    void this._emitBeatEvent("enemyDown", enemyId);
+  }
+
   interact(hotspotId) {
     if (this.dialogueUi.isOpen()) {
       this.dialogueUi.advance();
@@ -163,6 +177,14 @@ export class StoryRuntime {
     if (Array.isArray(match.actions)) await this._runActions(match.actions);
   }
 
+  async _emitBeatEvent(type, key) {
+    const beat = this._beat();
+    const map = beat?.events?.[type];
+    if (!map) return;
+    const actions = map[key] || map["*"];
+    if (Array.isArray(actions)) await this._runActions(actions);
+  }
+
   _setObjective(text) {
     this.state.objective = text || "";
     this._save();
@@ -216,6 +238,9 @@ export class StoryRuntime {
           await this.world.loadSet(this.scene.sets?.[a.set] || a.set);
           this.state.setId = a.set;
           this._save();
+          break;
+        case "setHotspotVisible":
+          this.world.setHotspotVisible?.(a.hotspot, Boolean(a.visible));
           break;
         case "showLocation":
           this.hudUi.showLocation(a.text || "");
