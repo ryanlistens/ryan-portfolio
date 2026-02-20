@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Noir3D Studio Prototype</title>
+
+    <style>
+      :root {
+        --bg: #050406;
+        --ink: #e8dec7;
+        --muted: rgba(232, 222, 199, 0.7);
+        --panel: rgba(8, 6, 5, 0.9);
+        --border: rgba(232, 222, 199, 0.18);
+        --accent: #c9a55a;
+        --danger: #b7443b;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+      }
+
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+      }
+
+      #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      .panel {
+        pointer-events: auto;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(10px);
+      }
+
+      #hud {
+        position: absolute;
+        top: env(safe-area-inset-top, 0px);
+        left: env(safe-area-inset-left, 0px);
+        right: env(safe-area-inset-right, 0px);
+        padding: 12px 12px 0;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: start;
+      }
+
+      #loc {
+        padding: 10px 12px;
+        border-left: 4px solid var(--accent);
+        letter-spacing: 0.22em;
+        font-size: 12px;
+        text-transform: uppercase;
+        opacity: 0;
+        transform: translateY(-6px);
+        transition: opacity 500ms ease, transform 500ms ease;
+      }
+      #loc.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      #obj {
+        padding: 10px 12px;
+        font-size: 12px;
+        color: var(--muted);
+        border-right: 4px solid rgba(201, 165, 90, 0.3);
+        white-space: nowrap;
+      }
+
+      #dlg {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+        width: min(680px, calc(100% - 24px));
+        padding: 16px 18px;
+        display: none;
+      }
+      #dlg.show {
+        display: block;
+      }
+
+      #dlg .speaker {
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        font-size: 11px;
+        color: var(--accent);
+      }
+      #dlg .text {
+        margin-top: 10px;
+        line-height: 1.65;
+        font-size: 14px;
+        color: var(--ink);
+      }
+      #dlg .hint {
+        margin-top: 10px;
+        text-align: right;
+        font-size: 11px;
+        color: rgba(232, 222, 199, 0.45);
+      }
+      #dlg .choices {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      #dlg button {
+        background: rgba(15, 12, 10, 0.9);
+        color: var(--ink);
+        border: 1px solid rgba(232, 222, 199, 0.18);
+        padding: 10px 12px;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+      }
+      #dlg button:hover {
+        border-color: rgba(201, 165, 90, 0.5);
+      }
+
+      #caseBtn {
+        pointer-events: auto;
+        background: rgba(15, 12, 10, 0.9);
+        color: var(--muted);
+        border: 1px solid rgba(232, 222, 199, 0.18);
+        padding: 10px 12px;
+        cursor: pointer;
+        font: inherit;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 11px;
+      }
+      #caseBtn:hover {
+        color: var(--ink);
+        border-color: rgba(201, 165, 90, 0.5);
+      }
+
+      #casePanel {
+        position: fixed;
+        inset: 0;
+        display: none;
+        z-index: 20;
+        pointer-events: auto;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      #casePanel.show {
+        display: block;
+      }
+      #casePanel .inner {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(740px, calc(100% - 24px));
+        max-height: min(78vh, 720px);
+        overflow: auto;
+        padding: 18px 18px 22px;
+      }
+      #casePanel h2 {
+        margin: 0 0 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        font-size: 12px;
+        color: var(--accent);
+      }
+      #casePanel .closeRow {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      #casePanel .closeRow button {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid rgba(232, 222, 199, 0.2);
+        padding: 8px 10px;
+        cursor: pointer;
+        font: inherit;
+      }
+      #casePanel .closeRow button:hover {
+        color: var(--ink);
+        border-color: rgba(201, 165, 90, 0.5);
+      }
+      #notes {
+        display: grid;
+        gap: 10px;
+      }
+      .note {
+        padding: 10px 12px;
+        border-left: 3px solid rgba(201, 165, 90, 0.65);
+        background: rgba(10, 8, 7, 0.6);
+        color: rgba(232, 222, 199, 0.92);
+        line-height: 1.55;
+        font-size: 13px;
+      }
+
+      #dev {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        width: min(520px, calc(100% - 24px));
+        padding: 12px 12px;
+        display: none;
+      }
+      #dev.show {
+        display: block;
+      }
+      #dev .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      #dev .row + .row {
+        margin-top: 10px;
+      }
+      #dev code {
+        color: rgba(232, 222, 199, 0.92);
+      }
+      #dev button {
+        background: rgba(15, 12, 10, 0.9);
+        color: var(--ink);
+        border: 1px solid rgba(232, 222, 199, 0.18);
+        padding: 8px 10px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+      }
+      #dev button:hover {
+        border-color: rgba(201, 165, 90, 0.5);
+      }
+      #dev .danger {
+        border-color: rgba(183, 68, 59, 0.5);
+      }
+      #dev .danger:hover {
+        border-color: rgba(183, 68, 59, 0.85);
+      }
+      #dev .muted {
+        color: rgba(232, 222, 199, 0.6);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      #grain {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.065;
+        z-index: 15;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      #vig {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 14;
+        background: radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, 0.75) 100%);
+      }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="c"></canvas>
+    </div>
+
+    <div id="ui">
+      <div id="hud">
+        <div id="loc" class="panel"></div>
+        <div style="display: flex; gap: 10px; align-items: start">
+          <div id="obj" class="panel">Objective: <span id="objectiveText">—</span></div>
+          <button id="caseBtn" title="Case notes (N)">Case Notes</button>
+        </div>
+      </div>
+
+      <div id="dlg" class="panel" aria-live="polite">
+        <div class="speaker"></div>
+        <div class="text"></div>
+        <div class="choices"></div>
+        <div class="hint">tap / click to continue</div>
+      </div>
+
+      <div id="dev" class="panel">
+        <div class="row">
+          <strong style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 12px"
+            >Dev</strong
+          >
+          <span class="muted">Toggle with <code>~</code></span>
+        </div>
+        <div class="row">
+          <button id="reloadContentBtn">Reload content</button>
+          <button id="restartBtn" class="danger">Restart scene</button>
+          <span class="muted"
+            >Current: <code id="dbgScene">—</code> / <code id="dbgBeat">—</code></span
+          >
+        </div>
+        <div class="row muted" id="devMsg"></div>
+      </div>
+    </div>
+
+    <div id="casePanel">
+      <div class="inner panel">
+        <div class="closeRow">
+          <h2 style="margin: 0">Case Notes</h2>
+          <button id="caseCloseBtn">Close (Esc)</button>
+        </div>
+        <div id="notes"></div>
+      </div>
+    </div>
+
+    <div id="vig"></div>
+    <div id="grain"></div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
