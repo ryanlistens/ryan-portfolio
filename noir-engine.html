@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>NIGHTFALL 3D — A Noir in Three Acts</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:wght@700;900&display=swap');
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+        html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Special Elite',monospace;touch-action:none}
+        canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0}
+
+        #fade{position:fixed;inset:0;background:#000;z-index:1500;transition:opacity 1.8s;pointer-events:none}
+        #fade.clear{opacity:0}
+
+        #title-screen{position:fixed;inset:0;background:#060506;z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity 2s;overflow:hidden}
+        #title-screen.gone{opacity:0;pointer-events:none}
+        #title-screen h1{font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(42px,14vw,120px);color:transparent;-webkit-text-stroke:2px #8a7050;letter-spacing:12px;z-index:1}
+        #title-screen .sub{font-family:'Special Elite',monospace;font-size:clamp(10px,3vw,16px);color:#2a1a0a;letter-spacing:10px;margin-top:15px;z-index:1}
+        #title-screen .tag{font-family:'Special Elite',monospace;font-size:clamp(8px,2vw,12px);color:#1a1008;letter-spacing:3px;margin-top:30px;max-width:80%;text-align:center;line-height:1.8;z-index:1}
+        .tap-hint{font-size:11px;color:#1a0a00;letter-spacing:4px;margin-top:50px;animation:pulse 2.5s ease-in-out infinite;z-index:1}
+        @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+        #title-card{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:800;opacity:0;transition:opacity 1.5s;pointer-events:none}
+        #title-card.show{opacity:1}
+        #title-card .loc{font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(20px,6vw,42px);color:#b0a080;letter-spacing:10px;text-transform:uppercase}
+        #title-card .time{font-family:'Special Elite',monospace;font-size:clamp(11px,2.5vw,16px);color:#4a3a2a;letter-spacing:6px;margin-top:10px}
+
+        .letterbox{position:fixed;left:0;width:100%;height:0;background:#000;z-index:700;transition:height 1.5s ease-in-out}
+        #lb-top{top:0}#lb-bot{bottom:0}
+        .letterbox.show{height:6vh}
+
+        #dialogue-box{position:fixed;bottom:max(9vh,55px);left:50%;transform:translateX(-50%);width:92%;max-width:620px;background:rgba(8,6,4,.96);border:1px solid #2d2418;border-left:4px solid #c4a35a;padding:16px 20px;opacity:0;transition:opacity .4s;z-index:600;pointer-events:none;cursor:pointer}
+        #dialogue-box.show{opacity:1;pointer-events:auto}
+        .dlg-speaker{font-family:'Playfair Display',serif;font-size:11px;color:#c4a35a;letter-spacing:4px;margin-bottom:6px;text-transform:uppercase}
+        .dlg-text{font-size:15px;color:#d4c5a9;line-height:1.7;min-height:1.5em}
+        .dlg-adv{font-size:9px;color:#4a3a2a;margin-top:8px;text-align:right;animation:pulse 2s ease-in-out infinite}
+
+        #narrator-box{position:fixed;bottom:max(9vh,55px);left:50%;transform:translateX(-50%);width:92%;max-width:620px;background:rgba(8,6,4,.92);border:1px solid #1a1510;padding:14px 20px;opacity:0;transition:opacity .4s;z-index:600;pointer-events:none;cursor:pointer}
+        #narrator-box.show{opacity:1;pointer-events:auto}
+        .nar-text{font-size:14px;color:#8a7a60;line-height:1.7;font-style:italic;min-height:1.5em}
+        .nar-adv{font-size:9px;color:#3a2a1a;margin-top:8px;text-align:right;animation:pulse 2s ease-in-out infinite}
+
+        #hud{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:500;text-align:center;pointer-events:none;opacity:0;transition:opacity 1.5s}
+        #hud.show{opacity:1}
+        #loc-name{font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(12px,3.5vw,20px);color:#8a7a60;letter-spacing:6px;text-transform:uppercase;text-shadow:0 2px 15px rgba(0,0,0,.8)}
+
+        #interact-prompt{position:fixed;top:46%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:#c4a35a;letter-spacing:3px;padding:5px 12px;border:1px solid rgba(196,163,90,.3);background:rgba(8,6,4,.75);z-index:400;opacity:0;transition:opacity .3s;pointer-events:none}
+        #interact-prompt.show{opacity:1}
+
+        #case-btn{position:fixed;top:14px;right:14px;padding:5px 12px;background:rgba(15,12,8,.85);border:2px solid #3a2a1a;color:#8a7a5a;font-family:'Special Elite',monospace;font-size:10px;letter-spacing:2px;cursor:pointer;z-index:500}
+        #case-btn:hover{border-color:#8a7a5a;color:#c4a35a}
+
+        #case-panel{position:fixed;top:0;right:-100%;width:min(85%,380px);height:100%;background:rgba(12,10,8,.98);border-left:2px solid #2d2418;padding:28px 22px;overflow-y:auto;z-index:750;transition:right .4s ease}
+        #case-panel.show{right:0}
+        #case-panel h2{font-family:'Playfair Display',serif;color:#c4a35a;margin-bottom:18px;font-size:14px;letter-spacing:4px;border-bottom:1px solid #2d2418;padding-bottom:8px}
+        .case-note{color:#8a7a60;font-size:13px;margin-bottom:8px;padding-left:12px;border-left:2px solid #3a2a1a;line-height:1.5}
+        .close-x{position:absolute;top:10px;right:14px;font-size:20px;cursor:pointer;color:#4a3a2a}
+        .close-x:hover{color:#c4a35a}
+
+        #inventory{position:fixed;top:14px;left:14px;display:flex;gap:4px;z-index:500}
+        .inv-slot{width:36px;height:36px;background:rgba(15,12,8,.85);border:2px solid #3a2a1a;display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer}
+        .inv-slot:hover{border-color:#8a7a5a}
+
+        #mobile-controls{display:none;position:fixed;bottom:0;left:0;right:0;z-index:400;pointer-events:none;padding:14px;padding-bottom:max(14px,env(safe-area-inset-bottom));justify-content:space-between;align-items:flex-end}
+        @media(hover:none)and(pointer:coarse){#mobile-controls{display:flex}}
+        #joy-zone{pointer-events:auto;touch-action:none;width:110px;height:110px;position:relative}
+        #joy-base{width:100%;height:100%;border-radius:50%;border:2px solid rgba(196,163,90,.2);background:rgba(15,12,8,.25);position:relative}
+        #joy-knob{width:40px;height:40px;border-radius:50%;background:rgba(196,163,90,.2);border:2px solid rgba(196,163,90,.35);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);transition:transform .05s}
+        #interact-mobile{pointer-events:auto;width:64px;height:64px;border-radius:50%;background:rgba(196,163,90,.12);border:2px solid rgba(196,163,90,.25);color:rgba(196,163,90,.5);font-family:'Special Elite',monospace;font-size:9px;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
+        #interact-mobile:active{background:rgba(196,163,90,.3);border-color:rgba(196,163,90,.5)}
+
+        #grain{position:fixed;inset:0;pointer-events:none;opacity:.04;z-index:999;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+        #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,.55) 100%);z-index:998}
+    </style>
+</head>
+<body>
+
+<div id="fade"></div>
+
+<div id="title-screen">
+    <h1>NIGHTFALL</h1>
+    <div class="sub">A NOIR IN THREE ACTS</div>
+    <div class="tag">A body in an alley. A city that doesn't care.<br>And a detective who probably shouldn't either.</div>
+    <div class="tap-hint">TAP TO BEGIN</div>
+</div>
+
+<div id="title-card">
+    <div class="loc" id="tc-loc"></div>
+    <div class="time" id="tc-time"></div>
+</div>
+
+<div id="lb-top" class="letterbox"></div>
+<div id="lb-bot" class="letterbox"></div>
+
+<div id="dialogue-box">
+    <div class="dlg-speaker" id="dlg-speaker"></div>
+    <div class="dlg-text" id="dlg-text"></div>
+    <div class="dlg-adv">tap to continue</div>
+</div>
+
+<div id="narrator-box">
+    <div class="nar-text" id="nar-text"></div>
+    <div class="nar-adv">tap to continue</div>
+</div>
+
+<div id="hud"><span id="loc-name"></span></div>
+<div id="interact-prompt">INVESTIGATE</div>
+
+<div id="inventory"></div>
+<button id="case-btn">CASE NOTES</button>
+<div id="case-panel">
+    <span class="close-x" id="case-close">&times;</span>
+    <h2>CASE NOTES</h2>
+    <div id="notes-list"></div>
+</div>
+
+<div id="mobile-controls">
+    <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
+    <div id="interact-mobile">ACT</div>
+</div>
+
+<div id="vig"></div>
+<div id="grain"></div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  CONTENT DATA  ██
+   Edit this section to build your game — scenes, dialogue,
+   characters, items. The engine below consumes this data.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const GAME = {
+    title: "NIGHTFALL",
+    startScene: "street",
+};
+
+const CHARACTERS = {
+    player: {
+        name: "THE DETECTIVE",
+        body: 0x2a2520, head: 0xd4a574, hat: 0x1a1815,
+        height: 1.8, speed: 4.5,
+    },
+    cop: {
+        name: "OFFICER MALONE",
+        body: 0x1a2a4a, head: 0xc49a6c, hat: 0x1a2030,
+        height: 1.75,
+    },
+};
+
+const ITEMS = {
+    newspaper: { name: "Newspaper", icon: "\u{1F4F0}" },
+    business_card: { name: "Business Card", icon: "\u{1F4C7}" },
+    cigarette: { name: "Turkish Cigarette", icon: "\u{1F6AC}" },
+    receipt: { name: "Dry Cleaner Receipt", icon: "\u{1F9FE}" },
+};
+
+const SCENES = {
+    street: {
+        label: "MULBERRY & VINE",
+        time: "11:47 PM",
+        fog: { color: 0x080c14, near: 12, far: 50 },
+        ambient: { color: 0x0a1020, intensity: 0.12 },
+        rain: 1500,
+        spawn: { x: 0, z: 14 },
+        camOffset: { x: 0, y: 5, z: 10 },
+        buildings: [
+            { x:-9, z:-8, w:7, h:16, d:8, color: 0x12161e, face: 1 },
+            { x:-9, z: 1, w:7, h:12, d:8, color: 0x141820, face: 1 },
+            { x:-9, z: 9, w:7, h: 9, d:6, color: 0x141820, face: 1 },
+            { x: 9, z:-10,w:7, h:14, d:8, color: 0x141a22, face:-1 },
+            { x: 9, z: 0, w:7, h:11, d:10,color: 0x12161e, face:-1 },
+            { x: 9, z: 9, w:7, h: 8, d:6, color: 0x141820, face:-1 },
+        ],
+        lamps: [{ x:-2.5, z: 5 }, { x: 2.5, z:-5 }],
+        neons: [
+            { text: "BAR", color: 0xff2040, x:-5.4, y:6.5, z:1, ry: Math.PI/2 },
+            { text: "HOTEL", color: 0x4488ff, x:5.4, y:7, z:0, ry:-Math.PI/2 },
+            { text: "DRUGS", color: 0x44ff88, x:-5.4, y:5, z:-5, ry: Math.PI/2, size: 0.6 },
+        ],
+        policeCar: { x: 3, z:-1 },
+        npcs: [
+            { id:"cop", char:"cop", x:-1, z:-4, facing: 0 },
+        ],
+        hotspots: [
+            { id:"hs-car", x:3, z:-1, r:2.2, dialogue:"police_car", label:"EXAMINE CAR" },
+            { id:"hs-paper", x:-3.5, z:8, r:1.5, dialogue:"newspaper_find", item:"newspaper", label:"PICK UP" },
+            { id:"hs-alley", x:-5.5, z:-3.5, r:1.8, door:"alley", requires:"talked_to_cop", lockedDialogue:"alley_locked", label:"ENTER ALLEY" },
+            { id:"hs-bar", x:-5.4, z:1, r:2, dialogue:"bar_sign", label:"LOOK" },
+        ],
+        onEnter: [
+            { type:"narrate", key:"opening_narration" },
+        ],
+    },
+    alley: {
+        label: "THE ALLEY",
+        time: "11:53 PM",
+        fog: { color: 0x060a10, near: 6, far: 25 },
+        ambient: { color: 0x0a0e18, intensity: 0.08 },
+        rain: 400,
+        spawn: { x: 0, z: 7 },
+        camOffset: { x: 0, y: 4.5, z: 8 },
+        walls: [
+            { x:-3.2, z:0, w:0.4, h:14, d:16, color: 0x10141a },
+            { x: 3.2, z:0, w:0.4, h:14, d:16, color: 0x10141a },
+        ],
+        overheadLight: { x:0, y:4.5, z:-1, color: 0xffddaa, intensity: 1.8 },
+        props: ["dumpster","chalk_outline","fire_escape","crime_tape"],
+        npcs: [],
+        hotspots: [
+            { id:"ev1", x:-0.8, z:-3, r:1.3, dialogue:"evidence_1", label:"EVIDENCE #1", evidence:true },
+            { id:"ev2", x:1, z:-1, r:1.3, dialogue:"evidence_2", item:"business_card", label:"EVIDENCE #2", evidence:true },
+            { id:"ev3", x:0.5, z:1.5, r:1.3, dialogue:"evidence_3", item:"cigarette", label:"EVIDENCE #3", evidence:true },
+            { id:"hs-outline", x:0, z:-2.5, r:1.5, dialogue:"chalk_exam", label:"EXAMINE BODY" },
+            { id:"hs-dumpster", x:-2.2, z:2, r:1.5, dialogue:"dumpster_exam", item:"receipt", label:"SEARCH DUMPSTER" },
+            { id:"hs-escape", x:3, z:-4, r:2, dialogue:"fire_escape_exam", label:"LOOK UP" },
+            { id:"hs-exit", x:0, z:7.5, r:1.5, door:"street", label:"EXIT ALLEY" },
+        ],
+        onEnter: [
+            { type:"narrate", key:"alley_entrance" },
+        ],
+    },
+};
+
+const DIALOGUE = {
+    opening_narration: { narrator: true, lines: [
+        { text: "The rain in this city doesn\u2019t fall. It loiters. Hangs around street corners like it\u2019s waiting to sell you something you don\u2019t need." },
+        { text: "Dispatch said \u2018body in an alley.\u2019 Like that narrows it down around here." },
+        { text: "Mulberry and Vine. Even the street names sound like they\u2019re covering for somebody." },
+    ]},
+    cop_intro: { lines: [
+        { speaker:"OFFICER MALONE", text:"You the private detective? They keep sending you guys before the body\u2019s even cold." },
+        { speaker:"YOU", text:"Keeps things fresh. What are we looking at?" },
+        { speaker:"OFFICER MALONE", text:"Male. Forties. Found face down by the dumpster around ten. No wallet, no watch, no nothing." },
+        { speaker:"YOU", text:"So either robbery or someone wanted him unidentifiable." },
+        { speaker:"OFFICER MALONE", text:"Or he was just the kind of guy who goes out without his wallet. In my experience, there\u2019s always a simple explanation." },
+        { speaker:"YOU", text:"In my experience, there never is." },
+        { speaker:"OFFICER MALONE", text:"Alley\u2019s yours. Watch the rats. They\u2019ve got seniority." },
+    ], onComplete: { setFlag:"talked_to_cop", addNote:"Body found in alley behind Mulberry & Vine. Male, mid-40s, no ID. Officer Malone on scene since 10 PM." }},
+    cop_return: { lines: [
+        { speaker:"OFFICER MALONE", text:"Find anything in there?" },
+        { speaker:"YOU", text:"Still working on it." },
+        { speaker:"OFFICER MALONE", text:"Take your time. I\u2019m billing the city by the hour." },
+    ]},
+    police_car: { narrator: true, lines: [
+        { text: "A Crown Vic with more dents than convictions. The radio crackles with the static poetry of a dispatcher who\u2019s seen it all and felt none of it." },
+    ]},
+    newspaper_find: { narrator: true, lines: [
+        { text: "Yesterday\u2019s Herald. Headline: \u2018HARBOR DEAL UNDER SCRUTINY.\u2019" },
+        { text: "The rain\u2019s turned the sports section into modern art. An improvement, frankly." },
+    ], onComplete: { addNote:"Found a newspaper near the scene. Harbor deal story on front page \u2014 could be relevant." }},
+    bar_sign: { narrator: true, lines: [
+        { text: "The neon buzzes like a bad conscience. \u2018BAR.\u2019 At least it\u2019s honest. Most places around here can\u2019t say the same." },
+    ]},
+    alley_locked: { narrator: true, lines: [
+        { text: "Crime scene tape. The alley\u2019s blocked off." },
+        { text: "Should probably talk to the officer first. Professional courtesy and all that." },
+    ]},
+    alley_entrance: { narrator: true, lines: [
+        { text: "The alley smells like regret and Tuesday\u2019s garbage. A single bulb swings overhead, casting shadows that can\u2019t decide where to fall." },
+        { text: "The chalk outline tells you this is the place. Time to see what the dead man left behind." },
+    ]},
+    evidence_1: { narrator: true, lines: [
+        { text: "Marker one. A wallet-shaped absence in the dead man\u2019s back pocket. The impression is still there in the fabric." },
+        { text: "Someone took it. But they left the shape of it, like a confession in negative space." },
+    ], onComplete: { setFlag:"found_ev1", addNote:"Evidence #1: Wallet missing \u2014 impression still visible in victim\u2019s pocket. Taken post-mortem." }},
+    evidence_2: { narrator: true, lines: [
+        { text: "A business card. \u2018Del Rey Import/Export.\u2019 Which in my experience means they import problems and export regret." },
+        { text: "Phone number on the back, handwritten. Area code\u2019s from the coast." },
+    ], onComplete: { setFlag:"found_ev2", addNote:"Evidence #2: Business card \u2014 Del Rey Import/Export. Handwritten phone number, coastal area code." }},
+    evidence_3: { narrator: true, lines: [
+        { text: "A cigarette butt. Turkish blend. The kind of thing someone smokes when they want you to know they\u2019ve been to Europe." },
+        { text: "Or at least the duty-free shop at JFK." },
+    ], onComplete: { setFlag:"found_ev3", addNote:"Evidence #3: Turkish cigarette butt. Distinctive \u2014 smoker has expensive taste or pretensions." }},
+    chalk_exam: { narrator: true, lines: [
+        { text: "The outline says he went down hard and stayed. Average height, average build. The most average dead man in the city." },
+        { text: "No signs of defensive wounds in the chalk. Either he didn\u2019t see it coming, or he knew the person who sent him here." },
+    ], onComplete: { addNote:"Chalk outline: no defensive posture. Victim likely surprised or knew the attacker." }},
+    dumpster_exam: { narrator: true, lines: [
+        { text: "A dumpster. It smells like it has opinions." },
+        { text: "Inside: takeout containers, a broken umbrella, and a receipt from a dry cleaner on Vine Street. Recent. Someone was tying up loose ends." },
+    ], onComplete: { addNote:"Dry cleaner receipt found in dumpster \u2014 Vine Street, dated this week. Could trace the victim or killer." }},
+    fire_escape_exam: { narrator: true, lines: [
+        { text: "A fire escape that\u2019s seen better decades. The ladder\u2019s down. Someone came or went this way recently." },
+        { text: "Rust on every rung except the middle five. Those are polished clean by recent hands." },
+    ], onComplete: { setFlag:"found_escape", addNote:"Fire escape ladder down \u2014 middle rungs polished clean. Someone used this as an entry or exit." }},
+    case_progress: { narrator: true, lines: [
+        { text: "Del Rey Import/Export. A Turkish cigarette. A missing wallet. A fire escape used in the dark." },
+        { text: "The pieces are falling into something. Not a picture yet. More like a bruise." },
+    ]},
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  ENGINE  ██
+   Scene builder, camera, dialogue, atmosphere, input, game loop.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+const state = {
+    currentScene: null,
+    flags: {},
+    inventory: [],
+    notes: [],
+    dialogueActive: false,
+    paused: true,
+    nearHotspot: null,
+    nearNPC: null,
+};
+
+let renderer, scene3d, camera, composer, clock;
+let playerGroup, playerPos, playerAngle = 0;
+let rain = null, rainCount = 0;
+let hotspots3d = [], npcObjects = [], animatables = [];
+let policeCarLights = null;
+let camOffset = new THREE.Vector3(0, 5, 10);
+let camTarget = new THREE.Vector3();
+let camLookTarget = new THREE.Vector3();
+
+const input = { move: { x:0, z:0 }, interact: false, _interactPrev: false };
+
+// --- Noir Post-Processing Shader ---
+const NoirShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        time: { value: 0 },
+        grain: { value: 0.07 },
+        vignette: { value: 0.55 },
+    },
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float time, grain, vignette;
+        varying vec2 vUv;
+        float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+        void main(){
+            vec4 c = texture2D(tDiffuse, vUv);
+            float g = hash(vUv*800.0 + time*97.0)*grain;
+            c.rgb += g - grain*0.5;
+            vec2 q = vUv - 0.5;
+            float d = length(q * vec2(1.0, 0.75));
+            c.rgb *= 1.0 - smoothstep(0.3, 0.78, d)*vignette;
+            float lum = dot(c.rgb, vec3(0.299,0.587,0.114));
+            c.rgb = mix(vec3(lum), c.rgb, 0.72);
+            c.rgb += (1.0-lum)*vec3(-0.015,-0.008,0.025);
+            c.rgb += lum*vec3(0.015,0.008,-0.01);
+            gl_FragColor = c;
+        }
+    `,
+};
+
+
+// --- Geometry Helpers ---
+
+function createBuilding(cfg) {
+    const { w, h, d, color, face } = cfg;
+    const g = new THREE.Group();
+    const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0.05 })
+    );
+    mesh.position.y = h / 2;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    g.add(mesh);
+
+    const winGeo = new THREE.PlaneGeometry(0.4, 0.55);
+    const cols = Math.floor(d / 1.6);
+    const rows = Math.floor((h - 1) / 2.2);
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (Math.random() > 0.45) continue;
+            const lit = Math.random() > 0.4;
+            if (!lit && Math.random() > 0.3) continue;
+            const wm = new THREE.MeshBasicMaterial({
+                color: lit ? 0xffcc88 : 0x060606,
+                transparent: true,
+                opacity: lit ? (0.25 + Math.random() * 0.4) : 0.6,
+            });
+            const win = new THREE.Mesh(winGeo, wm);
+            const xp = face > 0 ? w / 2 + 0.02 : -w / 2 - 0.02;
+            win.position.set(xp, 1.8 + r * 2.2, -d / 2 + 0.8 + c * 1.6);
+            win.rotation.y = face > 0 ? -Math.PI / 2 : Math.PI / 2;
+            g.add(win);
+        }
+    }
+    g.position.set(cfg.x, 0, cfg.z);
+    return g;
+}
+
+function createNeonSign(text, color, size) {
+    const s = size || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 256, 64);
+    const hex = '#' + color.toString(16).padStart(6, '0');
+    ctx.font = `bold ${Math.round(44 * s)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = hex;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = hex;
+    ctx.fillText(text, 128, 32);
+    ctx.fillText(text, 128, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    const geo = new THREE.PlaneGeometry(2.4 * s, 0.6 * s);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geo, mat);
+    const light = new THREE.PointLight(color, 1.2, 8);
+    return { mesh, light };
+}
+
+function createStreetLamp(x, z) {
+    const g = new THREE.Group();
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.7, roughness: 0.4 });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 5.5, 8), poleMat);
+    pole.position.y = 2.75;
+    g.add(pole);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6), poleMat);
+    arm.position.set(0.4, 5.1, 0);
+    arm.rotation.z = -Math.PI / 5;
+    g.add(arm);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffddaa }));
+    bulb.position.set(0.7, 4.85, 0);
+    g.add(bulb);
+    const pl = new THREE.PointLight(0xffcc66, 2.0, 14, 1.5);
+    pl.position.set(0.7, 4.85, 0);
+    g.add(pl);
+    const coneGeo = new THREE.ConeGeometry(2.2, 5, 16, 1, true);
+    const coneMat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.025, side: THREE.DoubleSide, depthWrite: false });
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.position.set(0.7, 2.4, 0);
+    g.add(cone);
+    g.position.set(x, 0, z);
+    return g;
+}
+
+function createPoliceCar(x, z) {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5, metalness: 0.4 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.65, 4.5), bodyMat);
+    body.position.y = 0.45;
+    g.add(body);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.45, 2.2), bodyMat);
+    top.position.set(0, 1.0, -0.3);
+    g.add(top);
+    const barMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 0.25), barMat);
+    bar.position.set(0, 1.28, -0.3);
+    g.add(bar);
+    const rl = new THREE.PointLight(0xff0000, 2, 10);
+    rl.position.set(-0.3, 1.35, -0.3);
+    g.add(rl);
+    const bl = new THREE.PointLight(0x0044ff, 0.2, 10);
+    bl.position.set(0.3, 1.35, -0.3);
+    g.add(bl);
+    g.position.set(x, 0, z);
+    return { group: g, redLight: rl, blueLight: bl, barMesh: bar };
+}
+
+function createCharacter(cfg) {
+    const g = new THREE.Group();
+    const bodyGeo = new THREE.CylinderGeometry(0.18, 0.32, 1.0, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: cfg.body });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.6;
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), new THREE.MeshStandardMaterial({ color: cfg.head }));
+    head.position.y = 1.25;
+    g.add(head);
+    if (cfg.hat !== undefined) {
+        const hatMat = new THREE.MeshStandardMaterial({ color: cfg.hat });
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.04, 12), hatMat);
+        brim.position.y = 1.38;
+        g.add(brim);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.14, 8), hatMat);
+        crown.position.y = 1.47;
+        g.add(crown);
+    }
+    const shGeo = new THREE.CircleGeometry(0.28, 12);
+    const shMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
+    const sh = new THREE.Mesh(shGeo, shMat);
+    sh.rotation.x = -Math.PI / 2;
+    sh.position.y = 0.02;
+    g.add(sh);
+    return g;
+}
+
+function createCrimeTape(x1, z1, x2, z2, y) {
+    const dx = x2 - x1, dz = z2 - z1;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    const angle = Math.atan2(dx, dz);
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < 20; i++) {
+        ctx.fillStyle = i % 2 === 0 ? '#ccbb00' : '#111';
+        ctx.fillRect(i * 13, 0, 13, 16);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.set(len * 2, 1);
+    const geo = new THREE.PlaneGeometry(len, 0.12);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.75, side: THREE.DoubleSide });
+    const tape = new THREE.Mesh(geo, mat);
+    tape.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
+    tape.rotation.y = angle;
+    return tape;
+}
+
+function createRainSystem(count) {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+        pos[i * 3] = (Math.random() - 0.5) * 40;
+        pos[i * 3 + 1] = Math.random() * 18;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 40;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+        color: 0xaabbcc, size: 0.055, transparent: true, opacity: 0.3,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    return new THREE.Points(geo, mat);
+}
+
+function createChalkOutline() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200; canvas.height = 120;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.arc(100, 18, 12, 0, Math.PI * 2);
+    ctx.moveTo(100, 30); ctx.lineTo(100, 70);
+    ctx.moveTo(100, 42); ctx.lineTo(70, 58);
+    ctx.moveTo(100, 42); ctx.lineTo(130, 58);
+    ctx.moveTo(100, 70); ctx.lineTo(75, 105);
+    ctx.moveTo(100, 70); ctx.lineTo(125, 105);
+    ctx.stroke();
+    const tex = new THREE.CanvasTexture(canvas);
+    const geo = new THREE.PlaneGeometry(2.5, 1.5);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+    const m = new THREE.Mesh(geo, mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.02;
+    return m;
+}
+
+function createEvidenceMarker(num, x, z) {
+    const g = new THREE.Group();
+    const tent = new THREE.Mesh(
+        new THREE.ConeGeometry(0.12, 0.22, 4),
+        new THREE.MeshBasicMaterial({ color: 0xddcc00 })
+    );
+    tent.position.y = 0.11;
+    g.add(tent);
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#111';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(num), 16, 16);
+    const tex = new THREE.CanvasTexture(canvas);
+    const label = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.14, 0.14),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+    );
+    label.position.set(0, 0.12, 0.13);
+    g.add(label);
+    g.position.set(x, 0, z);
+    return g;
+}
+
+function createDumpster(x, z) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 1.0, 1.0),
+        new THREE.MeshStandardMaterial({ color: 0x1a3020, roughness: 0.85 })
+    );
+    body.position.y = 0.5;
+    g.add(body);
+    const lid = new THREE.Mesh(
+        new THREE.BoxGeometry(1.7, 0.08, 1.1),
+        new THREE.MeshStandardMaterial({ color: 0x162818, roughness: 0.8 })
+    );
+    lid.position.y = 1.04;
+    lid.rotation.x = 0.15;
+    g.add(lid);
+    g.position.set(x, 0, z);
+    return g;
+}
+
+function createFireEscape(x, z) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.7, roughness: 0.5 });
+    for (let i = 0; i < 3; i++) {
+        const platform = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.06, 1.0), mat);
+        platform.position.set(0, 2.5 + i * 2.5, 0);
+        g.add(platform);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 1.0), mat);
+        rail.position.set(-0.88, 3.0 + i * 2.5, 0);
+        g.add(rail);
+        const rail2 = rail.clone();
+        rail2.position.x = 0.88;
+        g.add(rail2);
+    }
+    const ladder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.4, 0.04), mat);
+    ladder.position.set(0, 1.2, -0.48);
+    g.add(ladder);
+    for (let i = 0; i < 6; i++) {
+        const rung = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.04), mat);
+        rung.position.set(0, 0.2 + i * 0.4, -0.48);
+        g.add(rung);
+    }
+    g.position.set(x, 0, z);
+    return g;
+}
+
+
+// --- Scene Builder ---
+
+function clearScene3D() {
+    scene3d.traverse(child => {
+        if (child.isMesh) {
+            child.geometry?.dispose();
+            if (child.material) {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+            }
+        }
+    });
+    while (scene3d.children.length > 0) scene3d.remove(scene3d.children[0]);
+    hotspots3d.length = 0;
+    npcObjects.length = 0;
+    animatables.length = 0;
+    policeCarLights = null;
+    rain = null;
+}
+
+function buildScene(id) {
+    const sd = SCENES[id];
+    if (!sd) return;
+
+    scene3d.fog = new THREE.Fog(sd.fog.color, sd.fog.near, sd.fog.far);
+    scene3d.background = new THREE.Color(sd.fog.color);
+
+    const ambient = new THREE.AmbientLight(sd.ambient.color, sd.ambient.intensity);
+    scene3d.add(ambient);
+
+    if (id === 'street') buildStreet(sd);
+    else if (id === 'alley') buildAlley(sd);
+
+    if (sd.rain) {
+        rain = createRainSystem(sd.rain);
+        rainCount = sd.rain;
+        scene3d.add(rain);
+    }
+
+    playerGroup = createCharacter(CHARACTERS.player);
+    playerPos = new THREE.Vector3(sd.spawn.x, 0, sd.spawn.z);
+    playerGroup.position.copy(playerPos);
+    scene3d.add(playerGroup);
+
+    camOffset.set(sd.camOffset.x, sd.camOffset.y, sd.camOffset.z);
+    camera.position.set(playerPos.x + camOffset.x, camOffset.y, playerPos.z + camOffset.z);
+    camTarget.copy(camera.position);
+    camLookTarget.set(playerPos.x, 1.2, playerPos.z);
+    camera.lookAt(camLookTarget);
+
+    for (const npcDef of sd.npcs) {
+        const charDef = CHARACTERS[npcDef.char];
+        const npcMesh = createCharacter(charDef);
+        npcMesh.position.set(npcDef.x, 0, npcDef.z);
+        if (npcDef.facing) npcMesh.rotation.y = npcDef.facing;
+        scene3d.add(npcMesh);
+        npcObjects.push({ id: npcDef.id, charKey: npcDef.char, mesh: npcMesh });
+    }
+}
+
+function buildStreet(sd) {
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x0d1117, roughness: 0.3, metalness: 0.15 });
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(10, 40), roadMat);
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0, 0);
+    road.receiveShadow = true;
+    scene3d.add(road);
+
+    const swMat = new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.85 });
+    const swL = new THREE.Mesh(new THREE.BoxGeometry(4, 0.15, 40), swMat);
+    swL.position.set(-7, 0.075, 0);
+    swL.receiveShadow = true;
+    scene3d.add(swL);
+    const swR = new THREE.Mesh(new THREE.BoxGeometry(4, 0.15, 40), swMat);
+    swR.position.set(7, 0.075, 0);
+    swR.receiveShadow = true;
+    scene3d.add(swR);
+
+    for (const b of sd.buildings) scene3d.add(createBuilding(b));
+    for (const l of sd.lamps) scene3d.add(createStreetLamp(l.x, l.z));
+
+    for (const n of sd.neons) {
+        const { mesh, light } = createNeonSign(n.text, n.color, n.size);
+        mesh.position.set(n.x, n.y, n.z);
+        if (n.ry) mesh.rotation.y = n.ry;
+        light.position.set(n.x + (n.ry > 0 ? 0.6 : -0.6), n.y, n.z);
+        scene3d.add(mesh);
+        scene3d.add(light);
+    }
+
+    if (sd.policeCar) {
+        const pc = createPoliceCar(sd.policeCar.x, sd.policeCar.z);
+        scene3d.add(pc.group);
+        policeCarLights = pc;
+    }
+
+    scene3d.add(createCrimeTape(-5.5, -1.5, -5.5, -5.5, 0.9));
+    scene3d.add(createCrimeTape(-5.5, -1.5, -5.5, -5.5, 0.5));
+
+    for (const hsDef of sd.hotspots) {
+        hotspots3d.push({ ...hsDef, pos: new THREE.Vector3(hsDef.x, 0, hsDef.z) });
+    }
+}
+
+function buildAlley(sd) {
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.4, metalness: 0.1 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 18), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene3d.add(floor);
+
+    for (const w of sd.walls) {
+        const wall = new THREE.Mesh(
+            new THREE.BoxGeometry(w.w, w.h, w.d),
+            new THREE.MeshStandardMaterial({ color: w.color, roughness: 0.9 })
+        );
+        wall.position.set(w.x, w.h / 2, w.z);
+        wall.receiveShadow = true;
+        scene3d.add(wall);
+    }
+
+    if (sd.overheadLight) {
+        const ol = sd.overheadLight;
+        const pl = new THREE.PointLight(ol.color, ol.intensity, 12, 1.5);
+        pl.position.set(ol.x, ol.y, ol.z);
+        scene3d.add(pl);
+        const bulb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.06, 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0xffddaa })
+        );
+        bulb.position.copy(pl.position);
+        scene3d.add(bulb);
+        animatables.push({ type: 'flicker', light: pl, base: ol.intensity });
+    }
+
+    scene3d.add(createChalkOutline());
+    const outline = scene3d.children[scene3d.children.length - 1];
+    outline.position.set(0, 0.02, -2.5);
+
+    scene3d.add(createEvidenceMarker(1, -0.8, -3));
+    scene3d.add(createEvidenceMarker(2, 1, -1));
+    scene3d.add(createEvidenceMarker(3, 0.5, 1.5));
+
+    scene3d.add(createDumpster(-2.2, 2.5));
+    scene3d.add(createFireEscape(2.8, -4));
+
+    scene3d.add(createCrimeTape(-3, 7, 3, 7, 0.85));
+    scene3d.add(createCrimeTape(-3, 7, 3, 7, 0.45));
+
+    for (const hsDef of sd.hotspots) {
+        hotspots3d.push({ ...hsDef, pos: new THREE.Vector3(hsDef.x, 0, hsDef.z) });
+    }
+}
+
+
+// --- Dialogue Engine ---
+
+const dlgBox = $('dialogue-box');
+const dlgSpeaker = $('dlg-speaker');
+const dlgText = $('dlg-text');
+const narBox = $('narrator-box');
+const narText = $('nar-text');
+
+let dlgQueue = [], dlgIndex = 0, dlgIsNarrator = false;
+let dlgTyping = false, dlgTimer = null, dlgOnComplete = null;
+
+function startDialogue(key) {
+    const data = typeof key === 'string' ? DIALOGUE[key] : key;
+    if (!data) return;
+    dlgQueue = data.lines;
+    dlgIndex = 0;
+    dlgIsNarrator = !!data.narrator;
+    dlgOnComplete = data.onComplete || null;
+    state.dialogueActive = true;
+    showDlgLine();
+}
+
+function showDlgLine() {
+    if (dlgIndex >= dlgQueue.length) { finishDialogue(); return; }
+    const line = dlgQueue[dlgIndex];
+    if (dlgIsNarrator) {
+        dlgBox.classList.remove('show');
+        narBox.classList.add('show');
+        typeText(narText, line.text);
+    } else {
+        narBox.classList.remove('show');
+        dlgSpeaker.textContent = line.speaker || '';
+        dlgBox.classList.add('show');
+        typeText(dlgText, line.text);
+    }
+}
+
+function typeText(el, text) {
+    el.textContent = '';
+    let i = 0;
+    clearInterval(dlgTimer);
+    dlgTyping = true;
+    dlgTimer = setInterval(() => {
+        if (i < text.length) { el.textContent = text.substring(0, ++i); }
+        else { clearInterval(dlgTimer); dlgTyping = false; }
+    }, 28);
+}
+
+function advanceDialogue() {
+    if (!state.dialogueActive) return false;
+    if (dlgTyping) {
+        clearInterval(dlgTimer);
+        dlgTyping = false;
+        const line = dlgQueue[dlgIndex];
+        const el = dlgIsNarrator ? narText : dlgText;
+        el.textContent = line.text;
+        return true;
+    }
+    dlgIndex++;
+    showDlgLine();
+    return true;
+}
+
+function finishDialogue() {
+    state.dialogueActive = false;
+    dlgBox.classList.remove('show');
+    narBox.classList.remove('show');
+    if (dlgOnComplete) {
+        if (dlgOnComplete.setFlag) state.flags[dlgOnComplete.setFlag] = true;
+        if (dlgOnComplete.addNote) addNote(dlgOnComplete.addNote);
+        if (dlgOnComplete.addItem) addItem(dlgOnComplete.addItem);
+    }
+    checkCaseProgress();
+}
+
+
+// --- Case Notes & Inventory ---
+
+function addNote(text) {
+    if (state.notes.includes(text)) return;
+    state.notes.push(text);
+    renderNotes();
+}
+
+function renderNotes() {
+    const el = $('notes-list');
+    el.innerHTML = '';
+    state.notes.forEach(n => {
+        const d = document.createElement('div');
+        d.className = 'case-note';
+        d.textContent = n;
+        el.appendChild(d);
+    });
+}
+
+function addItem(key) {
+    if (!key || state.inventory.includes(key)) return;
+    state.inventory.push(key);
+    renderInventory();
+}
+
+function renderInventory() {
+    const el = $('inventory');
+    el.innerHTML = '';
+    state.inventory.forEach(key => {
+        const item = ITEMS[key];
+        if (!item) return;
+        const d = document.createElement('div');
+        d.className = 'inv-slot';
+        d.textContent = item.icon;
+        d.title = item.name;
+        el.appendChild(d);
+    });
+}
+
+function checkCaseProgress() {
+    if (state.flags.found_ev1 && state.flags.found_ev2 && state.flags.found_ev3 && !state.flags.case_progress_shown) {
+        state.flags.case_progress_shown = true;
+        setTimeout(() => startDialogue('case_progress'), 800);
+    }
+}
+
+
+// --- Input ---
+
+const keys = {};
+document.addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === 'e' || e.key === ' ' || e.key === 'Enter') input.interact = true;
+    if (e.key === 'n' || e.key === 'N') toggleCaseNotes();
+    if (e.key === 'Escape') closeCaseNotes();
+});
+document.addEventListener('keyup', e => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+function updateKeyboardInput() {
+    input.move.x = 0;
+    input.move.z = 0;
+    if (keys['w'] || keys['arrowup']) input.move.z = -1;
+    if (keys['s'] || keys['arrowdown']) input.move.z = 1;
+    if (keys['a'] || keys['arrowleft']) input.move.x = -1;
+    if (keys['d'] || keys['arrowright']) input.move.x = 1;
+    const len = Math.sqrt(input.move.x * input.move.x + input.move.z * input.move.z);
+    if (len > 1) { input.move.x /= len; input.move.z /= len; }
+}
+
+function setupJoystick() {
+    const zone = $('joy-zone');
+    const knob = $('joy-knob');
+    let active = false, sx = 0, sy = 0;
+
+    zone.addEventListener('touchstart', e => {
+        e.preventDefault();
+        active = true;
+        const t = e.touches[0];
+        sx = t.clientX;
+        sy = t.clientY;
+    }, { passive: false });
+
+    zone.addEventListener('touchmove', e => {
+        if (!active) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        let dx = t.clientX - sx, dy = t.clientY - sy;
+        const maxD = 38;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > maxD) { dx = dx / dist * maxD; dy = dy / dist * maxD; }
+        knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        input.move.x = dx / maxD;
+        input.move.z = dy / maxD;
+    }, { passive: false });
+
+    const stop = () => {
+        active = false;
+        knob.style.transform = 'translate(-50%,-50%)';
+        input.move.x = 0;
+        input.move.z = 0;
+    };
+    zone.addEventListener('touchend', stop);
+    zone.addEventListener('touchcancel', stop);
+}
+
+function setupInteractButton() {
+    const btn = $('interact-mobile');
+    btn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        input.interact = true;
+    }, { passive: false });
+}
+
+function setupDialogueClicks() {
+    dlgBox.addEventListener('click', e => { e.stopPropagation(); advanceDialogue(); });
+    narBox.addEventListener('click', e => { e.stopPropagation(); advanceDialogue(); });
+    document.addEventListener('click', () => {
+        if (state.dialogueActive) advanceDialogue();
+    });
+}
+
+function toggleCaseNotes() { $('case-panel').classList.toggle('show'); }
+function closeCaseNotes() { $('case-panel').classList.remove('show'); }
+$('case-btn').addEventListener('click', toggleCaseNotes);
+$('case-close').addEventListener('click', closeCaseNotes);
+
+
+// --- Scene Loading ---
+
+async function loadScene(id) {
+    state.paused = true;
+    const fade = $('fade');
+    fade.classList.remove('clear');
+    await delay(1800);
+
+    clearScene3D();
+    buildScene(id);
+    state.currentScene = id;
+
+    const sd = SCENES[id];
+    $('tc-loc').textContent = sd.label;
+    $('tc-time').textContent = sd.time;
+    $('title-card').classList.add('show');
+
+    await delay(600);
+    fade.classList.add('clear');
+    await delay(1800);
+
+    $('title-card').classList.remove('show');
+    $('loc-name').textContent = sd.label;
+    $('hud').classList.add('show');
+    $('lb-top').classList.add('show');
+    $('lb-bot').classList.add('show');
+
+    await delay(800);
+    state.paused = false;
+
+    if (sd.onEnter) {
+        for (const action of sd.onEnter) {
+            if (action.type === 'narrate') {
+                startDialogue(action.key);
+                await waitForDialogue();
+            }
+            if (action.type === 'wait') await delay(action.duration * 1000);
+        }
+    }
+}
+
+function waitForDialogue() {
+    return new Promise(resolve => {
+        const check = setInterval(() => {
+            if (!state.dialogueActive) { clearInterval(check); resolve(); }
+        }, 100);
+    });
+}
+
+
+// --- Update Loop ---
+
+function update(delta) {
+    updateKeyboardInput();
+
+    if (policeCarLights) {
+        const t = clock.getElapsedTime();
+        const flash = Math.sin(t * 5.5) > 0;
+        policeCarLights.redLight.intensity = flash ? 2.5 : 0.1;
+        policeCarLights.blueLight.intensity = flash ? 0.1 : 2.5;
+        policeCarLights.barMesh.material.color.set(flash ? 0xff0000 : 0x0044ff);
+    }
+
+    for (const a of animatables) {
+        if (a.type === 'flicker') {
+            a.light.intensity = a.base + Math.sin(clock.getElapsedTime() * 12) * 0.3 + Math.random() * 0.15;
+        }
+    }
+
+    if (rain) {
+        const pos = rain.geometry.attributes.position.array;
+        for (let i = 0; i < rainCount; i++) {
+            pos[i * 3 + 1] -= (10 + Math.random() * 3) * delta;
+            if (pos[i * 3 + 1] < 0) {
+                pos[i * 3 + 1] = 14 + Math.random() * 4;
+                pos[i * 3] = playerPos.x + (Math.random() - 0.5) * 35;
+                pos[i * 3 + 2] = playerPos.z + (Math.random() - 0.5) * 35;
+            }
+        }
+        rain.geometry.attributes.position.needsUpdate = true;
+    }
+
+    if (!state.paused && !state.dialogueActive && playerGroup) {
+        const speed = CHARACTERS.player.speed * delta;
+        if (input.move.x !== 0 || input.move.z !== 0) {
+            playerPos.x += input.move.x * speed;
+            playerPos.z += input.move.z * speed;
+
+            const bounds = state.currentScene === 'alley'
+                ? { xMin: -2.6, xMax: 2.6, zMin: -7, zMax: 8 }
+                : { xMin: -4.5, xMax: 4.5, zMin: -16, zMax: 16 };
+            playerPos.x = Math.max(bounds.xMin, Math.min(bounds.xMax, playerPos.x));
+            playerPos.z = Math.max(bounds.zMin, Math.min(bounds.zMax, playerPos.z));
+
+            const targetAngle = Math.atan2(input.move.x, input.move.z);
+            playerAngle += angleDiff(targetAngle, playerAngle) * 0.15;
+            playerGroup.rotation.y = playerAngle;
+        }
+        playerGroup.position.copy(playerPos);
+    }
+
+    const desired = new THREE.Vector3(
+        playerPos.x + camOffset.x,
+        camOffset.y,
+        playerPos.z + camOffset.z
+    );
+    camTarget.lerp(desired, 0.04);
+    camera.position.copy(camTarget);
+    const look = new THREE.Vector3(playerPos.x, 1.2, playerPos.z);
+    camLookTarget.lerp(look, 0.06);
+    camera.lookAt(camLookTarget);
+
+    if (!state.paused && !state.dialogueActive) {
+        let nearest = null, nearDist = Infinity;
+        for (const hs of hotspots3d) {
+            const dx = playerPos.x - hs.pos.x;
+            const dz = playerPos.z - hs.pos.z;
+            const d = Math.sqrt(dx * dx + dz * dz);
+            if (d < hs.r && d < nearDist) { nearest = hs; nearDist = d; }
+        }
+        state.nearHotspot = nearest;
+
+        let nearNPC = null, npcDist = Infinity;
+        for (const npc of npcObjects) {
+            const dx = playerPos.x - npc.mesh.position.x;
+            const dz = playerPos.z - npc.mesh.position.z;
+            const d = Math.sqrt(dx * dx + dz * dz);
+            if (d < 2.2 && d < npcDist) { nearNPC = npc; npcDist = d; }
+        }
+        state.nearNPC = nearNPC;
+
+        const prompt = $('interact-prompt');
+        if (nearNPC) {
+            prompt.textContent = 'TALK';
+            prompt.classList.add('show');
+        } else if (nearest) {
+            prompt.textContent = nearest.label || 'INVESTIGATE';
+            prompt.classList.add('show');
+        } else {
+            prompt.classList.remove('show');
+        }
+    }
+
+    if (input.interact && !input._interactPrev) {
+        handleInteract();
+    }
+    input._interactPrev = input.interact;
+    input.interact = false;
+}
+
+function handleInteract() {
+    if (state.dialogueActive) {
+        advanceDialogue();
+        return;
+    }
+
+    if (state.nearNPC) {
+        const npc = state.nearNPC;
+        const id = npc.id;
+        if (id === 'cop') {
+            startDialogue(state.flags.talked_to_cop ? 'cop_return' : 'cop_intro');
+        }
+        return;
+    }
+
+    if (state.nearHotspot) {
+        const hs = state.nearHotspot;
+        if (hs.door) {
+            if (hs.requires && !state.flags[hs.requires]) {
+                if (hs.lockedDialogue) startDialogue(hs.lockedDialogue);
+                return;
+            }
+            loadScene(hs.door);
+            return;
+        }
+        if (hs.item && !state.inventory.includes(hs.item)) {
+            addItem(hs.item);
+        }
+        if (hs.dialogue) {
+            startDialogue(hs.dialogue);
+        }
+    }
+}
+
+function angleDiff(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+}
+
+
+// --- Render ---
+
+function render() {
+    if (composer) {
+        const noirPass = composer.passes.find(p => p.uniforms && p.uniforms.time);
+        if (noirPass) noirPass.uniforms.time.value = clock.getElapsedTime();
+        composer.render();
+    }
+}
+
+
+// --- Init & Boot ---
+
+function init() {
+    clock = new THREE.Clock();
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = false;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.9;
+    document.body.insertBefore(renderer.domElement, document.body.firstChild);
+
+    scene3d = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 100);
+
+    const w = window.innerWidth, h = window.innerHeight;
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene3d, camera));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.4, 0.82));
+    const noirPass = new ShaderPass(NoirShader);
+    composer.addPass(noirPass);
+    composer.addPass(new OutputPass());
+
+    window.addEventListener('resize', () => {
+        const nw = window.innerWidth, nh = window.innerHeight;
+        camera.aspect = nw / nh;
+        camera.updateProjectionMatrix();
+        renderer.setSize(nw, nh);
+        composer.setSize(nw, nh);
+    });
+
+    setupJoystick();
+    setupInteractButton();
+    setupDialogueClicks();
+}
+
+function gameLoop() {
+    requestAnimationFrame(gameLoop);
+    const delta = Math.min(clock.getDelta(), 0.05);
+    update(delta);
+    render();
+}
+
+async function boot() {
+    init();
+    gameLoop();
+
+    await delay(300);
+    $('fade').classList.add('clear');
+
+    await new Promise(resolve => {
+        $('title-screen').addEventListener('click', () => {
+            $('title-screen').classList.add('gone');
+            resolve();
+        }, { once: true });
+        $('title-screen').addEventListener('touchstart', () => {
+            $('title-screen').classList.add('gone');
+            resolve();
+        }, { once: true });
+    });
+
+    await delay(1000);
+    loadScene(GAME.startScene);
+}
+
+boot();
+
+</script>
+</body>
+</html>
