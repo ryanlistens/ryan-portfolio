@@ -28,7 +28,7 @@ const INTRO_TEXT = ["Nightclub interior.", "Little Italy.", "Summer 1979. 11:54 
 
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 160);
+const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 160);
 const renderer = new THREE.WebGLRenderer({
   canvas: dom.canvas,
   antialias: true,
@@ -41,9 +41,9 @@ const fxGroup = new THREE.Group();
 const markerGroup = new THREE.Group();
 scene.add(envGroup, charGroup, fxGroup, markerGroup);
 
-const ambient = new THREE.AmbientLight(0x4f4455, 0.6);
-const key = new THREE.DirectionalLight(0xffd2a6, 1.15);
-const fill = new THREE.DirectionalLight(0x7aa7ff, 0.5);
+const ambient = new THREE.AmbientLight(0x6a6075, 0.9);
+const key = new THREE.DirectionalLight(0xffd2a6, 1.3);
+const fill = new THREE.DirectionalLight(0x7aa7ff, 0.7);
 key.position.set(8, 16, 7);
 fill.position.set(-10, 12, -8);
 scene.add(ambient, key, fill);
@@ -121,51 +121,45 @@ function buildPlayerMesh() {
   const shirt = new THREE.MeshStandardMaterial({ color: 0xd4c8b0, roughness: 0.5 });
   const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.7 });
 
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.14, 0.22), pants);
-  pelvis.position.y = 0.52;
-  const abdomen = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.2, 8), suit);
-  abdomen.position.y = 0.66;
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.32, 0.26), suit);
-  chest.position.y = 0.88;
-  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.28), suit);
-  shoulders.position.y = 1.05;
-  const collar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.1), shirt);
-  collar.position.set(0, 1.1, 0.07);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.1, 8), skin);
+  const lowerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.34, 10), pants);
+  lowerBody.position.y = 0.54;
+  const upperBody = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.38, 10), suit);
+  upperBody.position.y = 0.88;
+  const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), suit);
+  shoulderL.position.set(-0.26, 1.04, 0);
+  const shoulderR = shoulderL.clone(); shoulderR.position.set(0.26, 1.04, 0);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.04, 8), shirt);
+  collar.position.set(0, 1.09, 0.04);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 8), skin);
   neck.position.y = 1.14;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 12), skin);
-  head.position.y = 1.3;
-  head.scale.set(0.95, 1.1, 0.92);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.12), skin);
-  jaw.position.set(0, 1.2, 0.04);
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.06), skin);
-  nose.position.set(0, 1.3, 0.15);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.165, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), hairMat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), skin);
+  head.position.y = 1.3; head.scale.set(1, 1.12, 0.95);
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.05, 6), skin);
+  nose.position.set(0, 1.28, 0.14); nose.rotation.x = Math.PI / 2;
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.155, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMat);
   hair.position.y = 1.33;
-  const hairSides = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.2), hairMat);
-  hairSides.position.set(0, 1.26, -0.04);
 
-  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.28, 8), suit);
-  lUpperArm.position.set(-0.32, 0.88, 0); lUpperArm.rotation.z = 0.12;
-  const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.26, 8), suit);
-  lForearm.position.set(-0.36, 0.62, 0); lForearm.rotation.z = 0.08;
-  const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), skin);
-  lHand.position.set(-0.37, 0.48, 0);
-  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.32, 0.88, 0); rUpperArm.rotation.z = -0.12;
-  const rForearm = lForearm.clone(); rForearm.position.set(0.36, 0.62, 0); rForearm.rotation.z = -0.08;
-  const rHand = lHand.clone(); rHand.position.set(0.37, 0.48, 0);
+  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.28, 8), suit);
+  lUpperArm.position.set(-0.3, 0.88, 0); lUpperArm.rotation.z = 0.1;
+  const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
+  lForearm.position.set(-0.34, 0.63, 0);
+  const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), skin);
+  lHand.position.set(-0.34, 0.5, 0);
+  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.3, 0.88, 0); rUpperArm.rotation.z = -0.1;
+  const rForearm = lForearm.clone(); rForearm.position.set(0.34, 0.63, 0);
+  const rHand = lHand.clone(); rHand.position.set(0.34, 0.5, 0);
 
-  const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.26, 8), pants);
-  lThigh.position.set(-0.1, 0.36, 0);
-  const lShin = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.26, 8), pants);
-  lShin.position.set(-0.1, 0.12, 0);
-  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.16), shoe);
-  lShoe.position.set(-0.1, 0.0, 0.02);
-  const rThigh = lThigh.clone(); rThigh.position.set(0.1, 0.36, 0);
-  const rShin = lShin.clone(); rShin.position.set(0.1, 0.12, 0);
-  const rShoe = lShoe.clone(); rShoe.position.set(0.1, 0.0, 0.02);
+  const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
+  lThigh.position.set(-0.09, 0.32, 0);
+  const lShin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.26, 8), pants);
+  lShin.position.set(-0.09, 0.08, 0);
+  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.14), shoe);
+  lShoe.position.set(-0.09, -0.02, 0.02);
+  const rThigh = lThigh.clone(); rThigh.position.set(0.09, 0.32, 0);
+  const rShin = lShin.clone(); rShin.position.set(0.09, 0.08, 0);
+  const rShoe = lShoe.clone(); rShoe.position.set(0.09, -0.02, 0.02);
 
-  root.add(pelvis, abdomen, chest, shoulders, collar, neck, head, jaw, nose, hair, hairSides);
+  root.add(lowerBody, upperBody, shoulderL, shoulderR, collar, neck, head, nose, hair);
   root.add(lUpperArm, lForearm, lHand, rUpperArm, rForearm, rHand);
   root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
 
@@ -442,8 +436,8 @@ function loadNightclubScene(startPhase) {
   state.worldBounds = { minX: -11.2, maxX: 11.2, minZ: -10.8, maxZ: 10.8 };
 
   dom.hudLocation.textContent = "Nightclub";
-  scene.fog = new THREE.FogExp2(0x0a0a10, 0.038);
-  renderer.setClearColor(0x08070d, 1);
+  scene.fog = new THREE.FogExp2(0x0a0a10, 0.022);
+  renderer.setClearColor(0x0c0b12, 1);
 
   buildNightclubGeometry();
   buildNightclubCharacters();
@@ -783,12 +777,16 @@ function loadBathroomScene() {
 
   dom.hudLocation.textContent = "Powder Room";
   
-  scene.fog = new THREE.FogExp2(0x1a2029, 0.06);
-  renderer.setClearColor(0x111620, 1);
+  scene.fog = new THREE.FogExp2(0x1a2029, 0.025);
+  renderer.setClearColor(0x181e28, 1);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 12), new THREE.MeshStandardMaterial({ color: 0x212834, roughness: 0.88 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 12), new THREE.MeshStandardMaterial({ color: 0x2a3040, roughness: 0.88 }));
   floor.rotation.x = -Math.PI / 2; envGroup.add(floor);
-  const wc = 0x2e3645;
+  const bathLight1 = new THREE.PointLight(0xaabbdd, 0.6, 10, 2);
+  bathLight1.position.set(-1, 2.8, 3); fxGroup.add(bathLight1);
+  const bathLight2 = new THREE.PointLight(0x8899bb, 0.4, 8, 2);
+  bathLight2.position.set(3, 2.8, -2); fxGroup.add(bathLight2);
+  const wc = 0x3a4558;
   envGroup.add(makeBox(0, 1.6, -6, 14, 3.2, 0.35, wc, 0.74));
   envGroup.add(makeBox(0, 1.6, 6, 14, 3.2, 0.35, wc, 0.74));
   envGroup.add(makeBox(-7, 1.6, 0, 0.35, 3.2, 12, wc, 0.74));
@@ -1809,14 +1807,14 @@ function updateCamera(delta) {
   if (state.sceneType === "driving") return;
   let desired, lerpSpeed;
   if (state.player.seated) {
-    desired = tempA.set(state.player.pos.x - 2.5, state.player.pos.y + 3.4, state.player.pos.z - 3.2);
+    desired = tempA.set(state.player.pos.x - 3.0, state.player.pos.y + 4.5, state.player.pos.z - 4.0);
     lerpSpeed = 3.0;
   } else {
-    const bd = 4.2, h = 2.4;
+    const bd = 6.5, h = 4.0;
     const ox = Math.sin(state.player.yaw) * bd;
     const oz = Math.cos(state.player.yaw) * bd;
     desired = tempA.set(state.player.pos.x - ox, state.player.pos.y + h, state.player.pos.z - oz);
-    lerpSpeed = 7.5;
+    lerpSpeed = 6.0;
   }
   if (state.cameraBounds) {
     const b = state.cameraBounds;
@@ -1913,13 +1911,13 @@ function addCabaretLights() {
 
 function addSmoke() {
   state.smoke = [];
-  for (let i = 0; i < 44; i += 1) {
+  for (let i = 0; i < 30; i += 1) {
     const puff = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22 + Math.random() * 0.28, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xb8c1d6, transparent: true, opacity: 0.08 + Math.random() * 0.08 })
+      new THREE.SphereGeometry(0.06 + Math.random() * 0.08, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xb8c1d6, transparent: true, opacity: 0.04 + Math.random() * 0.04 })
     );
-    puff.position.set(-9.4 + Math.random() * 5.4, Math.random() * 3.2, -8.8 + Math.random() * 4.8);
-    puff.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.08, Math.random() * 0.02, (Math.random() - 0.5) * 0.08);
+    puff.position.set(-9.4 + Math.random() * 5.4, 1.2 + Math.random() * 2.0, -8.8 + Math.random() * 4.8);
+    puff.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.03, Math.random() * 0.01, (Math.random() - 0.5) * 0.03);
     fxGroup.add(puff);
     state.smoke.push(puff);
   }
