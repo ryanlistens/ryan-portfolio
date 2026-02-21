@@ -11,6 +11,7 @@ const dom = {
   locationLabel: document.getElementById("location-label"),
   timeLabel: document.getElementById("time-label"),
   musicLabel: document.getElementById("music-label"),
+  promptBox: document.getElementById("prompt-box"),
   objectiveLabel: document.getElementById("objective-label"),
   hintLabel: document.getElementById("hint-label"),
   dialogueBox: document.getElementById("dialogue-box"),
@@ -137,7 +138,7 @@ function attachCoreHandlers() {
     runIntro();
   };
 
-  dom.titleScreen.addEventListener("pointerdown", beginIntro);
+  addPressHandlers(dom.titleScreen, beginIntro);
   dom.skipIntroBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     beginIntro();
@@ -180,16 +181,8 @@ function attachCoreHandlers() {
     if (!mapped) {
       return;
     }
-    if (mapped === "a" && !state.keyState.aHeld) {
-      state.keyState.aQueued = true;
-    }
-    if (mapped === "b" && !state.keyState.bHeld) {
-      state.keyState.bQueued = true;
-    }
-    if (mapped === "a") {
-      state.keyState.aHeld = true;
-    } else if (mapped === "b") {
-      state.keyState.bHeld = true;
+    if (mapped === "a" || mapped === "b") {
+      queueActionKey(mapped, { hold: true });
     } else {
       state.keyState[mapped] = true;
     }
@@ -215,14 +208,72 @@ function attachCoreHandlers() {
     }
   });
 
-  dom.buttonA.addEventListener("pointerdown", () => {
-    state.keyState.aQueued = true;
+  addPressHandlers(dom.buttonA, () => {
+    queueActionKey("a", { hold: false });
   });
-  dom.buttonB.addEventListener("pointerdown", () => {
-    state.keyState.bQueued = true;
+  addPressHandlers(dom.buttonB, () => {
+    queueActionKey("b", { hold: false });
   });
 
+  const quickActivateNearest = () => {
+    if (state.choiceVisible) {
+      return;
+    }
+    if (state.evidenceOpen) {
+      closeEvidence();
+      return;
+    }
+    if (!state.nearestInteraction) {
+      return;
+    }
+    tryActivate(state.nearestInteraction.key);
+  };
+  addPressHandlers(dom.canvas, quickActivateNearest, { maxFreqMs: 220 });
+  addPressHandlers(dom.promptBox, quickActivateNearest, { maxFreqMs: 220 });
+
   setupJoystick();
+}
+
+function queueActionKey(key, options = {}) {
+  const opts = { hold: true, ...options };
+  if (key === "a") {
+    if (!state.keyState.aHeld || !opts.hold) {
+      state.keyState.aQueued = true;
+    }
+    if (opts.hold) {
+      state.keyState.aHeld = true;
+    }
+    return;
+  }
+  if (!state.keyState.bHeld || !opts.hold) {
+    state.keyState.bQueued = true;
+  }
+  if (opts.hold) {
+    state.keyState.bHeld = true;
+  }
+}
+
+function addPressHandlers(element, handler, options = {}) {
+  if (!element || !handler) {
+    return;
+  }
+  const opts = { maxFreqMs: 140, ...options };
+  let lastPressedAt = 0;
+  const trigger = (event) => {
+    if (event && event.cancelable) {
+      event.preventDefault();
+    }
+    const now = performance.now();
+    if (now - lastPressedAt < opts.maxFreqMs) {
+      return;
+    }
+    lastPressedAt = now;
+    handler(event);
+  };
+  element.addEventListener("pointerdown", trigger);
+  element.addEventListener("touchstart", trigger, { passive: false });
+  element.addEventListener("mousedown", trigger);
+  element.addEventListener("click", trigger);
 }
 
 function setupJoystick() {
@@ -236,12 +287,12 @@ function setupJoystick() {
     knob.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
   };
 
-  const updateFromPointer = (event) => {
+  const updateFromPoint = (clientX, clientY) => {
     const rect = joy.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    const dx = event.clientX - cx;
-    const dy = event.clientY - cy;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
     const max = rect.width * 0.31;
     const dist = Math.hypot(dx, dy);
     const clamped = dist > max ? max / dist : 1;
@@ -252,20 +303,42 @@ function setupJoystick() {
     setKnob(nx, ny);
   };
 
-  joy.addEventListener("pointerdown", (event) => {
+  let activePointerId = null;
+  const startJoystick = (clientX, clientY) => {
     state.joystickActive = true;
-    joy.setPointerCapture(event.pointerId);
-    updateFromPointer(event);
+    updateFromPoint(clientX, clientY);
+  };
+
+  joy.addEventListener("pointerdown", (event) => {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    activePointerId = event.pointerId;
+    if (typeof joy.setPointerCapture === "function") {
+      try {
+        joy.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore capture failures on inconsistent mobile implementations.
+      }
+    }
+    startJoystick(event.clientX, event.clientY);
   });
 
   joy.addEventListener("pointermove", (event) => {
+    if (activePointerId !== null && event.pointerId !== activePointerId) {
+      return;
+    }
     if (!state.joystickActive) {
       return;
     }
-    updateFromPointer(event);
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    updateFromPoint(event.clientX, event.clientY);
   });
 
   const clear = () => {
+    activePointerId = null;
     state.joystickActive = false;
     state.joysticVec.x = 0;
     state.joysticVec.y = 0;
@@ -275,6 +348,85 @@ function setupJoystick() {
   joy.addEventListener("pointerup", clear);
   joy.addEventListener("pointercancel", clear);
   joy.addEventListener("pointerleave", clear);
+
+  joy.addEventListener(
+    "touchstart",
+    (event) => {
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) {
+        return;
+      }
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      startJoystick(touch.clientX, touch.clientY);
+    },
+    { passive: false }
+  );
+
+  joy.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!state.joystickActive) {
+        return;
+      }
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) {
+        return;
+      }
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      updateFromPoint(touch.clientX, touch.clientY);
+    },
+    { passive: false }
+  );
+
+  joy.addEventListener(
+    "touchend",
+    (event) => {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      clear();
+    },
+    { passive: false }
+  );
+  joy.addEventListener(
+    "touchcancel",
+    (event) => {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      clear();
+    },
+    { passive: false }
+  );
+
+  let mouseActive = false;
+  joy.addEventListener("mousedown", (event) => {
+    if ("PointerEvent" in window) {
+      return;
+    }
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    mouseActive = true;
+    startJoystick(event.clientX, event.clientY);
+  });
+  window.addEventListener("mousemove", (event) => {
+    if (!mouseActive) {
+      return;
+    }
+    updateFromPoint(event.clientX, event.clientY);
+  });
+  window.addEventListener("mouseup", () => {
+    if (!mouseActive) {
+      return;
+    }
+    mouseActive = false;
+    clear();
+  });
 }
 
 async function runIntro() {
