@@ -164,7 +164,7 @@ function buildPlayerMesh() {
   root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
 
   state.player.mesh = root;
-  state.player.body = chest;
+  state.player.body = upperBody;
   state.player.leftLeg = lThigh;
   state.player.rightLeg = rThigh;
   state.player.leftArm = lUpperArm;
