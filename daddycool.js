@@ -406,16 +406,42 @@ async function transitionToScene(cardText, loadFn) {
 // ─── Music ─────────────────────────────────────────────────────────
 
 async function startMusic() {
+  if (state.music && !state.music.paused) return;
   const audio = state.music || new Audio();
   state.music = audio;
   audio.loop = true;
   audio.volume = 0.68;
-  const candidates = ["songs/nightclub.mp3", "music/nightclub.mp3"];
+  // Wider set of candidate paths to handle different deploy layouts
+  const candidates = [
+    "music/nightclub.mp3",
+    "songs/nightclub.mp3",
+    "./music/nightclub.mp3",
+    "assets/music/nightclub.mp3"
+  ];
   for (const src of candidates) {
     const ok = await tryAudioSource(audio, src);
     if (!ok) continue;
-    try { await audio.play(); return; } catch (_) {}
+    try {
+      await audio.play();
+      return; // successfully playing
+    } catch (err) {
+      if (err && err.name === "NotAllowedError") {
+        // Autoplay blocked — queue a one-time retry on next user gesture
+        scheduleAudioUnlock(audio);
+        return;
+      }
+    }
   }
+}
+
+function scheduleAudioUnlock(audio) {
+  const unlock = () => {
+    audio.play().catch(() => {});
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+  };
+  window.addEventListener("pointerdown", unlock, { once: true });
+  window.addEventListener("keydown", unlock, { once: true });
 }
 
 function tryAudioSource(audio, src) {
@@ -423,12 +449,15 @@ function tryAudioSource(audio, src) {
     let done = false;
     const pass = () => { if (done) return; done = true; cl(); resolve(true); };
     const fail = () => { if (done) return; done = true; cl(); resolve(false); };
-    const cl = () => { audio.removeEventListener("canplaythrough", pass); audio.removeEventListener("error", fail); };
+    const cl = () => {
+      audio.removeEventListener("canplaythrough", pass);
+      audio.removeEventListener("error", fail);
+    };
     audio.addEventListener("canplaythrough", pass, { once: true });
     audio.addEventListener("error", fail, { once: true });
     audio.src = src;
     audio.load();
-    window.setTimeout(fail, 2400);
+    window.setTimeout(fail, 3500); // slightly longer timeout
   });
 }
 
@@ -722,94 +751,301 @@ function buildTableSet(x, z, playerTable = false) {
   );
   top.position.set(x, 0.71, z);
   envGroup.add(top);
+
+  // Cocktail candle in glass holder
+  const candleHolder = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.065, 0.055, 0.1, 10),
+    new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.05, metalness: 0.0, transparent: true, opacity: 0.55 })
+  );
+  candleHolder.position.set(x + 0.1, 0.78, z + 0.06);
+  envGroup.add(candleHolder);
   const candle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.05, 0.22, 8),
+    new THREE.CylinderGeometry(0.04, 0.04, 0.14, 8),
     new THREE.MeshStandardMaterial({ color: 0xf3ead7, roughness: 0.44 })
   );
   candle.position.set(x + 0.1, 0.84, z + 0.06);
   envGroup.add(candle);
-  fxGroup.add((() => { const l = new THREE.PointLight(0xffb86f, 0.3, 2.8, 2); l.position.set(x + 0.1, 1.0, z + 0.06); return l; })());
+  const flame = new THREE.Mesh(
+    new THREE.SphereGeometry(0.022, 6, 6),
+    new THREE.MeshStandardMaterial({ color: 0xff9900, emissive: 0xff6600, emissiveIntensity: 1.2, roughness: 0.3 })
+  );
+  flame.position.set(x + 0.1, 0.93, z + 0.06);
+  envGroup.add(flame);
+  const candleLight = new THREE.PointLight(0xffb86f, 0.38, 3.2, 2);
+  candleLight.position.set(x + 0.1, 1.0, z + 0.06);
+  fxGroup.add(candleLight);
+  state.animations.push((dt, t) => { candleLight.intensity = 0.28 + Math.sin(t * 7.3 + x) * 0.12; return true; });
+
+  // Ashtray with cigarette
   const ashtray = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.11, 0.11, 0.05, 10),
+    new THREE.CylinderGeometry(0.12, 0.1, 0.04, 10),
     new THREE.MeshStandardMaterial({ color: 0x7c8795, roughness: 0.3, metalness: 0.5 })
   );
-  ashtray.position.set(x - 0.18, 0.77, z - 0.09);
+  ashtray.position.set(x - 0.22, 0.745, z - 0.1);
   envGroup.add(ashtray);
-  const matchbook = makeBox(x - 0.06, 0.76, z - 0.22, 0.08, 0.03, 0.05, 0xc83828, 0.5);
-  envGroup.add(matchbook);
   if (!playerTable) {
-    const drink = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.1, 0.24, 10),
-      new THREE.MeshStandardMaterial({ color: 0x7a3812, roughness: 0.2, metalness: 0.1 })
-    );
-    drink.position.set(x + 0.28, 0.83, z - 0.12);
-    envGroup.add(drink);
+    const butts = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.09, 5),
+      new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: 0.6 }));
+    butts.rotation.z = 1.1; butts.position.set(x - 0.21, 0.756, z - 0.09);
+    envGroup.add(butts);
+  }
+  const matchbook = makeBox(x - 0.06, 0.758, z - 0.24, 0.08, 0.03, 0.055, 0xc83828, 0.5);
+  envGroup.add(matchbook);
+
+  if (!playerTable) {
+    // Two cocktail glasses with different drinks
+    const drinkColors = [0xcc5a12, 0x3a6a9a];
+    const drinkOffsets = [[0.3, -0.14], [-0.24, 0.22]];
+    drinkOffsets.forEach(([dx, dz], i) => {
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.14, 6),
+        new THREE.MeshStandardMaterial({ color: 0xd0d0d0, roughness: 0.1, metalness: 0.2 }));
+      stem.position.set(x + dx, 0.80, z + dz);
+      envGroup.add(stem);
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.01, 0.1, 8),
+        new THREE.MeshStandardMaterial({ color: drinkColors[i % 2], roughness: 0.12, metalness: 0.05, transparent: true, opacity: 0.82 }));
+      bowl.position.set(x + dx, 0.875, z + dz);
+      envGroup.add(bowl);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.012, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd0d0d0, roughness: 0.1, metalness: 0.2 }));
+      base.position.set(x + dx, 0.737, z + dz);
+      envGroup.add(base);
+    });
+  }
+
+  // Chairs placed on opposite sides of table (for seated NPCs)
+  if (!playerTable) {
+    const chairMat = new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.75 });
+    const seatMat = new THREE.MeshStandardMaterial({ color: 0x6a2820, roughness: 0.8 });
+    [[-0.88, 0], [0.88, 0], [0, -0.88], [0, 0.88]].forEach(([dx, dz], i) => {
+      if (i > 1) return; // only two chairs per table (left/right)
+      const yaw = i === 0 ? 0 : Math.PI;
+      const cx = x + dx, cz = z + dz;
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.38), seatMat);
+      seat.position.set(cx, 0.46, cz);
+      envGroup.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.04), chairMat);
+      back.position.set(cx, 0.73, cz + (i === 0 ? -0.19 : 0.19));
+      envGroup.add(back);
+      [-0.16, 0.16].forEach((lx) => {
+        [-0.16, 0.16].forEach((lz) => {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.44, 5), chairMat);
+          leg.position.set(cx + lx, 0.22, cz + lz);
+          envGroup.add(leg);
+        });
+      });
+    });
   }
 }
 
 function buildNightclubCharacters() {
-  const frontman = makePerson(0x5a3a20, 0x5a3a20, false);
-  frontman.position.set(-8.8, 0.36, -10.0);
-  frontman.scale.set(1.04, 1.08, 1.04);
-  charGroup.add(frontman);
+  // ── Singer (shirtless Black man, tight flared white pants, gold chain) ──
+  const singerSkin = 0x2c1a0e;
+  const singer = makePerson(singerSkin, singerSkin, false); // skin-tone "outfit" = shirtless
+  singer.position.set(-8.4, 0, -9.8);
+  singer.scale.set(1.06, 1.1, 1.06);
+  // Gold chain necklace
+  const chain = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.010, 5, 16),
+    new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.88, roughness: 0.14, emissive: 0x553800, emissiveIntensity: 0.4 }));
+  chain.position.set(0, 0.93, 0.06); chain.rotation.x = Math.PI / 2 - 0.25;
+  singer.add(chain);
+  // Tight white flared pants (replace pants material appearance via overlay)
+  const pantFlareL = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.10, 0.24, 8),
+    new THREE.MeshStandardMaterial({ color: 0xe8e0d8, roughness: 0.55 }));
+  pantFlareL.position.set(-0.08, 0.17, 0);
+  const pantFlareR = pantFlareL.clone(); pantFlareR.position.set(0.08, 0.17, 0);
+  singer.add(pantFlareL, pantFlareR);
+  // Belt buckle
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.9, roughness: 0.1 }));
+  buckle.position.set(0, 0.47, 0.19);
+  singer.add(buckle);
+  charGroup.add(singer);
   state.animations.push((dt, t) => {
-    frontman.position.y = 0.36 + Math.sin(t * 5.6) * 0.08;
-    frontman.rotation.y = Math.sin(t * 2.4) * 0.4;
+    singer.position.y = Math.abs(Math.sin(t * 5.8)) * 0.12;
+    singer.rotation.y = Math.sin(t * 2.6) * 0.5;
+    // Arms pump with the beat
+    const arms = singer.children.filter((c) => c.isMesh);
+    singer.rotation.z = Math.sin(t * 5.8) * 0.07;
     return true;
   });
 
-  const drummer = makePerson(0x6a4a28, 0x1c1c22, false);
-  drummer.position.set(-9.8, 0.36, -10.9);
+  // ── Drummer with drum kit ──
+  const drummer = makePerson(0x8a5a30, 0x1c1c22, false);
+  drummer.position.set(-10.2, 0, -11.0);
+  drummer.rotation.y = 0.3;
   charGroup.add(drummer);
-  envGroup.add(makeBox(-9.8, 0.26, -10.4, 1.1, 0.5, 1.0, 0x7a1f2b, 0.28));
+  // Drum kit geometry
+  const drumBase = makeBox(-10.2, 0.28, -10.5, 1.2, 0.55, 0.9, 0x8a1a22, 0.3);
+  envGroup.add(drumBase);
+  const snare = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12),
+    new THREE.MeshStandardMaterial({ color: 0xd0c8b8, roughness: 0.4, metalness: 0.3 }));
+  snare.position.set(-10.0, 0.64, -10.3); envGroup.add(snare);
+  const hihat = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 10),
+    new THREE.MeshStandardMaterial({ color: 0xd4b040, metalness: 0.7, roughness: 0.2 }));
+  hihat.position.set(-9.7, 0.8, -10.4); envGroup.add(hihat);
+  const cymbalStand = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.78, 5),
+    new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 }));
+  cymbalStand.position.set(-9.7, 0.42, -10.4); envGroup.add(cymbalStand);
+  // Drumming animation
+  state.animations.push((dt, t) => {
+    const beat = Math.sin(t * 7.2);
+    drummer.rotation.z = beat * 0.06;
+    return true;
+  });
 
-  const coupleConfigs = [
-    { x: 3.7, z: -4.6, wDress: 0xeb4d9c, mSuit: 0x0f1013 },
-    { x: 6.2, z: -1.3, wDress: 0x45a8d3, mSuit: 0x2c50a6 },
-    { x: 3.6, z: 2.0, wDress: 0xbc4fd1, mSuit: 0x682646 }
+  // ── DJ Booth ──
+  const djBoothBase = makeBox(-7.2, 0.5, -10.5, 2.0, 1.0, 0.8, 0x1a1520, 0.4);
+  envGroup.add(djBoothBase);
+  const djBooth = makeBox(-7.2, 1.06, -10.5, 2.0, 0.1, 0.8, 0x2a2030, 0.25);
+  envGroup.add(djBooth);
+  // Turntable platters
+  [[-7.6], [-6.8]].forEach(([tx]) => {
+    const platter = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.04, 18),
+      new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.3 }));
+    platter.position.set(tx, 1.14, -10.5); envGroup.add(platter);
+    const label = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.045, 10),
+      new THREE.MeshStandardMaterial({ color: 0xcc3030, roughness: 0.5 }));
+    label.position.set(tx, 1.165, -10.5); envGroup.add(label);
+    state.animations.push((dt, t) => { platter.rotation.y += dt * 3.5; return true; });
+  });
+  // Mixer
+  const mixer = makeBox(-7.2, 1.14, -10.5, 0.3, 0.07, 0.22, 0x222222, 0.4);
+  envGroup.add(mixer);
+  // DJ glow
+  const djGlow = new THREE.PointLight(0x8844ff, 0.5, 4, 2);
+  djGlow.position.set(-7.2, 1.5, -10.2); fxGroup.add(djGlow);
+  state.animations.push((dt, t) => { djGlow.intensity = 0.3 + Math.sin(t * 4.1) * 0.22; return true; });
+  // DJ character
+  const dj = makePerson(0xf0d0a8, 0x0a0a14, false);
+  dj.position.set(-7.2, 0, -9.8);
+  dj.rotation.y = Math.PI;
+  // Headphones
+  const hpBar = makeBox(0, 1.18, 0, 0.32, 0.04, 0.04, 0x222222, 0.3);
+  dj.add(hpBar);
+  const hpL = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6),
+    new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4 }));
+  hpL.position.set(-0.16, 1.1, 0.06); dj.add(hpL);
+  const hpR = hpL.clone(); hpR.position.set(0.16, 1.1, 0.06); dj.add(hpR);
+  charGroup.add(dj);
+  state.animations.push((dt, t) => {
+    dj.rotation.y = Math.PI + Math.sin(t * 1.2) * 0.3;
+    return true;
+  });
+
+  // ── Dancers on dance floor ──
+  const dancerConfigs = [
+    { x: -9.9, z: -9.5, skin: 0xf2c89a, dress: 0xff3388 },
+    { x: -8.1, z: -9.5, skin: 0x4a2810, dress: 0xffaa00 },
+    { x: -9.0, z: -7.7, skin: 0xe8d0a8, dress: 0x4488ff },
+    { x: -7.2, z: -7.7, skin: 0x7a4a28, dress: 0xcc44aa }
   ];
-  coupleConfigs.forEach((cfg, idx) => {
-    const woman = makePerson(0xf1d7b8, cfg.wDress, true);
-    woman.position.set(cfg.x, 0.36, cfg.z + 0.12);
-    const man = makePerson(0xecd2b0, cfg.mSuit, false);
-    man.position.set(cfg.x + 0.7, 0.36, cfg.z - 0.08);
-    addCigarette(man, 0.28, 0.65, 0.12);
-    charGroup.add(woman, man);
+  dancerConfigs.forEach((dc, i) => {
+    const dancer = makePerson(dc.skin, dc.dress, i % 2 === 0);
+    dancer.position.set(dc.x, 0, dc.z);
+    charGroup.add(dancer);
     state.animations.push((dt, t) => {
-      woman.position.y = 0.36 + Math.sin(t * 1.8 + idx) * 0.03;
-      man.position.y = 0.36 + Math.sin(t * 1.6 + idx + 1.4) * 0.02;
+      const phase = t * 5.4 + i * 1.57;
+      dancer.position.y = Math.abs(Math.sin(phase)) * 0.1;
+      dancer.rotation.y = t * (i % 2 === 0 ? 1.1 : -0.9);
+      dancer.rotation.z = Math.sin(phase * 0.5) * 0.08;
       return true;
     });
   });
 
+  // ── Seated couples at tables (tables at 4.2/-4.6, 6.7/-1.3, 4.1/2.0) ──
+  const tableSeats = [
+    { tx: 4.2, tz: -4.6, wDress: 0xeb4d9c, wSkin: 0xf1d7b8, mSuit: 0x1a2b40, mShirt: 0xe8a050, mSkin: 0xecd2b0 },
+    { tx: 6.7, tz: -1.3, wDress: 0x45a8d3, wSkin: 0xc8906a, mSuit: 0x3a1a4a, mShirt: 0x60cc88, mSkin: 0x8a5030 },
+    { tx: 4.1, tz: 2.0,  wDress: 0xbc4fd1, wSkin: 0xf0c8a0, mSuit: 0x2a3a18, mShirt: 0xd44030, mSkin: 0xecd0a8 }
+  ];
+  tableSeats.forEach((cfg, idx) => {
+    // Woman on left side of table, man on right — both y=0 (table cloth hides legs visually)
+    const woman = makePerson(cfg.wSkin, cfg.wDress, true);
+    woman.position.set(cfg.tx - 0.85, 0, cfg.tz);
+    woman.rotation.y = Math.PI / 2; // facing right (toward man)
+    // Leisure suit man with open-chest shirt detail
+    const man = makePerson(cfg.mSkin, cfg.mSuit, false);
+    man.position.set(cfg.tx + 0.85, 0, cfg.tz);
+    man.rotation.y = -Math.PI / 2; // facing left (toward woman)
+    // Wide lapels
+    const lapelMat = new THREE.MeshStandardMaterial({ color: darkenColor(cfg.mSuit, 0.78), roughness: 0.55 });
+    const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.22, 0.04), lapelMat);
+    lapelL.position.set(-0.1, 0.82, 0.19); lapelL.rotation.z = 0.28;
+    const lapelR = lapelL.clone(); lapelR.position.set(0.1, 0.82, 0.19); lapelR.rotation.z = -0.28;
+    const shirtStripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.20, 0.035),
+      new THREE.MeshStandardMaterial({ color: cfg.mShirt, roughness: 0.5 }));
+    shirtStripe.position.set(0, 0.81, 0.21);
+    // Big collar wings
+    const colL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.055, 0.03),
+      new THREE.MeshStandardMaterial({ color: cfg.mShirt, roughness: 0.5 }));
+    colL.position.set(-0.13, 0.97, 0.19); colL.rotation.z = -0.42;
+    const colR = colL.clone(); colR.position.set(0.13, 0.97, 0.19); colR.rotation.z = 0.42;
+    man.add(lapelL, lapelR, shirtStripe, colL, colR);
+    addCigarette(man, 0.3, 0.65, 0.13);
+    charGroup.add(woman, man);
+
+    // Animated: nodding, laughing, leaning — phase-offset per couple
+    state.animations.push((dt, t) => {
+      const ph = t * 1.6 + idx * 2.1;
+      // Subtle seated sway/nod
+      woman.rotation.x = Math.sin(ph * 0.7) * 0.06;
+      woman.rotation.y = Math.PI / 2 + Math.sin(ph * 0.4) * 0.18; // glances around
+      man.rotation.x = Math.sin(ph * 0.5 + 1) * 0.05;
+      man.rotation.y = -Math.PI / 2 + Math.sin(ph * 0.35 + 0.8) * 0.2;
+      // Bob to the music
+      woman.position.y = Math.sin(t * 2.8 + idx) * 0.018;
+      man.position.y = Math.sin(t * 2.6 + idx + 1.2) * 0.015;
+      return true;
+    });
+  });
+
+  // ── Date (seated at player table) ──
   const date = makePerson(0xf2d8bc, 0xec4b94, true);
-  date.position.set(6.9, 0.36, 7.2);
+  date.position.set(6.9, 0, 7.2);
+  date.rotation.y = -Math.PI / 2;
   charGroup.add(date);
   state.dateMesh = date;
 
+  // ── Bartender (standing behind bar) ──
   const bartender = makePerson(0xf0d8b8, 0x191c24, false);
-  bartender.position.set(-8.5, 0.36, 7.1);
+  bartender.position.set(-8.5, 0, 7.1);
+  bartender.rotation.y = Math.PI;
   charGroup.add(bartender);
   state.bartenderMesh = bartender;
+  state.animations.push((dt, t) => {
+    bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.25;
+    return true;
+  });
 
-  const amber = makePerson(0xefd0ad, 0x12151c, false);
-  amber.position.set(-3.5, 0.36, -8.7);
-  const glasses = new THREE.Mesh(
-    new THREE.BoxGeometry(0.22, 0.06, 0.05),
-    new THREE.MeshStandardMaterial({ color: 0xca8a2b, emissive: 0x5f3610, emissiveIntensity: 0.46 })
-  );
+  // ── Amber Man (by the wall — leather jacket, biker cap, smoking) ──
+  const amber = makePerson(0xefd0ad, 0x0d0d0d, false);
+  amber.position.set(-3.5, 0, -8.7);
+  amber.rotation.y = 0.8;
+  // Leather jacket collar
+  const lcL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.14, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.3, metalness: 0.12 }));
+  lcL.position.set(-0.09, 0.94, 0.19); lcL.rotation.z = 0.22;
+  const lcR = lcL.clone(); lcR.position.set(0.09, 0.94, 0.19); lcR.rotation.z = -0.22;
+  const zip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.22, 0.035),
+    new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.75, roughness: 0.2 }));
+  zip.position.set(0, 0.82, 0.21);
+  amber.add(lcL, lcR, zip);
+  const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0xca8a2b, emissive: 0x5f3610, emissiveIntensity: 0.46 }));
   glasses.position.set(0, 1.0, 0.17);
   amber.add(glasses);
-  const bikerCap = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16, 0.17, 0.08, 10),
-    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 })
-  );
+  const bikerCap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.17, 0.08, 10),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 }));
   bikerCap.position.set(0, 1.12, 0);
   amber.add(bikerCap);
   addCigarette(amber, 0.08, 1.02, 0.18);
   addSmokeCloud(amber, 0, 1.5, 0);
   charGroup.add(amber);
   state.amberManMesh = amber;
+  state.animations.push((dt, t) => {
+    amber.rotation.y = 0.8 + Math.sin(t * 0.5) * 0.15;
+    return true;
+  });
 }
 
 function addCigarette(parent, x, y, z) {
@@ -931,17 +1167,69 @@ function loadBathroomScene() {
   envGroup.add(makeBox(0, 1.6, 6, 14, 3.2, 0.35, wc, 0.74));
   envGroup.add(makeBox(-7, 1.6, 0, 0.35, 3.2, 12, wc, 0.74));
   envGroup.add(makeBox(7, 1.6, 0, 0.35, 3.2, 12, wc, 0.74));
+  // Tile dado line on walls
+  envGroup.add(makeBox(0, 0.72, -5.82, 13.8, 0.06, 0.04, 0x506070, 0.4));
+  envGroup.add(makeBox(0, 0.72, 5.82, 13.8, 0.06, 0.04, 0x506070, 0.4));
 
+  // Sink counter with faucet
   envGroup.add(makeBox(-1.1, 0.45, 4.8, 5.8, 0.9, 1.2, 0x2e333d, 0.6));
-  const mirror = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 1.6), new THREE.MeshStandardMaterial({ color: 0x8a97b3, roughness: 0.2, metalness: 0.82 }));
-  mirror.position.set(-1.1, 1.64, 4.21); envGroup.add(mirror);
+  const sinkBasin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52),
+    new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.25, metalness: 0.15 }));
+  sinkBasin.position.set(-0.5, 0.92, 4.82); envGroup.add(sinkBasin);
+  const faucet = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7),
+    new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 }));
+  faucet.position.set(-0.5, 1.06, 4.69); envGroup.add(faucet);
+
+  // Mirror with slight tarnished reflection — cracked in corner
+  const mirror = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 1.6),
+    new THREE.MeshStandardMaterial({ color: 0x9aaccc, roughness: 0.12, metalness: 0.88 }));
+  mirror.position.set(-1.1, 1.66, 4.21); envGroup.add(mirror);
+  // Mirror crack detail
+  const crack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.01),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }));
+  crack.position.set(1.6, 2.18, 4.22); crack.rotation.z = 0.55; envGroup.add(crack);
+
+  // Stall partition
   envGroup.add(makeBox(2.8, 1.3, -2.7, 4.4, 2.6, 0.3, 0x27303f, 0.75));
-  const blood = new THREE.Mesh(new THREE.CircleGeometry(0.9, 20), new THREE.MeshStandardMaterial({ color: 0x5a0812, roughness: 0.95 }));
+  // Stall door (ajar)
+  const stallDoor = makeBox(0.7, 1.1, -3.3, 0.08, 2.0, 0.85, 0x2d3648, 0.7);
+  stallDoor.rotation.y = 0.45; envGroup.add(stallDoor);
+
+  // Blood pool — irregular shape built from overlapping circles
+  const bloodMat = new THREE.MeshStandardMaterial({ color: 0x4a0610, roughness: 0.97 });
+  const blood = new THREE.Mesh(new THREE.CircleGeometry(0.9, 20), bloodMat);
   blood.rotation.x = -Math.PI / 2; blood.position.set(3.3, 0.01, -2.2); envGroup.add(blood);
-  charGroup.add(makeCorpse(3.2, 0.12, -2.5));
+  const bloodTrail = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.9),
+    new THREE.MeshStandardMaterial({ color: 0x3e0408, roughness: 0.98 }));
+  bloodTrail.rotation.x = -Math.PI / 2; bloodTrail.rotation.z = 0.6;
+  bloodTrail.position.set(2.6, 0.011, -2.6); envGroup.add(bloodTrail);
+  const bloodSplat = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12), bloodMat);
+  bloodSplat.rotation.x = -Math.PI / 2; bloodSplat.position.set(2.2, 0.011, -3.1); envGroup.add(bloodSplat);
+
+  // Crime-scene atmosphere: flickering harsh overhead light
+  const crimeLight = new THREE.PointLight(0xc8dde8, 0.8, 9, 2);
+  crimeLight.position.set(3.3, 2.8, -2.5); fxGroup.add(crimeLight);
+  state.animations.push((dt, t) => {
+    crimeLight.intensity = 0.7 + Math.sin(t * 43) * 0.06 + Math.sin(t * 17) * 0.04;
+    return true;
+  });
+
+  charGroup.add(makeCorpse(3.2, 0.01, -2.5));
+
+  // Clues
   const compact = makeBox(3.5, 0.58, -2.45, 0.34, 0.05, 0.34, 0xaeb9d3, 0.24);
   envGroup.add(compact);
-  const sinkClue = makeBox(-0.7, 0.93, 4.83, 0.58, 0.04, 0.3, 0xf7f7f7, 0.5);
+  // Razor blade evidence near sink
+  const razor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.008, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xd0d0d0, metalness: 0.85, roughness: 0.1 }));
+  razor.position.set(-0.28, 0.935, 4.84); razor.rotation.y = 0.3; envGroup.add(razor);
+  // White powder residue lines on mirror ledge
+  const powderLine1 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.005, 0.018),
+    new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }));
+  powderLine1.position.set(-1.4, 0.936, 4.84); envGroup.add(powderLine1);
+  const powderLine2 = powderLine1.clone();
+  powderLine2.position.set(-1.1, 0.936, 4.84); envGroup.add(powderLine2);
+  const sinkClue = makeBox(-0.7, 0.938, 4.83, 0.58, 0.04, 0.3, 0xf7f7f7, 0.5);
   envGroup.add(sinkClue);
 
   state.obstacles = [makeObstacle(1.0, 5.1, -3.4, -1.4), makeObstacle(-4.0, 2.1, 4.2, 5.6)];
@@ -1751,17 +2039,28 @@ function clearInteractions() {
 
 function createMarker() {
   const marker = new THREE.Group();
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.22, 0.03, 8, 20),
-    new THREE.MeshStandardMaterial({ color: 0xffd892, emissive: 0xffa34d, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.4 })
-  );
-  ring.rotation.x = Math.PI / 2;
-  const dot = new THREE.Mesh(
-    new THREE.SphereGeometry(0.07, 8, 8),
-    new THREE.MeshStandardMaterial({ color: 0xffe0ad, emissive: 0xffb35f, emissiveIntensity: 0.52 })
-  );
-  dot.position.y = 0.24;
-  marker.add(ring, dot);
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: 0xffcc44, emissive: 0xff8800, emissiveIntensity: 0.9,
+    roughness: 0.18, metalness: 0.55
+  });
+  // Pin head — fat sphere
+  const pinHead = new THREE.Mesh(new THREE.SphereGeometry(0.115, 12, 12), goldMat);
+  pinHead.position.y = 0.0;
+  // Pin stem — tapers from head to tip
+  const pinStem = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.008, 0.26, 7), goldMat);
+  pinStem.position.y = -0.18;
+  // Pin tip — downward cone
+  const pinTip = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.10, 7),
+    new THREE.MeshStandardMaterial({ color: 0xe8b020, emissive: 0xcc6600, emissiveIntensity: 0.7, roughness: 0.2 }));
+  pinTip.rotation.z = Math.PI; pinTip.position.y = -0.36;
+  // Ground shadow ring
+  const shadowRing = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.22, 14),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+  shadowRing.rotation.x = -Math.PI / 2; shadowRing.position.y = -0.6;
+  // Glow point light
+  const glow = new THREE.PointLight(0xff9900, 0.55, 2.2, 2);
+  glow.position.y = 0.05;
+  marker.add(pinHead, pinStem, pinTip, shadowRing, glow);
   return marker;
 }
 
@@ -1774,8 +2073,9 @@ function updateInteractions(elapsed) {
     const pos = it.getPosFn();
     if (!enabled) { it.marker.visible = false; continue; }
     it.marker.visible = true;
-    it.marker.position.set(pos.x, pos.y + 1.4 + Math.sin(elapsed * 2.2) * 0.03, pos.z);
-    it.marker.rotation.y += 0.02;
+    // Pin bobs up and down slightly; no horizontal spin (pins are anchored)
+    it.marker.position.set(pos.x, pos.y + 1.62 + Math.sin(elapsed * 2.8) * 0.05, pos.z);
+    it.marker.rotation.y = 0;
     const dist = tempA.set(pos.x, state.player.pos.y, pos.z).distanceTo(state.player.pos);
     if (dist <= it.radius && dist < nearestDist) { nearest = it; nearestDist = dist; }
   }
@@ -1880,7 +2180,11 @@ function updatePlayer(delta, elapsed) {
   if (!state.playerCanMove || state.evidenceOpen) return;
   const inputX = (state.controls.right ? 1 : 0) - (state.controls.left ? 1 : 0) + state.controls.joyX;
   const inputZ = (state.controls.down ? 1 : 0) - (state.controls.up ? 1 : 0) + state.controls.joyY;
-  tempA.set(inputX, 0, inputZ);
+  // Camera-relative movement: forward = camera's look direction, right = camera's right
+  const cYaw = state.cameraYaw || 0;
+  const worldX = inputX * Math.cos(cYaw) - inputZ * Math.sin(cYaw);
+  const worldZ = -inputX * Math.sin(cYaw) - inputZ * Math.cos(cYaw);
+  tempA.set(worldX, 0, worldZ);
   if (tempA.lengthSq() < 0.001) {
     // Smoothly return limbs to idle when stopping
     if (state.player.leftLeg) state.player.leftLeg.rotation.x *= 0.85;
@@ -1978,7 +2282,7 @@ function updateCamera(delta) {
     // Normalize to [-PI, PI] for shortest rotation path
     while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
     while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
-    state.cameraYaw += yawDiff * (1 - Math.exp(-delta * 2.5));
+    state.cameraYaw += yawDiff * (1 - Math.exp(-delta * 3.2));
 
     const bd = 7.0, h = 4.4;
     const ox = Math.sin(state.cameraYaw) * bd;
@@ -2269,28 +2573,88 @@ function makeBox(x, y, z, w, h, d, color, roughness = 0.7) {
 
 function makeCorpse(x, y, z) {
   const body = new THREE.Group();
-  const clothMat = new THREE.MeshStandardMaterial({ color: 0xc4ccd8, roughness: 0.55 });
+  const clothMat = new THREE.MeshStandardMaterial({ color: 0xb8a0c0, roughness: 0.62 }); // purple dress
   const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4bca0, roughness: 0.5 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.7 });
-  // Torso
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.22, 0.38), clothMat);
-  torso.rotation.z = 0.3;
-  // Head
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), skinMat);
-  head.position.set(0.55, 0.06, 0); head.scale.set(1, 1.05, 0.9);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.155, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), hairMat);
-  hair.position.set(0.55, 0.1, 0);
-  // Arms splayed
-  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.4, 6), skinMat);
-  armL.position.set(0.15, 0.04, -0.28); armL.rotation.x = -0.4; armL.rotation.z = 1.2;
-  const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.35, 6), skinMat);
-  armR.position.set(0.3, 0.04, 0.26); armR.rotation.x = 0.3; armR.rotation.z = 0.8;
-  // Legs
-  const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.5, 6), clothMat);
-  legL.position.set(-0.45, 0.02, -0.08); legL.rotation.z = 1.4;
-  const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.45, 6), clothMat);
-  legR.position.set(-0.4, 0.02, 0.12); legR.rotation.z = 1.5; legR.rotation.x = 0.2;
-  body.add(torso, head, hair, armL, armR, legL, legR);
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.72 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: 0xd4207a, roughness: 0.35 });
+  const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.3 });
+  const eyeDark = new THREE.MeshStandardMaterial({ color: 0x111008, roughness: 0.2 });
+
+  // Torso (dress — larger, slightly twisted)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.22, 0.40), clothMat);
+  torso.rotation.z = 0.28;
+  body.add(torso);
+
+  // Skirt flare where dress hits floor
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.38, 0.12, 14), clothMat);
+  skirt.position.set(-0.25, 0.02, 0.02); skirt.rotation.z = 1.45;
+  body.add(skirt);
+
+  // Head (turned, cheek on floor — eerie stillness)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 12), skinMat);
+  head.position.set(0.57, 0.055, 0.06); head.scale.set(1.0, 1.06, 0.92);
+  body.add(head);
+
+  // Hair spread on floor
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMat);
+  hair.position.set(0.58, 0.06, -0.02);
+  body.add(hair);
+  const hairSpread = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.28),
+    new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.8, side: THREE.DoubleSide }));
+  hairSpread.rotation.x = -Math.PI / 2; hairSpread.position.set(0.68, 0.01, -0.18);
+  body.add(hairSpread);
+
+  // Face: eyes half-open (unsettling)
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.024, 7, 7), eyeWhite);
+  eyeL.position.set(0.62, 0.09, -0.065); body.add(eyeL);
+  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.013, 5, 5), eyeDark);
+  pupilL.position.set(0.64, 0.09, -0.065); body.add(pupilL);
+  const eyeR = eyeL.clone(); eyeR.position.set(0.62, 0.09, 0.04); body.add(eyeR);
+  const pupilR = pupilL.clone(); pupilR.position.set(0.64, 0.09, 0.04); body.add(pupilR);
+
+  // Arms: one reaching, one underneath
+  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.44, 7), skinMat);
+  armL.position.set(0.22, 0.03, -0.32); armL.rotation.x = -0.35; armL.rotation.z = 1.18;
+  body.add(armL);
+  const handL = new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 6), skinMat);
+  handL.position.set(0.1, 0.04, -0.52); body.add(handL);
+  const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.38, 7), skinMat);
+  armR.position.set(0.18, 0.03, 0.28); armR.rotation.x = 0.28; armR.rotation.z = 0.9;
+  body.add(armR);
+
+  // Legs in dress
+  const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.52, 7), clothMat);
+  legL.position.set(-0.48, 0.02, -0.07); legL.rotation.z = 1.38;
+  body.add(legL);
+  const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.46, 7), clothMat);
+  legR.position.set(-0.44, 0.02, 0.15); legR.rotation.z = 1.52; legR.rotation.x = 0.22;
+  body.add(legR);
+
+  // Heels (platform disco shoes)
+  const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.14), shoeMat);
+  shoeL.position.set(-0.72, 0.02, -0.07); body.add(shoeL);
+  const shoeR = shoeL.clone(); shoeR.position.set(-0.68, 0.02, 0.18); body.add(shoeR);
+
+  // Jewelry: bracelet
+  const bracelet = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.007, 5, 12),
+    new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.85, roughness: 0.15 }));
+  bracelet.position.set(0.1, 0.05, -0.52); bracelet.rotation.x = 1.1;
+  body.add(bracelet);
+
+  // Spilled purse near hand
+  const purse = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0xd4207a, roughness: 0.45 }));
+  purse.position.set(-0.04, 0.01, -0.65); purse.rotation.y = 0.4;
+  body.add(purse);
+  // Spilled contents: compact, lipstick
+  const compact2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.02, 0.07),
+    new THREE.MeshStandardMaterial({ color: 0xc8b8c8, roughness: 0.25, metalness: 0.3 }));
+  compact2.position.set(-0.16, 0.01, -0.7); body.add(compact2);
+  const lipstick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.07, 6),
+    new THREE.MeshStandardMaterial({ color: 0xcc2040, roughness: 0.35 }));
+  lipstick.position.set(-0.3, 0.01, -0.62); lipstick.rotation.z = 1.4;
+  body.add(lipstick);
+
   body.position.set(x, y, z);
   return body;
 }
