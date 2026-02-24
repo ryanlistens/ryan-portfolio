@@ -184,22 +184,31 @@ function buildPlayerMesh() {
   const sideburns = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.06, 0.03), hairMat);
   sideburns.position.set(-0.14, 1.28, 0.02);
   const sideburnsR = sideburns.clone(); sideburnsR.position.set(0.14, 1.28, 0.02);
+  // Fedora hat — the detective's calling card
+  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.55 });
+  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.24, 0.03, 16), hatMat);
+  hatBrim.position.y = 1.41;
+  const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.165, 0.19, 14), hatMat);
+  hatCrown.position.y = 1.535;
+  const hatBand = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.04, 14),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a0e, roughness: 0.5 }));
+  hatBand.position.y = 1.435;
 
   // Ears
   const earL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), skin);
   earL.position.set(-0.155, 1.3, 0); earL.scale.set(0.5, 1, 0.7);
   const earR = earL.clone(); earR.position.set(0.155, 1.3, 0);
 
-  // Arms
-  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.28, 8), suit);
-  lUpperArm.position.set(-0.3, 0.88, 0); lUpperArm.rotation.z = 0.1;
+  // Arms — hang naturally; forearm pulls slightly inward to kill zigzag
+  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.28, 8), suit);
+  lUpperArm.position.set(-0.28, 0.88, 0); lUpperArm.rotation.z = 0.10;
   const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
-  lForearm.position.set(-0.34, 0.63, 0);
+  lForearm.position.set(-0.24, 0.63, 0); lForearm.rotation.z = 0.04;
   const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin);
-  lHand.position.set(-0.34, 0.5, 0);
-  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.3, 0.88, 0); rUpperArm.rotation.z = -0.1;
-  const rForearm = lForearm.clone(); rForearm.position.set(0.34, 0.63, 0);
-  const rHand = lHand.clone(); rHand.position.set(0.34, 0.5, 0);
+  lHand.position.set(-0.22, 0.50, 0);
+  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
+  const rForearm = lForearm.clone(); rForearm.position.set(0.24, 0.63, 0); rForearm.rotation.z = -0.04;
+  const rHand = lHand.clone(); rHand.position.set(0.22, 0.50, 0);
 
   // Legs
   const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
@@ -215,6 +224,7 @@ function buildPlayerMesh() {
   root.add(belt, lowerBody, upperBody, shoulderL, shoulderR, lapelL, lapelR, collar);
   root.add(neck, head, jaw, eyeSocketL, eyeSocketR, pupilL, pupilR, browL, browR, nose, mouth);
   root.add(hair, sideburns, sideburnsR, earL, earR);
+  root.add(hatBrim, hatCrown, hatBand);
   root.add(lUpperArm, lForearm, lHand, rUpperArm, rForearm, rHand);
   root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
 
@@ -678,15 +688,27 @@ function buildNightclubGeometry() {
     return true;
   });
 
+  // Bar stools — positioned in front of bar counter (counter face at z=7.3)
+  // Bar counter x range: -10.95 to -6.25. Five evenly-spaced stools.
+  const stoolSkinColors = [0xf0d4a8, 0xd4a878, 0xc89060, 0xf5e0c0, 0x9a6040];
+  const stoolOutfits = [0x1a1a3a, 0x3a1a0a, 0x0a2a1a, 0x2a0a2a, 0x1a2a3a];
   for (let i = 0; i < 5; i++) {
-    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 10),
+    const sx = -10.0 + i * 0.95; // spread within bar counter x range
+    // Stool seat
+    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.16, 0.06, 10),
       new THREE.MeshStandardMaterial({ color: 0x6a1a1a, roughness: 0.5 }));
-    stool.position.set(-7.2 + i * 0.9, 0.62, 7.0);
+    stool.position.set(sx, 0.96, 6.8);
     envGroup.add(stool);
-    const stoolLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.6, 6),
-      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.4 }));
-    stoolLeg.position.set(-7.2 + i * 0.9, 0.32, 7.0);
+    // Stool leg (tall, chrome-look)
+    const stoolLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.032, 0.94, 6),
+      new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.2 }));
+    stoolLeg.position.set(sx, 0.50, 6.8);
     envGroup.add(stoolLeg);
+    // Footrest ring
+    const footRest = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.012, 6, 12),
+      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 }));
+    footRest.position.set(sx, 0.36, 6.8); footRest.rotation.x = Math.PI / 2;
+    envGroup.add(footRest);
   }
 
   for (let i = 0; i < 8; i++) {
@@ -1047,8 +1069,33 @@ function buildNightclubCharacters() {
   charGroup.add(bartender);
   state.bartenderMesh = bartender;
   state.animations.push((dt, t) => {
-    bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.25;
+    // Bartender polishes glasses and leans, checks the room
+    bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.45;
+    bartender.rotation.x = Math.sin(t * 1.1) * 0.04;
+    if (bartender.children[0]) bartender.children[0].rotation.y += dt * 1.2; // polishing motion
     return true;
+  });
+
+  // ── Bar patrons (3 people on stools, nursing drinks) ──
+  const barPatronCfgs = [
+    { x: -10.0, skin: 0xf0c890, outfit: 0x2a1a0a, female: false },
+    { x:  -8.1, skin: 0xd0906a, outfit: 0x1a2a3a, female: true  },
+    { x:  -6.8, skin: 0xc08858, outfit: 0x0a1a2a, female: false  }
+  ];
+  barPatronCfgs.forEach((cfg, pi) => {
+    const patron = makePerson(cfg.skin, cfg.outfit, cfg.female);
+    patron.position.set(cfg.x, 0, 7.4); // standing right behind stool, bar hides lower body
+    patron.rotation.y = Math.PI; // facing bar
+    charGroup.add(patron);
+    state.animations.push((dt, t) => {
+      const ph = t * 0.9 + pi * 2.3;
+      // Slow lean forward to drink, lean back, glance sideways
+      patron.rotation.x = Math.sin(ph * 0.6) * 0.08;
+      patron.rotation.y = Math.PI + Math.sin(ph * 0.4) * 0.22;
+      // Head nod to music
+      if (patron.children.length) patron.children[0].rotation.x = Math.sin(t * 2.4 + pi) * 0.06;
+      return true;
+    });
   });
 
   // ── Amber Man (by the wall — leather jacket, biker cap, smoking) ──
