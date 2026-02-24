@@ -199,16 +199,16 @@ function buildPlayerMesh() {
   earL.position.set(-0.155, 1.3, 0); earL.scale.set(0.5, 1, 0.7);
   const earR = earL.clone(); earR.position.set(0.155, 1.3, 0);
 
-  // Arms — hang naturally; forearm pulls slightly inward to kill zigzag
+  // Arms — hang naturally; forearm center aligned to elbow joint position (no zigzag)
   const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.28, 8), suit);
   lUpperArm.position.set(-0.28, 0.88, 0); lUpperArm.rotation.z = 0.10;
   const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
-  lForearm.position.set(-0.24, 0.63, 0); lForearm.rotation.z = 0.04;
+  lForearm.position.set(-0.26, 0.62, 0); lForearm.rotation.z = 0.04;
   const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin);
-  lHand.position.set(-0.22, 0.50, 0);
+  lHand.position.set(-0.26, 0.50, 0);
   const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
-  const rForearm = lForearm.clone(); rForearm.position.set(0.24, 0.63, 0); rForearm.rotation.z = -0.04;
-  const rHand = lHand.clone(); rHand.position.set(0.22, 0.50, 0);
+  const rForearm = lForearm.clone(); rForearm.position.set(0.26, 0.62, 0); rForearm.rotation.z = -0.04;
+  const rHand = lHand.clone(); rHand.position.set(0.26, 0.50, 0);
 
   // Legs
   const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
@@ -587,6 +587,38 @@ function buildNightclubGeometry() {
   envGroup.add(makeBox(0, 0.08, 11.1, 25, 0.16, 0.12, 0x3a2a1e, 0.6));
   envGroup.add(makeBox(-12.0, 0.08, 0, 0.12, 0.16, 23, 0x3a2a1e, 0.6));
   envGroup.add(makeBox(12.0, 0.08, 0, 0.12, 0.16, 23, 0x3a2a1e, 0.6));
+
+  // ── Wall artifacts — noir atmosphere ──
+  // Neon "BAR" sign on left wall near entrance
+  const neonMat = new THREE.MeshStandardMaterial({ color: 0xff2244, emissive: 0xff1133, emissiveIntensity: 1.6, roughness: 0.3 });
+  const neonB = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.06), neonMat);
+  neonB.position.set(-11.9, 2.2, 4.0); envGroup.add(neonB);
+  const neonBarLight = new THREE.PointLight(0xff2244, 0.5, 4, 2);
+  neonBarLight.position.set(-11.5, 2.2, 4.0); fxGroup.add(neonBarLight);
+  state.animations.push((dt, t) => { neonBarLight.intensity = 0.4 + Math.sin(t * 5.3) * 0.14; return true; });
+  // Framed "WANTED" style poster on back wall (z=-11)
+  envGroup.add(makeBox(6.5, 1.9, -11.1, 0.9, 1.3, 0.06, 0x3a2c1a, 0.6));        // outer frame
+  envGroup.add(makeBox(6.5, 1.9, -11.08, 0.74, 1.1, 0.04, 0xe8dcc0, 0.9));       // paper
+  envGroup.add(makeBox(6.5, 2.12, -11.07, 0.58, 0.08, 0.03, 0x2a1a08, 0.7));     // "WANTED" text bar
+  envGroup.add(makeBox(6.5, 1.88, -11.07, 0.44, 0.42, 0.03, 0xb0a898, 0.7));     // face silhouette
+  envGroup.add(makeBox(6.5, 1.6,  -11.07, 0.56, 0.12, 0.03, 0x3a2a18, 0.7));     // fine print
+  // Small framed photo cluster — back wall left
+  [-2.0, -0.8, 0.4].forEach((px, i) => {
+    envGroup.add(makeBox(px, 2.1 + (i % 2) * 0.18, -11.1, 0.46, 0.36, 0.05, 0x1a1410, 0.7)); // frame
+    envGroup.add(makeBox(px, 2.1 + (i % 2) * 0.18, -11.08, 0.36, 0.28, 0.03, 0x8a9aaa, 0.5)); // photo
+  });
+  // Vintage poster on right wall — dining side
+  envGroup.add(makeBox(12.0, 2.2, -6.0, 0.06, 1.4, 1.0, 0x2a1a08, 0.7));    // frame
+  envGroup.add(makeBox(12.0, 2.2, -6.0, 0.04, 1.2, 0.85, 0xd4b870, 0.5));   // warm paper
+  envGroup.add(makeBox(12.0, 2.5, -6.0, 0.03, 0.12, 0.7, 0x3a1a0a, 0.7));   // title band
+  envGroup.add(makeBox(12.0, 2.1, -6.0, 0.03, 0.55, 0.65, 0x6a4a28, 0.6));  // illustration block
+  // "LIVE TONIGHT" neon-style text strip above stage
+  const liveMat = new THREE.MeshStandardMaterial({ color: 0xffdd44, emissive: 0xffbb00, emissiveIntensity: 1.4 });
+  const liveSign = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.32, 0.06), liveMat);
+  liveSign.position.set(-8.6, 3.38, -11.0); envGroup.add(liveSign);
+  const liveLight = new THREE.PointLight(0xffdd44, 0.45, 5, 2);
+  liveLight.position.set(-8.6, 3.2, -10.6); fxGroup.add(liveLight);
+  state.animations.push((dt, t) => { liveLight.intensity = 0.38 + Math.sin(t * 4.8) * 0.10; return true; });
 
   // ── Wainscoting — dark wood paneling, lower ~1m of walls ──
   envGroup.add(makeBox(0, 0.5, -11.05, 24.2, 1.0, 0.07, 0x251205, 0.75));   // back wall panel
@@ -1157,9 +1189,9 @@ function buildNightclubCharacters() {
     return true;
   });
 
-  // ── Bartender (standing behind bar) ──
+  // ── Bartender (standing behind bar) ── positioned between counter (z≈8.9) and back shelving (z≈9.4)
   const bartender = makePerson(0xf0d8b8, 0x191c24, false);
-  bartender.position.set(-8.5, 0, 7.1);
+  bartender.position.set(-8.5, 0, 8.5);
   bartender.rotation.y = Math.PI;
   charGroup.add(bartender);
   state.bartenderMesh = bartender;
@@ -1313,8 +1345,35 @@ function runDanceBeat() {
     state.playerCanMove = true;
     setObjective("A scream cuts the room. Enter the women's room.", "Move to the red restroom door and press A.");
     showDialogue("A scream silences the club. Glasses freeze in mid-air.", 3200);
-    scene.fog.color.setHex(0x151a23);
-    scene.fog.density = 0.045;
+    scene.fog.color.setHex(0x1a1a18);
+    scene.fog.density = 0.022;
+    // Music cuts dead
+    if (state.music && !state.music.paused) { state.music.pause(); }
+    // House lights slam up — harsh, fluorescent-cold
+    ambient.intensity = 3.8;
+    // Emergency flash: cold white strobe that fades slowly
+    const emergFlash = new THREE.PointLight(0xddeeff, 5.0, 20, 1);
+    emergFlash.position.set(0, 3.8, 0); fxGroup.add(emergFlash);
+    state.animations.push((dt, t) => {
+      emergFlash.intensity = Math.max(0, emergFlash.intensity - dt * 1.4);
+      return emergFlash.intensity > 0.05;
+    });
+    // All NPCs panic-flee toward exit (front door, z≈11)
+    charGroup.children.slice().forEach((npc, i) => {
+      let fled = false;
+      state.animations.push((dt, t) => {
+        if (fled) return false;
+        // Sprint toward front exit
+        npc.position.z += dt * (3.5 + i * 0.2);
+        npc.rotation.y = Math.PI; // face exit (+z)
+        // Run bob
+        npc.position.y = Math.abs(Math.sin(t * 10 + i * 0.9)) * 0.12;
+        if (npc.position.z > 13) { npc.visible = false; fled = true; return false; }
+        return true;
+      });
+    });
+    // Stop dance tiles flashing — glow dies to black
+    state.danceTiles.forEach((tile) => { tile.mesh.material.emissiveIntensity = 0; });
   }, 6000);
 }
 
@@ -1342,7 +1401,7 @@ function loadBathroomScene() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person — no visible player body
 
   state.cameraBounds = { minX: -6.5, maxX: 6.5, minZ: -5.5, maxZ: 5.5, maxY: 4.5 };
   state.worldBounds = { minX: -6, maxX: 6, minZ: -5, maxZ: 5 };
@@ -1376,14 +1435,16 @@ function loadBathroomScene() {
     new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 }));
   faucet.position.set(-0.5, 1.06, 4.69); envGroup.add(faucet);
 
-  // Mirror with slight tarnished reflection — cracked in corner
+  // Mirror on back wall — flush against wall (z≈5.82), faces player
   const mirror = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 1.6),
     new THREE.MeshStandardMaterial({ color: 0x9aaccc, roughness: 0.12, metalness: 0.88 }));
-  mirror.position.set(-1.1, 1.66, 4.21); envGroup.add(mirror);
+  mirror.position.set(-1.1, 1.66, 5.78); mirror.rotation.y = Math.PI; envGroup.add(mirror);
+  // Mirror frame
+  envGroup.add(makeBox(-1.1, 1.66, 5.81, 5.7, 1.8, 0.05, 0x2a1a10, 0.6));
   // Mirror crack detail
   const crack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.01),
     new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }));
-  crack.position.set(1.6, 2.18, 4.22); crack.rotation.z = 0.55; envGroup.add(crack);
+  crack.position.set(1.6, 2.18, 5.77); crack.rotation.z = 0.55; envGroup.add(crack);
 
   // Stall partition
   envGroup.add(makeBox(2.8, 1.3, -2.7, 4.4, 2.6, 0.3, 0x27303f, 0.75));
@@ -1899,28 +1960,98 @@ function loadMotelExterior() {
 
   dom.hudLocation.textContent = "Motel";
 
-  scene.fog = new THREE.FogExp2(0x0a0e14, 0.012);
-  renderer.setClearColor(0x060a10, 1);
-  ambient.intensity = 1.0;
+  scene.fog = new THREE.FogExp2(0x06090f, 0.004); // thin fog — open world feel
+  renderer.setClearColor(0x04060e, 1); // deep night sky
+  ambient.intensity = 0.9;
 
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.95 }));
+  // Sky backdrop — large vertical plane simulating night sky depth
+  const skyBg = new THREE.Mesh(new THREE.PlaneGeometry(120, 40),
+    new THREE.MeshBasicMaterial({ color: 0x06080f }));
+  skyBg.position.set(0, 10, -28); envGroup.add(skyBg);
+  // Horizon glow band — city light bleed on the horizon
+  const horizonA = new THREE.Mesh(new THREE.PlaneGeometry(120, 3),
+    new THREE.MeshBasicMaterial({ color: 0x18102a }));
+  horizonA.position.set(0, 1.0, -26); envGroup.add(horizonA);
+  const horizonB = new THREE.Mesh(new THREE.PlaneGeometry(120, 1.5),
+    new THREE.MeshBasicMaterial({ color: 0x2a1830 }));
+  horizonB.position.set(0, 0.6, -24); envGroup.add(horizonB);
+  // Distant city silhouette — row of dark boxes
+  [-22, -16, -8, 4, 12, 20].forEach((bx, i) => {
+    const h = 1.5 + (i * 0.7) % 3.0;
+    envGroup.add(makeBox(bx, h * 0.5, -22, 2.0 + (i % 3) * 0.8, h, 0.5, 0x0c0a12, 0.95));
+  });
+  // Stars — small bright points scattered in sky
+  for (let i = 0; i < 40; i++) {
+    const star = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    star.position.set(-40 + i * 2.1 + (i % 3) * 1.4, 6 + (i % 5) * 1.8, -24 - (i % 4) * 1.2);
+    envGroup.add(star);
+  }
+
+  // Ground — extended for open feel
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x181a1c, roughness: 0.95 }));
   gnd.rotation.x = -Math.PI / 2; envGroup.add(gnd);
-  const sw = new THREE.Mesh(new THREE.PlaneGeometry(36, 2.5), new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.85 }));
+  const sw = new THREE.Mesh(new THREE.PlaneGeometry(36, 2.5), new THREE.MeshStandardMaterial({ color: 0x262828, roughness: 0.85 }));
   sw.rotation.x = -Math.PI / 2; sw.position.set(0, 0.02, -3.5); envGroup.add(sw);
-  envGroup.add(makeBox(0, 1.8, -5.8, 36, 3.6, 1.4, 0x2a2420, 0.8));
+  // Motel facade — taller for presence
+  envGroup.add(makeBox(0, 2.2, -5.8, 36, 4.4, 1.4, 0x2a2420, 0.8));
+  // Roof edge trim
+  envGroup.add(makeBox(0, 4.45, -5.2, 36.4, 0.14, 0.22, 0x3a3028, 0.6));
+
+  // ── Tall MOTEL neon sign — centred, rises above roofline ──
+  envGroup.add(makeBox(0, 6.5, -5.4, 0.22, 10, 0.22, 0x3a3a3a, 0.5));          // pole
+  envGroup.add(makeBox(0, 12.0, -5.4, 7.8, 2.6, 0.32, 0x160808, 0.4));          // sign board
+  // MOTEL letters — bright red neon tubes
+  const motelNeonMat = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff1020, emissiveIntensity: 2.0, roughness: 0.25 });
+  [-2.4, -1.2, 0.0, 1.2, 2.4].forEach((lx) => {
+    const tube = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.6, 0.08), motelNeonMat);
+    tube.position.set(lx, 12.0, -5.28); envGroup.add(tube);
+  });
+  const signGlow = new THREE.PointLight(0xff2030, 1.8, 18, 2);
+  signGlow.position.set(0, 12.0, -4.8); fxGroup.add(signGlow);
+  state.animations.push((dt, t) => {
+    signGlow.intensity = 1.6 + Math.sin(t * 4.8) * 0.25;
+    return true;
+  });
+  // Small "VACANCY" sign below — green
+  const vacMat = new THREE.MeshStandardMaterial({ color: 0x22ff44, emissive: 0x11cc33, emissiveIntensity: 1.4 });
+  const vacSign = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.42, 0.08), vacMat);
+  vacSign.position.set(0, 10.6, -5.28); envGroup.add(vacSign);
+  const vacGlow = new THREE.PointLight(0x22ff44, 0.6, 8, 2);
+  vacGlow.position.set(0, 10.6, -4.8); fxGroup.add(vacGlow);
 
   // Parking-lot sodium fill lights
   [-10, -4, 2, 8].forEach((lx) => {
     const pl = new THREE.PointLight(0xffd090, 0.55, 10, 2); pl.position.set(lx, 3.2, 0); fxGroup.add(pl);
   });
+  // Room doors + sconces (rooms 1–12)
   for (let i = 0; i < 12; i++) {
     const x = -14 + i * 2.3;
     envGroup.add(makeDoor(x, -5.0, (i === 2) ? 0x5a4a30 : 0x3a2e1e));
-    const nl = new THREE.PointLight(0xffe8c0, 0.18, 2.5, 2); nl.position.set(x, 2.6, -4.8); fxGroup.add(nl);
+    // Sconce bracket above each door
+    envGroup.add(makeBox(x, 3.8, -5.05, 0.18, 0.22, 0.12, 0x5a5040, 0.5));   // bracket
+    const bulbGeo = new THREE.SphereGeometry(0.055, 6, 6);
+    const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffee99, emissive: 0xffcc66, emissiveIntensity: (i === 5 || i === 9) ? 0 : 1.0 }); // rooms 6 & 10 broken (dark)
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(x, 3.62, -4.9); envGroup.add(bulb);
+    const nl = new THREE.PointLight(0xffe8c0, (i === 5 || i === 9) ? 0 : 0.22, 3.0, 2);
+    nl.position.set(x, 3.5, -4.7); fxGroup.add(nl);
   }
+  // Room 13 — dedicated sconce that blinks
   const r13x = 14;
   envGroup.add(makeDoor(r13x, -5.0, 0x5a4a30));
-  const r13l = new THREE.PointLight(0xffe8c0, 0.12, 1.5, 2); r13l.position.set(r13x, 2.6, -4.8); fxGroup.add(r13l);
+  envGroup.add(makeBox(r13x, 3.8, -5.05, 0.18, 0.22, 0.12, 0x5a5040, 0.5));
+  const r13Bulb = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6),
+    new THREE.MeshStandardMaterial({ color: 0xffee99, emissive: 0xffcc66, emissiveIntensity: 1.0 }));
+  r13Bulb.position.set(r13x, 3.62, -4.9); envGroup.add(r13Bulb);
+  const r13l = new THREE.PointLight(0xffe8c0, 0.22, 3.0, 2);
+  r13l.position.set(r13x, 3.5, -4.7); fxGroup.add(r13l);
+  // Room 13 blinks ominously
+  state.animations.push((dt, t) => {
+    const on = Math.sin(t * 3.4) > 0.1 || (Math.sin(t * 7.1) > 0.6);
+    r13l.intensity = on ? 0.22 : 0;
+    r13Bulb.material.emissiveIntensity = on ? 1.0 : 0;
+    return true;
+  });
 
   // Office building — with interior visible through door
   envGroup.add(makeBox(-17, 1.8, -4, 2.8, 3.6, 4, 0x2e2820, 0.7));
@@ -2591,6 +2722,21 @@ function updateAnimations(delta, elapsed) {
 
 function updateCamera(delta) {
   if (state.sceneType === "driving") return;
+
+  // First-person view in bathroom/mensroom scenes
+  if (state.phase === "bathroom" || state.phase === "mensroom") {
+    const eyeX = state.player.pos.x;
+    const eyeY = state.player.pos.y + 1.02;
+    const eyeZ = state.player.pos.z;
+    const fwdX = Math.sin(state.player.yaw);
+    const fwdZ = Math.cos(state.player.yaw);
+    tempA.set(eyeX, eyeY, eyeZ);
+    camera.position.lerp(tempA, 1 - Math.exp(-delta * 14));
+    tempB.set(eyeX + fwdX * 5, eyeY - 0.04, eyeZ + fwdZ * 5);
+    camera.lookAt(tempB);
+    return;
+  }
+
   let desired, lerpSpeed;
   // Fixed isometric-style offset — camera never spins, just follows position.
   // Offset: slightly right and well behind/above. Good for the nightclub layout.
@@ -2806,16 +2952,16 @@ function makePerson(skin, outfit, female) {
     const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.015, 0.2, 6), hm);
     hairSideL.position.set(-0.1, 0.98, 0.02);
     const hairSideR = hairSideL.clone(); hairSideR.position.set(0.1, 0.98, 0.02);
-    // Arms (bare skin) — hang at sides; forearm inward from elbow (no zigzag)
+    // Arms (bare skin) — forearm aligned to elbow joint for clean hang (no zigzag)
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.24, 8), sm);
     la.position.set(-0.17, 0.72, 0); la.rotation.z = 0.10;
     const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.2, 8), sm);
-    lfa.position.set(-0.14, 0.51, 0); lfa.rotation.z = 0.04;
+    lfa.position.set(-0.16, 0.50, 0); lfa.rotation.z = 0.04;
     const lh = new THREE.Mesh(new THREE.SphereGeometry(0.020, 6, 6), sm);
-    lh.position.set(-0.13, 0.40, 0);
+    lh.position.set(-0.15, 0.40, 0);
     const ra = la.clone(); ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
-    const rfa = lfa.clone(); rfa.position.set(0.14, 0.51, 0); rfa.rotation.z = -0.04;
-    const rh = lh.clone(); rh.position.set(0.13, 0.40, 0);
+    const rfa = lfa.clone(); rfa.position.set(0.16, 0.50, 0); rfa.rotation.z = -0.04;
+    const rh = lh.clone(); rh.position.set(0.15, 0.40, 0);
     // Legs under skirt
     const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.2, 8), sm);
     lt.position.set(-0.06, 0.06, 0);
@@ -2840,16 +2986,16 @@ function makePerson(skin, outfit, female) {
     // Hair
     const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.135, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.48), hm);
     hairCap.position.y = 1.1;
-    // Arms — hang naturally at sides; forearm pulls slightly inward from elbow (no zigzag)
+    // Arms — forearm center placed at elbow joint for straight hang (no zigzag)
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.030, 0.22, 8), om);
     la.position.set(-0.20, 0.76, 0); la.rotation.z = 0.10;
     const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.22, 8), om);
-    lfa.position.set(-0.17, 0.55, 0); lfa.rotation.z = 0.04;
+    lfa.position.set(-0.19, 0.54, 0); lfa.rotation.z = 0.04;
     const lh = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), sm);
-    lh.position.set(-0.16, 0.43, 0);
+    lh.position.set(-0.19, 0.43, 0);
     const ra = la.clone(); ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
-    const rfa = lfa.clone(); rfa.position.set(0.17, 0.55, 0); rfa.rotation.z = -0.04;
-    const rh = lh.clone(); rh.position.set(0.16, 0.43, 0);
+    const rfa = lfa.clone(); rfa.position.set(0.19, 0.54, 0); rfa.rotation.z = -0.04;
+    const rh = lh.clone(); rh.position.set(0.19, 0.43, 0);
     // Legs — slight A-stance angle for natural standing pose
     const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.042, 0.22, 8), pm);
     lt.position.set(-0.07, 0.30, 0); lt.rotation.z = -0.06;
