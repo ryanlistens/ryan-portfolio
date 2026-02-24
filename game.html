@@ -1491,8 +1491,6 @@ function drawNPC(npc) {
     const s = 2;
 
     // Pipe manager animations based on pipe stress level
-    let paceOffset = 0;
-    let jumpOffset = 0;
     let isJumping = false;
     let isPacing = false;
     if(npc.needsDoc) {
@@ -1510,14 +1508,12 @@ function drawNPC(npc) {
         if(pct >= 0.66) {
             // About to burst - jumping up and down frantically
             isJumping = true;
-            jumpOffset = -Math.abs(Math.sin(Date.now() / 80)) * 16;
+            y += -Math.abs(Math.sin(Date.now() / 80)) * 16;
         } else if(pct > 0) {
             // Pipe starting to swell - pacing back and forth
             isPacing = true;
-            paceOffset = Math.sin(Date.now() / 250) * 12;
+            x += Math.sin(Date.now() / 250) * 12;
         }
-        x += paceOffset;
-        y += jumpOffset;
     }
 
     // Shadow stays on ground (uses npc.x, not animated x)
@@ -1526,59 +1522,68 @@ function drawNPC(npc) {
     ctx.ellipse(npc.x, npc.y + 32, 10, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // Hat
     ctx.fillStyle = npc.color.hex;
     ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
 
+    // Head
     ctx.fillStyle = '#f5c89a';
     ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
 
+    // Face
     ctx.fillStyle = '#000';
-    if(npc.state === 'stressed') {
+    if(npc.state === 'stressed' && !isPacing && !isJumping) {
         ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
         ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
         ctx.fillRect(x - s, y - 7*s, 2*s, s);
         ctx.fillStyle = '#f5c89a';
         ctx.fillRect(x - 8*s, y - 9*s, 3*s, 4*s);
+    } else if(isPacing || isJumping) {
+        // Worried face during animations (no static hand)
+        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
+        ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
+        ctx.fillRect(x - s, y - 7*s, 2*s, s);
     } else {
         ctx.fillRect(x - 3*s, y - 10*s, 2*s, 2*s);
         ctx.fillRect(x + s, y - 10*s, 2*s, 2*s);
         ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
     }
 
+    // Torso
     ctx.fillStyle = npc.color.hex;
     ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
-    // Arms swing when pacing, flail when jumping
+
     if(isPacing) {
-        const armSwing = Math.sin(Date.now() / 125) * 4;
-        ctx.fillRect(x - 8*s, y - 3*s + armSwing, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 3*s - armSwing, 2*s, 7*s);
+        // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
+        const stride = Math.sin(Date.now() / 125) * 3;
+        // Arms — shift horizontally with stride, anchored to torso
+        ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
+        // Legs — opposite horizontal stride
+        ctx.fillRect(x - 5*s - stride, y + 6*s, 4*s, 7*s);
+        ctx.fillRect(x + s + stride, y + 6*s, 4*s, 7*s);
+        // Shoes follow legs
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 5*s - stride, y + 13*s, 4*s, 3*s);
+        ctx.fillRect(x + s + stride, y + 13*s, 4*s, 3*s);
     } else if(isJumping) {
-        const armFlail = Math.sin(Date.now() / 60) * 6;
-        ctx.fillRect(x - 8*s, y - 5*s + armFlail, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 5*s - armFlail, 2*s, 7*s);
-    } else {
-        ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
-    }
-    // Legs animate when pacing or jumping
-    if(isPacing) {
-        const legSwing = Math.sin(Date.now() / 125) * 3;
-        ctx.fillRect(x - 5*s, y + 6*s + legSwing, 4*s, 7*s);
-        ctx.fillRect(x + s, y + 6*s - legSwing, 4*s, 7*s);
-    } else if(isJumping) {
-        // Legs tucked up slightly when airborne
-        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 5*s);
-        ctx.fillRect(x + s, y + 6*s, 4*s, 5*s);
-    } else {
+        // Jumping: everything moves with y offset, arms raised up
+        ctx.fillRect(x - 9*s, y - 6*s, 2*s, 6*s);
+        ctx.fillRect(x + 7*s, y - 6*s, 2*s, 6*s);
+        // Legs together underneath
         ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
         ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
-    }
-
-    ctx.fillStyle = '#fff';
-    if(isJumping) {
-        ctx.fillRect(x - 5*s, y + 11*s, 4*s, 3*s);
-        ctx.fillRect(x + s, y + 11*s, 4*s, 3*s);
+        // Shoes
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+        ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
     } else {
+        // Static pose
+        ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+        ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+        ctx.fillStyle = '#fff';
         ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
         ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
     }
