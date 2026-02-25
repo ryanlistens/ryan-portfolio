@@ -211,28 +211,31 @@ function buildPlayerMesh() {
   const rUpperArm = lUpperArm.clone();  // deep-clones rForearm and rHand as children
   rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
 
-  // Legs
+  // Legs — proper hierarchy: shin/shoe follow thigh, with knee bend during walk
   const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
   lThigh.position.set(-0.09, 0.32, 0);
   const lShin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.26, 8), pants);
-  lShin.position.set(-0.09, 0.08, 0);
-  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.15), shoe);
-  lShoe.position.set(-0.09, -0.02, 0.02);
-  const rThigh = lThigh.clone(); rThigh.position.set(0.09, 0.32, 0);
-  const rShin = lShin.clone(); rShin.position.set(0.09, 0.08, 0);
-  const rShoe = lShoe.clone(); rShoe.position.set(0.09, -0.02, 0.02);
+  lShin.position.set(0, -0.27, 0);  // in lThigh local: knee(0.14) + shin_half(0.13)
+  lThigh.add(lShin);
+  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.055, 0.17), shoe);
+  lShoe.position.set(0, -0.425, 0.022);  // in lThigh local: 0.14 + 0.26 + 0.025
+  lThigh.add(lShoe);
+  const rThigh = lThigh.clone();  // deep-clones rShin and rShoe as children
+  rThigh.position.set(0.09, 0.32, 0);
 
   root.add(belt, lowerBody, upperBody, shoulderL, shoulderR, lapelL, lapelR, collar);
   root.add(neck, head, jaw, eyeSocketL, eyeSocketR, pupilL, pupilR, browL, browR, nose, mouth);
   root.add(hair, sideburns, sideburnsR, earL, earR);
   root.add(hatBrim, hatCrown, hatBand);
   root.add(lUpperArm, rUpperArm);  // forearms/hands are children of upper arms
-  root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
+  root.add(lThigh, rThigh);         // shins/shoes are children of thighs
 
   state.player.mesh = root;
   state.player.body = upperBody;
   state.player.leftLeg = lThigh;
   state.player.rightLeg = rThigh;
+  state.player.leftShin = lShin;
+  state.player.rightShin = rThigh.children[0];  // cloned rShin
   state.player.leftArm = lUpperArm;
   state.player.rightArm = rUpperArm;
   root.position.copy(state.player.pos);
@@ -1091,9 +1094,11 @@ function buildNightclubCharacters() {
     { x: -9.0, z: -7.7, skin: 0xe8d0a8, dress: 0x4488ff },
     { x: -7.2, z: -7.7, skin: 0x7a4a28, dress: 0xcc44aa }
   ];
+  const heightVariants = [0.92, 1.0, 0.88, 1.06, 0.96, 1.03, 0.90, 1.08];
   dancerConfigs.forEach((dc, i) => {
     const dancer = makePerson(dc.skin, dc.dress, i % 2 === 0);
     dancer.position.set(dc.x, 0, dc.z);
+    dancer.scale.setScalar(heightVariants[i % heightVariants.length]);
     charGroup.add(dancer);
     state.animations.push((dt, t) => {
       if (state.phase === "scream" || state.phase === "aftermath") return false;
@@ -1116,10 +1121,12 @@ function buildNightclubCharacters() {
     const woman = makePerson(cfg.wSkin, cfg.wDress, true);
     woman.position.set(cfg.tx - 0.85, 0.5, cfg.tz);
     woman.rotation.y = Math.PI / 2; // facing right (toward man)
+    woman.scale.setScalar(0.88 + idx * 0.06);  // slight height variety
     // Leisure suit man with open-chest shirt detail
     const man = makePerson(cfg.mSkin, cfg.mSuit, false);
     man.position.set(cfg.tx + 0.85, 0.5, cfg.tz);
     man.rotation.y = -Math.PI / 2; // facing left (toward woman)
+    man.scale.setScalar(0.95 + idx * 0.05);
     // Wide lapels
     const lapelMat = new THREE.MeshStandardMaterial({ color: darkenColor(cfg.mSuit, 0.78), roughness: 0.55 });
     const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.22, 0.04), lapelMat);
@@ -1358,8 +1365,9 @@ function runDanceBeat() {
       emergFlash.intensity = Math.max(0, emergFlash.intensity - dt * 1.4);
       return emergFlash.intensity > 0.05;
     });
-    // All NPCs panic-flee toward exit (front door, z≈11)
+    // All NPCs panic-flee toward exit (front door, z≈11) — skip the player
     charGroup.children.slice().forEach((npc, i) => {
+      if (npc === state.player.mesh) return;
       let fled = false;
       state.animations.push((dt, t) => {
         if (fled) return false;
@@ -1398,7 +1406,7 @@ function loadBathroomScene() {
   state.playerCanMove = true;
   state.player.seated = false;
   state.player.pos.set(-2.6, 0, 2.0);
-  state.player.yaw = 0; // face +z toward mirror and sink
+  state.player.yaw = Math.PI; // face -z toward crime scene (body at z=-2.5)
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
   state.player.mesh.visible = false; // first-person — no visible player body
@@ -2647,6 +2655,8 @@ function updatePlayer(delta, elapsed) {
     // Smoothly return limbs to idle when stopping
     if (state.player.leftLeg) state.player.leftLeg.rotation.x *= 0.85;
     if (state.player.rightLeg) state.player.rightLeg.rotation.x *= 0.85;
+    if (state.player.leftShin) state.player.leftShin.rotation.x *= 0.85;
+    if (state.player.rightShin) state.player.rightShin.rotation.x *= 0.85;
     if (state.player.leftArm) state.player.leftArm.rotation.x *= 0.85;
     if (state.player.rightArm) state.player.rightArm.rotation.x *= 0.85;
     // Gentle idle breathing bob
@@ -2654,7 +2664,7 @@ function updatePlayer(delta, elapsed) {
     return;
   }
   tempA.normalize();
-  const speed = state.player.seated ? 0 : 3.2;
+  const speed = state.player.seated ? 0 : 4.2;
   const trialX = state.player.pos.x + tempA.x * speed * delta;
   const trialZ = state.player.pos.z + tempA.z * speed * delta;
   if (canMoveTo(trialX, state.player.pos.z)) state.player.pos.x = trialX;
@@ -2676,14 +2686,16 @@ function updatePlayer(delta, elapsed) {
   // Walk bob - subtle vertical movement above current floor level
   state.player.mesh.position.y = state.player.pos.y + Math.abs(Math.sin(elapsed * 8.0)) * 0.018;
 
-  // Natural walk cycle - legs and arms swing with smooth sine
-  const wp = Math.sin(elapsed * 8.5) * 0.32;
+  // Natural walk cycle — thigh swings, shin bends at knee (opposite direction = knee lift)
+  const wp = Math.sin(elapsed * 9.0) * 0.38;
   if (state.player.leftLeg) state.player.leftLeg.rotation.x = wp;
   if (state.player.rightLeg) state.player.rightLeg.rotation.x = -wp;
+  if (state.player.leftShin) state.player.leftShin.rotation.x = -Math.max(0, wp) * 0.65;
+  if (state.player.rightShin) state.player.rightShin.rotation.x = -Math.max(0, -wp) * 0.65;
   if (state.player.leftArm) state.player.leftArm.rotation.x = -wp * 0.45;
   if (state.player.rightArm) state.player.rightArm.rotation.x = wp * 0.45;
   // Subtle body tilt while walking
-  if (state.player.body) state.player.body.rotation.z = Math.sin(elapsed * 8.5) * 0.015;
+  if (state.player.body) state.player.body.rotation.z = Math.sin(elapsed * 9.0) * 0.018;
 }
 
 function canMoveTo(x, z) {
