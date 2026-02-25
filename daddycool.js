@@ -184,22 +184,32 @@ function buildPlayerMesh() {
   const sideburns = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.06, 0.03), hairMat);
   sideburns.position.set(-0.14, 1.28, 0.02);
   const sideburnsR = sideburns.clone(); sideburnsR.position.set(0.14, 1.28, 0.02);
+  // Fedora hat — the detective's calling card
+  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.55 });
+  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.24, 0.03, 16), hatMat);
+  hatBrim.position.y = 1.41;
+  const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.165, 0.19, 14), hatMat);
+  hatCrown.position.y = 1.535;
+  const hatBand = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.04, 14),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a0e, roughness: 0.5 }));
+  hatBand.position.y = 1.435;
 
   // Ears
   const earL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), skin);
   earL.position.set(-0.155, 1.3, 0); earL.scale.set(0.5, 1, 0.7);
   const earR = earL.clone(); earR.position.set(0.155, 1.3, 0);
 
-  // Arms
-  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.28, 8), suit);
-  lUpperArm.position.set(-0.3, 0.88, 0); lUpperArm.rotation.z = 0.1;
+  // Arms — proper parent-child hierarchy so forearm/hand follow upper arm during walk animation
+  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.28, 8), suit);
+  lUpperArm.position.set(-0.28, 0.88, 0); lUpperArm.rotation.z = 0.10;
   const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
-  lForearm.position.set(-0.34, 0.63, 0);
+  lForearm.position.set(0, -0.26, 0);  // in lUpperArm local: half_upper(0.14) + half_fore(0.12)
+  lUpperArm.add(lForearm);
   const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin);
-  lHand.position.set(-0.34, 0.5, 0);
-  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.3, 0.88, 0); rUpperArm.rotation.z = -0.1;
-  const rForearm = lForearm.clone(); rForearm.position.set(0.34, 0.63, 0);
-  const rHand = lHand.clone(); rHand.position.set(0.34, 0.5, 0);
+  lHand.position.set(0, -0.415, 0);  // in lUpperArm local: 0.14 + 0.24 + 0.035
+  lUpperArm.add(lHand);
+  const rUpperArm = lUpperArm.clone();  // deep-clones rForearm and rHand as children
+  rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
 
   // Legs
   const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
@@ -215,7 +225,8 @@ function buildPlayerMesh() {
   root.add(belt, lowerBody, upperBody, shoulderL, shoulderR, lapelL, lapelR, collar);
   root.add(neck, head, jaw, eyeSocketL, eyeSocketR, pupilL, pupilR, browL, browR, nose, mouth);
   root.add(hair, sideburns, sideburnsR, earL, earR);
-  root.add(lUpperArm, lForearm, lHand, rUpperArm, rForearm, rHand);
+  root.add(hatBrim, hatCrown, hatBand);
+  root.add(lUpperArm, rUpperArm);  // forearms/hands are children of upper arms
   root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
 
   state.player.mesh = root;
@@ -578,6 +589,98 @@ function buildNightclubGeometry() {
   envGroup.add(makeBox(-12.0, 0.08, 0, 0.12, 0.16, 23, 0x3a2a1e, 0.6));
   envGroup.add(makeBox(12.0, 0.08, 0, 0.12, 0.16, 23, 0x3a2a1e, 0.6));
 
+  // ── Wall artifacts — noir atmosphere ──
+  // Neon "BAR" sign on left wall near entrance
+  const neonMat = new THREE.MeshStandardMaterial({ color: 0xff2244, emissive: 0xff1133, emissiveIntensity: 1.6, roughness: 0.3 });
+  const neonB = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.06), neonMat);
+  neonB.position.set(-11.9, 2.2, 4.0); envGroup.add(neonB);
+  const neonBarLight = new THREE.PointLight(0xff2244, 0.5, 4, 2);
+  neonBarLight.position.set(-11.5, 2.2, 4.0); fxGroup.add(neonBarLight);
+  state.animations.push((dt, t) => { neonBarLight.intensity = 0.4 + Math.sin(t * 5.3) * 0.14; return true; });
+  // Framed "WANTED" style poster on back wall (z=-11)
+  envGroup.add(makeBox(6.5, 1.9, -11.1, 0.9, 1.3, 0.06, 0x3a2c1a, 0.6));        // outer frame
+  envGroup.add(makeBox(6.5, 1.9, -11.08, 0.74, 1.1, 0.04, 0xe8dcc0, 0.9));       // paper
+  envGroup.add(makeBox(6.5, 2.12, -11.07, 0.58, 0.08, 0.03, 0x2a1a08, 0.7));     // "WANTED" text bar
+  envGroup.add(makeBox(6.5, 1.88, -11.07, 0.44, 0.42, 0.03, 0xb0a898, 0.7));     // face silhouette
+  envGroup.add(makeBox(6.5, 1.6,  -11.07, 0.56, 0.12, 0.03, 0x3a2a18, 0.7));     // fine print
+  // Small framed photo cluster — back wall left
+  [-2.0, -0.8, 0.4].forEach((px, i) => {
+    envGroup.add(makeBox(px, 2.1 + (i % 2) * 0.18, -11.1, 0.46, 0.36, 0.05, 0x1a1410, 0.7)); // frame
+    envGroup.add(makeBox(px, 2.1 + (i % 2) * 0.18, -11.08, 0.36, 0.28, 0.03, 0x8a9aaa, 0.5)); // photo
+  });
+  // Vintage poster on right wall — dining side
+  envGroup.add(makeBox(12.0, 2.2, -6.0, 0.06, 1.4, 1.0, 0x2a1a08, 0.7));    // frame
+  envGroup.add(makeBox(12.0, 2.2, -6.0, 0.04, 1.2, 0.85, 0xd4b870, 0.5));   // warm paper
+  envGroup.add(makeBox(12.0, 2.5, -6.0, 0.03, 0.12, 0.7, 0x3a1a0a, 0.7));   // title band
+  envGroup.add(makeBox(12.0, 2.1, -6.0, 0.03, 0.55, 0.65, 0x6a4a28, 0.6));  // illustration block
+  // "LIVE TONIGHT" neon-style text strip above stage
+  const liveMat = new THREE.MeshStandardMaterial({ color: 0xffdd44, emissive: 0xffbb00, emissiveIntensity: 1.4 });
+  const liveSign = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.32, 0.06), liveMat);
+  liveSign.position.set(-8.6, 3.38, -11.0); envGroup.add(liveSign);
+  const liveLight = new THREE.PointLight(0xffdd44, 0.45, 5, 2);
+  liveLight.position.set(-8.6, 3.2, -10.6); fxGroup.add(liveLight);
+  state.animations.push((dt, t) => { liveLight.intensity = 0.38 + Math.sin(t * 4.8) * 0.10; return true; });
+
+  // ── Wainscoting — dark wood paneling, lower ~1m of walls ──
+  envGroup.add(makeBox(0, 0.5, -11.05, 24.2, 1.0, 0.07, 0x251205, 0.75));   // back wall panel
+  envGroup.add(makeBox(0, 1.02, -11.05, 24.2, 0.05, 0.09, 0x4a2c12, 0.35)); // back wall cap rail
+  envGroup.add(makeBox(11.95, 0.5, 0, 0.07, 1.0, 22.4, 0x251205, 0.75));    // right wall panel
+  envGroup.add(makeBox(11.95, 1.02, 0, 0.09, 0.05, 22.4, 0x4a2c12, 0.35));  // right wall cap rail
+  envGroup.add(makeBox(0, 0.5, 11.05, 24.2, 1.0, 0.07, 0x251205, 0.75));    // front wall panel
+  envGroup.add(makeBox(0, 1.02, 11.05, 24.2, 0.05, 0.09, 0x4a2c12, 0.35));  // front wall cap rail
+
+  // ── Wall sconces — warm amber brass fixtures ──
+  const sconceMat = new THREE.MeshStandardMaterial({ color: 0x8a6028, metalness: 0.58, roughness: 0.38 });
+  const sconceGlowMat = new THREE.MeshStandardMaterial({ color: 0xffee88, emissive: 0xffcc44, emissiveIntensity: 0.95 });
+  // Back wall sconces (z=-11.3), 3 fixtures
+  [-5.5, 0.5, 6.0].forEach((sx, si) => {
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.07), sconceMat);
+    plate.position.set(sx, 2.04, -11.06); envGroup.add(plate);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.2, 6), sconceMat);
+    arm.rotation.x = Math.PI / 2; arm.position.set(sx, 2.08, -10.9); envGroup.add(arm);
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.09, 0.13, 8), sconceMat);
+    shade.position.set(sx, 2.05, -10.78); envGroup.add(shade);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.036, 6, 6), sconceGlowMat);
+    bulb.position.set(sx, 1.99, -10.78); envGroup.add(bulb);
+    const sconceLight = new THREE.PointLight(0xffbb66, 0.44, 6.0, 2);
+    sconceLight.position.set(sx, 1.95, -10.5); fxGroup.add(sconceLight);
+    state.animations.push((dt, t) => { sconceLight.intensity = 0.40 + Math.sin(t * 5.8 + si * 2.1) * 0.06; return true; });
+  });
+  // Right wall sconces (x=12.2), 3 fixtures — dining/booth side
+  [-4.2, 0.3, 5.0].forEach((sz, si) => {
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.26, 0.22), sconceMat);
+    plate.position.set(11.95, 2.04, sz); envGroup.add(plate);
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.09, 0.13, 8), sconceMat);
+    shade.rotation.z = Math.PI / 2; shade.position.set(11.77, 2.05, sz); envGroup.add(shade);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.036, 6, 6), sconceGlowMat);
+    bulb.position.set(11.77, 1.99, sz); envGroup.add(bulb);
+    const sconceLight = new THREE.PointLight(0xffbb66, 0.40, 5.5, 2);
+    sconceLight.position.set(11.55, 1.94, sz); fxGroup.add(sconceLight);
+    state.animations.push((dt, t) => { sconceLight.intensity = 0.36 + Math.sin(t * 6.2 + si * 1.8) * 0.05; return true; });
+  });
+  // Left wall sconces (x=-12.2), 2 fixtures near bar and stage
+  [-2.5, -7.5].forEach((sz, si) => {
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.26, 0.22), sconceMat);
+    plate.position.set(-11.95, 2.04, sz); envGroup.add(plate);
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.09, 0.13, 8), sconceMat);
+    shade.rotation.z = -Math.PI / 2; shade.position.set(-11.77, 2.05, sz); envGroup.add(shade);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.036, 6, 6), sconceGlowMat);
+    bulb.position.set(-11.77, 1.99, sz); envGroup.add(bulb);
+    const sconceLight = new THREE.PointLight(0xffbb66, 0.34, 5.0, 2);
+    sconceLight.position.set(-11.55, 1.94, sz); fxGroup.add(sconceLight);
+    state.animations.push((dt, t) => { sconceLight.intensity = 0.30 + Math.sin(t * 5.4 + si * 2.4) * 0.05; return true; });
+  });
+
+  // ── Banquette booth seating along right wall (dining platform side) ──
+  // Deep crimson velvet bench: seat at x≈11.3, back panel against right wall
+  envGroup.add(makeBox(11.35, 0.63, 0.3, 1.1, 0.14, 13.4, 0x7a1618, 0.86));   // seat cushion
+  envGroup.add(makeBox(11.78, 1.05, 0.3, 0.36, 0.9, 13.4, 0x5e1215, 0.88));   // seat back
+  envGroup.add(makeBox(10.81, 0.63, 0.3, 0.06, 0.16, 13.4, 0x5a1018, 0.9));   // front trim edge
+  // Armrest dividers partitioning the bench into 6 booth sections
+  [-5.75, -3.35, -0.95, 1.45, 3.85, 6.25].forEach((az) => {
+    envGroup.add(makeBox(11.55, 0.82, az, 0.64, 0.44, 0.07, 0x4a0c10, 0.8));
+  });
+
   envGroup.add(makeBox(-6.6, 0.04, -6.2, 8.8, 0.08, 8.8, 0x180f18, 0.36));
   buildDanceFloor(-9.9, -9.5);
 
@@ -678,16 +781,25 @@ function buildNightclubGeometry() {
     return true;
   });
 
-  for (let i = 0; i < 5; i++) {
-    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 10),
+  // Bar stools — 3 stools aligned with the 3 patrons (counter face at z=7.3)
+  const stoolXs = [-10.0, -8.1, -6.8];  // match barPatronCfgs x positions exactly
+  stoolXs.forEach((sx) => {
+    // Stool seat
+    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.16, 0.06, 10),
       new THREE.MeshStandardMaterial({ color: 0x6a1a1a, roughness: 0.5 }));
-    stool.position.set(-7.2 + i * 0.9, 0.62, 7.0);
+    stool.position.set(sx, 0.96, 6.8);
     envGroup.add(stool);
-    const stoolLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.6, 6),
-      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.4 }));
-    stoolLeg.position.set(-7.2 + i * 0.9, 0.32, 7.0);
+    // Stool leg (chrome)
+    const stoolLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.032, 0.94, 6),
+      new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.2 }));
+    stoolLeg.position.set(sx, 0.50, 6.8);
     envGroup.add(stoolLeg);
-  }
+    // Footrest ring
+    const footRest = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.012, 6, 12),
+      new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 }));
+    footRest.position.set(sx, 0.36, 6.8); footRest.rotation.x = Math.PI / 2;
+    envGroup.add(footRest);
+  });
 
   for (let i = 0; i < 8; i++) {
     const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.2 + Math.random() * 0.12, 6),
@@ -884,9 +996,15 @@ function buildNightclubCharacters() {
   state.animations.push((dt, t) => {
     singer.position.y = 0.70 + Math.abs(Math.sin(t * 5.8)) * 0.12;
     singer.rotation.y = Math.sin(t * 2.6) * 0.5;
-    // Arms pump with the beat
-    const arms = singer.children.filter((c) => c.isMesh);
     singer.rotation.z = Math.sin(t * 5.8) * 0.07;
+    // Left arm (index 6) pumps up on the beat; right arm (index 7) counter-swings
+    if (singer.children[6]) singer.children[6].rotation.z = 0.10 + Math.sin(t * 5.8) * 0.55;
+    if (singer.children[7]) singer.children[7].rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
+    // Head tilts and nods expressively
+    if (singer.userData.head) {
+      singer.userData.head.rotation.x = Math.sin(t * 5.8) * 0.12;
+      singer.userData.head.rotation.y = Math.sin(t * 2.6 + 0.5) * 0.18;
+    }
     return true;
   });
 
@@ -978,6 +1096,7 @@ function buildNightclubCharacters() {
     dancer.position.set(dc.x, 0, dc.z);
     charGroup.add(dancer);
     state.animations.push((dt, t) => {
+      if (state.phase === "scream" || state.phase === "aftermath") return false;
       const phase = t * 5.4 + i * 1.57;
       dancer.position.y = Math.abs(Math.sin(phase)) * 0.1;
       dancer.rotation.y = t * (i % 2 === 0 ? 1.1 : -0.9);
@@ -1021,11 +1140,23 @@ function buildNightclubCharacters() {
     // Animated: nodding, laughing, leaning — phase-offset per couple
     state.animations.push((dt, t) => {
       const ph = t * 1.6 + idx * 2.1;
-      // Subtle seated sway/nod
+      // Bodies stay mostly facing each other with slight lean-in
       woman.rotation.x = Math.sin(ph * 0.7) * 0.06;
-      woman.rotation.y = Math.PI / 2 + Math.sin(ph * 0.4) * 0.18; // glances around
-      man.rotation.x = Math.sin(ph * 0.5 + 1) * 0.05;
-      man.rotation.y = -Math.PI / 2 + Math.sin(ph * 0.35 + 0.8) * 0.2;
+      woman.rotation.y = Math.PI / 2 + Math.sin(ph * 0.38) * 0.14;
+      man.rotation.x = Math.sin(ph * 0.5 + 1) * 0.055;
+      man.rotation.y = -Math.PI / 2 + Math.sin(ph * 0.33 + 0.8) * 0.16;
+      // Head: independent glances and nods — more lifelike than whole-body rotation
+      if (woman.userData.head) {
+        woman.userData.head.rotation.y = Math.sin(ph * 0.55) * 0.26;
+        woman.userData.head.rotation.x = Math.sin(ph * 0.9) * 0.10;
+      }
+      if (man.userData.head) {
+        man.userData.head.rotation.y = Math.sin(ph * 0.48 + 1.2) * 0.22;
+        man.userData.head.rotation.x = Math.sin(ph * 0.78 + 0.5) * 0.08;
+      }
+      // Man occasionally raises right arm (arm index 7, male) — gesturing while talking
+      const gesture = Math.max(0, Math.sin(ph * 0.35 + 2.0));
+      if (man.children[7]) man.children[7].rotation.z = -0.10 - gesture * 0.38;
       // Bob to the music (base y=0.5 for dining platform)
       woman.position.y = 0.5 + Math.sin(t * 2.8 + idx) * 0.018;
       man.position.y = 0.5 + Math.sin(t * 2.6 + idx + 1.2) * 0.015;
@@ -1039,16 +1170,67 @@ function buildNightclubCharacters() {
   date.rotation.y = -Math.PI / 2;
   charGroup.add(date);
   state.dateMesh = date;
+  // Date animation: alive and present — glances at player, sways to music, raises drink
+  state.animations.push((dt, t) => {
+    // Gentle seated sway with glances toward player side
+    date.rotation.y = -Math.PI / 2 + Math.sin(t * 0.48) * 0.28;
+    date.rotation.x = Math.sin(t * 0.72) * 0.045;
+    date.position.y = 0.5 + Math.sin(t * 2.5) * 0.014;
+    // Head: thoughtful tilt and slow look-around
+    if (date.userData.head) {
+      date.userData.head.rotation.y = Math.sin(t * 0.55) * 0.22;
+      date.userData.head.rotation.x = Math.sin(t * 0.38 + 1.0) * 0.08;
+    }
+    // Right arm (female index 10) occasionally raises — sipping her drink
+    const drinkLift = Math.max(0, Math.sin(t * 0.55 + 0.8));
+    if (date.children[10]) date.children[10].rotation.z = -0.10 - drinkLift * 0.55;
+    if (date.children[10] && date.children[10].children[0]) date.children[10].children[0].rotation.z = -0.04 - drinkLift * 0.85;
+    return true;
+  });
 
-  // ── Bartender (standing behind bar) ──
+  // ── Bartender (standing behind bar) ── positioned between counter (z≈8.9) and back shelving (z≈9.4)
   const bartender = makePerson(0xf0d8b8, 0x191c24, false);
-  bartender.position.set(-8.5, 0, 7.1);
+  bartender.position.set(-8.5, 0, 8.5);
   bartender.rotation.y = Math.PI;
   charGroup.add(bartender);
   state.bartenderMesh = bartender;
   state.animations.push((dt, t) => {
-    bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.25;
+    // Bartender polishes glasses and leans, checks the room
+    bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.45;
+    bartender.rotation.x = Math.sin(t * 1.1) * 0.04;
+    if (bartender.children[0]) bartender.children[0].rotation.y += dt * 1.2; // polishing motion
     return true;
+  });
+
+  // ── Bar patrons (3 people on stools, nursing drinks) ──
+  const barPatronCfgs = [
+    { x: -10.0, skin: 0xf0c890, outfit: 0x2a1a0a, female: false },
+    { x:  -8.1, skin: 0xd0906a, outfit: 0x1a2a3a, female: true  },
+    { x:  -6.8, skin: 0xc08858, outfit: 0x0a1a2a, female: false  }
+  ];
+  barPatronCfgs.forEach((cfg, pi) => {
+    const patron = makePerson(cfg.skin, cfg.outfit, cfg.female);
+    patron.position.set(cfg.x, 0, 7.4); // standing right behind stool, bar hides lower body
+    patron.rotation.y = Math.PI; // facing bar
+    charGroup.add(patron);
+    // Right-arm child index differs by gender: female=10, male=7 (after hierarchy change)
+    const rArmIdx = cfg.female ? 10 : 7;
+    state.animations.push((dt, t) => {
+      const ph = t * 0.9 + pi * 2.3;
+      patron.rotation.x = Math.sin(ph * 0.6) * 0.09;
+      patron.rotation.y = Math.PI + Math.sin(ph * 0.4) * 0.28; // wider glance
+      // Head nods independently — nod to the music
+      if (patron.userData.head) {
+        patron.userData.head.rotation.x = Math.sin(t * 2.4 + pi) * 0.10;
+        patron.userData.head.rotation.y = Math.sin(t * 0.8 + pi * 0.7) * 0.14;
+      }
+      // Raise drink to mouth periodically (right arm lifts; forearm is ra.children[0])
+      const drinkLift = Math.max(0, Math.sin(t * 0.65 + pi * 1.8));
+      const rArm = patron.children[rArmIdx];
+      if (rArm) rArm.rotation.z = 0.10 - drinkLift * 0.6;
+      if (rArm && rArm.children[0]) rArm.children[0].rotation.z = 0.04 - drinkLift * 0.9;
+      return true;
+    });
   });
 
   // ── Amber Man (by the wall — leather jacket, biker cap, smoking) ──
@@ -1077,7 +1259,19 @@ function buildNightclubCharacters() {
   charGroup.add(amber);
   state.amberManMesh = amber;
   state.animations.push((dt, t) => {
-    amber.rotation.y = 0.8 + Math.sin(t * 0.5) * 0.15;
+    // Slow body rotation — watching the room with suspicion
+    amber.rotation.y = 0.8 + Math.sin(t * 0.5) * 0.28;
+    amber.rotation.x = Math.sin(t * 0.32) * 0.03;
+    // Head follows with extra lag for a cool detached look
+    if (amber.userData.head) {
+      amber.userData.head.rotation.y = Math.sin(t * 0.6 + 0.4) * 0.18;
+      amber.userData.head.rotation.x = Math.sin(t * 0.45) * 0.06;
+    }
+    // Right arm occasionally raises cigarette (index 7 = right upper arm after hierarchy change)
+    const smokeRaise = Math.max(0, Math.sin(t * 0.42 + 1.2));
+    const amberRA = amber.children[7];
+    if (amberRA) amberRA.rotation.z = -0.10 - smokeRaise * 0.50;
+    if (amberRA && amberRA.children[0]) amberRA.children[0].rotation.z = -0.04 - smokeRaise * 0.65;
     return true;
   });
 }
@@ -1151,8 +1345,35 @@ function runDanceBeat() {
     state.playerCanMove = true;
     setObjective("A scream cuts the room. Enter the women's room.", "Move to the red restroom door and press A.");
     showDialogue("A scream silences the club. Glasses freeze in mid-air.", 3200);
-    scene.fog.color.setHex(0x151a23);
-    scene.fog.density = 0.045;
+    scene.fog.color.setHex(0x1a1a18);
+    scene.fog.density = 0.022;
+    // Music cuts dead
+    if (state.music && !state.music.paused) { state.music.pause(); }
+    // House lights slam up — harsh, fluorescent-cold
+    ambient.intensity = 3.8;
+    // Emergency flash: cold white strobe that fades slowly
+    const emergFlash = new THREE.PointLight(0xddeeff, 5.0, 20, 1);
+    emergFlash.position.set(0, 3.8, 0); fxGroup.add(emergFlash);
+    state.animations.push((dt, t) => {
+      emergFlash.intensity = Math.max(0, emergFlash.intensity - dt * 1.4);
+      return emergFlash.intensity > 0.05;
+    });
+    // All NPCs panic-flee toward exit (front door, z≈11)
+    charGroup.children.slice().forEach((npc, i) => {
+      let fled = false;
+      state.animations.push((dt, t) => {
+        if (fled) return false;
+        // Sprint toward front exit
+        npc.position.z += dt * (3.5 + i * 0.2);
+        npc.rotation.y = Math.PI; // face exit (+z)
+        // Run bob
+        npc.position.y = Math.abs(Math.sin(t * 10 + i * 0.9)) * 0.12;
+        if (npc.position.z > 13) { npc.visible = false; fled = true; return false; }
+        return true;
+      });
+    });
+    // Stop dance tiles flashing — glow dies to black
+    state.danceTiles.forEach((tile) => { tile.mesh.material.emissiveIntensity = 0; });
   }, 6000);
 }
 
@@ -1176,11 +1397,11 @@ function loadBathroomScene() {
   state.phase = "bathroom";
   state.playerCanMove = true;
   state.player.seated = false;
-  state.player.pos.set(-2.6, 0, 2.8);
-  state.player.yaw = Math.PI;
+  state.player.pos.set(-2.6, 0, 2.0);
+  state.player.yaw = 0; // face +z toward mirror and sink
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person — no visible player body
 
   state.cameraBounds = { minX: -6.5, maxX: 6.5, minZ: -5.5, maxZ: 5.5, maxY: 4.5 };
   state.worldBounds = { minX: -6, maxX: 6, minZ: -5, maxZ: 5 };
@@ -1214,14 +1435,16 @@ function loadBathroomScene() {
     new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 }));
   faucet.position.set(-0.5, 1.06, 4.69); envGroup.add(faucet);
 
-  // Mirror with slight tarnished reflection — cracked in corner
+  // Mirror on back wall — flush against wall (z≈5.82), faces player
   const mirror = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 1.6),
     new THREE.MeshStandardMaterial({ color: 0x9aaccc, roughness: 0.12, metalness: 0.88 }));
-  mirror.position.set(-1.1, 1.66, 4.21); envGroup.add(mirror);
+  mirror.position.set(-1.1, 1.66, 5.78); mirror.rotation.y = Math.PI; envGroup.add(mirror);
+  // Mirror frame
+  envGroup.add(makeBox(-1.1, 1.66, 5.81, 5.7, 1.8, 0.05, 0x2a1a10, 0.6));
   // Mirror crack detail
   const crack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.01),
     new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }));
-  crack.position.set(1.6, 2.18, 4.22); crack.rotation.z = 0.55; envGroup.add(crack);
+  crack.position.set(1.6, 2.18, 5.77); crack.rotation.z = 0.55; envGroup.add(crack);
 
   // Stall partition
   envGroup.add(makeBox(2.8, 1.3, -2.7, 4.4, 2.6, 0.3, 0x27303f, 0.75));
@@ -1340,7 +1563,7 @@ function loadMensRoomScene() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person — no visible player body
 
   state.cameraBounds = { minX: -5.5, maxX: 5.5, minZ: -5, maxZ: 5.5, maxY: 4.5 };
   state.worldBounds = { minX: -4.5, maxX: 4.5, minZ: -4.5, maxZ: 4.5 };
@@ -1596,37 +1819,122 @@ function motelPhoneCall() {
 function motelIntruder() {
   state.flags.add("motel-intruder");
   state.playerCanMove = false;
+
+  // Build intruder — starts at door (right wall, x≈3.85)
   const intruder = makePerson(0xd8c8a0, 0x1a1a1a, false);
-  const mask = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 }));
+  const mask = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 }));
   mask.position.y = 0.98; intruder.add(mask);
-  intruder.add(makeBox(0.3, 0.65, 0.12, 0.08, 0.05, 0.2, 0x2a2a2a, 0.3));
-  intruder.position.set(3.4, 0, 2.5);
-  intruder.rotation.y = -Math.PI / 2;
+  // Gun held in right hand — separate mesh so we can drop it
+  const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.055, 0.18),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.3, metalness: 0.4 }));
+  gunMesh.position.set(0.22, 0.62, 0.1); intruder.add(gunMesh);
+  intruder.position.set(3.85, 0, 2.5);
+  intruder.rotation.y = Math.PI; // facing into room (toward -x)
   charGroup.add(intruder);
   state.intruderMesh = intruder;
 
+  // ── Phase 1: pounding on door ──
   showDialogue("*BANG BANG BANG* \u2014 Someone\u2019s pounding on the door.", 2500);
+
   window.setTimeout(() => {
+    // ── Phase 2: kick in door and walk to center of room ──
+    // Door-kick flash
+    const kickFlash = new THREE.PointLight(0xfff0d0, 2.5, 6, 2);
+    kickFlash.position.set(3.6, 1.0, 2.5); fxGroup.add(kickFlash);
+    let flashT = 0;
+    const flashAnim = (dt) => {
+      flashT += dt;
+      kickFlash.intensity = 2.5 * Math.exp(-flashT * 8);
+      if (flashT > 0.5) { fxGroup.remove(kickFlash); return false; }
+      return true;
+    };
+    state.animations.push(flashAnim);
+
+    // Walk intruder into room
+    const walkDest = new THREE.Vector3(1.8, 0, 2.5);
+    let walkDone = false;
+    let walkBob = 0;
+    const walkIn = (dt) => {
+      if (walkDone) return false;
+      const diff = walkDest.clone().sub(intruder.position);
+      if (diff.length() < 0.12) { walkDone = true; return false; }
+      walkBob += dt;
+      intruder.position.addScaledVector(diff.normalize(), dt * 1.4);
+      intruder.rotation.x = Math.sin(walkBob * 9) * 0.04; // walk bob
+      return true;
+    };
+    state.animations.push(walkIn);
+
     showDialogueSequence([
-      "A masked man kicks the door in, gun drawn.",
+      "A masked man kicks the door in, gun raised.",
       { text: "You: Easy now. Let\u2019s talk about this.", action: () => {
         state.playerCanMove = true;
+        // ── Menace loop: intruder slowly drifts and aims ──
+        const menaceAnim = (dt, t) => {
+          if (!intruder.visible || state.flags.has("motel-intruder-fled")) return false;
+          // Gun tracks player (bob + aim sway)
+          intruder.rotation.y = Math.PI + Math.sin(t * 0.6) * 0.18;
+          gunMesh.rotation.z = Math.sin(t * 1.4) * 0.08; // gun sway
+          return true;
+        };
+        state.animations.push(menaceAnim);
         setObjective("Get to your gun on the nightstand.", "Use B on the gun holster.");
       }}
     ]);
-  }, 3000);
+  }, 2800);
 
+  // ── Phase 3: confrontation with gun ──
   addInteraction("confront", "B",
     () => state.flags.has("motel-gun") && !state.flags.has("motel-intruder-fled"),
-    () => intruder.position, 2.5, () => {
+    () => intruder.position, 2.8, () => {
     state.flags.add("motel-intruder-fled");
     state.playerCanMove = false;
+
+    // Muzzle flash from player's position
+    const muzzle = new THREE.PointLight(0xffd060, 4.0, 5, 2);
+    muzzle.position.set(state.player.pos.x, state.player.pos.y + 0.8, state.player.pos.z);
+    fxGroup.add(muzzle);
+    let muzzleT = 0;
+    state.animations.push((dt) => {
+      muzzleT += dt;
+      muzzle.intensity = 4.0 * Math.exp(-muzzleT * 14);
+      if (muzzleT > 0.35) { fxGroup.remove(muzzle); return false; }
+      return true;
+    });
+
+    // Gun drops from intruder's hand
+    intruder.remove(gunMesh);
+    const droppedGun = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.055, 0.18),
+      new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.3, metalness: 0.4 }));
+    droppedGun.position.set(intruder.position.x + 0.25, 0.62, intruder.position.z);
+    envGroup.add(droppedGun);
+    let dropT = 0;
+    state.animations.push((dt) => {
+      dropT += dt;
+      droppedGun.position.y = Math.max(0.03, 0.62 - dropT * dropT * 4);
+      droppedGun.rotation.z += dt * 9;
+      return droppedGun.position.y > 0.04;
+    });
+
     showDialogueSequence([
-      "You draw and fire \u2014 the gun flies from his hand.",
-      "The masked man stumbles back and bolts out the open door.",
-      { text: "You holster your piece. Time to see what\u2019s going on outside.", action: () => {
+      "You draw and fire \u2014 the gun spins out of his hand.",
+      "The masked man stumbles, clutches his wrist, and bolts for the door.",
+      { text: "You holster your piece. Time to find out who sent him.", action: () => {
         state.playerCanMove = true;
-        intruder.visible = false;
+        // Intruder panics and sprints for door
+        const fleeDest = new THREE.Vector3(4.5, 0, 2.5);
+        let fleeBob = 0;
+        state.animations.push((dt) => {
+          if (!intruder.visible) return false;
+          const diff = fleeDest.clone().sub(intruder.position);
+          if (diff.length() < 0.2) { intruder.visible = false; return false; }
+          fleeBob += dt;
+          intruder.position.addScaledVector(diff.normalize(), dt * 4.0); // sprinting
+          intruder.rotation.y = Math.atan2(diff.x, diff.z);
+          intruder.rotation.x = Math.sin(fleeBob * 12) * 0.08; // run bob
+          return true;
+        });
         setObjective("Exit the motel room.", "Press A at the door.");
       }}
     ]);
@@ -1647,50 +1955,154 @@ function loadMotelExterior() {
   state.player.mesh.rotation.y = state.player.yaw;
   state.player.mesh.visible = true;
 
-  state.cameraBounds = { minX: -18, maxX: 18, minZ: -6, maxZ: 8, maxY: 8 };
-  state.worldBounds = { minX: -16, maxX: 15, minZ: -3.5, maxZ: 4 };
+  state.cameraBounds = { minX: -22, maxX: 20, minZ: -4, maxZ: 12, maxY: 7 };
+  state.worldBounds = { minX: -18.5, maxX: 15, minZ: -3.5, maxZ: 4 };
 
   dom.hudLocation.textContent = "Motel";
-  
-  scene.fog = new THREE.FogExp2(0x0a0e14, 0.012);
-  renderer.setClearColor(0x060a10, 1);
-  ambient.intensity = 1.0;
 
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.95 }));
+  scene.fog = new THREE.FogExp2(0x06090f, 0.004); // thin fog — open world feel
+  renderer.setClearColor(0x04060e, 1); // deep night sky
+  ambient.intensity = 0.9;
+
+  // Sky backdrop — large vertical plane simulating night sky depth
+  const skyBg = new THREE.Mesh(new THREE.PlaneGeometry(120, 40),
+    new THREE.MeshBasicMaterial({ color: 0x06080f }));
+  skyBg.position.set(0, 10, -28); envGroup.add(skyBg);
+  // Horizon glow band — city light bleed on the horizon
+  const horizonA = new THREE.Mesh(new THREE.PlaneGeometry(120, 3),
+    new THREE.MeshBasicMaterial({ color: 0x18102a }));
+  horizonA.position.set(0, 1.0, -26); envGroup.add(horizonA);
+  const horizonB = new THREE.Mesh(new THREE.PlaneGeometry(120, 1.5),
+    new THREE.MeshBasicMaterial({ color: 0x2a1830 }));
+  horizonB.position.set(0, 0.6, -24); envGroup.add(horizonB);
+  // Distant city silhouette — row of dark boxes
+  [-22, -16, -8, 4, 12, 20].forEach((bx, i) => {
+    const h = 1.5 + (i * 0.7) % 3.0;
+    envGroup.add(makeBox(bx, h * 0.5, -22, 2.0 + (i % 3) * 0.8, h, 0.5, 0x0c0a12, 0.95));
+  });
+  // Stars — small bright points scattered in sky
+  for (let i = 0; i < 40; i++) {
+    const star = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    star.position.set(-40 + i * 2.1 + (i % 3) * 1.4, 6 + (i % 5) * 1.8, -24 - (i % 4) * 1.2);
+    envGroup.add(star);
+  }
+
+  // Ground — extended for open feel
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x181a1c, roughness: 0.95 }));
   gnd.rotation.x = -Math.PI / 2; envGroup.add(gnd);
-  const sw = new THREE.Mesh(new THREE.PlaneGeometry(36, 2.5), new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.85 }));
+  const sw = new THREE.Mesh(new THREE.PlaneGeometry(36, 2.5), new THREE.MeshStandardMaterial({ color: 0x262828, roughness: 0.85 }));
   sw.rotation.x = -Math.PI / 2; sw.position.set(0, 0.02, -3.5); envGroup.add(sw);
-  envGroup.add(makeBox(0, 1.8, -5.8, 36, 3.6, 1.4, 0x2a2420, 0.8));
+  // Motel facade — taller for presence
+  envGroup.add(makeBox(0, 2.2, -5.8, 36, 4.4, 1.4, 0x2a2420, 0.8));
+  // Roof edge trim
+  envGroup.add(makeBox(0, 4.45, -5.2, 36.4, 0.14, 0.22, 0x3a3028, 0.6));
+
+  // ── Tall MOTEL neon sign — parking-lot pylon in front of building ──
+  // Positioned at x=15 (right end), z=-2 (parking lot), clearly visible from camera
+  envGroup.add(makeBox(15, 4.0, -2.0, 0.28, 8.0, 0.28, 0x3a3a3a, 0.5));          // pole, y=0 to y=8
+  envGroup.add(makeBox(15, 0.2, -2.0, 0.44, 0.4, 0.44, 0x2a2a2a, 0.6));          // pole base
+  envGroup.add(makeBox(15, 8.0, -2.0, 5.5, 2.0, 0.55, 0x160808, 0.4));           // sign board
+  // Neon border frame around sign
+  envGroup.add(makeBox(15, 8.0, -1.75, 5.7, 2.2, 0.08, 0xff2030, 0.25));         // outline glow
+  // MOTEL — 5 letter-blocks across sign face
+  const motelNeonMat = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff1020, emissiveIntensity: 2.2, roughness: 0.2 });
+  [-1.6, -0.8, 0.0, 0.8, 1.6].forEach((lx) => {
+    const tube = new THREE.Mesh(new THREE.BoxGeometry(0.44, 1.2, 0.1), motelNeonMat);
+    tube.position.set(15 + lx, 8.2, -1.75); envGroup.add(tube);
+  });
+  const signGlow = new THREE.PointLight(0xff2030, 2.2, 22, 2);
+  signGlow.position.set(15, 8.0, -1.4); fxGroup.add(signGlow);
+  state.animations.push((dt, t) => {
+    signGlow.intensity = 1.8 + Math.sin(t * 4.8) * 0.40;
+    return true;
+  });
+  // "VACANCY" sub-sign in green below MOTEL
+  const vacMat = new THREE.MeshStandardMaterial({ color: 0x22ff44, emissive: 0x11cc33, emissiveIntensity: 1.6 });
+  const vacSign = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.52, 0.2), vacMat);
+  vacSign.position.set(15, 6.7, -1.75); envGroup.add(vacSign);
+  const vacGlow = new THREE.PointLight(0x22ff44, 0.7, 10, 2);
+  vacGlow.position.set(15, 6.7, -1.4); fxGroup.add(vacGlow);
 
   // Parking-lot sodium fill lights
   [-10, -4, 2, 8].forEach((lx) => {
     const pl = new THREE.PointLight(0xffd090, 0.55, 10, 2); pl.position.set(lx, 3.2, 0); fxGroup.add(pl);
   });
+  // Room doors + sconces (rooms 1–12)
   for (let i = 0; i < 12; i++) {
     const x = -14 + i * 2.3;
     envGroup.add(makeDoor(x, -5.0, (i === 2) ? 0x5a4a30 : 0x3a2e1e));
-    const nl = new THREE.PointLight(0xffe8c0, 0.18, 2.5, 2); nl.position.set(x, 2.6, -4.8); fxGroup.add(nl);
+    // Sconce bracket above each door
+    envGroup.add(makeBox(x, 3.8, -5.05, 0.18, 0.22, 0.12, 0x5a5040, 0.5));   // bracket
+    const bulbGeo = new THREE.SphereGeometry(0.055, 6, 6);
+    const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffee99, emissive: 0xffcc66, emissiveIntensity: (i === 5 || i === 9) ? 0 : 1.0 }); // rooms 6 & 10 broken (dark)
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(x, 3.62, -4.9); envGroup.add(bulb);
+    const nl = new THREE.PointLight(0xffe8c0, (i === 5 || i === 9) ? 0 : 0.22, 3.0, 2);
+    nl.position.set(x, 3.5, -4.7); fxGroup.add(nl);
   }
+  // Room 13 — dedicated sconce that blinks
   const r13x = 14;
   envGroup.add(makeDoor(r13x, -5.0, 0x5a4a30));
-  const r13l = new THREE.PointLight(0xffe8c0, 0.12, 1.5, 2); r13l.position.set(r13x, 2.6, -4.8); fxGroup.add(r13l);
+  envGroup.add(makeBox(r13x, 3.8, -5.05, 0.18, 0.22, 0.12, 0x5a5040, 0.5));
+  const r13Bulb = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6),
+    new THREE.MeshStandardMaterial({ color: 0xffee99, emissive: 0xffcc66, emissiveIntensity: 1.0 }));
+  r13Bulb.position.set(r13x, 3.62, -4.9); envGroup.add(r13Bulb);
+  const r13l = new THREE.PointLight(0xffe8c0, 0.22, 3.0, 2);
+  r13l.position.set(r13x, 3.5, -4.7); fxGroup.add(r13l);
+  // Room 13 blinks ominously
+  state.animations.push((dt, t) => {
+    const on = Math.sin(t * 3.4) > 0.1 || (Math.sin(t * 7.1) > 0.6);
+    r13l.intensity = on ? 0.22 : 0;
+    r13Bulb.material.emissiveIntensity = on ? 1.0 : 0;
+    return true;
+  });
 
+  // Office building — with interior visible through door
   envGroup.add(makeBox(-17, 1.8, -4, 2.8, 3.6, 4, 0x2e2820, 0.7));
   envGroup.add(makeDoor(-16.5, -2, 0x483828));
   envGroup.add(makeBox(-17, 3.2, -2, 2.0, 0.4, 0.1, 0x444030, 0.5));
+  // Office sign: "MANAGER"
+  envGroup.add(makeBox(-17, 2.8, -2.05, 1.4, 0.3, 0.05, 0x8a7a3a, 0.5));
+  // Office interior hints — desk, TV glow, lamp
+  const offDesk = makeBox(-17.2, 0.52, -3.5, 1.4, 1.04, 0.7, 0x3a2e1e, 0.75);
+  envGroup.add(offDesk);
+  const offTv = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x1a1814, roughness: 0.3 }));
+  offTv.position.set(-17.2, 1.0, -3.6); envGroup.add(offTv);
+  const tvFlicker = new THREE.PointLight(0x4466aa, 0.35, 3, 2);
+  tvFlicker.position.set(-17.2, 1.1, -3.2); fxGroup.add(tvFlicker);
+  state.animations.push((dt, t) => {
+    tvFlicker.intensity = 0.2 + Math.abs(Math.sin(t * 8.5 + Math.sin(t * 3.1) * 4)) * 0.35;
+    return true;
+  });
+  const offLamp = new THREE.PointLight(0xffdd99, 0.6, 4, 2);
+  offLamp.position.set(-16.8, 1.5, -3.0); fxGroup.add(offLamp);
+  // Manager NPC — old woman, barely moves, eyes on TV
+  const manager = makePerson(0xd4b898, 0x2a3828, true);
+  manager.position.set(-16.9, 0, -3.0);
+  manager.rotation.y = -Math.PI * 0.25; // angled toward door / desk
+  charGroup.add(manager);
+  state.animations.push((dt, t) => {
+    // Very slow head turn toward door occasionally, mostly watches TV
+    manager.rotation.y = -Math.PI * 0.25 + Math.sin(t * 0.3) * 0.3;
+    manager.rotation.x = Math.sin(t * 0.2) * 0.03;
+    return true;
+  });
 
   const sp = makeBox(4, 3.5, 5, 0.15, 5.0, 0.15, 0x4a4a4a, 0.5); envGroup.add(sp);
   const sb = makeBox(4, 6.2, 5, 4.5, 2.0, 0.2, 0x1a1210, 0.5); envGroup.add(sb);
   const sg = new THREE.PointLight(0xff4466, 0.6, 10, 2); sg.position.set(4, 6.8, 5.5); fxGroup.add(sg);
   state.animations.push((dt, t) => { sg.intensity = 0.5 + Math.sin(t * 3) * 0.2; return true; });
 
-  makeSimpleCar(-5, 2, 0x3a2222);
-  makeSimpleCar(3, 3, 0x222a3a);
+  // Cars parked further from the path to office — moved to z=3 so walkway at z=-2 is clear
+  makeSimpleCar(-5, 3, 0x3a2222);
+  makeSimpleCar(3, 3.5, 0x222a3a);
 
   state.obstacles = [
-    makeObstacle(-20, 16, -6.5, -4.2),
-    makeObstacle(-6.5, -3.5, 1, 3.5),
-    makeObstacle(1.5, 4.5, 2, 4.5)
+    makeObstacle(-20, 15.5, -6.5, -4.2),  // motel building row
+    makeObstacle(-7.0, -3.0, 2.0, 4.0),   // car 1 (moved back)
+    makeObstacle(1.5, 4.5, 2.5, 5.0),     // car 2 (moved back)
+    makeObstacle(-19.5, -15.5, -4.5, 4.0) // office building side walls
   ];
 
   clearInteractions();
@@ -2286,7 +2698,7 @@ function canMoveTo(x, z) {
 function updateAnimations(delta, elapsed) {
   state.animations = state.animations.filter((fn) => fn(delta, elapsed));
   for (const tile of state.danceTiles) {
-    const glow = state.phase === "aftermath" || state.phase === "club-final" ? 0.06 : 0.2 + Math.max(0, Math.sin(elapsed * 2.4 + tile.phase)) * 0.56;
+    const glow = (state.phase === "aftermath" || state.phase === "club-final" || state.phase === "scream") ? 0 : 0.2 + Math.max(0, Math.sin(elapsed * 2.4 + tile.phase)) * 0.56;
     tile.mesh.material.emissiveIntensity = glow;
   }
   for (const smoke of state.smoke) {
@@ -2314,6 +2726,41 @@ function updateAnimations(delta, elapsed) {
 
 function updateCamera(delta) {
   if (state.sceneType === "driving") return;
+
+  // Motel exterior — lower, cinematic angle showing building + sign against sky
+  if (state.phase === "motel-ext" || state.phase === "motel-morning") {
+    const desiredPos = tempA.set(
+      state.player.pos.x + 2.0,
+      state.player.pos.y + 4.5,
+      state.player.pos.z + 10.0
+    );
+    if (state.cameraBounds) {
+      const b = state.cameraBounds;
+      desiredPos.x = clamp(desiredPos.x, b.minX, b.maxX);
+      desiredPos.y = clamp(desiredPos.y, 0.5, b.maxY);
+      desiredPos.z = clamp(desiredPos.z, b.minZ, b.maxZ);
+    }
+    camera.position.lerp(desiredPos, 1 - Math.exp(-delta * 3.8));
+    // Look at a point mid-building so the facade + sign appear in upper half of frame
+    tempB.set(state.player.pos.x - 1.5, state.player.pos.y + 2.5, state.player.pos.z - 3.5);
+    camera.lookAt(tempB);
+    return;
+  }
+
+  // First-person view in bathroom/mensroom scenes
+  if (state.phase === "bathroom" || state.phase === "mensroom") {
+    const eyeX = state.player.pos.x;
+    const eyeY = state.player.pos.y + 1.02;
+    const eyeZ = state.player.pos.z;
+    const fwdX = Math.sin(state.player.yaw);
+    const fwdZ = Math.cos(state.player.yaw);
+    tempA.set(eyeX, eyeY, eyeZ);
+    camera.position.lerp(tempA, 1 - Math.exp(-delta * 14));
+    tempB.set(eyeX + fwdX * 5, eyeY - 0.04, eyeZ + fwdZ * 5);
+    camera.lookAt(tempB);
+    return;
+  }
+
   let desired, lerpSpeed;
   // Fixed isometric-style offset — camera never spins, just follows position.
   // Offset: slightly right and well behind/above. Good for the nightclub layout.
@@ -2529,16 +2976,17 @@ function makePerson(skin, outfit, female) {
     const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.015, 0.2, 6), hm);
     hairSideL.position.set(-0.1, 0.98, 0.02);
     const hairSideR = hairSideL.clone(); hairSideR.position.set(0.1, 0.98, 0.02);
-    // Arms (bare skin) — hang at sides; forearm inward from elbow (no zigzag)
+    // Arms (bare skin) — proper hierarchy so forearm/hand follow upper arm during animation
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.24, 8), sm);
     la.position.set(-0.17, 0.72, 0); la.rotation.z = 0.10;
     const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.2, 8), sm);
-    lfa.position.set(-0.14, 0.51, 0); lfa.rotation.z = 0.04;
+    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.12) + half_fore(0.10)
+    la.add(lfa);
     const lh = new THREE.Mesh(new THREE.SphereGeometry(0.020, 6, 6), sm);
-    lh.position.set(-0.13, 0.40, 0);
-    const ra = la.clone(); ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
-    const rfa = lfa.clone(); rfa.position.set(0.14, 0.51, 0); rfa.rotation.z = -0.04;
-    const rh = lh.clone(); rh.position.set(0.13, 0.40, 0);
+    lh.position.set(0, -0.34, 0);  // in la local: 0.12 + 0.20 + 0.02
+    la.add(lh);
+    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
+    ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
     // Legs under skirt
     const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.2, 8), sm);
     lt.position.set(-0.06, 0.06, 0);
@@ -2547,7 +2995,7 @@ function makePerson(skin, outfit, female) {
     lsh.position.set(-0.06, -0.02, 0.01);
     const rsh = lsh.clone(); rsh.position.set(0.06, -0.02, 0.01);
     root.add(skirt, waist, chest, shoulderL, shoulderR, hairBack, hairTop, hairSideL, hairSideR);
-    root.add(la, lfa, lh, ra, rfa, rh, lt, rt, lsh, rsh);
+    root.add(la, ra, lt, rt, lsh, rsh);  // forearms/hands are children of upper arms
     root.add(...faceParts);
   } else {
     // Slimmer, more proportional male body
@@ -2563,16 +3011,17 @@ function makePerson(skin, outfit, female) {
     // Hair
     const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.135, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.48), hm);
     hairCap.position.y = 1.1;
-    // Arms — hang naturally at sides; forearm pulls slightly inward from elbow (no zigzag)
+    // Arms — proper hierarchy so forearm/hand follow upper arm during animation
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.030, 0.22, 8), om);
     la.position.set(-0.20, 0.76, 0); la.rotation.z = 0.10;
     const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.22, 8), om);
-    lfa.position.set(-0.17, 0.55, 0); lfa.rotation.z = 0.04;
+    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.11) + half_fore(0.11)
+    la.add(lfa);
     const lh = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), sm);
-    lh.position.set(-0.16, 0.43, 0);
-    const ra = la.clone(); ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
-    const rfa = lfa.clone(); rfa.position.set(0.17, 0.55, 0); rfa.rotation.z = -0.04;
-    const rh = lh.clone(); rh.position.set(0.16, 0.43, 0);
+    lh.position.set(0, -0.356, 0);  // in la local: 0.11 + 0.22 + 0.026
+    la.add(lh);
+    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
+    ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
     // Legs — slight A-stance angle for natural standing pose
     const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.042, 0.22, 8), pm);
     lt.position.set(-0.07, 0.30, 0); lt.rotation.z = -0.06;
@@ -2584,9 +3033,11 @@ function makePerson(skin, outfit, female) {
     const rs = ls.clone(); rs.position.set(0.072, 0.09, 0); rs.rotation.z = 0.03;
     const rsh = lsh.clone(); rsh.position.set(0.072, 0.0, 0.01);
     root.add(chest, abdomen, pelvis, shoulderL, shoulderR, hairCap);
-    root.add(la, lfa, lh, ra, rfa, rh, lt, ls, lsh, rt, rs, rsh);
+    root.add(la, ra, lt, ls, lsh, rt, rs, rsh);  // forearms/hands are children of upper arms
     root.add(...faceParts);
   }
+  root.userData.head = head;
+  root.userData.neck = neck;
   return root;
 }
 
