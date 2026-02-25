@@ -1397,8 +1397,8 @@ function loadBathroomScene() {
   state.phase = "bathroom";
   state.playerCanMove = true;
   state.player.seated = false;
-  state.player.pos.set(-2.6, 0, 2.8);
-  state.player.yaw = Math.PI;
+  state.player.pos.set(-2.6, 0, 2.0);
+  state.player.yaw = 0; // face +z toward mirror and sink
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
   state.player.mesh.visible = false; // first-person — no visible player body
@@ -1955,7 +1955,7 @@ function loadMotelExterior() {
   state.player.mesh.rotation.y = state.player.yaw;
   state.player.mesh.visible = true;
 
-  state.cameraBounds = { minX: -20, maxX: 18, minZ: -6, maxZ: 8, maxY: 8 };
+  state.cameraBounds = { minX: -22, maxX: 20, minZ: -4, maxZ: 12, maxY: 7 };
   state.worldBounds = { minX: -18.5, maxX: 15, minZ: -3.5, maxZ: 4 };
 
   dom.hudLocation.textContent = "Motel";
@@ -1998,27 +1998,31 @@ function loadMotelExterior() {
   // Roof edge trim
   envGroup.add(makeBox(0, 4.45, -5.2, 36.4, 0.14, 0.22, 0x3a3028, 0.6));
 
-  // ── Tall MOTEL neon sign — centred, rises above roofline ──
-  envGroup.add(makeBox(0, 6.5, -5.4, 0.22, 10, 0.22, 0x3a3a3a, 0.5));          // pole
-  envGroup.add(makeBox(0, 12.0, -5.4, 7.8, 2.6, 0.32, 0x160808, 0.4));          // sign board
-  // MOTEL letters — bright red neon tubes
-  const motelNeonMat = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff1020, emissiveIntensity: 2.0, roughness: 0.25 });
-  [-2.4, -1.2, 0.0, 1.2, 2.4].forEach((lx) => {
-    const tube = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.6, 0.08), motelNeonMat);
-    tube.position.set(lx, 12.0, -5.28); envGroup.add(tube);
+  // ── Tall MOTEL neon sign — parking-lot pylon in front of building ──
+  // Positioned at x=15 (right end), z=-2 (parking lot), clearly visible from camera
+  envGroup.add(makeBox(15, 4.0, -2.0, 0.28, 8.0, 0.28, 0x3a3a3a, 0.5));          // pole, y=0 to y=8
+  envGroup.add(makeBox(15, 0.2, -2.0, 0.44, 0.4, 0.44, 0x2a2a2a, 0.6));          // pole base
+  envGroup.add(makeBox(15, 8.0, -2.0, 5.5, 2.0, 0.55, 0x160808, 0.4));           // sign board
+  // Neon border frame around sign
+  envGroup.add(makeBox(15, 8.0, -1.75, 5.7, 2.2, 0.08, 0xff2030, 0.25));         // outline glow
+  // MOTEL — 5 letter-blocks across sign face
+  const motelNeonMat = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff1020, emissiveIntensity: 2.2, roughness: 0.2 });
+  [-1.6, -0.8, 0.0, 0.8, 1.6].forEach((lx) => {
+    const tube = new THREE.Mesh(new THREE.BoxGeometry(0.44, 1.2, 0.1), motelNeonMat);
+    tube.position.set(15 + lx, 8.2, -1.75); envGroup.add(tube);
   });
-  const signGlow = new THREE.PointLight(0xff2030, 1.8, 18, 2);
-  signGlow.position.set(0, 12.0, -4.8); fxGroup.add(signGlow);
+  const signGlow = new THREE.PointLight(0xff2030, 2.2, 22, 2);
+  signGlow.position.set(15, 8.0, -1.4); fxGroup.add(signGlow);
   state.animations.push((dt, t) => {
-    signGlow.intensity = 1.6 + Math.sin(t * 4.8) * 0.25;
+    signGlow.intensity = 1.8 + Math.sin(t * 4.8) * 0.40;
     return true;
   });
-  // Small "VACANCY" sign below — green
-  const vacMat = new THREE.MeshStandardMaterial({ color: 0x22ff44, emissive: 0x11cc33, emissiveIntensity: 1.4 });
-  const vacSign = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.42, 0.08), vacMat);
-  vacSign.position.set(0, 10.6, -5.28); envGroup.add(vacSign);
-  const vacGlow = new THREE.PointLight(0x22ff44, 0.6, 8, 2);
-  vacGlow.position.set(0, 10.6, -4.8); fxGroup.add(vacGlow);
+  // "VACANCY" sub-sign in green below MOTEL
+  const vacMat = new THREE.MeshStandardMaterial({ color: 0x22ff44, emissive: 0x11cc33, emissiveIntensity: 1.6 });
+  const vacSign = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.52, 0.2), vacMat);
+  vacSign.position.set(15, 6.7, -1.75); envGroup.add(vacSign);
+  const vacGlow = new THREE.PointLight(0x22ff44, 0.7, 10, 2);
+  vacGlow.position.set(15, 6.7, -1.4); fxGroup.add(vacGlow);
 
   // Parking-lot sodium fill lights
   [-10, -4, 2, 8].forEach((lx) => {
@@ -2722,6 +2726,26 @@ function updateAnimations(delta, elapsed) {
 
 function updateCamera(delta) {
   if (state.sceneType === "driving") return;
+
+  // Motel exterior — lower, cinematic angle showing building + sign against sky
+  if (state.phase === "motel-ext" || state.phase === "motel-morning") {
+    const desiredPos = tempA.set(
+      state.player.pos.x + 2.0,
+      state.player.pos.y + 4.5,
+      state.player.pos.z + 10.0
+    );
+    if (state.cameraBounds) {
+      const b = state.cameraBounds;
+      desiredPos.x = clamp(desiredPos.x, b.minX, b.maxX);
+      desiredPos.y = clamp(desiredPos.y, 0.5, b.maxY);
+      desiredPos.z = clamp(desiredPos.z, b.minZ, b.maxZ);
+    }
+    camera.position.lerp(desiredPos, 1 - Math.exp(-delta * 3.8));
+    // Look at a point mid-building so the facade + sign appear in upper half of frame
+    tempB.set(state.player.pos.x - 1.5, state.player.pos.y + 2.5, state.player.pos.z - 3.5);
+    camera.lookAt(tempB);
+    return;
+  }
 
   // First-person view in bathroom/mensroom scenes
   if (state.phase === "bathroom" || state.phase === "mensroom") {
