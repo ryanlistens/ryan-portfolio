@@ -199,16 +199,17 @@ function buildPlayerMesh() {
   earL.position.set(-0.155, 1.3, 0); earL.scale.set(0.5, 1, 0.7);
   const earR = earL.clone(); earR.position.set(0.155, 1.3, 0);
 
-  // Arms — hang naturally; forearm center aligned to elbow joint position (no zigzag)
+  // Arms — proper parent-child hierarchy so forearm/hand follow upper arm during walk animation
   const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.28, 8), suit);
   lUpperArm.position.set(-0.28, 0.88, 0); lUpperArm.rotation.z = 0.10;
   const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
-  lForearm.position.set(-0.26, 0.62, 0); lForearm.rotation.z = 0.04;
+  lForearm.position.set(0, -0.26, 0);  // in lUpperArm local: half_upper(0.14) + half_fore(0.12)
+  lUpperArm.add(lForearm);
   const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin);
-  lHand.position.set(-0.26, 0.50, 0);
-  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
-  const rForearm = lForearm.clone(); rForearm.position.set(0.26, 0.62, 0); rForearm.rotation.z = -0.04;
-  const rHand = lHand.clone(); rHand.position.set(0.26, 0.50, 0);
+  lHand.position.set(0, -0.415, 0);  // in lUpperArm local: 0.14 + 0.24 + 0.035
+  lUpperArm.add(lHand);
+  const rUpperArm = lUpperArm.clone();  // deep-clones rForearm and rHand as children
+  rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
 
   // Legs
   const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
@@ -225,7 +226,7 @@ function buildPlayerMesh() {
   root.add(neck, head, jaw, eyeSocketL, eyeSocketR, pupilL, pupilR, browL, browR, nose, mouth);
   root.add(hair, sideburns, sideburnsR, earL, earR);
   root.add(hatBrim, hatCrown, hatBand);
-  root.add(lUpperArm, lForearm, lHand, rUpperArm, rForearm, rHand);
+  root.add(lUpperArm, rUpperArm);  // forearms/hands are children of upper arms
   root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
 
   state.player.mesh = root;
@@ -780,18 +781,15 @@ function buildNightclubGeometry() {
     return true;
   });
 
-  // Bar stools — positioned in front of bar counter (counter face at z=7.3)
-  // Bar counter x range: -10.95 to -6.25. Five evenly-spaced stools.
-  const stoolSkinColors = [0xf0d4a8, 0xd4a878, 0xc89060, 0xf5e0c0, 0x9a6040];
-  const stoolOutfits = [0x1a1a3a, 0x3a1a0a, 0x0a2a1a, 0x2a0a2a, 0x1a2a3a];
-  for (let i = 0; i < 5; i++) {
-    const sx = -10.0 + i * 0.95; // spread within bar counter x range
+  // Bar stools — 3 stools aligned with the 3 patrons (counter face at z=7.3)
+  const stoolXs = [-10.0, -8.1, -6.8];  // match barPatronCfgs x positions exactly
+  stoolXs.forEach((sx) => {
     // Stool seat
     const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.16, 0.06, 10),
       new THREE.MeshStandardMaterial({ color: 0x6a1a1a, roughness: 0.5 }));
     stool.position.set(sx, 0.96, 6.8);
     envGroup.add(stool);
-    // Stool leg (tall, chrome-look)
+    // Stool leg (chrome)
     const stoolLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.032, 0.94, 6),
       new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.2 }));
     stoolLeg.position.set(sx, 0.50, 6.8);
@@ -801,7 +799,7 @@ function buildNightclubGeometry() {
       new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5 }));
     footRest.position.set(sx, 0.36, 6.8); footRest.rotation.x = Math.PI / 2;
     envGroup.add(footRest);
-  }
+  });
 
   for (let i = 0; i < 8; i++) {
     const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.2 + Math.random() * 0.12, 6),
@@ -999,9 +997,9 @@ function buildNightclubCharacters() {
     singer.position.y = 0.70 + Math.abs(Math.sin(t * 5.8)) * 0.12;
     singer.rotation.y = Math.sin(t * 2.6) * 0.5;
     singer.rotation.z = Math.sin(t * 5.8) * 0.07;
-    // Left arm (index 6) pumps up on the beat; right arm (index 9) counter-swings
+    // Left arm (index 6) pumps up on the beat; right arm (index 7) counter-swings
     if (singer.children[6]) singer.children[6].rotation.z = 0.10 + Math.sin(t * 5.8) * 0.55;
-    if (singer.children[9]) singer.children[9].rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
+    if (singer.children[7]) singer.children[7].rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
     // Head tilts and nods expressively
     if (singer.userData.head) {
       singer.userData.head.rotation.x = Math.sin(t * 5.8) * 0.12;
@@ -1098,6 +1096,7 @@ function buildNightclubCharacters() {
     dancer.position.set(dc.x, 0, dc.z);
     charGroup.add(dancer);
     state.animations.push((dt, t) => {
+      if (state.phase === "scream" || state.phase === "aftermath") return false;
       const phase = t * 5.4 + i * 1.57;
       dancer.position.y = Math.abs(Math.sin(phase)) * 0.1;
       dancer.rotation.y = t * (i % 2 === 0 ? 1.1 : -0.9);
@@ -1155,9 +1154,9 @@ function buildNightclubCharacters() {
         man.userData.head.rotation.y = Math.sin(ph * 0.48 + 1.2) * 0.22;
         man.userData.head.rotation.x = Math.sin(ph * 0.78 + 0.5) * 0.08;
       }
-      // Man occasionally raises right arm (arm index 9, male) — gesturing while talking
+      // Man occasionally raises right arm (arm index 7, male) — gesturing while talking
       const gesture = Math.max(0, Math.sin(ph * 0.35 + 2.0));
-      if (man.children[9]) man.children[9].rotation.z = -0.10 - gesture * 0.38;
+      if (man.children[7]) man.children[7].rotation.z = -0.10 - gesture * 0.38;
       // Bob to the music (base y=0.5 for dining platform)
       woman.position.y = 0.5 + Math.sin(t * 2.8 + idx) * 0.018;
       man.position.y = 0.5 + Math.sin(t * 2.6 + idx + 1.2) * 0.015;
@@ -1182,10 +1181,10 @@ function buildNightclubCharacters() {
       date.userData.head.rotation.y = Math.sin(t * 0.55) * 0.22;
       date.userData.head.rotation.x = Math.sin(t * 0.38 + 1.0) * 0.08;
     }
-    // Right arm (female index 12) occasionally raises — sipping her drink
+    // Right arm (female index 10) occasionally raises — sipping her drink
     const drinkLift = Math.max(0, Math.sin(t * 0.55 + 0.8));
-    if (date.children[12]) date.children[12].rotation.z = -0.10 - drinkLift * 0.55;
-    if (date.children[13]) date.children[13].rotation.z = -0.04 - drinkLift * 0.85;
+    if (date.children[10]) date.children[10].rotation.z = -0.10 - drinkLift * 0.55;
+    if (date.children[10] && date.children[10].children[0]) date.children[10].children[0].rotation.z = -0.04 - drinkLift * 0.85;
     return true;
   });
 
@@ -1214,9 +1213,8 @@ function buildNightclubCharacters() {
     patron.position.set(cfg.x, 0, 7.4); // standing right behind stool, bar hides lower body
     patron.rotation.y = Math.PI; // facing bar
     charGroup.add(patron);
-    // Right-arm child index differs by gender: female=12, male=9
-    const rArmIdx = cfg.female ? 12 : 9;
-    const rForeIdx = cfg.female ? 13 : 10;
+    // Right-arm child index differs by gender: female=10, male=7 (after hierarchy change)
+    const rArmIdx = cfg.female ? 10 : 7;
     state.animations.push((dt, t) => {
       const ph = t * 0.9 + pi * 2.3;
       patron.rotation.x = Math.sin(ph * 0.6) * 0.09;
@@ -1226,10 +1224,11 @@ function buildNightclubCharacters() {
         patron.userData.head.rotation.x = Math.sin(t * 2.4 + pi) * 0.10;
         patron.userData.head.rotation.y = Math.sin(t * 0.8 + pi * 0.7) * 0.14;
       }
-      // Raise drink to mouth periodically (right arm lifts and bends)
+      // Raise drink to mouth periodically (right arm lifts; forearm is ra.children[0])
       const drinkLift = Math.max(0, Math.sin(t * 0.65 + pi * 1.8));
-      if (patron.children[rArmIdx])  patron.children[rArmIdx].rotation.z  = 0.10 - drinkLift * 0.6;
-      if (patron.children[rForeIdx]) patron.children[rForeIdx].rotation.z = 0.04 - drinkLift * 0.9;
+      const rArm = patron.children[rArmIdx];
+      if (rArm) rArm.rotation.z = 0.10 - drinkLift * 0.6;
+      if (rArm && rArm.children[0]) rArm.children[0].rotation.z = 0.04 - drinkLift * 0.9;
       return true;
     });
   });
@@ -1268,10 +1267,11 @@ function buildNightclubCharacters() {
       amber.userData.head.rotation.y = Math.sin(t * 0.6 + 0.4) * 0.18;
       amber.userData.head.rotation.x = Math.sin(t * 0.45) * 0.06;
     }
-    // Right arm occasionally raises cigarette (index 9 = right upper arm, male)
+    // Right arm occasionally raises cigarette (index 7 = right upper arm after hierarchy change)
     const smokeRaise = Math.max(0, Math.sin(t * 0.42 + 1.2));
-    if (amber.children[9])  amber.children[9].rotation.z  = -0.10 - smokeRaise * 0.50;
-    if (amber.children[10]) amber.children[10].rotation.z = -0.04 - smokeRaise * 0.65;
+    const amberRA = amber.children[7];
+    if (amberRA) amberRA.rotation.z = -0.10 - smokeRaise * 0.50;
+    if (amberRA && amberRA.children[0]) amberRA.children[0].rotation.z = -0.04 - smokeRaise * 0.65;
     return true;
   });
 }
@@ -2698,7 +2698,7 @@ function canMoveTo(x, z) {
 function updateAnimations(delta, elapsed) {
   state.animations = state.animations.filter((fn) => fn(delta, elapsed));
   for (const tile of state.danceTiles) {
-    const glow = state.phase === "aftermath" || state.phase === "club-final" ? 0.06 : 0.2 + Math.max(0, Math.sin(elapsed * 2.4 + tile.phase)) * 0.56;
+    const glow = (state.phase === "aftermath" || state.phase === "club-final" || state.phase === "scream") ? 0 : 0.2 + Math.max(0, Math.sin(elapsed * 2.4 + tile.phase)) * 0.56;
     tile.mesh.material.emissiveIntensity = glow;
   }
   for (const smoke of state.smoke) {
@@ -2976,16 +2976,17 @@ function makePerson(skin, outfit, female) {
     const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.015, 0.2, 6), hm);
     hairSideL.position.set(-0.1, 0.98, 0.02);
     const hairSideR = hairSideL.clone(); hairSideR.position.set(0.1, 0.98, 0.02);
-    // Arms (bare skin) — forearm aligned to elbow joint for clean hang (no zigzag)
+    // Arms (bare skin) — proper hierarchy so forearm/hand follow upper arm during animation
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.24, 8), sm);
     la.position.set(-0.17, 0.72, 0); la.rotation.z = 0.10;
     const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.2, 8), sm);
-    lfa.position.set(-0.16, 0.50, 0); lfa.rotation.z = 0.04;
+    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.12) + half_fore(0.10)
+    la.add(lfa);
     const lh = new THREE.Mesh(new THREE.SphereGeometry(0.020, 6, 6), sm);
-    lh.position.set(-0.15, 0.40, 0);
-    const ra = la.clone(); ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
-    const rfa = lfa.clone(); rfa.position.set(0.16, 0.50, 0); rfa.rotation.z = -0.04;
-    const rh = lh.clone(); rh.position.set(0.15, 0.40, 0);
+    lh.position.set(0, -0.34, 0);  // in la local: 0.12 + 0.20 + 0.02
+    la.add(lh);
+    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
+    ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
     // Legs under skirt
     const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.2, 8), sm);
     lt.position.set(-0.06, 0.06, 0);
@@ -2994,7 +2995,7 @@ function makePerson(skin, outfit, female) {
     lsh.position.set(-0.06, -0.02, 0.01);
     const rsh = lsh.clone(); rsh.position.set(0.06, -0.02, 0.01);
     root.add(skirt, waist, chest, shoulderL, shoulderR, hairBack, hairTop, hairSideL, hairSideR);
-    root.add(la, lfa, lh, ra, rfa, rh, lt, rt, lsh, rsh);
+    root.add(la, ra, lt, rt, lsh, rsh);  // forearms/hands are children of upper arms
     root.add(...faceParts);
   } else {
     // Slimmer, more proportional male body
@@ -3010,16 +3011,17 @@ function makePerson(skin, outfit, female) {
     // Hair
     const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.135, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.48), hm);
     hairCap.position.y = 1.1;
-    // Arms — forearm center placed at elbow joint for straight hang (no zigzag)
+    // Arms — proper hierarchy so forearm/hand follow upper arm during animation
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.030, 0.22, 8), om);
     la.position.set(-0.20, 0.76, 0); la.rotation.z = 0.10;
     const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.22, 8), om);
-    lfa.position.set(-0.19, 0.54, 0); lfa.rotation.z = 0.04;
+    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.11) + half_fore(0.11)
+    la.add(lfa);
     const lh = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), sm);
-    lh.position.set(-0.19, 0.43, 0);
-    const ra = la.clone(); ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
-    const rfa = lfa.clone(); rfa.position.set(0.19, 0.54, 0); rfa.rotation.z = -0.04;
-    const rh = lh.clone(); rh.position.set(0.19, 0.43, 0);
+    lh.position.set(0, -0.356, 0);  // in la local: 0.11 + 0.22 + 0.026
+    la.add(lh);
+    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
+    ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
     // Legs — slight A-stance angle for natural standing pose
     const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.042, 0.22, 8), pm);
     lt.position.set(-0.07, 0.30, 0); lt.rotation.z = -0.06;
@@ -3031,7 +3033,7 @@ function makePerson(skin, outfit, female) {
     const rs = ls.clone(); rs.position.set(0.072, 0.09, 0); rs.rotation.z = 0.03;
     const rsh = lsh.clone(); rsh.position.set(0.072, 0.0, 0.01);
     root.add(chest, abdomen, pelvis, shoulderL, shoulderR, hairCap);
-    root.add(la, lfa, lh, ra, rfa, rh, lt, ls, lsh, rt, rs, rsh);
+    root.add(la, ra, lt, ls, lsh, rt, rs, rsh);  // forearms/hands are children of upper arms
     root.add(...faceParts);
   }
   root.userData.head = head;
