@@ -1563,7 +1563,7 @@ function loadMensRoomScene() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person — no visible player body
 
   state.cameraBounds = { minX: -5.5, maxX: 5.5, minZ: -5, maxZ: 5.5, maxY: 4.5 };
   state.worldBounds = { minX: -4.5, maxX: 4.5, minZ: -4.5, maxZ: 4.5 };
