@@ -126,112 +126,71 @@ function initRendererProfile() {
 }
 
 function buildPlayerMesh() {
-  const root = new THREE.Group();
-  const suit = new THREE.MeshStandardMaterial({ color: 0x1a1b20, roughness: 0.45, metalness: 0.07 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0xeed5b3, roughness: 0.4, metalness: 0.03 });
-  const pants = new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.5 });
-  const shoe = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.3, metalness: 0.15 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0xd4c8b0, roughness: 0.5 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.7 });
-  const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xf4f0e8, roughness: 0.3 });
-  const eyeDark = new THREE.MeshStandardMaterial({ color: 0x1a1208, roughness: 0.2 });
-  const browMat = new THREE.MeshStandardMaterial({ color: 0x221508, roughness: 0.6 });
-  const lipMat = new THREE.MeshStandardMaterial({ color: 0xc49880, roughness: 0.55 });
-  const beltMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.35, metalness: 0.2 });
+  const root     = new THREE.Group();
+  const coat     = new THREE.MeshToonMaterial({ color: 0x1a1b20 });
+  const skin     = new THREE.MeshToonMaterial({ color: 0xeed5b3 });
+  const trousers = new THREE.MeshToonMaterial({ color: 0x151618 });
+  const shoe     = new THREE.MeshToonMaterial({ color: 0x100e0c });
+  const hatMat   = new THREE.MeshToonMaterial({ color: 0x0e0c0a });
+  const eyeMat   = new THREE.MeshToonMaterial({ color: 0x111111 });
+  const beltMat  = new THREE.MeshToonMaterial({ color: 0x0a0806 });
+  const bandMat  = new THREE.MeshToonMaterial({ color: 0x3a2a0e });
 
-  // Torso: belt region, lower body, upper body, shoulder pads
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.2, 0.06, 12), beltMat);
-  belt.position.y = 0.68;
-  const lowerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.34, 12), pants);
-  lowerBody.position.y = 0.54;
-  const upperBody = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.38, 12), suit);
-  upperBody.position.y = 0.88;
-  const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), suit);
-  shoulderL.position.set(-0.26, 1.04, 0);
-  const shoulderR = shoulderL.clone(); shoulderR.position.set(0.26, 1.04, 0);
-  const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.03), suit);
-  lapelL.position.set(-0.08, 0.96, 0.1); lapelL.rotation.z = 0.15;
-  const lapelR = lapelL.clone(); lapelR.position.set(0.08, 0.96, 0.1); lapelR.rotation.z = -0.15;
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.04, 10), shirt);
-  collar.position.set(0, 1.09, 0.04);
+  // Trench coat — wide hourglass silhouette
+  const coatHem   = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.33, 0.32, 12), coat);
+  coatHem.position.y = 0.50;
+  const coatWaist = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.22, 12), coat);
+  coatWaist.position.y = 0.76;
+  const coatChest = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.22, 0.30, 12), coat);
+  coatChest.position.y = 0.98;
+  // Wide coat shoulders — dominant silhouette feature
+  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.11, 0.32), coat);
+  shoulders.position.y = 1.15;
+  // Belt
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.225, 0.225, 0.065, 12), beltMat);
+  belt.position.y = 0.65;
 
-  // Neck and head with proper jaw shape
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 10), skin);
-  neck.position.y = 1.14;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 14), skin);
-  head.position.y = 1.3; head.scale.set(1, 1.12, 0.95);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.14), skin);
-  jaw.position.set(0, 1.2, 0.02);
+  // Head — large cartoon proportion
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 14), skin);
+  head.position.y = 1.38;
+  // Eyes
+  const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 8), eyeMat);
+  lEye.position.set(-0.080, 1.39, 0.20);
+  const rEye = lEye.clone(); rEye.position.set(0.080, 1.39, 0.20);
 
-  // Face: eyes with whites and pupils, eyebrows, nose, mouth
-  const eyeSocketL = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), eyeWhite);
-  eyeSocketL.position.set(-0.055, 1.32, 0.12);
-  const eyeSocketR = eyeSocketL.clone(); eyeSocketR.position.set(0.055, 1.32, 0.12);
-  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), eyeDark);
-  pupilL.position.set(-0.055, 1.32, 0.145);
-  const pupilR = pupilL.clone(); pupilR.position.set(0.055, 1.32, 0.145);
-  const browL = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.012, 0.02), browMat);
-  browL.position.set(-0.055, 1.355, 0.125); browL.rotation.z = 0.08;
-  const browR = browL.clone(); browR.position.set(0.055, 1.355, 0.125); browR.rotation.z = -0.08;
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.022, 0.055, 6), skin);
-  nose.position.set(0, 1.28, 0.14); nose.rotation.x = Math.PI / 2;
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.015), lipMat);
-  mouth.position.set(0, 1.24, 0.13);
+  // Wide-brim fedora — iconic detective silhouette
+  const brim  = new THREE.Mesh(new THREE.CylinderGeometry(0.340, 0.355, 0.040, 16), hatMat);
+  brim.position.y = 1.57;
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.205, 0.240, 14), hatMat);
+  crown.position.y = 1.70;
+  const band  = new THREE.Mesh(new THREE.CylinderGeometry(0.160, 0.160, 0.048, 14), bandMat);
+  band.position.y = 1.585;
 
-  // Hair
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.157, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMat);
-  hair.position.y = 1.33;
-  const sideburns = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.06, 0.03), hairMat);
-  sideburns.position.set(-0.14, 1.28, 0.02);
-  const sideburnsR = sideburns.clone(); sideburnsR.position.set(0.14, 1.28, 0.02);
-  // Fedora hat — the detective's calling card
-  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.55 });
-  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.24, 0.03, 16), hatMat);
-  hatBrim.position.y = 1.41;
-  const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.165, 0.19, 14), hatMat);
-  hatCrown.position.y = 1.535;
-  const hatBand = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.04, 14),
-    new THREE.MeshStandardMaterial({ color: 0x3a2a0e, roughness: 0.5 }));
-  hatBand.position.y = 1.435;
+  // Arms — wide coat sleeves, box-style for toon look
+  const lUpperArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.40, 0.18), coat);
+  lUpperArm.position.set(-0.42, 0.92, 0);
+  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.42, 0.92, 0);
 
-  // Ears
-  const earL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), skin);
-  earL.position.set(-0.155, 1.3, 0); earL.scale.set(0.5, 1, 0.7);
-  const earR = earL.clone(); earR.position.set(0.155, 1.3, 0);
-
-  // Arms — proper parent-child hierarchy so forearm/hand follow upper arm during walk animation
-  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.28, 8), suit);
-  lUpperArm.position.set(-0.28, 0.88, 0); lUpperArm.rotation.z = 0.10;
-  const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
-  lForearm.position.set(0, -0.26, 0);  // in lUpperArm local: half_upper(0.14) + half_fore(0.12)
-  lUpperArm.add(lForearm);
-  const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin);
-  lHand.position.set(0, -0.415, 0);  // in lUpperArm local: 0.14 + 0.24 + 0.035
-  lUpperArm.add(lHand);
-  const rUpperArm = lUpperArm.clone();  // deep-clones rForearm and rHand as children
-  rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
-
-  // Legs — proper hierarchy: shin/shoe follow thigh, with knee bend during walk
-  const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
-  lThigh.position.set(-0.09, 0.32, 0);
-  const lShin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.26, 8), pants);
-  lShin.position.set(0, -0.27, 0);  // in lThigh local: knee(0.14) + shin_half(0.13)
+  // Legs — hidden under coat, feet poke out below hem
+  const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.32, 0.13), trousers);
+  lThigh.position.set(-0.09, 0.37, 0);
+  const lShin = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.24, 0.11), trousers);
+  lShin.position.set(0, -0.28, 0);  // in lThigh local: half_thigh(0.16) + half_shin(0.12)
   lThigh.add(lShin);
-  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.055, 0.17), shoe);
-  lShoe.position.set(0, -0.425, 0.022);  // in lThigh local: 0.14 + 0.26 + 0.025
+  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.065, 0.22), shoe);
+  lShoe.position.set(0, -0.445, 0.028);
   lThigh.add(lShoe);
   const rThigh = lThigh.clone();  // deep-clones rShin and rShoe as children
-  rThigh.position.set(0.09, 0.32, 0);
+  rThigh.position.set(0.09, 0.37, 0);
 
-  root.add(belt, lowerBody, upperBody, shoulderL, shoulderR, lapelL, lapelR, collar);
-  root.add(neck, head, jaw, eyeSocketL, eyeSocketR, pupilL, pupilR, browL, browR, nose, mouth);
-  root.add(hair, sideburns, sideburnsR, earL, earR);
-  root.add(hatBrim, hatCrown, hatBand);
-  root.add(lUpperArm, rUpperArm);  // forearms/hands are children of upper arms
-  root.add(lThigh, rThigh);         // shins/shoes are children of thighs
+  root.add(coatHem, coatWaist, coatChest, shoulders, belt);
+  root.add(lThigh, rThigh);   // shins/shoes are children of thighs
+  root.add(head, lEye, rEye);
+  root.add(brim, crown, band);
+  root.add(lUpperArm, rUpperArm);
 
   state.player.mesh = root;
-  state.player.body = upperBody;
+  state.player.body = coatChest;
   state.player.leftLeg = lThigh;
   state.player.rightLeg = rThigh;
   state.player.leftShin = lShin;
@@ -1000,9 +959,9 @@ function buildNightclubCharacters() {
     singer.position.y = 0.70 + Math.abs(Math.sin(t * 5.8)) * 0.12;
     singer.rotation.y = Math.sin(t * 2.6) * 0.5;
     singer.rotation.z = Math.sin(t * 5.8) * 0.07;
-    // Left arm (index 6) pumps up on the beat; right arm (index 7) counter-swings
-    if (singer.children[6]) singer.children[6].rotation.z = 0.10 + Math.sin(t * 5.8) * 0.55;
-    if (singer.children[7]) singer.children[7].rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
+    // Arms pump on the beat
+    if (singer.userData.leftArm)  singer.userData.leftArm.rotation.z  = 0.10 + Math.sin(t * 5.8) * 0.55;
+    if (singer.userData.rightArm) singer.userData.rightArm.rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
     // Head tilts and nods expressively
     if (singer.userData.head) {
       singer.userData.head.rotation.x = Math.sin(t * 5.8) * 0.12;
@@ -1161,9 +1120,9 @@ function buildNightclubCharacters() {
         man.userData.head.rotation.y = Math.sin(ph * 0.48 + 1.2) * 0.22;
         man.userData.head.rotation.x = Math.sin(ph * 0.78 + 0.5) * 0.08;
       }
-      // Man occasionally raises right arm (arm index 7, male) — gesturing while talking
+      // Man occasionally raises right arm — gesturing while talking
       const gesture = Math.max(0, Math.sin(ph * 0.35 + 2.0));
-      if (man.children[7]) man.children[7].rotation.z = -0.10 - gesture * 0.38;
+      if (man.userData.rightArm) man.userData.rightArm.rotation.z = -0.10 - gesture * 0.38;
       // Bob to the music (base y=0.5 for dining platform)
       woman.position.y = 0.5 + Math.sin(t * 2.8 + idx) * 0.018;
       man.position.y = 0.5 + Math.sin(t * 2.6 + idx + 1.2) * 0.015;
@@ -1188,10 +1147,9 @@ function buildNightclubCharacters() {
       date.userData.head.rotation.y = Math.sin(t * 0.55) * 0.22;
       date.userData.head.rotation.x = Math.sin(t * 0.38 + 1.0) * 0.08;
     }
-    // Right arm (female index 10) occasionally raises — sipping her drink
+    // Right arm occasionally raises — sipping her drink
     const drinkLift = Math.max(0, Math.sin(t * 0.55 + 0.8));
-    if (date.children[10]) date.children[10].rotation.z = -0.10 - drinkLift * 0.55;
-    if (date.children[10] && date.children[10].children[0]) date.children[10].children[0].rotation.z = -0.04 - drinkLift * 0.85;
+    if (date.userData.rightArm) date.userData.rightArm.rotation.z = -0.10 - drinkLift * 0.55;
     return true;
   });
 
@@ -1205,7 +1163,7 @@ function buildNightclubCharacters() {
     // Bartender polishes glasses and leans, checks the room
     bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.45;
     bartender.rotation.x = Math.sin(t * 1.1) * 0.04;
-    if (bartender.children[0]) bartender.children[0].rotation.y += dt * 1.2; // polishing motion
+    if (bartender.userData.rightArm) bartender.userData.rightArm.rotation.z = -0.10 + Math.sin(t * 2.2) * 0.45; // polishing motion
     return true;
   });
 
@@ -1220,8 +1178,6 @@ function buildNightclubCharacters() {
     patron.position.set(cfg.x, 0, 7.4); // standing right behind stool, bar hides lower body
     patron.rotation.y = Math.PI; // facing bar
     charGroup.add(patron);
-    // Right-arm child index differs by gender: female=10, male=7 (after hierarchy change)
-    const rArmIdx = cfg.female ? 10 : 7;
     state.animations.push((dt, t) => {
       const ph = t * 0.9 + pi * 2.3;
       patron.rotation.x = Math.sin(ph * 0.6) * 0.09;
@@ -1231,11 +1187,9 @@ function buildNightclubCharacters() {
         patron.userData.head.rotation.x = Math.sin(t * 2.4 + pi) * 0.10;
         patron.userData.head.rotation.y = Math.sin(t * 0.8 + pi * 0.7) * 0.14;
       }
-      // Raise drink to mouth periodically (right arm lifts; forearm is ra.children[0])
+      // Raise drink to mouth periodically
       const drinkLift = Math.max(0, Math.sin(t * 0.65 + pi * 1.8));
-      const rArm = patron.children[rArmIdx];
-      if (rArm) rArm.rotation.z = 0.10 - drinkLift * 0.6;
-      if (rArm && rArm.children[0]) rArm.children[0].rotation.z = 0.04 - drinkLift * 0.9;
+      if (patron.userData.rightArm) patron.userData.rightArm.rotation.z = 0.10 - drinkLift * 0.6;
       return true;
     });
   });
@@ -1274,11 +1228,9 @@ function buildNightclubCharacters() {
       amber.userData.head.rotation.y = Math.sin(t * 0.6 + 0.4) * 0.18;
       amber.userData.head.rotation.x = Math.sin(t * 0.45) * 0.06;
     }
-    // Right arm occasionally raises cigarette (index 7 = right upper arm after hierarchy change)
+    // Right arm occasionally raises cigarette
     const smokeRaise = Math.max(0, Math.sin(t * 0.42 + 1.2));
-    const amberRA = amber.children[7];
-    if (amberRA) amberRA.rotation.z = -0.10 - smokeRaise * 0.50;
-    if (amberRA && amberRA.children[0]) amberRA.children[0].rotation.z = -0.04 - smokeRaise * 0.65;
+    if (amber.userData.rightArm) amber.userData.rightArm.rotation.z = -0.10 - smokeRaise * 0.50;
     return true;
   });
 }
@@ -2925,131 +2877,94 @@ function addSmoke() {
   }
 }
 
-function makePerson(skin, outfit, female) {
+function makePerson(skinColor, outfitColor, female) {
   const root = new THREE.Group();
-  const om = new THREE.MeshStandardMaterial({ color: outfit, roughness: 0.44, metalness: 0.08 });
-  const sm = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.42 });
-  const hm = new THREE.MeshStandardMaterial({ color: darkenColor(skin, 0.32), roughness: 0.65 });
-  const pm = new THREE.MeshStandardMaterial({ color: darkenColor(outfit, 0.8), roughness: 0.5 });
-  const eyeW = new THREE.MeshStandardMaterial({ color: 0xf4f0e8, roughness: 0.3 });
-  const eyeD = new THREE.MeshStandardMaterial({ color: 0x1a1208, roughness: 0.2 });
-  const browM = new THREE.MeshStandardMaterial({ color: darkenColor(skin, 0.25), roughness: 0.6 });
-  const lipM = new THREE.MeshStandardMaterial({ color: female ? 0xc44a50 : darkenColor(skin, 0.75), roughness: 0.5 });
-
-  // Head, neck, face shared between male and female
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.08, 10), sm);
-  neck.position.y = 0.92;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), sm);
-  head.position.y = 1.06; head.scale.set(0.95, 1.08, 0.9);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.11), sm);
-  jaw.position.set(0, 0.97, 0.02);
-
-  // Eyes
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), eyeW);
-  eyeL.position.set(-0.045, 1.08, 0.1);
-  const eyeR = eyeL.clone(); eyeR.position.set(0.045, 1.08, 0.1);
-  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 6), eyeD);
-  pupilL.position.set(-0.045, 1.08, 0.12);
-  const pupilR = pupilL.clone(); pupilR.position.set(0.045, 1.08, 0.12);
-
-  // Eyebrows
-  const browL = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.01, 0.015), browM);
-  browL.position.set(-0.045, 1.105, 0.1); browL.rotation.z = female ? -0.05 : 0.1;
-  const browR = browL.clone(); browR.position.set(0.045, 1.105, 0.1); browR.rotation.z = female ? 0.05 : -0.1;
-
-  // Nose and mouth
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.018, 0.04, 6), sm);
-  nose.position.set(0, 1.05, 0.12); nose.rotation.x = Math.PI / 2;
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.008, 0.012), lipM);
-  mouth.position.set(0, 1.0, 0.11);
-
-  // Ears
-  const earL = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 6), sm);
-  earL.position.set(-0.125, 1.06, 0); earL.scale.set(0.45, 1, 0.65);
-  const earR = earL.clone(); earR.position.set(0.125, 1.06, 0);
-
-  const faceParts = [neck, head, jaw, eyeL, eyeR, pupilL, pupilR, browL, browR, nose, mouth, earL, earR];
+  const skin   = new THREE.MeshToonMaterial({ color: skinColor });
+  const outfit = new THREE.MeshToonMaterial({ color: outfitColor });
+  const dark   = new THREE.MeshToonMaterial({ color: darkenColor(outfitColor, 0.55) });
+  const hairMat = new THREE.MeshToonMaterial({ color: 0x0c0906 });
+  const eyeMat  = new THREE.MeshToonMaterial({ color: 0x111111 });
 
   if (female) {
-    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.24, 0.48, 12), om);
-    skirt.position.y = 0.26;
-    const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.14, 10), om);
-    waist.position.y = 0.56;
-    const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.15, 0.24, 10), om);
-    chest.position.y = 0.74;
-    const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), om);
-    shoulderL.position.set(-0.17, 0.84, 0);
-    const shoulderR = shoulderL.clone(); shoulderR.position.set(0.17, 0.84, 0);
-    // Hair - long and flowing
-    const hairBack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.06, 0.45, 12), hm);
-    hairBack.position.set(0, 0.9, -0.04);
-    const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.138, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hm);
-    hairTop.position.y = 1.1;
-    const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.015, 0.2, 6), hm);
-    hairSideL.position.set(-0.1, 0.98, 0.02);
-    const hairSideR = hairSideL.clone(); hairSideR.position.set(0.1, 0.98, 0.02);
-    // Arms (bare skin) — proper hierarchy so forearm/hand follow upper arm during animation
-    const la = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.24, 8), sm);
-    la.position.set(-0.17, 0.72, 0); la.rotation.z = 0.10;
-    const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.2, 8), sm);
-    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.12) + half_fore(0.10)
-    la.add(lfa);
-    const lh = new THREE.Mesh(new THREE.SphereGeometry(0.020, 6, 6), sm);
-    lh.position.set(0, -0.34, 0);  // in la local: 0.12 + 0.20 + 0.02
-    la.add(lh);
-    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
-    ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
-    // Legs under skirt
-    const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.2, 8), sm);
-    lt.position.set(-0.06, 0.06, 0);
-    const rt = lt.clone(); rt.position.set(0.06, 0.06, 0);
-    const lsh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.1), new THREE.MeshStandardMaterial({ color: 0x2a1008, roughness: 0.3 }));
-    lsh.position.set(-0.06, -0.02, 0.01);
-    const rsh = lsh.clone(); rsh.position.set(0.06, -0.02, 0.01);
-    root.add(skirt, waist, chest, shoulderL, shoulderR, hairBack, hairTop, hairSideL, hairSideR);
-    root.add(la, ra, lt, rt, lsh, rsh);  // forearms/hands are children of upper arms
-    root.add(...faceParts);
+    // Flared dress — narrow waist, wide skirt hem
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.32, 0.58, 12), outfit);
+    skirt.position.y = 0.31;
+    const bodice = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.14, 0.28, 10), outfit);
+    bodice.position.y = 0.74;
+    const shoulderBar = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.09, 0.22), outfit);
+    shoulderBar.position.y = 0.90;
+    // Arms (bare skin — hang at sides)
+    const lArm = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.034, 0.46, 7), skin);
+    lArm.position.set(-0.24, 0.69, 0); lArm.rotation.z = 0.20;
+    const rArm = lArm.clone(); rArm.position.set(0.24, 0.69, 0); rArm.rotation.z = -0.20;
+    // Legs peek below hem
+    const lLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.034, 0.10, 7), skin);
+    lLeg.position.set(-0.07, 0.02, 0);
+    const rLeg = lLeg.clone(); rLeg.position.set(0.07, 0.02, 0);
+    // Head — large, dominant cartoon proportion
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.205, 12, 10), skin);
+    head.position.y = 1.13;
+    // Hair — covers top and sides of head
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.222, 12, 9), hairMat);
+    hair.position.set(0, 1.21, -0.02); hair.scale.set(1.0, 0.80, 0.90);
+    // Eyes — large
+    const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.036, 7, 7), eyeMat);
+    lEye.position.set(-0.082, 1.14, 0.185);
+    const rEye = lEye.clone(); rEye.position.set(0.082, 1.14, 0.185);
+    // Lips
+    const lipMat = new THREE.MeshToonMaterial({ color: 0xcc1c3c });
+    const lips = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.025, 0.02), lipMat);
+    lips.position.set(0, 1.04, 0.20);
+
+    root.add(skirt, bodice, shoulderBar, lArm, rArm, lLeg, rLeg, head, hair, lEye, rEye, lips);
+    root.userData.head = head;
+    root.userData.leftArm  = lArm;
+    root.userData.rightArm = rArm;
+
   } else {
-    // Slimmer, more proportional male body
-    const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.28, 10), om);
-    chest.position.y = 0.76;
-    const abdomen = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.16, 10), om);
-    abdomen.position.y = 0.56;
-    const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.12, 0.16), pm);
-    pelvis.position.y = 0.44;
-    const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 6), om);
-    shoulderL.position.set(-0.19, 0.88, 0);
-    const shoulderR = shoulderL.clone(); shoulderR.position.set(0.19, 0.88, 0);
-    // Hair
-    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.135, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.48), hm);
-    hairCap.position.y = 1.1;
-    // Arms — proper hierarchy so forearm/hand follow upper arm during animation
-    const la = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.030, 0.22, 8), om);
-    la.position.set(-0.20, 0.76, 0); la.rotation.z = 0.10;
-    const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.22, 8), om);
-    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.11) + half_fore(0.11)
-    la.add(lfa);
-    const lh = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), sm);
-    lh.position.set(0, -0.356, 0);  // in la local: 0.11 + 0.22 + 0.026
-    la.add(lh);
-    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
-    ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
-    // Legs — slight A-stance angle for natural standing pose
-    const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.042, 0.22, 8), pm);
-    lt.position.set(-0.07, 0.30, 0); lt.rotation.z = -0.06;
-    const ls = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.034, 0.22, 8), pm);
-    ls.position.set(-0.072, 0.09, 0); ls.rotation.z = -0.03;
-    const lsh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.13), new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.3 }));
-    lsh.position.set(-0.072, 0.0, 0.01);
-    const rt = lt.clone(); rt.position.set(0.07, 0.30, 0); rt.rotation.z = 0.06;
-    const rs = ls.clone(); rs.position.set(0.072, 0.09, 0); rs.rotation.z = 0.03;
-    const rsh = lsh.clone(); rsh.position.set(0.072, 0.0, 0.01);
-    root.add(chest, abdomen, pelvis, shoulderL, shoulderR, hairCap);
-    root.add(la, ra, lt, ls, lsh, rt, rs, rsh);  // forearms/hands are children of upper arms
-    root.add(...faceParts);
+    // Blocky suit — wide shoulders give clear male silhouette
+    const hatMat = new THREE.MeshToonMaterial({ color: darkenColor(outfitColor, 0.40) });
+    const shoeMat = new THREE.MeshToonMaterial({ color: 0x100d08 });
+    const handMat = new THREE.MeshToonMaterial({ color: skinColor });
+    // Legs / trousers
+    const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.46, 0.16), dark);
+    lLeg.position.set(-0.11, 0.25, 0);
+    const rLeg = lLeg.clone(); rLeg.position.set(0.11, 0.25, 0);
+    const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.065, 0.20), shoeMat);
+    lShoe.position.set(-0.11, 0.02, 0.03);
+    const rShoe = lShoe.clone(); rShoe.position.set(0.11, 0.02, 0.03);
+    // Jacket — blocky torso
+    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.54, 0.25), outfit);
+    jacket.position.y = 0.74;
+    // Wide shoulders — dominant feature
+    const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.12, 0.27), outfit);
+    shoulders.position.y = 1.02;
+    // Arms (jacket sleeves)
+    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.40, 0.15), outfit);
+    lArm.position.set(-0.34, 0.73, 0);
+    const rArm = lArm.clone(); rArm.position.set(0.34, 0.73, 0);
+    const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 0.09), handMat);
+    lHand.position.set(-0.34, 0.50, 0);
+    const rHand = lHand.clone(); rHand.position.set(0.34, 0.50, 0);
+    // Head — large
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.200, 12, 10), skin);
+    head.position.y = 1.20;
+    // Hat brim + crown
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.270, 0.280, 0.046, 12), hatMat);
+    brim.position.y = 1.39;
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.152, 0.190, 0.220, 12), hatMat);
+    crown.position.y = 1.52;
+    // Eyes
+    const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.030, 7, 7), eyeMat);
+    lEye.position.set(-0.075, 1.21, 0.185);
+    const rEye = lEye.clone(); rEye.position.set(0.075, 1.21, 0.185);
+
+    root.add(lLeg, rLeg, lShoe, rShoe, jacket, shoulders, lArm, rArm, lHand, rHand,
+             head, brim, crown, lEye, rEye);
+    root.userData.head = head;
+    root.userData.leftArm  = lArm;
+    root.userData.rightArm = rArm;
   }
-  root.userData.head = head;
-  root.userData.neck = neck;
   return root;
 }
 
