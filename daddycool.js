@@ -20,8 +20,8 @@ const dom = {
   closeEvidenceBtn: document.getElementById("close-evidence-btn"),
   joystick: document.getElementById("joystick"),
   joystickKnob: document.getElementById("joystick-knob"),
-  btnA: document.getElementById("btn-a"),
-  btnB: document.getElementById("btn-b")
+  btnI: document.getElementById("btn-i"),
+  btnP: document.getElementById("btn-p")
 };
 
 const INTRO_TEXT = ["Nightclub interior.", "Little Italy.", "Summer 1979. 11:54 PM."].join("\n");
@@ -126,113 +126,75 @@ function initRendererProfile() {
 }
 
 function buildPlayerMesh() {
-  const root = new THREE.Group();
-  const suit = new THREE.MeshStandardMaterial({ color: 0x1a1b20, roughness: 0.45, metalness: 0.07 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0xeed5b3, roughness: 0.4, metalness: 0.03 });
-  const pants = new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.5 });
-  const shoe = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.3, metalness: 0.15 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0xd4c8b0, roughness: 0.5 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.7 });
-  const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xf4f0e8, roughness: 0.3 });
-  const eyeDark = new THREE.MeshStandardMaterial({ color: 0x1a1208, roughness: 0.2 });
-  const browMat = new THREE.MeshStandardMaterial({ color: 0x221508, roughness: 0.6 });
-  const lipMat = new THREE.MeshStandardMaterial({ color: 0xc49880, roughness: 0.55 });
-  const beltMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.35, metalness: 0.2 });
+  const root     = new THREE.Group();
+  const coat     = new THREE.MeshToonMaterial({ color: 0x1a1b20 });
+  const skin     = new THREE.MeshToonMaterial({ color: 0xeed5b3 });
+  const trousers = new THREE.MeshToonMaterial({ color: 0x151618 });
+  const shoe     = new THREE.MeshToonMaterial({ color: 0x100e0c });
+  const hatMat   = new THREE.MeshToonMaterial({ color: 0x0e0c0a });
+  const eyeMat   = new THREE.MeshToonMaterial({ color: 0x111111 });
+  const beltMat  = new THREE.MeshToonMaterial({ color: 0x0a0806 });
+  const bandMat  = new THREE.MeshToonMaterial({ color: 0x3a2a0e });
 
-  // Torso: belt region, lower body, upper body, shoulder pads
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.2, 0.06, 12), beltMat);
-  belt.position.y = 0.68;
-  const lowerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.34, 12), pants);
-  lowerBody.position.y = 0.54;
-  const upperBody = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.38, 12), suit);
-  upperBody.position.y = 0.88;
-  const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), suit);
-  shoulderL.position.set(-0.26, 1.04, 0);
-  const shoulderR = shoulderL.clone(); shoulderR.position.set(0.26, 1.04, 0);
-  const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.03), suit);
-  lapelL.position.set(-0.08, 0.96, 0.1); lapelL.rotation.z = 0.15;
-  const lapelR = lapelL.clone(); lapelR.position.set(0.08, 0.96, 0.1); lapelR.rotation.z = -0.15;
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.04, 10), shirt);
-  collar.position.set(0, 1.09, 0.04);
+  // Trench coat — wide hourglass silhouette
+  const coatHem   = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.33, 0.32, 12), coat);
+  coatHem.position.y = 0.50;
+  const coatWaist = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.22, 12), coat);
+  coatWaist.position.y = 0.76;
+  const coatChest = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.22, 0.30, 12), coat);
+  coatChest.position.y = 0.98;
+  // Wide coat shoulders — dominant silhouette feature
+  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.11, 0.32), coat);
+  shoulders.position.y = 1.15;
+  // Belt
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.225, 0.225, 0.065, 12), beltMat);
+  belt.position.y = 0.65;
 
-  // Neck and head with proper jaw shape
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 10), skin);
-  neck.position.y = 1.14;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 14), skin);
-  head.position.y = 1.3; head.scale.set(1, 1.12, 0.95);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.14), skin);
-  jaw.position.set(0, 1.2, 0.02);
+  // Head — large cartoon proportion
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 14), skin);
+  head.position.y = 1.38;
+  // Eyes
+  const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 8), eyeMat);
+  lEye.position.set(-0.080, 1.39, 0.20);
+  const rEye = lEye.clone(); rEye.position.set(0.080, 1.39, 0.20);
 
-  // Face: eyes with whites and pupils, eyebrows, nose, mouth
-  const eyeSocketL = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), eyeWhite);
-  eyeSocketL.position.set(-0.055, 1.32, 0.12);
-  const eyeSocketR = eyeSocketL.clone(); eyeSocketR.position.set(0.055, 1.32, 0.12);
-  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), eyeDark);
-  pupilL.position.set(-0.055, 1.32, 0.145);
-  const pupilR = pupilL.clone(); pupilR.position.set(0.055, 1.32, 0.145);
-  const browL = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.012, 0.02), browMat);
-  browL.position.set(-0.055, 1.355, 0.125); browL.rotation.z = 0.08;
-  const browR = browL.clone(); browR.position.set(0.055, 1.355, 0.125); browR.rotation.z = -0.08;
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.022, 0.055, 6), skin);
-  nose.position.set(0, 1.28, 0.14); nose.rotation.x = Math.PI / 2;
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.015), lipMat);
-  mouth.position.set(0, 1.24, 0.13);
+  // Wide-brim fedora — iconic detective silhouette
+  const brim  = new THREE.Mesh(new THREE.CylinderGeometry(0.340, 0.355, 0.040, 16), hatMat);
+  brim.position.y = 1.57;
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.205, 0.240, 14), hatMat);
+  crown.position.y = 1.70;
+  const band  = new THREE.Mesh(new THREE.CylinderGeometry(0.160, 0.160, 0.048, 14), bandMat);
+  band.position.y = 1.585;
 
-  // Hair
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.157, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMat);
-  hair.position.y = 1.33;
-  const sideburns = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.06, 0.03), hairMat);
-  sideburns.position.set(-0.14, 1.28, 0.02);
-  const sideburnsR = sideburns.clone(); sideburnsR.position.set(0.14, 1.28, 0.02);
-  // Fedora hat — the detective's calling card
-  const hatMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 0.55 });
-  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.24, 0.03, 16), hatMat);
-  hatBrim.position.y = 1.41;
-  const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.165, 0.19, 14), hatMat);
-  hatCrown.position.y = 1.535;
-  const hatBand = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.04, 14),
-    new THREE.MeshStandardMaterial({ color: 0x3a2a0e, roughness: 0.5 }));
-  hatBand.position.y = 1.435;
+  // Arms — wide coat sleeves, box-style for toon look
+  const lUpperArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.40, 0.18), coat);
+  lUpperArm.position.set(-0.42, 0.92, 0);
+  const rUpperArm = lUpperArm.clone(); rUpperArm.position.set(0.42, 0.92, 0);
 
-  // Ears
-  const earL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), skin);
-  earL.position.set(-0.155, 1.3, 0); earL.scale.set(0.5, 1, 0.7);
-  const earR = earL.clone(); earR.position.set(0.155, 1.3, 0);
+  // Legs — hidden under coat, feet poke out below hem
+  const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.32, 0.13), trousers);
+  lThigh.position.set(-0.09, 0.37, 0);
+  const lShin = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.24, 0.11), trousers);
+  lShin.position.set(0, -0.28, 0);  // in lThigh local: half_thigh(0.16) + half_shin(0.12)
+  lThigh.add(lShin);
+  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.065, 0.22), shoe);
+  lShoe.position.set(0, -0.445, 0.028);
+  lThigh.add(lShoe);
+  const rThigh = lThigh.clone();  // deep-clones rShin and rShoe as children
+  rThigh.position.set(0.09, 0.37, 0);
 
-  // Arms — proper parent-child hierarchy so forearm/hand follow upper arm during walk animation
-  const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.28, 8), suit);
-  lUpperArm.position.set(-0.28, 0.88, 0); lUpperArm.rotation.z = 0.10;
-  const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.032, 0.24, 8), suit);
-  lForearm.position.set(0, -0.26, 0);  // in lUpperArm local: half_upper(0.14) + half_fore(0.12)
-  lUpperArm.add(lForearm);
-  const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), skin);
-  lHand.position.set(0, -0.415, 0);  // in lUpperArm local: 0.14 + 0.24 + 0.035
-  lUpperArm.add(lHand);
-  const rUpperArm = lUpperArm.clone();  // deep-clones rForearm and rHand as children
-  rUpperArm.position.set(0.28, 0.88, 0); rUpperArm.rotation.z = -0.10;
-
-  // Legs
-  const lThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.28, 8), pants);
-  lThigh.position.set(-0.09, 0.32, 0);
-  const lShin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.26, 8), pants);
-  lShin.position.set(-0.09, 0.08, 0);
-  const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.15), shoe);
-  lShoe.position.set(-0.09, -0.02, 0.02);
-  const rThigh = lThigh.clone(); rThigh.position.set(0.09, 0.32, 0);
-  const rShin = lShin.clone(); rShin.position.set(0.09, 0.08, 0);
-  const rShoe = lShoe.clone(); rShoe.position.set(0.09, -0.02, 0.02);
-
-  root.add(belt, lowerBody, upperBody, shoulderL, shoulderR, lapelL, lapelR, collar);
-  root.add(neck, head, jaw, eyeSocketL, eyeSocketR, pupilL, pupilR, browL, browR, nose, mouth);
-  root.add(hair, sideburns, sideburnsR, earL, earR);
-  root.add(hatBrim, hatCrown, hatBand);
-  root.add(lUpperArm, rUpperArm);  // forearms/hands are children of upper arms
-  root.add(lThigh, lShin, lShoe, rThigh, rShin, rShoe);
+  root.add(coatHem, coatWaist, coatChest, shoulders, belt);
+  root.add(lThigh, rThigh);   // shins/shoes are children of thighs
+  root.add(head, lEye, rEye);
+  root.add(brim, crown, band);
+  root.add(lUpperArm, rUpperArm);
 
   state.player.mesh = root;
-  state.player.body = upperBody;
+  state.player.body = coatChest;
   state.player.leftLeg = lThigh;
   state.player.rightLeg = rThigh;
+  state.player.leftShin = lShin;
+  state.player.rightShin = rThigh.children[0];  // cloned rShin
   state.player.leftArm = lUpperArm;
   state.player.rightArm = rUpperArm;
   root.position.copy(state.player.pos);
@@ -255,8 +217,8 @@ function attachInput() {
     s: "down", S: "down", ArrowDown: "down",
     a: "left", A: "left", ArrowLeft: "left",
     d: "right", D: "right", ArrowRight: "right",
-    e: "interact", E: "interact", Enter: "interact", j: "interact", J: "interact",
-    b: "action", B: "action", " ": "action", k: "action", K: "action"
+    i: "interact", I: "interact", Enter: "interact", e: "interact", E: "interact",
+    p: "action", P: "action", " ": "action"
   };
   window.addEventListener("keydown", (event) => {
     const action = keyMap[event.key];
@@ -274,8 +236,8 @@ function attachInput() {
     else state.controls[action] = false;
     if (event.key.startsWith("Arrow") || action === "interact" || action === "action") event.preventDefault();
   });
-  bindPress(dom.btnA, () => queueButton("a", false));
-  bindPress(dom.btnB, () => queueButton("b", false));
+  bindPress(dom.btnI, () => queueButton("a", false));
+  bindPress(dom.btnP, () => queueButton("b", false));
   bindPress(dom.canvas, () => {
     if (state.inDialogue) { displayNextDialogueLine(); return; }
     if (state.evidenceOpen) { closeEvidence(); return; }
@@ -539,9 +501,9 @@ function loadNightclubScene(startPhase) {
   registerNightclubInteractions();
 
   if (startPhase === "seated") {
-    setObjective("Seated at your table. Press A to talk. Press B to stand.", "Move with joystick or WASD.");
+    setObjective("Seated at your table. Press I to talk. Press P to stand.", "Move with joystick or WASD.");
   } else {
-    setObjective("Rejoin your date.", "Press A near her.");
+    setObjective("Rejoin your date.", "Press I near her.");
   }
 }
 
@@ -997,9 +959,9 @@ function buildNightclubCharacters() {
     singer.position.y = 0.70 + Math.abs(Math.sin(t * 5.8)) * 0.12;
     singer.rotation.y = Math.sin(t * 2.6) * 0.5;
     singer.rotation.z = Math.sin(t * 5.8) * 0.07;
-    // Left arm (index 6) pumps up on the beat; right arm (index 7) counter-swings
-    if (singer.children[6]) singer.children[6].rotation.z = 0.10 + Math.sin(t * 5.8) * 0.55;
-    if (singer.children[7]) singer.children[7].rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
+    // Arms pump on the beat
+    if (singer.userData.leftArm)  singer.userData.leftArm.rotation.z  = 0.10 + Math.sin(t * 5.8) * 0.55;
+    if (singer.userData.rightArm) singer.userData.rightArm.rotation.z = -0.10 - Math.sin(t * 5.8 + Math.PI) * 0.45;
     // Head tilts and nods expressively
     if (singer.userData.head) {
       singer.userData.head.rotation.x = Math.sin(t * 5.8) * 0.12;
@@ -1091,9 +1053,11 @@ function buildNightclubCharacters() {
     { x: -9.0, z: -7.7, skin: 0xe8d0a8, dress: 0x4488ff },
     { x: -7.2, z: -7.7, skin: 0x7a4a28, dress: 0xcc44aa }
   ];
+  const heightVariants = [0.92, 1.0, 0.88, 1.06, 0.96, 1.03, 0.90, 1.08];
   dancerConfigs.forEach((dc, i) => {
     const dancer = makePerson(dc.skin, dc.dress, i % 2 === 0);
     dancer.position.set(dc.x, 0, dc.z);
+    dancer.scale.setScalar(heightVariants[i % heightVariants.length]);
     charGroup.add(dancer);
     state.animations.push((dt, t) => {
       if (state.phase === "scream" || state.phase === "aftermath") return false;
@@ -1116,10 +1080,12 @@ function buildNightclubCharacters() {
     const woman = makePerson(cfg.wSkin, cfg.wDress, true);
     woman.position.set(cfg.tx - 0.85, 0.5, cfg.tz);
     woman.rotation.y = Math.PI / 2; // facing right (toward man)
+    woman.scale.setScalar(0.88 + idx * 0.06);  // slight height variety
     // Leisure suit man with open-chest shirt detail
     const man = makePerson(cfg.mSkin, cfg.mSuit, false);
     man.position.set(cfg.tx + 0.85, 0.5, cfg.tz);
     man.rotation.y = -Math.PI / 2; // facing left (toward woman)
+    man.scale.setScalar(0.95 + idx * 0.05);
     // Wide lapels
     const lapelMat = new THREE.MeshStandardMaterial({ color: darkenColor(cfg.mSuit, 0.78), roughness: 0.55 });
     const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.22, 0.04), lapelMat);
@@ -1154,9 +1120,9 @@ function buildNightclubCharacters() {
         man.userData.head.rotation.y = Math.sin(ph * 0.48 + 1.2) * 0.22;
         man.userData.head.rotation.x = Math.sin(ph * 0.78 + 0.5) * 0.08;
       }
-      // Man occasionally raises right arm (arm index 7, male) — gesturing while talking
+      // Man occasionally raises right arm — gesturing while talking
       const gesture = Math.max(0, Math.sin(ph * 0.35 + 2.0));
-      if (man.children[7]) man.children[7].rotation.z = -0.10 - gesture * 0.38;
+      if (man.userData.rightArm) man.userData.rightArm.rotation.z = -0.10 - gesture * 0.38;
       // Bob to the music (base y=0.5 for dining platform)
       woman.position.y = 0.5 + Math.sin(t * 2.8 + idx) * 0.018;
       man.position.y = 0.5 + Math.sin(t * 2.6 + idx + 1.2) * 0.015;
@@ -1181,10 +1147,9 @@ function buildNightclubCharacters() {
       date.userData.head.rotation.y = Math.sin(t * 0.55) * 0.22;
       date.userData.head.rotation.x = Math.sin(t * 0.38 + 1.0) * 0.08;
     }
-    // Right arm (female index 10) occasionally raises — sipping her drink
+    // Right arm occasionally raises — sipping her drink
     const drinkLift = Math.max(0, Math.sin(t * 0.55 + 0.8));
-    if (date.children[10]) date.children[10].rotation.z = -0.10 - drinkLift * 0.55;
-    if (date.children[10] && date.children[10].children[0]) date.children[10].children[0].rotation.z = -0.04 - drinkLift * 0.85;
+    if (date.userData.rightArm) date.userData.rightArm.rotation.z = -0.10 - drinkLift * 0.55;
     return true;
   });
 
@@ -1198,7 +1163,7 @@ function buildNightclubCharacters() {
     // Bartender polishes glasses and leans, checks the room
     bartender.rotation.y = Math.PI + Math.sin(t * 0.7) * 0.45;
     bartender.rotation.x = Math.sin(t * 1.1) * 0.04;
-    if (bartender.children[0]) bartender.children[0].rotation.y += dt * 1.2; // polishing motion
+    if (bartender.userData.rightArm) bartender.userData.rightArm.rotation.z = -0.10 + Math.sin(t * 2.2) * 0.45; // polishing motion
     return true;
   });
 
@@ -1213,8 +1178,6 @@ function buildNightclubCharacters() {
     patron.position.set(cfg.x, 0, 7.4); // standing right behind stool, bar hides lower body
     patron.rotation.y = Math.PI; // facing bar
     charGroup.add(patron);
-    // Right-arm child index differs by gender: female=10, male=7 (after hierarchy change)
-    const rArmIdx = cfg.female ? 10 : 7;
     state.animations.push((dt, t) => {
       const ph = t * 0.9 + pi * 2.3;
       patron.rotation.x = Math.sin(ph * 0.6) * 0.09;
@@ -1224,11 +1187,9 @@ function buildNightclubCharacters() {
         patron.userData.head.rotation.x = Math.sin(t * 2.4 + pi) * 0.10;
         patron.userData.head.rotation.y = Math.sin(t * 0.8 + pi * 0.7) * 0.14;
       }
-      // Raise drink to mouth periodically (right arm lifts; forearm is ra.children[0])
+      // Raise drink to mouth periodically
       const drinkLift = Math.max(0, Math.sin(t * 0.65 + pi * 1.8));
-      const rArm = patron.children[rArmIdx];
-      if (rArm) rArm.rotation.z = 0.10 - drinkLift * 0.6;
-      if (rArm && rArm.children[0]) rArm.children[0].rotation.z = 0.04 - drinkLift * 0.9;
+      if (patron.userData.rightArm) patron.userData.rightArm.rotation.z = 0.10 - drinkLift * 0.6;
       return true;
     });
   });
@@ -1267,11 +1228,9 @@ function buildNightclubCharacters() {
       amber.userData.head.rotation.y = Math.sin(t * 0.6 + 0.4) * 0.18;
       amber.userData.head.rotation.x = Math.sin(t * 0.45) * 0.06;
     }
-    // Right arm occasionally raises cigarette (index 7 = right upper arm after hierarchy change)
+    // Right arm occasionally raises cigarette
     const smokeRaise = Math.max(0, Math.sin(t * 0.42 + 1.2));
-    const amberRA = amber.children[7];
-    if (amberRA) amberRA.rotation.z = -0.10 - smokeRaise * 0.50;
-    if (amberRA && amberRA.children[0]) amberRA.children[0].rotation.z = -0.04 - smokeRaise * 0.65;
+    if (amber.userData.rightArm) amber.userData.rightArm.rotation.z = -0.10 - smokeRaise * 0.50;
     return true;
   });
 }
@@ -1310,27 +1269,27 @@ function addSmokeCloud(parent, x, y, z) {
 
 function registerNightclubInteractions() {
   clearInteractions();
-  addInteraction("talk-date", "A", () => state.phase === "seated", () => state.dateMesh.position, 1.8, () => {
+  addInteraction("talk-date", "I", () => state.phase === "seated", () => state.dateMesh.position, 1.8, () => {
     showDialogue("Date: I love this song!", 1700);
   });
-  addInteraction("stand-up", "B", () => state.phase === "seated", () => state.dateMesh.position, 1.9, () => {
+  addInteraction("stand-up", "P", () => state.phase === "seated", () => state.dateMesh.position, 1.9, () => {
     state.phase = "explore";
     state.playerCanMove = true;
     state.player.seated = false;
-    setObjective("Walk the room. Talk to bartender at the bar.", "A to interact. B is action.");
+    setObjective("Walk the room. Talk to bartender at the bar.", "I to interact. P is action.");
     showDialogue("You stand up and the room opens around you.", 2600);
   });
-  addInteraction("amber-man", "B", () => state.phase === "explore" || state.phase === "dance-invite", () => state.amberManMesh.position, 1.7, () => {
+  addInteraction("amber-man", "P", () => state.phase === "explore" || state.phase === "dance-invite", () => state.amberManMesh.position, 1.7, () => {
     showDialogue("\u2026", 1100);
   });
-  addInteraction("bartender", "A", () => state.phase === "explore", () => state.bartenderMesh.position, 1.8, () => {
+  addInteraction("bartender", "I", () => state.phase === "explore", () => state.bartenderMesh.position, 1.8, () => {
     state.phase = "dance-invite";
-    setObjective("Your date moved to the dance floor. Meet her and press A.", "Dance floor is lit on the left.");
+    setObjective("Your date moved to the dance floor. Meet her and press I.", "Dance floor is lit on the left.");
     showDialogue("Date: Come on, detective. Dance before this song dies.", 3600);
     moveDateTo(-6.5, -6.0, 0);
   });
-  addInteraction("dance-date", "A", () => state.phase === "dance-invite", () => state.dateMesh.position, 1.9, () => { runDanceBeat(); });
-  addInteraction("womens-door", "A", () => state.phase === "scream", () => state.womensDoorPos, 1.8, () => { loadBathroomScene(); });
+  addInteraction("dance-date", "I", () => state.phase === "dance-invite", () => state.dateMesh.position, 1.9, () => { runDanceBeat(); });
+  addInteraction("womens-door", "I", () => state.phase === "scream", () => state.womensDoorPos, 1.8, () => { loadBathroomScene(); });
 }
 
 function runDanceBeat() {
@@ -1343,7 +1302,7 @@ function runDanceBeat() {
   window.setTimeout(() => {
     state.phase = "scream";
     state.playerCanMove = true;
-    setObjective("A scream cuts the room. Enter the women's room.", "Move to the red restroom door and press A.");
+    setObjective("A scream cuts the room. Enter the women's room.", "Move to the red restroom door and press I.");
     showDialogue("A scream silences the club. Glasses freeze in mid-air.", 3200);
     scene.fog.color.setHex(0x1a1a18);
     scene.fog.density = 0.022;
@@ -1358,8 +1317,9 @@ function runDanceBeat() {
       emergFlash.intensity = Math.max(0, emergFlash.intensity - dt * 1.4);
       return emergFlash.intensity > 0.05;
     });
-    // All NPCs panic-flee toward exit (front door, z≈11)
+    // All NPCs panic-flee toward exit (front door, z≈11) — skip the player
     charGroup.children.slice().forEach((npc, i) => {
+      if (npc === state.player.mesh) return;
       let fled = false;
       state.animations.push((dt, t) => {
         if (fled) return false;
@@ -1398,7 +1358,7 @@ function loadBathroomScene() {
   state.playerCanMove = true;
   state.player.seated = false;
   state.player.pos.set(-2.6, 0, 2.0);
-  state.player.yaw = 0; // face +z toward mirror and sink
+  state.player.yaw = Math.PI; // face -z toward crime scene (body at z=-2.5)
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
   state.player.mesh.visible = false; // first-person — no visible player body
@@ -1446,35 +1406,47 @@ function loadBathroomScene() {
     new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }));
   crack.position.set(1.6, 2.18, 5.77); crack.rotation.z = 0.55; envGroup.add(crack);
 
-  // Stall partition
-  envGroup.add(makeBox(2.8, 1.3, -2.7, 4.4, 2.6, 0.3, 0x27303f, 0.75));
-  // Stall door (ajar)
-  const stallDoor = makeBox(0.7, 1.1, -3.3, 0.08, 2.0, 0.85, 0x2d3648, 0.7);
-  stallDoor.rotation.y = 0.45; envGroup.add(stallDoor);
+  // Stall — front partition wall (full width with door gap on left)
+  envGroup.add(makeBox(3.1, 1.3, -2.7, 3.8, 2.6, 0.3, 0x27303f, 0.75));  // right portion
+  envGroup.add(makeBox(0.55, 1.3, -2.7, 0.6, 2.6, 0.3, 0x27303f, 0.75));  // left slim post
+  // Left stall side wall (runs front to back)
+  envGroup.add(makeBox(0.76, 1.3, -4.3, 0.3, 2.6, 3.2, 0x27303f, 0.75));
+  // Stall door (ajar — swings into hallway)
+  const stallDoor = makeBox(0.85, 1.1, -2.5, 0.08, 2.0, 0.95, 0x2d3648, 0.7);
+  stallDoor.rotation.y = -0.5; envGroup.add(stallDoor);
 
-  // Blood pool — irregular shape built from overlapping circles
+  // Toilet inside the stall — base + cistern
+  const toiletMat = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.3 });
+  const tBase = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.20, 0.38, 12), toiletMat);
+  tBase.position.set(2.8, 0.19, -5.1); envGroup.add(tBase);
+  const tSeat = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.044, 6, 14), toiletMat);
+  tSeat.rotation.x = Math.PI / 2; tSeat.position.set(2.8, 0.42, -5.1); envGroup.add(tSeat);
+  const tCistern = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.44, 0.22), toiletMat);
+  tCistern.position.set(2.8, 0.72, -5.5); envGroup.add(tCistern);
+
+  // Blood pool INSIDE the stall — body slumped against the back
   const bloodMat = new THREE.MeshStandardMaterial({ color: 0x4a0610, roughness: 0.97 });
-  const blood = new THREE.Mesh(new THREE.CircleGeometry(0.9, 20), bloodMat);
-  blood.rotation.x = -Math.PI / 2; blood.position.set(3.3, 0.01, -2.2); envGroup.add(blood);
-  const bloodTrail = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.9),
+  const blood = new THREE.Mesh(new THREE.CircleGeometry(0.85, 20), bloodMat);
+  blood.rotation.x = -Math.PI / 2; blood.position.set(3.0, 0.01, -4.0); envGroup.add(blood);
+  const bloodTrail = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 1.1),
     new THREE.MeshStandardMaterial({ color: 0x3e0408, roughness: 0.98 }));
-  bloodTrail.rotation.x = -Math.PI / 2; bloodTrail.rotation.z = 0.6;
-  bloodTrail.position.set(2.6, 0.011, -2.6); envGroup.add(bloodTrail);
-  const bloodSplat = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12), bloodMat);
-  bloodSplat.rotation.x = -Math.PI / 2; bloodSplat.position.set(2.2, 0.011, -3.1); envGroup.add(bloodSplat);
+  bloodTrail.rotation.x = -Math.PI / 2; bloodTrail.rotation.z = 0.4;
+  bloodTrail.position.set(2.6, 0.011, -3.4); envGroup.add(bloodTrail);
+  const bloodSplat = new THREE.Mesh(new THREE.CircleGeometry(0.20, 12), bloodMat);
+  bloodSplat.rotation.x = -Math.PI / 2; bloodSplat.position.set(2.2, 0.011, -3.0); envGroup.add(bloodSplat);
 
-  // Crime-scene atmosphere: flickering harsh overhead light
-  const crimeLight = new THREE.PointLight(0xc8dde8, 0.8, 9, 2);
-  crimeLight.position.set(3.3, 2.8, -2.5); fxGroup.add(crimeLight);
+  // Crime-scene atmosphere: flickering harsh overhead light inside stall
+  const crimeLight = new THREE.PointLight(0xc8dde8, 0.9, 8, 2);
+  crimeLight.position.set(3.0, 2.8, -4.0); fxGroup.add(crimeLight);
   state.animations.push((dt, t) => {
-    crimeLight.intensity = 0.7 + Math.sin(t * 43) * 0.06 + Math.sin(t * 17) * 0.04;
+    crimeLight.intensity = 0.8 + Math.sin(t * 43) * 0.07 + Math.sin(t * 17) * 0.05;
     return true;
   });
 
-  charGroup.add(makeCorpse(3.2, 0.01, -2.5));
+  charGroup.add(makeCorpse(3.0, 0.01, -4.0));
 
-  // Clues
-  const compact = makeBox(3.5, 0.58, -2.45, 0.34, 0.05, 0.34, 0xaeb9d3, 0.24);
+  // Compact mirror clue — on floor just inside stall, reachable from doorway
+  const compact = makeBox(3.5, 0.08, -3.7, 0.34, 0.05, 0.34, 0xaeb9d3, 0.24);
   envGroup.add(compact);
   // Razor blade evidence near sink
   const razor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.008, 0.04),
@@ -1489,15 +1461,20 @@ function loadBathroomScene() {
   const sinkClue = makeBox(-0.7, 0.938, 4.83, 0.58, 0.04, 0.3, 0xf7f7f7, 0.5);
   envGroup.add(sinkClue);
 
-  state.obstacles = [makeObstacle(1.0, 5.1, -3.4, -1.4), makeObstacle(-4.0, 2.1, 4.2, 5.6)];
+  // Obstacles: block behind the toilet/back wall; sink counter; left stall side panel
+  state.obstacles = [
+    makeObstacle(1.1, 5.2, -5.8, -4.6),  // back of stall / toilet
+    makeObstacle(0.4, 1.1, -5.8, -2.5),  // left stall wall
+    makeObstacle(-4.0, 2.1, 4.2, 5.6)    // sink counter
+  ];
 
   clearInteractions();
-  addInteraction("compact", "B", () => !state.flags.has("bathroom-mirror"), () => compact.position, 1.4, () => {
+  addInteraction("compact", "P", () => !state.flags.has("bathroom-mirror"), () => compact.position, 2.0, () => {
     state.flags.add("bathroom-mirror");
     openEvidence("Compact mirror", "Hmm\u2026 she could have been too busy minding her nose to notice the dealer of her last blowline.");
     updateBathroomObjective();
   });
-  addInteraction("sink", "B", () => !state.flags.has("bathroom-sink"), () => sinkClue.position, 1.4, () => {
+  addInteraction("sink", "P", () => !state.flags.has("bathroom-sink"), () => sinkClue.position, 1.4, () => {
     state.flags.add("bathroom-sink");
     openEvidence("Sink counter", "White lines on the mirror. Bloody razor blade near the faucet.");
     updateBathroomObjective();
@@ -1511,8 +1488,8 @@ function loadBathroomScene() {
 
 function updateBathroomObjective() {
   const count = Number(state.flags.has("bathroom-mirror")) + Number(state.flags.has("bathroom-sink"));
-  if (count >= 2) setObjective("Evidence logged. Leave the powder room.", "Press A at the exit.");
-  else setObjective(`Inspect clue points (${count}/2).`, "Use B on compact mirror and sink evidence.");
+  if (count >= 2) setObjective("Evidence logged. Leave the powder room.", "Press I at the exit.");
+  else setObjective(`Inspect clue points (${count}/2).`, "Press P on compact mirror and sink evidence.");
 }
 
 // ─── Scene: Club Aftermath ─────────────────────────────────────────
@@ -1536,19 +1513,19 @@ function loadClubAftermath() {
   for (const tile of state.danceTiles) tile.mesh.material.emissiveIntensity = 0.06;
 
   clearInteractions();
-  addInteraction("date-aftermath", "A", () => !state.flags.has("aftermath-talked"), () => state.dateMesh.position, 1.9, () => {
+  addInteraction("date-aftermath", "I", () => !state.flags.has("aftermath-talked"), () => state.dateMesh.position, 1.9, () => {
     state.flags.add("aftermath-talked");
     showDialogueSequence([
       "Date: I just went in with all the drinks\u2026 and then I saw all the\u2026 is she actually dead?",
       "You: It wasn\u2019t her time of the month.",
       "Date: Can we go home?",
       { text: "You: Let me just use the men\u2019s room real quick.", action: () => {
-        setObjective("Enter the men\u2019s room.", "Walk to the gold restroom door and press A.");
-        addInteraction("mens-door-aftermath", "A", () => true, () => state.mensDoorPos, 1.8, () => { loadMensRoomScene(); });
+        setObjective("Enter the men\u2019s room.", "Walk to the gold restroom door and press I.");
+        addInteraction("mens-door-aftermath", "I", () => true, () => state.mensDoorPos, 1.8, () => { loadMensRoomScene(); });
       }}
     ]);
   });
-  setObjective("Talk to your date.", "Press A near her.");
+  setObjective("Talk to your date.", "Press I near her.");
 }
 
 // ─── Scene: Men's Room ─────────────────────────────────────────────
@@ -1597,11 +1574,17 @@ function loadMensRoomScene() {
   const s2Door = makeBox(-3.25, 1.1, 1.15, 0.08, 2.0, 0.9, 0x2d3648, 0.7);
   envGroup.add(s2Door);
 
+  // Guy1 — pressed against back wall of stall, faces into room (+x)
   const guy1 = makePerson(0xecd2b0, 0x1a1e26, false);
-  guy1.position.set(-3.7, 0.36, 0.1); guy1.scale.setScalar(0.85); guy1.visible = false;
+  guy1.position.set(-3.95, 0.36, 0.22); guy1.scale.setScalar(0.85);
+  guy1.rotation.y = Math.PI / 2; // facing +x (toward entry)
+  guy1.visible = false;
   charGroup.add(guy1);
+  // Guy2 — facing into the stall (-x), very close to guy1
   const guy2 = makePerson(0xf0d8b8, 0x252a34, false);
-  guy2.position.set(-3.4, 0.36, 0.5); guy2.scale.setScalar(0.85); guy2.visible = false;
+  guy2.position.set(-3.35, 0.36, 0.22); guy2.scale.setScalar(0.85);
+  guy2.rotation.y = -Math.PI / 2; // facing -x (toward guy1)
+  guy2.visible = false;
   charGroup.add(guy2);
 
   envGroup.add(makeBox(2.5, 0.45, 4.3, 4.2, 0.9, 1.0, 0x2e333d, 0.6));
@@ -1617,11 +1600,11 @@ function loadMensRoomScene() {
   ];
 
   clearInteractions();
-  addInteraction("stall1", "B", () => !state.flags.has("mr-s1"), () => s1Door.position, 1.6, () => {
+  addInteraction("stall1", "P", () => !state.flags.has("mr-s1"), () => s1Door.position, 1.6, () => {
     state.flags.add("mr-s1");
     showDialogue("Empty. Clean enough, for a men\u2019s room.", 2000);
   });
-  addInteraction("stall2", "B", () => !state.flags.has("mr-s2"), () => s2Door.position, 1.6, () => {
+  addInteraction("stall2", "P", () => !state.flags.has("mr-s2"), () => s2Door.position, 1.6, () => {
     state.flags.add("mr-s2");
     guy1.visible = true; guy2.visible = true;
     state.animations.push((dt) => {
@@ -1632,10 +1615,10 @@ function loadMensRoomScene() {
     showDialogueSequence([
       "\u201CApologies, guys.\u201D",
       "No motive here. Just an opportunity."
-    ], () => setObjective("Leave the men\u2019s room.", "Press A at the exit."));
+    ], () => setObjective("Leave the men\u2019s room.", "Press I at the exit."));
   });
-  addInteraction("exit-mr", "A", () => state.flags.has("mr-s2"), () => new THREE.Vector3(0, 0, 4.4), 2.0, () => loadClubFinal());
-  setObjective("Check the stalls.", "Use B on the stall doors.");
+  addInteraction("exit-mr", "I", () => state.flags.has("mr-s2"), () => new THREE.Vector3(0, 0, 4.4), 2.0, () => loadClubFinal());
+  setObjective("Check the stalls.", "Press P on the stall doors.");
 }
 
 // ─── Scene: Club Final (leave club) ────────────────────────────────
@@ -1660,19 +1643,19 @@ function loadClubFinal() {
   for (const tile of state.danceTiles) tile.mesh.material.emissiveIntensity = 0.06;
 
   clearInteractions();
-  addInteraction("date-final", "A", () => !state.flags.has("club-final-talked"), () => state.dateMesh.position, 2.0, () => {
+  addInteraction("date-final", "I", () => !state.flags.has("club-final-talked"), () => state.dateMesh.position, 2.0, () => {
     state.flags.add("club-final-talked");
     showDialogueSequence([
       "Date: Encounter anything?",
       "You: Nothing out of place. Just a little matter between men. We can go now."
     ], () => {
-      setObjective("Leave the nightclub.", "Press A at the entrance.");
-      addInteraction("exit-club", "A", () => true, () => new THREE.Vector3(0, 0, 10.5), 2.2, () => {
+      setObjective("Leave the nightclub.", "Press I at the entrance.");
+      addInteraction("exit-club", "I", () => true, () => new THREE.Vector3(0, 0, 10.5), 2.2, () => {
         transitionToScene("11th Hour Motel.\nNight.", loadMotelRoom);
       });
     });
   });
-  setObjective("Rejoin your date.", "Press A near her.");
+  setObjective("Rejoin your date.", "Press I near her.");
 }
 
 // ─── Scene: Motel Room ─────────────────────────────────────────────
@@ -1687,7 +1670,7 @@ function loadMotelRoom() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person — no body visible
 
   state.cameraBounds = { minX: -4.5, maxX: 4.5, minZ: -4.5, maxZ: 4.5, maxY: 4.5 };
   state.worldBounds = { minX: -3.5, maxX: 3.5, minZ: -3.5, maxZ: 3.5 };
@@ -1767,17 +1750,17 @@ function loadMotelRoom() {
   ];
 
   clearInteractions();
-  addInteraction("tape", "B", () => !state.flags.has("motel-tape"), () => tapePos, 1.6, () => {
+  addInteraction("tape", "P", () => !state.flags.has("motel-tape"), () => tapePos, 1.6, () => {
     state.flags.add("motel-tape");
     openEvidence("Tape Recorder",
       "\"Thursday night at the disco \u2014 my date screamed, and I found a body. " +
       "Later that night, I attempted to rearrange the order, but it was no use: " +
       "just not my night\u2026 not hers. Though I suspect a few men had a good time.\"");
   });
-  addInteraction("motel-tv", "B", () => true, () => tv.position, 1.6, () => {
+  addInteraction("motel-tv", "P", () => true, () => tv.position, 1.6, () => {
     showDialogue("Static. Nothing worth watching at this hour.", 2000);
   });
-  addInteraction("motel-fridge", "B", () => true, () => new THREE.Vector3(2.8, 0, -3.2), 1.6, () => {
+  addInteraction("motel-fridge", "P", () => true, () => new THREE.Vector3(2.8, 0, -3.2), 1.6, () => {
     showDialogue("Empty. Just a box of baking soda and a forgotten lime.", 2200);
   });
   addInteraction("gun-holster", "B",
@@ -1786,13 +1769,13 @@ function loadMotelRoom() {
     state.flags.add("motel-gun");
     holster.visible = false;
     showDialogue("You grab your piece.", 1200);
-    setObjective("Confront the intruder.", "Press B near him.");
+    setObjective("Confront the intruder.", "Press P near him.");
   });
-  addInteraction("motel-door", "A", () => state.flags.has("motel-intruder-fled"), () => door.position, 1.8, () => {
+  addInteraction("motel-door", "I", () => state.flags.has("motel-intruder-fled"), () => door.position, 1.8, () => {
     transitionToScene("11th Hour Motel.\nExterior. Night.", loadMotelExterior);
   });
 
-  setObjective("Examine the room.", "Use B on tape recorder, TV, or fridge.");
+  setObjective("Examine the room.", "Press P on tape recorder, TV, or fridge.");
 }
 
 function motelPhoneCall() {
@@ -1879,7 +1862,7 @@ function motelIntruder() {
           return true;
         };
         state.animations.push(menaceAnim);
-        setObjective("Get to your gun on the nightstand.", "Use B on the gun holster.");
+        setObjective("Get to your gun on the nightstand.", "Press P on the gun holster.");
       }}
     ]);
   }, 2800);
@@ -1935,7 +1918,7 @@ function motelIntruder() {
           intruder.rotation.x = Math.sin(fleeBob * 12) * 0.08; // run bob
           return true;
         });
-        setObjective("Exit the motel room.", "Press A at the door.");
+        setObjective("Exit the motel room.", "Press I at the door.");
       }}
     ]);
   });
@@ -2107,7 +2090,7 @@ function loadMotelExterior() {
 
   clearInteractions();
   const offDoorPos = new THREE.Vector3(-16.5, 0, -2);
-  addInteraction("office", "A", () => !state.flags.has("motel-mail"), () => offDoorPos, 2.0, () => {
+  addInteraction("office", "I", () => !state.flags.has("motel-mail"), () => offDoorPos, 2.0, () => {
     state.playerCanMove = false;
     showDialogueSequence([
       "A smoky old woman behind the desk watches a cowboy show on a tiny TV. A fly buzzes around. She is unfazed.",
@@ -2123,8 +2106,8 @@ function loadMotelExterior() {
       { text: "You: Thanks for letting me know.", action: () => {
         state.flags.add("motel-mail");
         state.playerCanMove = true;
-        setObjective("Head back. Get some rest.", "Walk right toward your car.");
-        addInteraction("leave-night", "A", () => true, () => new THREE.Vector3(-5, 0, 2), 2.5, () => {
+        setObjective("Head back. Get some rest.", "Walk to your car.");
+        addInteraction("leave-night", "I", () => true, () => new THREE.Vector3(-5, 0, 0), 5.0, () => {
           transitionToScene("Thunderstorms & Neon Signs.\n\n11th Hour Motel.\nSaturday morning.", loadMotelMorning);
         });
       }}
@@ -2132,7 +2115,7 @@ function loadMotelExterior() {
   });
 
   const r3Pos = new THREE.Vector3(-14 + 2 * 2.3, 0, -4.8);
-  addInteraction("room3-locked", "A", () => true, () => r3Pos, 1.5, () => showDialogue("You\u2019ve checked out.", 1500));
+  addInteraction("room3-locked", "I", () => true, () => r3Pos, 1.5, () => showDialogue("You\u2019ve checked out.", 1500));
 
   setObjective("Explore the motel. Visit the office.", "Walk left to the office.");
 }
@@ -2165,13 +2148,19 @@ function loadMotelMorning() {
 
   dom.hudLocation.textContent = "Motel";
   
-  scene.fog = new THREE.FogExp2(0x1a2030, 0.018);
-  renderer.setClearColor(0x1a2233, 1);
-  ambient.intensity = 0.8;
+  // Dawn sky — warm coral horizon fading up to steel blue
+  scene.fog = new THREE.FogExp2(0xc87848, 0.012);
+  renderer.setClearColor(0xd98858, 1);
+  ambient.intensity = 1.1;
+  ambient.color.setHex(0xffdec8);
+  // Dawn directional light from east (low angle)
+  const dawn = new THREE.DirectionalLight(0xff9966, 1.2);
+  dawn.position.set(20, 3, 8); fxGroup.add(dawn);
+  key.color.setHex(0xffcc99); key.intensity = 0.9;
 
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.9 }));
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), new THREE.MeshStandardMaterial({ color: 0x3a3830, roughness: 0.9 }));
   gnd.rotation.x = -Math.PI / 2; envGroup.add(gnd);
-  envGroup.add(makeBox(0, 1.8, -5.8, 36, 3.6, 1.4, 0x3a3428, 0.75));
+  envGroup.add(makeBox(0, 1.8, -5.8, 36, 3.6, 1.4, 0x4a4038, 0.75));
   for (let i = 0; i < 12; i++) envGroup.add(makeDoor(-14 + i * 2.3, -5.0, 0x4a3e2e));
   const r13x = 14;
   const r13Door = makeDoor(r13x, -5.0, 0x5a4a30);
@@ -2186,6 +2175,12 @@ function loadMotelMorning() {
 
   const manager = makePerson(0xecd2b0, 0x5a3a4a, true);
   manager.position.set(-10, 0.36, -3);
+  // White hair bun + glasses for character-specific manager look
+  const mgrHair = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshToonMaterial({ color: 0xf2eeea }));
+  mgrHair.position.set(0, 1.58, 0.04); manager.add(mgrHair);
+  const mgrGlassL = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.011, 4, 10), new THREE.MeshToonMaterial({ color: 0x1a1008 }));
+  mgrGlassL.position.set(-0.07, 1.36, 0.24); mgrGlassL.rotation.x = Math.PI / 2; manager.add(mgrGlassL);
+  const mgrGlassR = mgrGlassL.clone(); mgrGlassR.position.set(0.07, 1.36, 0.24); manager.add(mgrGlassR);
   charGroup.add(manager);
 
   clearInteractions();
@@ -2208,11 +2203,11 @@ function loadMotelMorning() {
     "I didn\u2019t need the room, but I hate to see a squeamish lady put out.",
     { text: "You: Tell ya what, ma\u2019am. It\u2019s on me.", action: () => {
       state.playerCanMove = true;
-      setObjective("Go to room 13 at the far right.", "Walk right to room 13 and press A.");
+      setObjective("Go to room 13 at the far right.", "Walk right to room 13 and press I.");
     }}
   ]);
 
-  addInteraction("room13-enter", "A", () => state.playerCanMove, () => r13Door.position, 1.8, () => loadRoom13());
+  addInteraction("room13-enter", "I", () => state.playerCanMove, () => r13Door.position, 1.8, () => loadRoom13());
 }
 
 // ─── Scene: Room 13 ────────────────────────────────────────────────
@@ -2227,7 +2222,7 @@ function loadRoom13() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person
 
   state.cameraBounds = { minX: -4.5, maxX: 4.5, minZ: -4.5, maxZ: 4.5, maxY: 4.5 };
   state.worldBounds = { minX: -3.5, maxX: 3.5, minZ: -3.5, maxZ: 3.5 };
@@ -2270,23 +2265,23 @@ function loadRoom13() {
   state.obstacles = [makeObstacle(-3.8, -1.4, -2.8, 0.5), makeObstacle(1.0, 3.4, -3.8, -2.8)];
 
   clearInteractions();
-  addInteraction("exam-scene", "B", () => !state.flags.has("r13-examined"), () => new THREE.Vector3(0.2, 0, 1.2), 1.8, () => {
+  addInteraction("exam-scene", "P", () => !state.flags.has("r13-examined"), () => new THREE.Vector3(0.2, 0, 1.2), 1.8, () => {
     state.flags.add("r13-examined");
     openEvidence("Crime Scene",
       "The pills were a mix of amphetamines and painkillers, prescription label not relevant. " +
       "The whiskey was the nail on the coffin.");
   });
-  addInteraction("r13-tv", "B", () => tvScreen.visible, () => tv.position, 1.6, () => {
+  addInteraction("r13-tv", "P", () => tvScreen.visible, () => tv.position, 1.6, () => {
     tvScreen.visible = false; tvScreen.material.color.setHex(0x0a0a0a);
     showDialogue("You turn off the TV. Static fades to silence.", 1800);
   });
-  addInteraction("exit-r13", "A", () => state.flags.has("r13-examined"), () => new THREE.Vector3(3.5, 0, 2.5), 1.8, () => loadRoom13Exit());
+  addInteraction("exit-r13", "I", () => state.flags.has("r13-examined"), () => new THREE.Vector3(3.5, 0, 2.5), 1.8, () => loadRoom13Exit());
 
   showDialogueSequence([
     "Looks like he\u2019s also checked out.",
     { text: "Same layout as your room. Dead man on the floor, ski mask on top of a snowy TV.", action: () => {
       state.playerCanMove = true;
-      setObjective("Investigate the scene.", "Use B to examine the body and evidence.");
+      setObjective("Investigate the scene.", "Press P to examine the body and evidence.");
     }}
   ]);
 }
@@ -2307,23 +2302,35 @@ function loadRoom13Exit() {
 
   dom.hudLocation.textContent = "Motel";
   
-  scene.fog = new THREE.FogExp2(0x1a2030, 0.018);
-  renderer.setClearColor(0x1a2233, 1);
+  // Dawn sky continued — matching motel-morning palette
+  scene.fog = new THREE.FogExp2(0xc87848, 0.012);
+  renderer.setClearColor(0xd98858, 1);
+  ambient.intensity = 1.1;
+  ambient.color.setHex(0xffdec8);
+  const dawnR13 = new THREE.DirectionalLight(0xff9966, 1.2);
+  dawnR13.position.set(20, 3, 8); fxGroup.add(dawnR13);
+  key.color.setHex(0xffcc99); key.intensity = 0.9;
 
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(20, 14), new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.9 }));
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(20, 14), new THREE.MeshStandardMaterial({ color: 0x3a3830, roughness: 0.9 }));
   gnd.rotation.x = -Math.PI / 2; gnd.position.x = 12; envGroup.add(gnd);
-  envGroup.add(makeBox(12, 1.8, -5.8, 14, 3.6, 1.4, 0x3a3428, 0.75));
+  envGroup.add(makeBox(12, 1.8, -5.8, 14, 3.6, 1.4, 0x4a4038, 0.75));
   envGroup.add(makeDoor(14, -5.0, 0x5a4a30));
 
   const kid = makePerson(0xf0d8b8, 0x3a5a3a, false);
   kid.position.set(12, 0.2, -2); kid.scale.setScalar(0.6); charGroup.add(kid);
   const mgr = makePerson(0xecd2b0, 0x5a3a4a, true);
-  mgr.position.set(10, 0.36, -2); mgr.visible = false; charGroup.add(mgr);
+  mgr.position.set(10, 0.36, -2); mgr.visible = false;
+  const mgrH2 = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshToonMaterial({ color: 0xf2eeea }));
+  mgrH2.position.set(0, 1.58, 0.04); mgr.add(mgrH2);
+  const mgrGL2 = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.011, 4, 10), new THREE.MeshToonMaterial({ color: 0x1a1008 }));
+  mgrGL2.position.set(-0.07, 1.36, 0.24); mgrGL2.rotation.x = Math.PI / 2; mgr.add(mgrGL2);
+  const mgrGR2 = mgrGL2.clone(); mgrGR2.position.set(0.07, 1.36, 0.24); mgr.add(mgrGR2);
+  charGroup.add(mgr);
 
   clearInteractions();
   state.obstacles = [makeObstacle(6, 16, -6.5, -4.2)];
 
-  addInteraction("talk-kid", "A", () => !state.flags.has("kid-talked"), () => kid.position, 2.2, () => {
+  addInteraction("talk-kid", "I", () => !state.flags.has("kid-talked"), () => kid.position, 2.2, () => {
     state.flags.add("kid-talked");
     state.playerCanMove = false;
     showDialogueSequence([
@@ -2336,14 +2343,14 @@ function loadRoom13Exit() {
       "Manager: Thank you for looking into things. Looks like I\u2019ll have to pay the garbage collector this week.",
       { text: "You: I\u2019ll be heading out now.", action: () => {
         state.playerCanMove = true;
-        setObjective("Get in the car and leave.", "Press A to leave.");
-        addInteraction("leave-motel", "A", () => true, () => new THREE.Vector3(10, 0, 3), 3.0, () => {
-          transitionToScene("Upstate. Afternoon.\n\nMusic: I\u2019m Only Sleeping.", loadDrivingScene);
+        setObjective("Get in the car and leave.", "Press I to leave.");
+        addInteraction("leave-motel", "I", () => true, () => new THREE.Vector3(10, 0, 3), 3.0, () => {
+          transitionToScene("Upstate. Afternoon.", loadDrivingScene);
         });
       }}
     ]);
   });
-  setObjective("Someone\u2019s near your bag.", "Press A to talk.");
+  setObjective("Someone\u2019s near your bag.", "Press I to talk.");
 }
 
 // ─── Scene: Driving ────────────────────────────────────────────────
@@ -2536,13 +2543,13 @@ function updateInteractions(elapsed) {
     if (dist <= it.radius && dist < nearestDist) { nearest = it; nearestDist = dist; }
   }
   state.nearestInteraction = nearest;
-  if (state.evidenceOpen) { dom.interactionText.textContent = "Press B or BACK to close evidence."; return; }
-  const nearA = findNearestByKey("A");
-  const nearB = findNearestByKey("B");
+  if (state.evidenceOpen) { dom.interactionText.textContent = "Press P or BACK to close evidence."; return; }
+  const nearA = findNearestByKey("I");
+  const nearB = findNearestByKey("P");
   if (!nearA && !nearB) { dom.interactionText.textContent = state.activeBaseHint; return; }
   const parts = [];
-  if (nearA) parts.push(`[A] ${formatInteractionLabel(nearA.id)}`);
-  if (nearB) parts.push(`[B] ${formatInteractionLabel(nearB.id)}`);
+  if (nearA) parts.push(`[I] ${formatInteractionLabel(nearA.id)}`);
+  if (nearB) parts.push(`[P] ${formatInteractionLabel(nearB.id)}`);
   dom.interactionText.textContent = parts.join("  |  ");
 }
 
@@ -2618,12 +2625,12 @@ function updateInputTriggers() {
     return;
   }
   if (state.controls.aQueued) {
-    const target = findNearestByKey("A");
+    const target = findNearestByKey("I");
     if (target) triggerInteraction(target);
   }
   if (state.controls.bQueued) {
     if (state.evidenceOpen) closeEvidence();
-    else { const target = findNearestByKey("B"); if (target) triggerInteraction(target); }
+    else { const target = findNearestByKey("P"); if (target) triggerInteraction(target); }
   }
   state.controls.aQueued = false;
   state.controls.bQueued = false;
@@ -2647,6 +2654,8 @@ function updatePlayer(delta, elapsed) {
     // Smoothly return limbs to idle when stopping
     if (state.player.leftLeg) state.player.leftLeg.rotation.x *= 0.85;
     if (state.player.rightLeg) state.player.rightLeg.rotation.x *= 0.85;
+    if (state.player.leftShin) state.player.leftShin.rotation.x *= 0.85;
+    if (state.player.rightShin) state.player.rightShin.rotation.x *= 0.85;
     if (state.player.leftArm) state.player.leftArm.rotation.x *= 0.85;
     if (state.player.rightArm) state.player.rightArm.rotation.x *= 0.85;
     // Gentle idle breathing bob
@@ -2654,7 +2663,7 @@ function updatePlayer(delta, elapsed) {
     return;
   }
   tempA.normalize();
-  const speed = state.player.seated ? 0 : 3.2;
+  const speed = state.player.seated ? 0 : 4.2;
   const trialX = state.player.pos.x + tempA.x * speed * delta;
   const trialZ = state.player.pos.z + tempA.z * speed * delta;
   if (canMoveTo(trialX, state.player.pos.z)) state.player.pos.x = trialX;
@@ -2676,14 +2685,16 @@ function updatePlayer(delta, elapsed) {
   // Walk bob - subtle vertical movement above current floor level
   state.player.mesh.position.y = state.player.pos.y + Math.abs(Math.sin(elapsed * 8.0)) * 0.018;
 
-  // Natural walk cycle - legs and arms swing with smooth sine
-  const wp = Math.sin(elapsed * 8.5) * 0.32;
+  // Natural walk cycle — thigh swings, shin bends at knee (opposite direction = knee lift)
+  const wp = Math.sin(elapsed * 9.0) * 0.38;
   if (state.player.leftLeg) state.player.leftLeg.rotation.x = wp;
   if (state.player.rightLeg) state.player.rightLeg.rotation.x = -wp;
+  if (state.player.leftShin) state.player.leftShin.rotation.x = -Math.max(0, wp) * 0.65;
+  if (state.player.rightShin) state.player.rightShin.rotation.x = -Math.max(0, -wp) * 0.65;
   if (state.player.leftArm) state.player.leftArm.rotation.x = -wp * 0.45;
   if (state.player.rightArm) state.player.rightArm.rotation.x = wp * 0.45;
   // Subtle body tilt while walking
-  if (state.player.body) state.player.body.rotation.z = Math.sin(elapsed * 8.5) * 0.015;
+  if (state.player.body) state.player.body.rotation.z = Math.sin(elapsed * 9.0) * 0.018;
 }
 
 function canMoveTo(x, z) {
@@ -2747,10 +2758,10 @@ function updateCamera(delta) {
     return;
   }
 
-  // First-person view in bathroom/mensroom scenes
-  if (state.phase === "bathroom" || state.phase === "mensroom") {
+  // First-person view in bathroom / mensroom / motel-room scenes
+  if (state.phase === "bathroom" || state.phase === "mensroom" || state.phase === "motel-room" || state.phase === "room13") {
     const eyeX = state.player.pos.x;
-    const eyeY = state.player.pos.y + 1.02;
+    const eyeY = state.player.pos.y + 1.60;
     const eyeZ = state.player.pos.z;
     const fwdX = Math.sin(state.player.yaw);
     const fwdZ = Math.cos(state.player.yaw);
@@ -2913,131 +2924,94 @@ function addSmoke() {
   }
 }
 
-function makePerson(skin, outfit, female) {
+function makePerson(skinColor, outfitColor, female) {
   const root = new THREE.Group();
-  const om = new THREE.MeshStandardMaterial({ color: outfit, roughness: 0.44, metalness: 0.08 });
-  const sm = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.42 });
-  const hm = new THREE.MeshStandardMaterial({ color: darkenColor(skin, 0.32), roughness: 0.65 });
-  const pm = new THREE.MeshStandardMaterial({ color: darkenColor(outfit, 0.8), roughness: 0.5 });
-  const eyeW = new THREE.MeshStandardMaterial({ color: 0xf4f0e8, roughness: 0.3 });
-  const eyeD = new THREE.MeshStandardMaterial({ color: 0x1a1208, roughness: 0.2 });
-  const browM = new THREE.MeshStandardMaterial({ color: darkenColor(skin, 0.25), roughness: 0.6 });
-  const lipM = new THREE.MeshStandardMaterial({ color: female ? 0xc44a50 : darkenColor(skin, 0.75), roughness: 0.5 });
-
-  // Head, neck, face shared between male and female
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.08, 10), sm);
-  neck.position.y = 0.92;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), sm);
-  head.position.y = 1.06; head.scale.set(0.95, 1.08, 0.9);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.11), sm);
-  jaw.position.set(0, 0.97, 0.02);
-
-  // Eyes
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), eyeW);
-  eyeL.position.set(-0.045, 1.08, 0.1);
-  const eyeR = eyeL.clone(); eyeR.position.set(0.045, 1.08, 0.1);
-  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 6), eyeD);
-  pupilL.position.set(-0.045, 1.08, 0.12);
-  const pupilR = pupilL.clone(); pupilR.position.set(0.045, 1.08, 0.12);
-
-  // Eyebrows
-  const browL = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.01, 0.015), browM);
-  browL.position.set(-0.045, 1.105, 0.1); browL.rotation.z = female ? -0.05 : 0.1;
-  const browR = browL.clone(); browR.position.set(0.045, 1.105, 0.1); browR.rotation.z = female ? 0.05 : -0.1;
-
-  // Nose and mouth
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.018, 0.04, 6), sm);
-  nose.position.set(0, 1.05, 0.12); nose.rotation.x = Math.PI / 2;
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.008, 0.012), lipM);
-  mouth.position.set(0, 1.0, 0.11);
-
-  // Ears
-  const earL = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 6), sm);
-  earL.position.set(-0.125, 1.06, 0); earL.scale.set(0.45, 1, 0.65);
-  const earR = earL.clone(); earR.position.set(0.125, 1.06, 0);
-
-  const faceParts = [neck, head, jaw, eyeL, eyeR, pupilL, pupilR, browL, browR, nose, mouth, earL, earR];
+  const skin   = new THREE.MeshToonMaterial({ color: skinColor });
+  const outfit = new THREE.MeshToonMaterial({ color: outfitColor });
+  const dark   = new THREE.MeshToonMaterial({ color: darkenColor(outfitColor, 0.55) });
+  const hairMat = new THREE.MeshToonMaterial({ color: 0x0c0906 });
+  const eyeMat  = new THREE.MeshToonMaterial({ color: 0x111111 });
 
   if (female) {
-    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.24, 0.48, 12), om);
-    skirt.position.y = 0.26;
-    const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.14, 10), om);
-    waist.position.y = 0.56;
-    const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.15, 0.24, 10), om);
-    chest.position.y = 0.74;
-    const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), om);
-    shoulderL.position.set(-0.17, 0.84, 0);
-    const shoulderR = shoulderL.clone(); shoulderR.position.set(0.17, 0.84, 0);
-    // Hair - long and flowing
-    const hairBack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.06, 0.45, 12), hm);
-    hairBack.position.set(0, 0.9, -0.04);
-    const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.138, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hm);
-    hairTop.position.y = 1.1;
-    const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.015, 0.2, 6), hm);
-    hairSideL.position.set(-0.1, 0.98, 0.02);
-    const hairSideR = hairSideL.clone(); hairSideR.position.set(0.1, 0.98, 0.02);
-    // Arms (bare skin) — proper hierarchy so forearm/hand follow upper arm during animation
-    const la = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.24, 8), sm);
-    la.position.set(-0.17, 0.72, 0); la.rotation.z = 0.10;
-    const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.2, 8), sm);
-    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.12) + half_fore(0.10)
-    la.add(lfa);
-    const lh = new THREE.Mesh(new THREE.SphereGeometry(0.020, 6, 6), sm);
-    lh.position.set(0, -0.34, 0);  // in la local: 0.12 + 0.20 + 0.02
-    la.add(lh);
-    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
-    ra.position.set(0.17, 0.72, 0); ra.rotation.z = -0.10;
-    // Legs under skirt
-    const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.2, 8), sm);
-    lt.position.set(-0.06, 0.06, 0);
-    const rt = lt.clone(); rt.position.set(0.06, 0.06, 0);
-    const lsh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.1), new THREE.MeshStandardMaterial({ color: 0x2a1008, roughness: 0.3 }));
-    lsh.position.set(-0.06, -0.02, 0.01);
-    const rsh = lsh.clone(); rsh.position.set(0.06, -0.02, 0.01);
-    root.add(skirt, waist, chest, shoulderL, shoulderR, hairBack, hairTop, hairSideL, hairSideR);
-    root.add(la, ra, lt, rt, lsh, rsh);  // forearms/hands are children of upper arms
-    root.add(...faceParts);
+    // Flared dress — narrow waist, wide skirt hem
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.32, 0.58, 12), outfit);
+    skirt.position.y = 0.31;
+    const bodice = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.14, 0.28, 10), outfit);
+    bodice.position.y = 0.74;
+    const shoulderBar = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.09, 0.22), outfit);
+    shoulderBar.position.y = 0.90;
+    // Arms (bare skin — hang at sides)
+    const lArm = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.034, 0.46, 7), skin);
+    lArm.position.set(-0.24, 0.69, 0); lArm.rotation.z = 0.20;
+    const rArm = lArm.clone(); rArm.position.set(0.24, 0.69, 0); rArm.rotation.z = -0.20;
+    // Legs peek below hem
+    const lLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.034, 0.10, 7), skin);
+    lLeg.position.set(-0.07, 0.02, 0);
+    const rLeg = lLeg.clone(); rLeg.position.set(0.07, 0.02, 0);
+    // Head — large, dominant cartoon proportion
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.205, 12, 10), skin);
+    head.position.y = 1.13;
+    // Hair — covers top and sides of head
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.222, 12, 9), hairMat);
+    hair.position.set(0, 1.21, -0.02); hair.scale.set(1.0, 0.80, 0.90);
+    // Eyes — large
+    const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.036, 7, 7), eyeMat);
+    lEye.position.set(-0.082, 1.14, 0.185);
+    const rEye = lEye.clone(); rEye.position.set(0.082, 1.14, 0.185);
+    // Lips
+    const lipMat = new THREE.MeshToonMaterial({ color: 0xcc1c3c });
+    const lips = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.025, 0.02), lipMat);
+    lips.position.set(0, 1.04, 0.20);
+
+    root.add(skirt, bodice, shoulderBar, lArm, rArm, lLeg, rLeg, head, hair, lEye, rEye, lips);
+    root.userData.head = head;
+    root.userData.leftArm  = lArm;
+    root.userData.rightArm = rArm;
+
   } else {
-    // Slimmer, more proportional male body
-    const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.28, 10), om);
-    chest.position.y = 0.76;
-    const abdomen = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.16, 10), om);
-    abdomen.position.y = 0.56;
-    const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.12, 0.16), pm);
-    pelvis.position.y = 0.44;
-    const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 6), om);
-    shoulderL.position.set(-0.19, 0.88, 0);
-    const shoulderR = shoulderL.clone(); shoulderR.position.set(0.19, 0.88, 0);
-    // Hair
-    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.135, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.48), hm);
-    hairCap.position.y = 1.1;
-    // Arms — proper hierarchy so forearm/hand follow upper arm during animation
-    const la = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.030, 0.22, 8), om);
-    la.position.set(-0.20, 0.76, 0); la.rotation.z = 0.10;
-    const lfa = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.22, 8), om);
-    lfa.position.set(0, -0.22, 0);  // in la local: half_upper(0.11) + half_fore(0.11)
-    la.add(lfa);
-    const lh = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), sm);
-    lh.position.set(0, -0.356, 0);  // in la local: 0.11 + 0.22 + 0.026
-    la.add(lh);
-    const ra = la.clone();  // deep-clones rfa (ra.children[0]) and rh (ra.children[1])
-    ra.position.set(0.20, 0.76, 0); ra.rotation.z = -0.10;
-    // Legs — slight A-stance angle for natural standing pose
-    const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.042, 0.22, 8), pm);
-    lt.position.set(-0.07, 0.30, 0); lt.rotation.z = -0.06;
-    const ls = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.034, 0.22, 8), pm);
-    ls.position.set(-0.072, 0.09, 0); ls.rotation.z = -0.03;
-    const lsh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.13), new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.3 }));
-    lsh.position.set(-0.072, 0.0, 0.01);
-    const rt = lt.clone(); rt.position.set(0.07, 0.30, 0); rt.rotation.z = 0.06;
-    const rs = ls.clone(); rs.position.set(0.072, 0.09, 0); rs.rotation.z = 0.03;
-    const rsh = lsh.clone(); rsh.position.set(0.072, 0.0, 0.01);
-    root.add(chest, abdomen, pelvis, shoulderL, shoulderR, hairCap);
-    root.add(la, ra, lt, ls, lsh, rt, rs, rsh);  // forearms/hands are children of upper arms
-    root.add(...faceParts);
+    // Blocky suit — wide shoulders give clear male silhouette
+    const hatMat = new THREE.MeshToonMaterial({ color: darkenColor(outfitColor, 0.40) });
+    const shoeMat = new THREE.MeshToonMaterial({ color: 0x100d08 });
+    const handMat = new THREE.MeshToonMaterial({ color: skinColor });
+    // Legs / trousers
+    const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.46, 0.16), dark);
+    lLeg.position.set(-0.11, 0.25, 0);
+    const rLeg = lLeg.clone(); rLeg.position.set(0.11, 0.25, 0);
+    const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.065, 0.20), shoeMat);
+    lShoe.position.set(-0.11, 0.02, 0.03);
+    const rShoe = lShoe.clone(); rShoe.position.set(0.11, 0.02, 0.03);
+    // Jacket — blocky torso
+    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.54, 0.25), outfit);
+    jacket.position.y = 0.74;
+    // Wide shoulders — dominant feature
+    const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.12, 0.27), outfit);
+    shoulders.position.y = 1.02;
+    // Arms (jacket sleeves)
+    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.40, 0.15), outfit);
+    lArm.position.set(-0.34, 0.73, 0);
+    const rArm = lArm.clone(); rArm.position.set(0.34, 0.73, 0);
+    const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 0.09), handMat);
+    lHand.position.set(-0.34, 0.50, 0);
+    const rHand = lHand.clone(); rHand.position.set(0.34, 0.50, 0);
+    // Head — large
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.200, 12, 10), skin);
+    head.position.y = 1.20;
+    // Hat brim + crown
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.270, 0.280, 0.046, 12), hatMat);
+    brim.position.y = 1.39;
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.152, 0.190, 0.220, 12), hatMat);
+    crown.position.y = 1.52;
+    // Eyes
+    const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.030, 7, 7), eyeMat);
+    lEye.position.set(-0.075, 1.21, 0.185);
+    const rEye = lEye.clone(); rEye.position.set(0.075, 1.21, 0.185);
+
+    root.add(lLeg, rLeg, lShoe, rShoe, jacket, shoulders, lArm, rArm, lHand, rHand,
+             head, brim, crown, lEye, rEye);
+    root.userData.head = head;
+    root.userData.leftArm  = lArm;
+    root.userData.rightArm = rArm;
   }
-  root.userData.head = head;
-  root.userData.neck = neck;
   return root;
 }
 
