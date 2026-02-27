@@ -20,8 +20,8 @@ const dom = {
   closeEvidenceBtn: document.getElementById("close-evidence-btn"),
   joystick: document.getElementById("joystick"),
   joystickKnob: document.getElementById("joystick-knob"),
-  btnA: document.getElementById("btn-a"),
-  btnB: document.getElementById("btn-b")
+  btnI: document.getElementById("btn-i"),
+  btnP: document.getElementById("btn-p")
 };
 
 const INTRO_TEXT = ["Nightclub interior.", "Little Italy.", "Summer 1979. 11:54 PM."].join("\n");
@@ -217,8 +217,8 @@ function attachInput() {
     s: "down", S: "down", ArrowDown: "down",
     a: "left", A: "left", ArrowLeft: "left",
     d: "right", D: "right", ArrowRight: "right",
-    e: "interact", E: "interact", Enter: "interact", j: "interact", J: "interact",
-    b: "action", B: "action", " ": "action", k: "action", K: "action"
+    i: "interact", I: "interact", Enter: "interact", e: "interact", E: "interact",
+    p: "action", P: "action", " ": "action"
   };
   window.addEventListener("keydown", (event) => {
     const action = keyMap[event.key];
@@ -236,8 +236,8 @@ function attachInput() {
     else state.controls[action] = false;
     if (event.key.startsWith("Arrow") || action === "interact" || action === "action") event.preventDefault();
   });
-  bindPress(dom.btnA, () => queueButton("a", false));
-  bindPress(dom.btnB, () => queueButton("b", false));
+  bindPress(dom.btnI, () => queueButton("a", false));
+  bindPress(dom.btnP, () => queueButton("b", false));
   bindPress(dom.canvas, () => {
     if (state.inDialogue) { displayNextDialogueLine(); return; }
     if (state.evidenceOpen) { closeEvidence(); return; }
@@ -501,9 +501,9 @@ function loadNightclubScene(startPhase) {
   registerNightclubInteractions();
 
   if (startPhase === "seated") {
-    setObjective("Seated at your table. Press A to talk. Press B to stand.", "Move with joystick or WASD.");
+    setObjective("Seated at your table. Press I to talk. Press P to stand.", "Move with joystick or WASD.");
   } else {
-    setObjective("Rejoin your date.", "Press A near her.");
+    setObjective("Rejoin your date.", "Press I near her.");
   }
 }
 
@@ -1269,27 +1269,27 @@ function addSmokeCloud(parent, x, y, z) {
 
 function registerNightclubInteractions() {
   clearInteractions();
-  addInteraction("talk-date", "A", () => state.phase === "seated", () => state.dateMesh.position, 1.8, () => {
+  addInteraction("talk-date", "I", () => state.phase === "seated", () => state.dateMesh.position, 1.8, () => {
     showDialogue("Date: I love this song!", 1700);
   });
-  addInteraction("stand-up", "B", () => state.phase === "seated", () => state.dateMesh.position, 1.9, () => {
+  addInteraction("stand-up", "P", () => state.phase === "seated", () => state.dateMesh.position, 1.9, () => {
     state.phase = "explore";
     state.playerCanMove = true;
     state.player.seated = false;
-    setObjective("Walk the room. Talk to bartender at the bar.", "A to interact. B is action.");
+    setObjective("Walk the room. Talk to bartender at the bar.", "I to interact. P is action.");
     showDialogue("You stand up and the room opens around you.", 2600);
   });
-  addInteraction("amber-man", "B", () => state.phase === "explore" || state.phase === "dance-invite", () => state.amberManMesh.position, 1.7, () => {
+  addInteraction("amber-man", "P", () => state.phase === "explore" || state.phase === "dance-invite", () => state.amberManMesh.position, 1.7, () => {
     showDialogue("\u2026", 1100);
   });
-  addInteraction("bartender", "A", () => state.phase === "explore", () => state.bartenderMesh.position, 1.8, () => {
+  addInteraction("bartender", "I", () => state.phase === "explore", () => state.bartenderMesh.position, 1.8, () => {
     state.phase = "dance-invite";
-    setObjective("Your date moved to the dance floor. Meet her and press A.", "Dance floor is lit on the left.");
+    setObjective("Your date moved to the dance floor. Meet her and press I.", "Dance floor is lit on the left.");
     showDialogue("Date: Come on, detective. Dance before this song dies.", 3600);
     moveDateTo(-6.5, -6.0, 0);
   });
-  addInteraction("dance-date", "A", () => state.phase === "dance-invite", () => state.dateMesh.position, 1.9, () => { runDanceBeat(); });
-  addInteraction("womens-door", "A", () => state.phase === "scream", () => state.womensDoorPos, 1.8, () => { loadBathroomScene(); });
+  addInteraction("dance-date", "I", () => state.phase === "dance-invite", () => state.dateMesh.position, 1.9, () => { runDanceBeat(); });
+  addInteraction("womens-door", "I", () => state.phase === "scream", () => state.womensDoorPos, 1.8, () => { loadBathroomScene(); });
 }
 
 function runDanceBeat() {
@@ -1302,7 +1302,7 @@ function runDanceBeat() {
   window.setTimeout(() => {
     state.phase = "scream";
     state.playerCanMove = true;
-    setObjective("A scream cuts the room. Enter the women's room.", "Move to the red restroom door and press A.");
+    setObjective("A scream cuts the room. Enter the women's room.", "Move to the red restroom door and press I.");
     showDialogue("A scream silences the club. Glasses freeze in mid-air.", 3200);
     scene.fog.color.setHex(0x1a1a18);
     scene.fog.density = 0.022;
@@ -1406,35 +1406,47 @@ function loadBathroomScene() {
     new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }));
   crack.position.set(1.6, 2.18, 5.77); crack.rotation.z = 0.55; envGroup.add(crack);
 
-  // Stall partition
-  envGroup.add(makeBox(2.8, 1.3, -2.7, 4.4, 2.6, 0.3, 0x27303f, 0.75));
-  // Stall door (ajar)
-  const stallDoor = makeBox(0.7, 1.1, -3.3, 0.08, 2.0, 0.85, 0x2d3648, 0.7);
-  stallDoor.rotation.y = 0.45; envGroup.add(stallDoor);
+  // Stall — front partition wall (full width with door gap on left)
+  envGroup.add(makeBox(3.1, 1.3, -2.7, 3.8, 2.6, 0.3, 0x27303f, 0.75));  // right portion
+  envGroup.add(makeBox(0.55, 1.3, -2.7, 0.6, 2.6, 0.3, 0x27303f, 0.75));  // left slim post
+  // Left stall side wall (runs front to back)
+  envGroup.add(makeBox(0.76, 1.3, -4.3, 0.3, 2.6, 3.2, 0x27303f, 0.75));
+  // Stall door (ajar — swings into hallway)
+  const stallDoor = makeBox(0.85, 1.1, -2.5, 0.08, 2.0, 0.95, 0x2d3648, 0.7);
+  stallDoor.rotation.y = -0.5; envGroup.add(stallDoor);
 
-  // Blood pool — irregular shape built from overlapping circles
+  // Toilet inside the stall — base + cistern
+  const toiletMat = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.3 });
+  const tBase = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.20, 0.38, 12), toiletMat);
+  tBase.position.set(2.8, 0.19, -5.1); envGroup.add(tBase);
+  const tSeat = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.044, 6, 14), toiletMat);
+  tSeat.rotation.x = Math.PI / 2; tSeat.position.set(2.8, 0.42, -5.1); envGroup.add(tSeat);
+  const tCistern = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.44, 0.22), toiletMat);
+  tCistern.position.set(2.8, 0.72, -5.5); envGroup.add(tCistern);
+
+  // Blood pool INSIDE the stall — body slumped against the back
   const bloodMat = new THREE.MeshStandardMaterial({ color: 0x4a0610, roughness: 0.97 });
-  const blood = new THREE.Mesh(new THREE.CircleGeometry(0.9, 20), bloodMat);
-  blood.rotation.x = -Math.PI / 2; blood.position.set(3.3, 0.01, -2.2); envGroup.add(blood);
-  const bloodTrail = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.9),
+  const blood = new THREE.Mesh(new THREE.CircleGeometry(0.85, 20), bloodMat);
+  blood.rotation.x = -Math.PI / 2; blood.position.set(3.0, 0.01, -4.0); envGroup.add(blood);
+  const bloodTrail = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 1.1),
     new THREE.MeshStandardMaterial({ color: 0x3e0408, roughness: 0.98 }));
-  bloodTrail.rotation.x = -Math.PI / 2; bloodTrail.rotation.z = 0.6;
-  bloodTrail.position.set(2.6, 0.011, -2.6); envGroup.add(bloodTrail);
-  const bloodSplat = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12), bloodMat);
-  bloodSplat.rotation.x = -Math.PI / 2; bloodSplat.position.set(2.2, 0.011, -3.1); envGroup.add(bloodSplat);
+  bloodTrail.rotation.x = -Math.PI / 2; bloodTrail.rotation.z = 0.4;
+  bloodTrail.position.set(2.6, 0.011, -3.4); envGroup.add(bloodTrail);
+  const bloodSplat = new THREE.Mesh(new THREE.CircleGeometry(0.20, 12), bloodMat);
+  bloodSplat.rotation.x = -Math.PI / 2; bloodSplat.position.set(2.2, 0.011, -3.0); envGroup.add(bloodSplat);
 
-  // Crime-scene atmosphere: flickering harsh overhead light
-  const crimeLight = new THREE.PointLight(0xc8dde8, 0.8, 9, 2);
-  crimeLight.position.set(3.3, 2.8, -2.5); fxGroup.add(crimeLight);
+  // Crime-scene atmosphere: flickering harsh overhead light inside stall
+  const crimeLight = new THREE.PointLight(0xc8dde8, 0.9, 8, 2);
+  crimeLight.position.set(3.0, 2.8, -4.0); fxGroup.add(crimeLight);
   state.animations.push((dt, t) => {
-    crimeLight.intensity = 0.7 + Math.sin(t * 43) * 0.06 + Math.sin(t * 17) * 0.04;
+    crimeLight.intensity = 0.8 + Math.sin(t * 43) * 0.07 + Math.sin(t * 17) * 0.05;
     return true;
   });
 
-  charGroup.add(makeCorpse(3.2, 0.01, -2.5));
+  charGroup.add(makeCorpse(3.0, 0.01, -4.0));
 
-  // Clues
-  const compact = makeBox(3.5, 0.58, -2.45, 0.34, 0.05, 0.34, 0xaeb9d3, 0.24);
+  // Compact mirror clue — on floor just inside stall, reachable from doorway
+  const compact = makeBox(3.5, 0.08, -3.7, 0.34, 0.05, 0.34, 0xaeb9d3, 0.24);
   envGroup.add(compact);
   // Razor blade evidence near sink
   const razor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.008, 0.04),
@@ -1449,15 +1461,20 @@ function loadBathroomScene() {
   const sinkClue = makeBox(-0.7, 0.938, 4.83, 0.58, 0.04, 0.3, 0xf7f7f7, 0.5);
   envGroup.add(sinkClue);
 
-  state.obstacles = [makeObstacle(1.0, 5.1, -3.4, -1.4), makeObstacle(-4.0, 2.1, 4.2, 5.6)];
+  // Obstacles: block behind the toilet/back wall; sink counter; left stall side panel
+  state.obstacles = [
+    makeObstacle(1.1, 5.2, -5.8, -4.6),  // back of stall / toilet
+    makeObstacle(0.4, 1.1, -5.8, -2.5),  // left stall wall
+    makeObstacle(-4.0, 2.1, 4.2, 5.6)    // sink counter
+  ];
 
   clearInteractions();
-  addInteraction("compact", "B", () => !state.flags.has("bathroom-mirror"), () => compact.position, 1.4, () => {
+  addInteraction("compact", "P", () => !state.flags.has("bathroom-mirror"), () => compact.position, 2.0, () => {
     state.flags.add("bathroom-mirror");
     openEvidence("Compact mirror", "Hmm\u2026 she could have been too busy minding her nose to notice the dealer of her last blowline.");
     updateBathroomObjective();
   });
-  addInteraction("sink", "B", () => !state.flags.has("bathroom-sink"), () => sinkClue.position, 1.4, () => {
+  addInteraction("sink", "P", () => !state.flags.has("bathroom-sink"), () => sinkClue.position, 1.4, () => {
     state.flags.add("bathroom-sink");
     openEvidence("Sink counter", "White lines on the mirror. Bloody razor blade near the faucet.");
     updateBathroomObjective();
@@ -1471,8 +1488,8 @@ function loadBathroomScene() {
 
 function updateBathroomObjective() {
   const count = Number(state.flags.has("bathroom-mirror")) + Number(state.flags.has("bathroom-sink"));
-  if (count >= 2) setObjective("Evidence logged. Leave the powder room.", "Press A at the exit.");
-  else setObjective(`Inspect clue points (${count}/2).`, "Use B on compact mirror and sink evidence.");
+  if (count >= 2) setObjective("Evidence logged. Leave the powder room.", "Press I at the exit.");
+  else setObjective(`Inspect clue points (${count}/2).`, "Press P on compact mirror and sink evidence.");
 }
 
 // ─── Scene: Club Aftermath ─────────────────────────────────────────
@@ -1496,19 +1513,19 @@ function loadClubAftermath() {
   for (const tile of state.danceTiles) tile.mesh.material.emissiveIntensity = 0.06;
 
   clearInteractions();
-  addInteraction("date-aftermath", "A", () => !state.flags.has("aftermath-talked"), () => state.dateMesh.position, 1.9, () => {
+  addInteraction("date-aftermath", "I", () => !state.flags.has("aftermath-talked"), () => state.dateMesh.position, 1.9, () => {
     state.flags.add("aftermath-talked");
     showDialogueSequence([
       "Date: I just went in with all the drinks\u2026 and then I saw all the\u2026 is she actually dead?",
       "You: It wasn\u2019t her time of the month.",
       "Date: Can we go home?",
       { text: "You: Let me just use the men\u2019s room real quick.", action: () => {
-        setObjective("Enter the men\u2019s room.", "Walk to the gold restroom door and press A.");
-        addInteraction("mens-door-aftermath", "A", () => true, () => state.mensDoorPos, 1.8, () => { loadMensRoomScene(); });
+        setObjective("Enter the men\u2019s room.", "Walk to the gold restroom door and press I.");
+        addInteraction("mens-door-aftermath", "I", () => true, () => state.mensDoorPos, 1.8, () => { loadMensRoomScene(); });
       }}
     ]);
   });
-  setObjective("Talk to your date.", "Press A near her.");
+  setObjective("Talk to your date.", "Press I near her.");
 }
 
 // ─── Scene: Men's Room ─────────────────────────────────────────────
@@ -1557,11 +1574,17 @@ function loadMensRoomScene() {
   const s2Door = makeBox(-3.25, 1.1, 1.15, 0.08, 2.0, 0.9, 0x2d3648, 0.7);
   envGroup.add(s2Door);
 
+  // Guy1 — pressed against back wall of stall, faces into room (+x)
   const guy1 = makePerson(0xecd2b0, 0x1a1e26, false);
-  guy1.position.set(-3.7, 0.36, 0.1); guy1.scale.setScalar(0.85); guy1.visible = false;
+  guy1.position.set(-3.95, 0.36, 0.22); guy1.scale.setScalar(0.85);
+  guy1.rotation.y = Math.PI / 2; // facing +x (toward entry)
+  guy1.visible = false;
   charGroup.add(guy1);
+  // Guy2 — facing into the stall (-x), very close to guy1
   const guy2 = makePerson(0xf0d8b8, 0x252a34, false);
-  guy2.position.set(-3.4, 0.36, 0.5); guy2.scale.setScalar(0.85); guy2.visible = false;
+  guy2.position.set(-3.35, 0.36, 0.22); guy2.scale.setScalar(0.85);
+  guy2.rotation.y = -Math.PI / 2; // facing -x (toward guy1)
+  guy2.visible = false;
   charGroup.add(guy2);
 
   envGroup.add(makeBox(2.5, 0.45, 4.3, 4.2, 0.9, 1.0, 0x2e333d, 0.6));
@@ -1577,11 +1600,11 @@ function loadMensRoomScene() {
   ];
 
   clearInteractions();
-  addInteraction("stall1", "B", () => !state.flags.has("mr-s1"), () => s1Door.position, 1.6, () => {
+  addInteraction("stall1", "P", () => !state.flags.has("mr-s1"), () => s1Door.position, 1.6, () => {
     state.flags.add("mr-s1");
     showDialogue("Empty. Clean enough, for a men\u2019s room.", 2000);
   });
-  addInteraction("stall2", "B", () => !state.flags.has("mr-s2"), () => s2Door.position, 1.6, () => {
+  addInteraction("stall2", "P", () => !state.flags.has("mr-s2"), () => s2Door.position, 1.6, () => {
     state.flags.add("mr-s2");
     guy1.visible = true; guy2.visible = true;
     state.animations.push((dt) => {
@@ -1592,10 +1615,10 @@ function loadMensRoomScene() {
     showDialogueSequence([
       "\u201CApologies, guys.\u201D",
       "No motive here. Just an opportunity."
-    ], () => setObjective("Leave the men\u2019s room.", "Press A at the exit."));
+    ], () => setObjective("Leave the men\u2019s room.", "Press I at the exit."));
   });
-  addInteraction("exit-mr", "A", () => state.flags.has("mr-s2"), () => new THREE.Vector3(0, 0, 4.4), 2.0, () => loadClubFinal());
-  setObjective("Check the stalls.", "Use B on the stall doors.");
+  addInteraction("exit-mr", "I", () => state.flags.has("mr-s2"), () => new THREE.Vector3(0, 0, 4.4), 2.0, () => loadClubFinal());
+  setObjective("Check the stalls.", "Press P on the stall doors.");
 }
 
 // ─── Scene: Club Final (leave club) ────────────────────────────────
@@ -1620,19 +1643,19 @@ function loadClubFinal() {
   for (const tile of state.danceTiles) tile.mesh.material.emissiveIntensity = 0.06;
 
   clearInteractions();
-  addInteraction("date-final", "A", () => !state.flags.has("club-final-talked"), () => state.dateMesh.position, 2.0, () => {
+  addInteraction("date-final", "I", () => !state.flags.has("club-final-talked"), () => state.dateMesh.position, 2.0, () => {
     state.flags.add("club-final-talked");
     showDialogueSequence([
       "Date: Encounter anything?",
       "You: Nothing out of place. Just a little matter between men. We can go now."
     ], () => {
-      setObjective("Leave the nightclub.", "Press A at the entrance.");
-      addInteraction("exit-club", "A", () => true, () => new THREE.Vector3(0, 0, 10.5), 2.2, () => {
+      setObjective("Leave the nightclub.", "Press I at the entrance.");
+      addInteraction("exit-club", "I", () => true, () => new THREE.Vector3(0, 0, 10.5), 2.2, () => {
         transitionToScene("11th Hour Motel.\nNight.", loadMotelRoom);
       });
     });
   });
-  setObjective("Rejoin your date.", "Press A near her.");
+  setObjective("Rejoin your date.", "Press I near her.");
 }
 
 // ─── Scene: Motel Room ─────────────────────────────────────────────
@@ -1647,7 +1670,7 @@ function loadMotelRoom() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person — no body visible
 
   state.cameraBounds = { minX: -4.5, maxX: 4.5, minZ: -4.5, maxZ: 4.5, maxY: 4.5 };
   state.worldBounds = { minX: -3.5, maxX: 3.5, minZ: -3.5, maxZ: 3.5 };
@@ -1727,17 +1750,17 @@ function loadMotelRoom() {
   ];
 
   clearInteractions();
-  addInteraction("tape", "B", () => !state.flags.has("motel-tape"), () => tapePos, 1.6, () => {
+  addInteraction("tape", "P", () => !state.flags.has("motel-tape"), () => tapePos, 1.6, () => {
     state.flags.add("motel-tape");
     openEvidence("Tape Recorder",
       "\"Thursday night at the disco \u2014 my date screamed, and I found a body. " +
       "Later that night, I attempted to rearrange the order, but it was no use: " +
       "just not my night\u2026 not hers. Though I suspect a few men had a good time.\"");
   });
-  addInteraction("motel-tv", "B", () => true, () => tv.position, 1.6, () => {
+  addInteraction("motel-tv", "P", () => true, () => tv.position, 1.6, () => {
     showDialogue("Static. Nothing worth watching at this hour.", 2000);
   });
-  addInteraction("motel-fridge", "B", () => true, () => new THREE.Vector3(2.8, 0, -3.2), 1.6, () => {
+  addInteraction("motel-fridge", "P", () => true, () => new THREE.Vector3(2.8, 0, -3.2), 1.6, () => {
     showDialogue("Empty. Just a box of baking soda and a forgotten lime.", 2200);
   });
   addInteraction("gun-holster", "B",
@@ -1746,13 +1769,13 @@ function loadMotelRoom() {
     state.flags.add("motel-gun");
     holster.visible = false;
     showDialogue("You grab your piece.", 1200);
-    setObjective("Confront the intruder.", "Press B near him.");
+    setObjective("Confront the intruder.", "Press P near him.");
   });
-  addInteraction("motel-door", "A", () => state.flags.has("motel-intruder-fled"), () => door.position, 1.8, () => {
+  addInteraction("motel-door", "I", () => state.flags.has("motel-intruder-fled"), () => door.position, 1.8, () => {
     transitionToScene("11th Hour Motel.\nExterior. Night.", loadMotelExterior);
   });
 
-  setObjective("Examine the room.", "Use B on tape recorder, TV, or fridge.");
+  setObjective("Examine the room.", "Press P on tape recorder, TV, or fridge.");
 }
 
 function motelPhoneCall() {
@@ -1839,7 +1862,7 @@ function motelIntruder() {
           return true;
         };
         state.animations.push(menaceAnim);
-        setObjective("Get to your gun on the nightstand.", "Use B on the gun holster.");
+        setObjective("Get to your gun on the nightstand.", "Press P on the gun holster.");
       }}
     ]);
   }, 2800);
@@ -1895,7 +1918,7 @@ function motelIntruder() {
           intruder.rotation.x = Math.sin(fleeBob * 12) * 0.08; // run bob
           return true;
         });
-        setObjective("Exit the motel room.", "Press A at the door.");
+        setObjective("Exit the motel room.", "Press I at the door.");
       }}
     ]);
   });
@@ -2067,7 +2090,7 @@ function loadMotelExterior() {
 
   clearInteractions();
   const offDoorPos = new THREE.Vector3(-16.5, 0, -2);
-  addInteraction("office", "A", () => !state.flags.has("motel-mail"), () => offDoorPos, 2.0, () => {
+  addInteraction("office", "I", () => !state.flags.has("motel-mail"), () => offDoorPos, 2.0, () => {
     state.playerCanMove = false;
     showDialogueSequence([
       "A smoky old woman behind the desk watches a cowboy show on a tiny TV. A fly buzzes around. She is unfazed.",
@@ -2083,8 +2106,8 @@ function loadMotelExterior() {
       { text: "You: Thanks for letting me know.", action: () => {
         state.flags.add("motel-mail");
         state.playerCanMove = true;
-        setObjective("Head back. Get some rest.", "Walk right toward your car.");
-        addInteraction("leave-night", "A", () => true, () => new THREE.Vector3(-5, 0, 2), 2.5, () => {
+        setObjective("Head back. Get some rest.", "Walk to your car.");
+        addInteraction("leave-night", "I", () => true, () => new THREE.Vector3(-5, 0, 0), 5.0, () => {
           transitionToScene("Thunderstorms & Neon Signs.\n\n11th Hour Motel.\nSaturday morning.", loadMotelMorning);
         });
       }}
@@ -2092,7 +2115,7 @@ function loadMotelExterior() {
   });
 
   const r3Pos = new THREE.Vector3(-14 + 2 * 2.3, 0, -4.8);
-  addInteraction("room3-locked", "A", () => true, () => r3Pos, 1.5, () => showDialogue("You\u2019ve checked out.", 1500));
+  addInteraction("room3-locked", "I", () => true, () => r3Pos, 1.5, () => showDialogue("You\u2019ve checked out.", 1500));
 
   setObjective("Explore the motel. Visit the office.", "Walk left to the office.");
 }
@@ -2125,13 +2148,19 @@ function loadMotelMorning() {
 
   dom.hudLocation.textContent = "Motel";
   
-  scene.fog = new THREE.FogExp2(0x1a2030, 0.018);
-  renderer.setClearColor(0x1a2233, 1);
-  ambient.intensity = 0.8;
+  // Dawn sky — warm coral horizon fading up to steel blue
+  scene.fog = new THREE.FogExp2(0xc87848, 0.012);
+  renderer.setClearColor(0xd98858, 1);
+  ambient.intensity = 1.1;
+  ambient.color.setHex(0xffdec8);
+  // Dawn directional light from east (low angle)
+  const dawn = new THREE.DirectionalLight(0xff9966, 1.2);
+  dawn.position.set(20, 3, 8); fxGroup.add(dawn);
+  key.color.setHex(0xffcc99); key.intensity = 0.9;
 
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.9 }));
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), new THREE.MeshStandardMaterial({ color: 0x3a3830, roughness: 0.9 }));
   gnd.rotation.x = -Math.PI / 2; envGroup.add(gnd);
-  envGroup.add(makeBox(0, 1.8, -5.8, 36, 3.6, 1.4, 0x3a3428, 0.75));
+  envGroup.add(makeBox(0, 1.8, -5.8, 36, 3.6, 1.4, 0x4a4038, 0.75));
   for (let i = 0; i < 12; i++) envGroup.add(makeDoor(-14 + i * 2.3, -5.0, 0x4a3e2e));
   const r13x = 14;
   const r13Door = makeDoor(r13x, -5.0, 0x5a4a30);
@@ -2146,6 +2175,12 @@ function loadMotelMorning() {
 
   const manager = makePerson(0xecd2b0, 0x5a3a4a, true);
   manager.position.set(-10, 0.36, -3);
+  // White hair bun + glasses for character-specific manager look
+  const mgrHair = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshToonMaterial({ color: 0xf2eeea }));
+  mgrHair.position.set(0, 1.58, 0.04); manager.add(mgrHair);
+  const mgrGlassL = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.011, 4, 10), new THREE.MeshToonMaterial({ color: 0x1a1008 }));
+  mgrGlassL.position.set(-0.07, 1.36, 0.24); mgrGlassL.rotation.x = Math.PI / 2; manager.add(mgrGlassL);
+  const mgrGlassR = mgrGlassL.clone(); mgrGlassR.position.set(0.07, 1.36, 0.24); manager.add(mgrGlassR);
   charGroup.add(manager);
 
   clearInteractions();
@@ -2168,11 +2203,11 @@ function loadMotelMorning() {
     "I didn\u2019t need the room, but I hate to see a squeamish lady put out.",
     { text: "You: Tell ya what, ma\u2019am. It\u2019s on me.", action: () => {
       state.playerCanMove = true;
-      setObjective("Go to room 13 at the far right.", "Walk right to room 13 and press A.");
+      setObjective("Go to room 13 at the far right.", "Walk right to room 13 and press I.");
     }}
   ]);
 
-  addInteraction("room13-enter", "A", () => state.playerCanMove, () => r13Door.position, 1.8, () => loadRoom13());
+  addInteraction("room13-enter", "I", () => state.playerCanMove, () => r13Door.position, 1.8, () => loadRoom13());
 }
 
 // ─── Scene: Room 13 ────────────────────────────────────────────────
@@ -2187,7 +2222,7 @@ function loadRoom13() {
   state.player.yaw = Math.PI;
   state.player.mesh.position.copy(state.player.pos);
   state.player.mesh.rotation.y = state.player.yaw;
-  state.player.mesh.visible = true;
+  state.player.mesh.visible = false; // first-person
 
   state.cameraBounds = { minX: -4.5, maxX: 4.5, minZ: -4.5, maxZ: 4.5, maxY: 4.5 };
   state.worldBounds = { minX: -3.5, maxX: 3.5, minZ: -3.5, maxZ: 3.5 };
@@ -2230,23 +2265,23 @@ function loadRoom13() {
   state.obstacles = [makeObstacle(-3.8, -1.4, -2.8, 0.5), makeObstacle(1.0, 3.4, -3.8, -2.8)];
 
   clearInteractions();
-  addInteraction("exam-scene", "B", () => !state.flags.has("r13-examined"), () => new THREE.Vector3(0.2, 0, 1.2), 1.8, () => {
+  addInteraction("exam-scene", "P", () => !state.flags.has("r13-examined"), () => new THREE.Vector3(0.2, 0, 1.2), 1.8, () => {
     state.flags.add("r13-examined");
     openEvidence("Crime Scene",
       "The pills were a mix of amphetamines and painkillers, prescription label not relevant. " +
       "The whiskey was the nail on the coffin.");
   });
-  addInteraction("r13-tv", "B", () => tvScreen.visible, () => tv.position, 1.6, () => {
+  addInteraction("r13-tv", "P", () => tvScreen.visible, () => tv.position, 1.6, () => {
     tvScreen.visible = false; tvScreen.material.color.setHex(0x0a0a0a);
     showDialogue("You turn off the TV. Static fades to silence.", 1800);
   });
-  addInteraction("exit-r13", "A", () => state.flags.has("r13-examined"), () => new THREE.Vector3(3.5, 0, 2.5), 1.8, () => loadRoom13Exit());
+  addInteraction("exit-r13", "I", () => state.flags.has("r13-examined"), () => new THREE.Vector3(3.5, 0, 2.5), 1.8, () => loadRoom13Exit());
 
   showDialogueSequence([
     "Looks like he\u2019s also checked out.",
     { text: "Same layout as your room. Dead man on the floor, ski mask on top of a snowy TV.", action: () => {
       state.playerCanMove = true;
-      setObjective("Investigate the scene.", "Use B to examine the body and evidence.");
+      setObjective("Investigate the scene.", "Press P to examine the body and evidence.");
     }}
   ]);
 }
@@ -2267,23 +2302,35 @@ function loadRoom13Exit() {
 
   dom.hudLocation.textContent = "Motel";
   
-  scene.fog = new THREE.FogExp2(0x1a2030, 0.018);
-  renderer.setClearColor(0x1a2233, 1);
+  // Dawn sky continued — matching motel-morning palette
+  scene.fog = new THREE.FogExp2(0xc87848, 0.012);
+  renderer.setClearColor(0xd98858, 1);
+  ambient.intensity = 1.1;
+  ambient.color.setHex(0xffdec8);
+  const dawnR13 = new THREE.DirectionalLight(0xff9966, 1.2);
+  dawnR13.position.set(20, 3, 8); fxGroup.add(dawnR13);
+  key.color.setHex(0xffcc99); key.intensity = 0.9;
 
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(20, 14), new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.9 }));
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(20, 14), new THREE.MeshStandardMaterial({ color: 0x3a3830, roughness: 0.9 }));
   gnd.rotation.x = -Math.PI / 2; gnd.position.x = 12; envGroup.add(gnd);
-  envGroup.add(makeBox(12, 1.8, -5.8, 14, 3.6, 1.4, 0x3a3428, 0.75));
+  envGroup.add(makeBox(12, 1.8, -5.8, 14, 3.6, 1.4, 0x4a4038, 0.75));
   envGroup.add(makeDoor(14, -5.0, 0x5a4a30));
 
   const kid = makePerson(0xf0d8b8, 0x3a5a3a, false);
   kid.position.set(12, 0.2, -2); kid.scale.setScalar(0.6); charGroup.add(kid);
   const mgr = makePerson(0xecd2b0, 0x5a3a4a, true);
-  mgr.position.set(10, 0.36, -2); mgr.visible = false; charGroup.add(mgr);
+  mgr.position.set(10, 0.36, -2); mgr.visible = false;
+  const mgrH2 = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshToonMaterial({ color: 0xf2eeea }));
+  mgrH2.position.set(0, 1.58, 0.04); mgr.add(mgrH2);
+  const mgrGL2 = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.011, 4, 10), new THREE.MeshToonMaterial({ color: 0x1a1008 }));
+  mgrGL2.position.set(-0.07, 1.36, 0.24); mgrGL2.rotation.x = Math.PI / 2; mgr.add(mgrGL2);
+  const mgrGR2 = mgrGL2.clone(); mgrGR2.position.set(0.07, 1.36, 0.24); mgr.add(mgrGR2);
+  charGroup.add(mgr);
 
   clearInteractions();
   state.obstacles = [makeObstacle(6, 16, -6.5, -4.2)];
 
-  addInteraction("talk-kid", "A", () => !state.flags.has("kid-talked"), () => kid.position, 2.2, () => {
+  addInteraction("talk-kid", "I", () => !state.flags.has("kid-talked"), () => kid.position, 2.2, () => {
     state.flags.add("kid-talked");
     state.playerCanMove = false;
     showDialogueSequence([
@@ -2296,14 +2343,14 @@ function loadRoom13Exit() {
       "Manager: Thank you for looking into things. Looks like I\u2019ll have to pay the garbage collector this week.",
       { text: "You: I\u2019ll be heading out now.", action: () => {
         state.playerCanMove = true;
-        setObjective("Get in the car and leave.", "Press A to leave.");
-        addInteraction("leave-motel", "A", () => true, () => new THREE.Vector3(10, 0, 3), 3.0, () => {
-          transitionToScene("Upstate. Afternoon.\n\nMusic: I\u2019m Only Sleeping.", loadDrivingScene);
+        setObjective("Get in the car and leave.", "Press I to leave.");
+        addInteraction("leave-motel", "I", () => true, () => new THREE.Vector3(10, 0, 3), 3.0, () => {
+          transitionToScene("Upstate. Afternoon.", loadDrivingScene);
         });
       }}
     ]);
   });
-  setObjective("Someone\u2019s near your bag.", "Press A to talk.");
+  setObjective("Someone\u2019s near your bag.", "Press I to talk.");
 }
 
 // ─── Scene: Driving ────────────────────────────────────────────────
@@ -2496,13 +2543,13 @@ function updateInteractions(elapsed) {
     if (dist <= it.radius && dist < nearestDist) { nearest = it; nearestDist = dist; }
   }
   state.nearestInteraction = nearest;
-  if (state.evidenceOpen) { dom.interactionText.textContent = "Press B or BACK to close evidence."; return; }
-  const nearA = findNearestByKey("A");
-  const nearB = findNearestByKey("B");
+  if (state.evidenceOpen) { dom.interactionText.textContent = "Press P or BACK to close evidence."; return; }
+  const nearA = findNearestByKey("I");
+  const nearB = findNearestByKey("P");
   if (!nearA && !nearB) { dom.interactionText.textContent = state.activeBaseHint; return; }
   const parts = [];
-  if (nearA) parts.push(`[A] ${formatInteractionLabel(nearA.id)}`);
-  if (nearB) parts.push(`[B] ${formatInteractionLabel(nearB.id)}`);
+  if (nearA) parts.push(`[I] ${formatInteractionLabel(nearA.id)}`);
+  if (nearB) parts.push(`[P] ${formatInteractionLabel(nearB.id)}`);
   dom.interactionText.textContent = parts.join("  |  ");
 }
 
@@ -2578,12 +2625,12 @@ function updateInputTriggers() {
     return;
   }
   if (state.controls.aQueued) {
-    const target = findNearestByKey("A");
+    const target = findNearestByKey("I");
     if (target) triggerInteraction(target);
   }
   if (state.controls.bQueued) {
     if (state.evidenceOpen) closeEvidence();
-    else { const target = findNearestByKey("B"); if (target) triggerInteraction(target); }
+    else { const target = findNearestByKey("P"); if (target) triggerInteraction(target); }
   }
   state.controls.aQueued = false;
   state.controls.bQueued = false;
@@ -2711,10 +2758,10 @@ function updateCamera(delta) {
     return;
   }
 
-  // First-person view in bathroom/mensroom scenes
-  if (state.phase === "bathroom" || state.phase === "mensroom") {
+  // First-person view in bathroom / mensroom / motel-room scenes
+  if (state.phase === "bathroom" || state.phase === "mensroom" || state.phase === "motel-room" || state.phase === "room13") {
     const eyeX = state.player.pos.x;
-    const eyeY = state.player.pos.y + 1.02;
+    const eyeY = state.player.pos.y + 1.60;
     const eyeZ = state.player.pos.z;
     const fwdX = Math.sin(state.player.yaw);
     const fwdZ = Math.cos(state.player.yaw);
