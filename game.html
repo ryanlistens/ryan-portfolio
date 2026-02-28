@@ -1509,8 +1509,12 @@ function drawNPC(npc) {
             pct = Math.min((Date.now() - npc.crackStartTime) / 15000, 1);
         }
 
-        if(pct > 0) {
-            // Pipe needs attention - pacing back and forth
+        if(pct >= 0.66) {
+            // About to burst - jumping up and down frantically
+            isJumping = true;
+            y += -Math.abs(Math.sin(Date.now() / 80)) * 16;
+        } else if(pct > 0) {
+            // Pipe starting to swell - pacing back and forth
             isPacing = true;
             x += Math.sin(Date.now() / 250) * 12;
         }
@@ -1751,28 +1755,34 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             ctx.clip();
 
             const my = groundY + 8;
+            // Use canvas transform to flip when facing left — draw always as right-facing
+            ctx.save();
+            ctx.translate(mowerX, my);
+            ctx.scale(mowerFacing, 1);
             // Mower body — green (John Deere style)
             ctx.fillStyle = '#2e7d32';
-            ctx.fillRect(mowerX - 8 * mowerFacing, my - 8, 16, 10);
-            // Hood
+            ctx.fillRect(-8, -8, 16, 10);
+            // Hood (front, right side)
             ctx.fillStyle = '#388e3c';
-            ctx.fillRect(mowerX + 4 * mowerFacing, my - 10, 8 * mowerFacing, 6);
-            // Seat
+            ctx.fillRect(4, -10, 8, 6);
+            // Seat (behind driver)
             ctx.fillStyle = '#f9a825';
-            ctx.fillRect(mowerX - 4 * mowerFacing, my - 12, 5, 5);
-            // Wheels
+            ctx.fillRect(-6, -12, 5, 5);
+            // Rear wheel (larger)
             ctx.fillStyle = '#222';
-            ctx.beginPath(); ctx.arc(mowerX - 6 * mowerFacing, my + 3, 3.5, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(mowerX + 8 * mowerFacing, my + 3, 2.5, 0, Math.PI * 2); ctx.fill();
-            // Yellow wheel rims
+            ctx.beginPath(); ctx.arc(-6, 3, 3.5, 0, Math.PI * 2); ctx.fill();
+            // Front wheel (smaller)
+            ctx.beginPath(); ctx.arc(8, 3, 2.5, 0, Math.PI * 2); ctx.fill();
+            // Yellow wheel rim
             ctx.fillStyle = '#f9a825';
-            ctx.beginPath(); ctx.arc(mowerX - 6 * mowerFacing, my + 3, 1.5, 0, Math.PI * 2); ctx.fill();
-            // Tiny driver
+            ctx.beginPath(); ctx.arc(-6, 3, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Tiny driver (seated)
             ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(mowerX - 3 * mowerFacing, my - 16, 4, 5);
+            ctx.fillRect(-3, -16, 4, 5);
             ctx.fillStyle = '#2e7d32'; // green cap
-            ctx.fillRect(mowerX - 4 * mowerFacing, my - 18, 6, 3);
-            // Grass clipping spray
+            ctx.fillRect(-4, -18, 6, 3);
+            ctx.restore();
+            // Grass clipping spray (behind mower in world space)
             if(mowerX > wx + 5 && mowerX < wx + ww - 5) {
                 for(let g = 0; g < 4; g++) {
                     const gx = mowerX - mowerFacing * (10 + g * 3) + Math.random() * 4;
@@ -1821,10 +1831,14 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             const splashPct = (splashCycle - 0.4) / 0.3;
             const fishX = pondCx - 4 + Math.sin(t / 800) * 6;
             const fishY = pondCy - 4 - Math.sin(splashPct * Math.PI) * 14;
+            // Determine fish facing based on horizontal velocity
+            const fishVx = Math.cos(t / 800); // derivative of sin
+            const fishDir = fishVx >= 0 ? 1 : -1;
             // Fish body — orange/white koi
             ctx.fillStyle = '#ff6633';
             ctx.save();
             ctx.translate(fishX, fishY);
+            ctx.scale(fishDir, 1);
             ctx.rotate(-0.5 + splashPct);
             // Body
             ctx.beginPath(); ctx.ellipse(0, 0, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
@@ -1978,35 +1992,29 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.beginPath(); ctx.arc(c2x + 8, wy + 14, 5, 0, Math.PI*2); ctx.fill();
 
     // === LAYOUT BANDS (top to bottom) ===
-    const bldgTop = wy + wh * 0.18;   // across-the-street building top
-    const bldgBot = wy + wh * 0.42;   // building base / far sidewalk
-    const streetTop = bldgBot;          // street starts
-    const streetBot = wy + wh * 0.54;  // street ends
-    const curbTop = streetBot;          // near curb/sidewalk
-    const curbBot = wy + wh * 0.58;
-    const lotTop = curbBot;             // parking lot asphalt
-    const lotBot = wy + wh;            // bottom of window
+    const bldgTop = wy + wh * 0.18;
+    const bldgBot = wy + wh * 0.38;
+    const streetTop = bldgBot;
+    const streetBot = wy + wh * 0.48;
+    const curbTop = streetBot;
+    const curbBot = wy + wh * 0.52;
+    const lotTop = curbBot;
+    const lotBot = wy + wh;
 
     // === BUILDING ACROSS THE STREET — industrial park office ===
-    // Main facade
     ctx.fillStyle = '#8a8578';
     ctx.fillRect(wx, bldgTop, ww, bldgBot - bldgTop);
-    // Darker base strip
     ctx.fillStyle = '#706a5e';
     ctx.fillRect(wx, bldgBot - 4, ww, 4);
-    // Roof edge
     ctx.fillStyle = '#6a6458';
     ctx.fillRect(wx, bldgTop, ww, 3);
-    // Window rows — office windows in grid
     const bldgH = bldgBot - bldgTop;
     for(let row = 0; row < 2; row++) {
         for(let col = 0; col < 16; col++) {
             const bwx = wx + 10 + col * 23;
             const bwy = bldgTop + 6 + row * (bldgH * 0.38);
-            // Window recess
             ctx.fillStyle = '#5a5548';
             ctx.fillRect(bwx, bwy, 16, 8);
-            // Glass — slight blue tint, some lit
             const lit = ((col * 7 + row * 3) % 5) < 2;
             ctx.fillStyle = lit ? 'rgba(180,210,240,0.7)' : 'rgba(100,140,170,0.5)';
             ctx.fillRect(bwx + 1, bwy + 1, 14, 6);
@@ -2020,89 +2028,35 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(entX + 3, bldgBot - 12, 10, 10);
     ctx.fillRect(entX + 15, bldgBot - 12, 10, 10);
 
-    // === PIPETECH OUTDOOR SIGN — brutalist quality ===
-    // Mounted on building facade, upper-right area
-    const signCx = wx + ww * 0.78;
-    const signTop = bldgTop + 2;
-    const signW = 72, signH = 20;
-    // Dark brutalist sign panel (matching indoor style)
-    ctx.fillStyle = '#2b2b2b';
-    ctx.fillRect(signCx - signW/2, signTop, signW, signH);
-    // Mounting bolts — 4 corners
-    const boltOff = 3;
-    const boltPositions = [
-        [signCx - signW/2 + boltOff, signTop + boltOff],
-        [signCx + signW/2 - boltOff, signTop + boltOff],
-        [signCx - signW/2 + boltOff, signTop + signH - boltOff],
-        [signCx + signW/2 - boltOff, signTop + signH - boltOff]
-    ];
-    for(let bp of boltPositions) {
-        ctx.fillStyle = '#555';
-        ctx.beginPath(); ctx.arc(bp[0], bp[1], 1.5, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#777';
-        ctx.beginPath(); ctx.arc(bp[0] - 0.3, bp[1] - 0.3, 0.6, 0, Math.PI*2); ctx.fill();
-    }
-    // "PIPETECH" text — cream on dark, matching indoor font style
-    ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', signCx, signTop + 10);
-    // Divider line under text
-    ctx.fillStyle = '#555';
-    ctx.fillRect(signCx - signW/2 + 8, signTop + 12, signW - 16, 0.5);
-    // Four colored stripes — contained within panel
-    const stripeL = signCx - signW/2 + 8;
-    const stripeW = signW - 16;
-    for(let i = 0; i < 4; i++) {
-        ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(stripeL, signTop + 13.5 + i * 1.5, stripeW, 1);
-    }
-
-    // === STREET with traffic ===
+    // === STREET — single lane, one direction (right), no opposing traffic ===
     ctx.fillStyle = '#3e3e3e';
     ctx.fillRect(wx, streetTop, ww, streetBot - streetTop);
-    // Center yellow dashed line
-    const lineY = (streetTop + streetBot) / 2;
-    ctx.strokeStyle = '#c8b020';
+    // White edge line at top of road (near sidewalk)
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.lineWidth = 1;
-    ctx.setLineDash([8, 6]);
-    ctx.beginPath(); ctx.moveTo(wx, lineY); ctx.lineTo(wx + ww, lineY); ctx.stroke();
-    ctx.setLineDash([]);
-    // Street traffic — car driving across
-    const carSpeed = (t / 4000) % 1;
+    ctx.beginPath(); ctx.moveTo(wx, streetTop + 1); ctx.lineTo(wx + ww, streetTop + 1); ctx.stroke();
+    // Street traffic — single car driving right
+    const carSpeed = (t / 5000) % 1;
     const trafficX = wx - 30 + (ww + 60) * carSpeed;
     if(trafficX > wx - 20 && trafficX < wx + ww + 20) {
-        const carY = lineY - 4;
-        // Car body
+        const carY = (streetTop + streetBot) / 2;
+        // Side profile car: body, roof, windshield, rear window, wheels
         ctx.fillStyle = '#b0b0b0';
         ctx.fillRect(trafficX - 14, carY - 3, 28, 7);
-        // Cabin
         ctx.fillStyle = '#999';
-        ctx.fillRect(trafficX - 7, carY - 6, 14, 4);
-        // Glass
+        ctx.fillRect(trafficX - 5, carY - 6, 14, 4);
         ctx.fillStyle = 'rgba(150,200,240,0.5)';
-        ctx.fillRect(trafficX - 5, carY - 5, 5, 3);
-        ctx.fillRect(trafficX + 1, carY - 5, 5, 3);
-        // Wheels
+        ctx.fillRect(trafficX - 3, carY - 5, 5, 3);
+        ctx.fillRect(trafficX + 3, carY - 5, 5, 3);
+        // Tail light
+        ctx.fillStyle = '#cc3333';
+        ctx.fillRect(trafficX - 14, carY - 2, 2, 3);
+        // Headlight
+        ctx.fillStyle = '#ffe';
+        ctx.fillRect(trafficX + 12, carY - 2, 2, 3);
         ctx.fillStyle = '#222';
         ctx.beginPath(); ctx.arc(trafficX - 8, carY + 4, 2, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(trafficX + 8, carY + 4, 2, 0, Math.PI*2); ctx.fill();
-    }
-    // Second car going opposite direction (slower)
-    const car2Speed = ((t / 5500) + 0.4) % 1;
-    const traffic2X = wx + ww + 30 - (ww + 60) * car2Speed;
-    if(traffic2X > wx - 20 && traffic2X < wx + ww + 20) {
-        const car2Y = lineY + 4;
-        ctx.fillStyle = '#7a3030';
-        ctx.fillRect(traffic2X - 12, car2Y - 2, 24, 6);
-        ctx.fillStyle = '#6a2525';
-        ctx.fillRect(traffic2X - 6, car2Y - 5, 12, 4);
-        ctx.fillStyle = 'rgba(150,200,240,0.5)';
-        ctx.fillRect(traffic2X - 4, car2Y - 4, 4, 3);
-        ctx.fillRect(traffic2X + 1, car2Y - 4, 4, 3);
-        ctx.fillStyle = '#222';
-        ctx.beginPath(); ctx.arc(traffic2X - 7, car2Y + 4, 1.8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(traffic2X + 7, car2Y + 4, 1.8, 0, Math.PI*2); ctx.fill();
     }
 
     // === CURB / SIDEWALK ===
@@ -2111,16 +2065,46 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillStyle = '#bbb';
     ctx.fillRect(wx, curbTop, ww, 1.5);
 
+    // === PIPETECH ENTRANCE SIGN — on this side, at parking lot entrance ===
+    // Steel I-beam sign post (near left edge of lot)
+    const signPostX = wx + 18;
+    const signPostTop = curbTop - 4;
+    const signPostBot = lotTop + 6;
+    // I-beam post
+    ctx.fillStyle = '#555';
+    ctx.fillRect(signPostX - 2, signPostTop, 4, signPostBot - signPostTop);
+    // I-beam flanges
+    ctx.fillRect(signPostX - 4, signPostTop, 8, 2);
+    ctx.fillRect(signPostX - 4, signPostBot - 2, 8, 2);
+    // Sign panel mounted on post
+    const signW = 52, signH = 14;
+    const signTop = signPostTop - signH + 1;
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(signPostX - 2, signTop, signW, signH);
+    // Mounting bracket
+    ctx.fillStyle = '#444';
+    ctx.fillRect(signPostX - 1, signTop + signH - 2, 3, 3);
+    // "PIPETECH" text
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 7px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('PIPETECH', signPostX + 3, signTop + 8);
+    // Colored stripes under text
+    for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = COLORS[i].hex;
+        ctx.fillRect(signPostX + 3, signTop + 10 + i * 1, signW - 8, 0.8);
+    }
+
     // === PARKING LOT ===
     ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(wx, lotTop, ww, lotBot - lotTop);
-    // Asphalt texture — subtle speckle
+    // Asphalt texture
     ctx.fillStyle = '#525252';
     for(let sp = 0; sp < 30; sp++) {
         ctx.fillRect(wx + (sp * 47 + 13) % ww, lotTop + (sp * 31 + 7) % (lotBot - lotTop), 2, 1);
     }
 
-    // Parking lines — closer together for proper scale
+    // Parking lines
     const lotH = lotBot - lotTop;
     const spotW = ww / 11;
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -2132,41 +2116,74 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         ctx.lineTo(lx, lotBot - 2);
         ctx.stroke();
     }
-    // Horizontal line at top of lot (parking block edge)
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(wx + 8, lotTop + 3); ctx.lineTo(wx + 8 + 10 * spotW, lotTop + 3); ctx.stroke();
 
-    // Parked cars — properly scaled to fit spots
+    // Parked cars — top-down perspective (roof visible, slightly angled)
     const carDefs = [
-        {spot: 0, col: '#c0392b', dark: '#8b2a1f'},
-        {spot: 2, col: '#2980b9', dark: '#1a5a80'},
-        {spot: 3, col: '#f0f0f0', dark: '#bbb'},
-        {spot: 5, col: '#27ae60', dark: '#1a7a40'},
-        {spot: 7, col: '#f39c12', dark: '#c87f0a'},
-        {spot: 8, col: '#555', dark: '#333'},
-        {spot: 9, col: '#8e44ad', dark: '#6a2d80'}
+        {spot: 0, col: '#c0392b', dark: '#8b2a1f', glass: '#4a1a1a'},
+        {spot: 2, col: '#2980b9', dark: '#1a5a80', glass: '#1a3a50'},
+        {spot: 3, col: '#f0f0f0', dark: '#bbb', glass: '#889'},
+        {spot: 5, col: '#27ae60', dark: '#1a7a40', glass: '#0a4020'},
+        {spot: 7, col: '#f39c12', dark: '#c87f0a', glass: '#7a4a0a'},
+        {spot: 8, col: '#555', dark: '#333', glass: '#222'},
+        {spot: 9, col: '#8e44ad', dark: '#6a2d80', glass: '#3a1a4a'}
     ];
     for(let cd of carDefs) {
         const cx = wx + 8 + (cd.spot + 0.5) * spotW;
-        const cy = lotTop + lotH * 0.5;
-        const cw = spotW * 0.8;
-        const ch = lotH * 0.55;
-        // Body
+        const cy = lotTop + lotH * 0.52;
+        const cw = spotW * 0.7;
+        const ch = lotH * 0.7;
+        // Car body (top-down: longer than wide, nose at top)
         ctx.fillStyle = cd.col;
-        ctx.fillRect(cx - cw/2, cy - ch/2 + 1, cw, ch);
-        // Cabin
+        // Rounded car body shape
+        const r = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - cw/2 + r, cy - ch/2);
+        ctx.lineTo(cx + cw/2 - r, cy - ch/2);
+        ctx.quadraticCurveTo(cx + cw/2, cy - ch/2, cx + cw/2, cy - ch/2 + r);
+        ctx.lineTo(cx + cw/2, cy + ch/2 - r);
+        ctx.quadraticCurveTo(cx + cw/2, cy + ch/2, cx + cw/2 - r, cy + ch/2);
+        ctx.lineTo(cx - cw/2 + r, cy + ch/2);
+        ctx.quadraticCurveTo(cx - cw/2, cy + ch/2, cx - cw/2, cy + ch/2 - r);
+        ctx.lineTo(cx - cw/2, cy - ch/2 + r);
+        ctx.quadraticCurveTo(cx - cw/2, cy - ch/2, cx - cw/2 + r, cy - ch/2);
+        ctx.fill();
+        // Windshield (front, near top — car faces away from viewer)
+        ctx.fillStyle = cd.glass;
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(cx - cw*0.35, cy - ch/2 + 2, cw*0.7, ch*0.18);
+        ctx.globalAlpha = 1;
+        // Roof panel (center)
         ctx.fillStyle = cd.dark;
-        ctx.fillRect(cx - cw*0.35, cy - ch/2 - 2, cw*0.7, ch*0.35);
-        // Glass
-        ctx.fillStyle = 'rgba(150,200,240,0.45)';
-        ctx.fillRect(cx - cw*0.3, cy - ch/2 - 1, cw*0.28, ch*0.25);
-        ctx.fillRect(cx + cw*0.05, cy - ch/2 - 1, cw*0.28, ch*0.25);
-        // Wheels
-        ctx.fillStyle = '#111';
-        ctx.fillRect(cx - cw/2 + 1, cy + ch/2, cw*0.2, 2);
-        ctx.fillRect(cx + cw/2 - cw*0.2 - 1, cy + ch/2, cw*0.2, 2);
+        ctx.fillRect(cx - cw*0.3, cy - ch*0.15, cw*0.6, ch*0.3);
+        // Rear windshield
+        ctx.fillStyle = cd.glass;
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(cx - cw*0.28, cy + ch*0.2, cw*0.56, ch*0.12);
+        ctx.globalAlpha = 1;
+        // Tail lights
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(cx - cw/2 + 1, cy + ch/2 - 2, cw*0.15, 2);
+        ctx.fillRect(cx + cw/2 - cw*0.15 - 1, cy + ch/2 - 2, cw*0.15, 2);
     }
+
+    // Mullet Pro's van — parked in last spot, larger, white with stripe
+    const vanSpot = 10;
+    const vanCx = wx + 8 + (vanSpot + 0.3) * spotW;
+    const vanCy = lotTop + lotH * 0.48;
+    const vanW = spotW * 0.8;
+    const vanH = lotH * 0.85;
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(vanCx - vanW/2, vanCy - vanH/2, vanW, vanH);
+    ctx.fillStyle = '#c8c0b0';
+    ctx.fillRect(vanCx - vanW*0.35, vanCy - vanH/2 + 2, vanW*0.7, vanH*0.12);
+    ctx.fillStyle = '#d0c8b8';
+    ctx.fillRect(vanCx - vanW*0.25, vanCy - vanH*0.1, vanW*0.5, vanH*0.25);
+    // Orange side stripe
+    ctx.fillStyle = '#f39c12';
+    ctx.fillRect(vanCx - vanW/2 + 1, vanCy + 1, vanW - 2, 2);
 
     ctx.restore();
 
@@ -2174,14 +2191,13 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.strokeStyle = '#4a4a4a';
     ctx.lineWidth = 4;
     ctx.strokeRect(wx, wy, ww, wh);
-    // Inner frame line
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(wx + 3, wy + 3, ww - 6, wh - 6);
     // Horizontal mullion
     ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(wx, wy + wh * 0.45, ww, 3);
-    // Vertical mullions — divide into thirds
+    // Vertical mullions
     ctx.fillRect(wx + ww * 0.33, wy, 3, wh);
     ctx.fillRect(wx + ww * 0.66, wy, 3, wh);
     // Corner rivets
@@ -2197,6 +2213,116 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(wx - 3, wy + wh, ww + 6, 5);
     ctx.fillStyle = '#555';
     ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 2);
+}
+
+// Hand wheel turn-valve on vertical pipe section (below window)
+function drawHandWheelValve(pipeX, pipeY, npc) {
+    const vx = pipeX;
+    const vy = pipeY - 70; // positioned on vertical pipe above elbow, below window
+    const t = Date.now();
+    const valveR = 10;
+
+    // Determine valve state
+    let isStressed = false;
+    let stressPct = 0;
+    let isFixed = npc.state === 'fixing';
+    let fixDone = npc.state === 'happy' && !npc.needsDoc;
+
+    // Check stress from cracks array (L1-4, L6)
+    const crack = cracks.find(c => c.npc === npc);
+    if(crack) {
+        isStressed = true;
+        stressPct = Math.min((t - crack.time) / crack.max, 1);
+    }
+    // Check stress from crackStartTime (L5)
+    if(npc.crackStartTime && npc.needsDoc) {
+        isStressed = true;
+        stressPct = Math.min((t - npc.crackStartTime) / 15000, 1);
+    }
+
+    // Valve rotation — oscillates when stressed, turns when being fixed
+    let valveAngle = 0;
+    if(isFixed) {
+        // Wrench is turning — valve rotates counter-clockwise half, then clockwise half
+        const fixCycle = (t / 1200) % 2;
+        if(fixCycle < 1) {
+            valveAngle = -Math.PI * fixCycle; // counter-clockwise half turn
+        } else {
+            valveAngle = -Math.PI + Math.PI * (fixCycle - 1); // clockwise back
+        }
+    } else if(isStressed) {
+        // Slight jitter when under pressure
+        valveAngle = Math.sin(t / 300) * 0.15 * stressPct;
+    }
+
+    // Valve mounting plate (bolted to pipe)
+    ctx.fillStyle = '#666';
+    ctx.fillRect(vx - 6, vy - 4, 12, 8);
+
+    // Wheel spokes + rim
+    ctx.save();
+    ctx.translate(vx, vy);
+    ctx.rotate(valveAngle);
+
+    // Outer rim
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, valveR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Spokes (4)
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 2;
+    for(let sp = 0; sp < 4; sp++) {
+        const a = sp * Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * valveR, Math.sin(a) * valveR);
+        ctx.stroke();
+    }
+
+    // Center hub
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#999';
+    ctx.beginPath();
+    ctx.arc(-0.5, -0.5, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Water drips when pipe is stressed
+    if(isStressed && stressPct > 0.2) {
+        const dripCount = Math.floor(stressPct * 4);
+        for(let d = 0; d < dripCount; d++) {
+            const dripPhase = ((t / 600 + d * 200) % 1);
+            const dx = vx - 5 + d * 3 + Math.sin(t / 400 + d) * 2;
+            const dy = vy + valveR + 4 + dripPhase * 18;
+            const dripAlpha = 0.6 * (1 - dripPhase);
+            ctx.fillStyle = `rgba(100,180,255,${dripAlpha})`;
+            ctx.beginPath();
+            ctx.ellipse(dx, dy, 1.5, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Steam spritzes when highly stressed
+    if(isStressed && stressPct > 0.5) {
+        const steamCount = Math.floor((stressPct - 0.5) * 6);
+        for(let s = 0; s < steamCount; s++) {
+            const sp = ((t / 800 + s * 300) % 1);
+            const sx = vx + (s % 2 === 0 ? -1 : 1) * (valveR + 2 + sp * 8);
+            const sy = vy - 3 - sp * 10;
+            const steamAlpha = 0.3 * (1 - sp);
+            ctx.fillStyle = `rgba(220,220,220,${steamAlpha})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2 + sp * 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
 }
 
 // Draw color-coordinated step-ladder for pipe managers
@@ -3574,6 +3700,21 @@ function drawLevel5PipeRoom() {
         ctx.setLineDash([]);
         ctx.restore();
 
+        if(npc.needsDoc && npc.crackStartTime) {
+            const crackTime = Date.now() - npc.crackStartTime;
+            const pct = Math.min(crackTime / 15000, 1);
+            ctx.fillStyle = npc.color.hex;
+            ctx.globalAlpha = 0.4 + pct * 0.6;
+            const sz = 18 + pct * 28;
+            for(let i = 0; i < 3; i++) {
+                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // Hand wheel turn-valve at bottom of pipe (below window)
+        drawHandWheelValve(npc.x, pipeY, npc);
+
         // Color-coordinated step-ladder (drawn behind NPC)
         drawStepLadder(npc.x, npc.y, npc.color);
         drawNPC(npc);
@@ -3895,7 +4036,51 @@ function drawLevel5FurnaceRoom() {
         ctx.fillStyle = `rgba(255,100,0,${glowIntensity})`;
         ctx.fillRect(furnace.x - 35, furnace.y - 15, 70, 30);
     }
-    
+
+    // Analog number counter — padlock-style tumbler dial showing docs remaining
+    const counterX = furnace.x + 50;
+    const counterY = furnace.y - 10;
+    const docsRemaining = 6 - level5.docsCollected;
+    // Counter housing — dark metal box
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(counterX - 14, counterY - 16, 28, 32);
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(counterX - 14, counterY - 16, 28, 32);
+    // Inner number window — recessed slot
+    ctx.fillStyle = '#111';
+    ctx.fillRect(counterX - 10, counterY - 10, 20, 20);
+    // Number display — single digit, side-facing tumbler style
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(counterX - 8, counterY - 8, 16, 16);
+    // Tumbler number
+    ctx.fillStyle = docsRemaining > 0 ? '#ff6600' : '#00ff88';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(docsRemaining.toString(), counterX, counterY);
+    ctx.textBaseline = 'alphabetic';
+    // Tumbler groove lines (top and bottom of digit window)
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(counterX - 8, counterY - 4); ctx.lineTo(counterX + 8, counterY - 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(counterX - 8, counterY + 4); ctx.lineTo(counterX + 8, counterY + 4); ctx.stroke();
+    // Mounting screws
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(counterX - 10, counterY - 12, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(counterX + 10, counterY - 12, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(counterX - 10, counterY + 12, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(counterX + 10, counterY + 12, 2, 0, Math.PI * 2); ctx.fill();
+    // Screw slots
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for(let sc of [[-10,-12],[10,-12],[-10,12],[10,12]]) {
+        ctx.beginPath();
+        ctx.moveTo(counterX + sc[0] - 1.5, counterY + sc[1]);
+        ctx.lineTo(counterX + sc[0] + 1.5, counterY + sc[1]);
+        ctx.stroke();
+    }
+
     ctx.fillStyle = '#654321';
     ctx.fillRect(level5.furnaceRoom.leftDoor.x - 10, level5.furnaceRoom.leftDoor.y, 50, 60);
     ctx.fillStyle = '#4a3a1a';
@@ -4131,23 +4316,34 @@ function drawOfficeRoom(officeName) {
         // Horizon tree line
         ctx.fillStyle = '#2e7d32';
         for(let tr = 0; tr < 14; tr++) { ctx.beginPath(); ctx.arc(wL + 12 + tr * 24, gndY - 4, 14, 0, Math.PI*2); ctx.fill(); }
-        // Riding lawnmower
+        // Riding lawnmower — use canvas scale for proper mirroring
         const mc = (t / 3000) % 2;
         let mx = mc < 1 ? wL - 30 + (wW + 60) * mc : wL + wW + 30 - (wW + 60) * (mc - 1);
         const mf = mc < 1 ? 1 : -1;
         if(mx > wL - 20 && mx < wL + wW + 20) {
             ctx.save(); ctx.beginPath(); ctx.rect(wL, wT, wW, wBot - wT); ctx.clip();
             const my = gndY + 16;
-            ctx.fillStyle = '#2e7d32'; ctx.fillRect(mx - 16*mf, my - 16, 32, 20);
-            ctx.fillStyle = '#388e3c'; ctx.fillRect(mx + 8*mf, my - 20, 16*mf, 12);
-            ctx.fillStyle = '#f9a825'; ctx.fillRect(mx - 8*mf, my - 24, 10, 10);
+            // Draw right-facing, mirror with scale for left-facing
+            ctx.save();
+            ctx.translate(mx, my);
+            ctx.scale(mf, 1);
+            // Body
+            ctx.fillStyle = '#2e7d32'; ctx.fillRect(-16, -16, 32, 20);
+            // Hood (front)
+            ctx.fillStyle = '#388e3c'; ctx.fillRect(8, -20, 16, 12);
+            // Seat (back)
+            ctx.fillStyle = '#f9a825'; ctx.fillRect(-8, -24, 10, 10);
+            // Rear wheel (larger)
             ctx.fillStyle = '#222';
-            ctx.beginPath(); ctx.arc(mx - 12*mf, my + 6, 7, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(mx + 16*mf, my + 6, 5, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#f9a825'; ctx.beginPath(); ctx.arc(mx - 12*mf, my + 6, 3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-12, 6, 7, 0, Math.PI*2); ctx.fill();
+            // Front wheel (smaller)
+            ctx.beginPath(); ctx.arc(16, 6, 5, 0, Math.PI*2); ctx.fill();
+            // Yellow wheel rim
+            ctx.fillStyle = '#f9a825'; ctx.beginPath(); ctx.arc(-12, 6, 3, 0, Math.PI*2); ctx.fill();
             // Tiny driver
-            ctx.fillStyle = '#f5d5a8'; ctx.fillRect(mx - 5*mf, my - 32, 8, 10);
-            ctx.fillStyle = '#2e7d32'; ctx.fillRect(mx - 6*mf, my - 36, 10, 5);
+            ctx.fillStyle = '#f5d5a8'; ctx.fillRect(-5, -32, 8, 10);
+            ctx.fillStyle = '#2e7d32'; ctx.fillRect(-6, -36, 10, 5);
+            ctx.restore();
             ctx.restore();
         }
         // Grass clipping particles behind mower
@@ -4189,14 +4385,16 @@ function drawOfficeRoom(officeName) {
         for(let lp of lilies) {
             ctx.beginPath(); ctx.ellipse(lp[0], lp[1], 14, 5, 0, 0.2, Math.PI*1.8); ctx.fill();
         }
-        // Jumping fish
+        // Jumping fish — faces direction of travel
         const fishCycle = (t / 2500) % 1;
         const fishX = wL + 100 + Math.sin(t / 3000) * 80;
+        const fishVx2 = Math.cos(t / 3000); // horizontal velocity
+        const fishFace = fishVx2 >= 0 ? -1 : 1; // -1 faces left (default), 1 faces right
         if(fishCycle < 0.4) {
             const jumpPct = fishCycle / 0.4;
             const fy = gndY + 10 - Math.sin(jumpPct * Math.PI) * 35;
             const rot = (jumpPct - 0.5) * 1.2;
-            ctx.save(); ctx.translate(fishX, fy); ctx.rotate(rot);
+            ctx.save(); ctx.translate(fishX, fy); ctx.scale(fishFace, 1); ctx.rotate(rot);
             ctx.fillStyle = '#e67e22';
             ctx.beginPath(); ctx.ellipse(0, 0, 10, 5, 0, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = '#d35400';
@@ -9770,6 +9968,21 @@ function drawScene() {
         ctx.lineTo(694, pipeY + 25);
         ctx.stroke();
 
+        const crack = cracks.find(c => c.npc === npc);
+        if(crack && !resetting) {
+            const pct = (Date.now() - crack.time) / crack.max;
+            ctx.fillStyle = npc.color.hex;
+            ctx.globalAlpha = 0.4 + pct * 0.6;
+            const sz = 18 + pct * 28;
+            for(let i = 0; i < 3; i++) {
+                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 40 + i * 8, sz, 8);
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // Hand wheel turn-valve at bottom of pipe (below window)
+        drawHandWheelValve(npc.x, pipeY, npc);
+
         // Color-coordinated step-ladder (drawn behind NPC)
         drawStepLadder(npc.x, npc.y, npc.color);
         drawNPC(npc);
@@ -10000,7 +10213,7 @@ function update() {
 
             keys = {};
             level = 5;
-            timer = 120; // Level 5 gets 120 seconds
+            timer = 180; // Level 5 gets 180 seconds
             state = 'levelCard';
             cardTimer = 0;
             initLevel(5);
