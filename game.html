@@ -1611,6 +1611,346 @@ function drawNPC(npc) {
     }
 }
 
+// Draw industrial bay window with unique outdoor scene per PM color
+function drawPipeRoomWindow(cx, wy, colorIndex) {
+    const t = Date.now();
+    const ww = 64, wh = 80;
+    const wx = cx - ww / 2;
+
+    // Sky gradient background
+    const skyGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh * 0.5);
+    skyGrad.addColorStop(0, '#7ec8e3');
+    skyGrad.addColorStop(1, '#b5ddf0');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(wx, wy, ww, wh);
+
+    // Ground area (lower half of window)
+    const groundY = wy + wh * 0.55;
+    const groundH = wh * 0.45;
+
+    if(colorIndex === 0) {
+        // === RED: Apple tree with axe, roosting birds ===
+        // Green grass ground
+        ctx.fillStyle = '#4a8c3f';
+        ctx.fillRect(wx, groundY, ww, groundH);
+        ctx.fillStyle = '#3d7a34';
+        ctx.fillRect(wx, groundY, ww, 3);
+
+        // Tree trunk (center)
+        const tx = cx, ty = groundY - 8;
+        ctx.fillStyle = '#6b4226';
+        ctx.fillRect(tx - 5, ty - 20, 10, 28);
+        // Tree bark texture
+        ctx.strokeStyle = '#5a3520';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(tx - 3, ty - 18); ctx.lineTo(tx - 2, ty + 5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(tx + 2, ty - 15); ctx.lineTo(tx + 3, ty + 2); ctx.stroke();
+
+        // Leafy canopy — lush green with red apples
+        ctx.fillStyle = '#2d7a1e';
+        ctx.beginPath(); ctx.arc(tx, ty - 28, 18, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#35881f';
+        ctx.beginPath(); ctx.arc(tx - 10, ty - 22, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(tx + 10, ty - 22, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#228b22';
+        ctx.beginPath(); ctx.arc(tx, ty - 35, 13, 0, Math.PI * 2); ctx.fill();
+
+        // Red apples scattered in canopy
+        ctx.fillStyle = '#e74c3c';
+        const applePositions = [[-8,-26],[6,-30],[0,-20],[-12,-32],[10,-24]];
+        for(let ap of applePositions) {
+            ctx.beginPath(); ctx.arc(tx + ap[0], ty + ap[1], 3, 0, Math.PI * 2); ctx.fill();
+        }
+        // Apple stems
+        ctx.strokeStyle = '#4a3520';
+        ctx.lineWidth = 0.5;
+        for(let ap of applePositions) {
+            ctx.beginPath(); ctx.moveTo(tx + ap[0], ty + ap[1] - 3); ctx.lineTo(tx + ap[0] + 1, ty + ap[1] - 5); ctx.stroke();
+        }
+
+        // Red axe wedged into trunk
+        const axX = tx + 6, axY = ty - 5;
+        // Axe handle
+        ctx.fillStyle = '#8B6914';
+        ctx.save();
+        ctx.translate(axX, axY);
+        ctx.rotate(0.6);
+        ctx.fillRect(0, -1, 16, 3);
+        ctx.restore();
+        // Axe head (red)
+        ctx.fillStyle = '#cc2222';
+        ctx.save();
+        ctx.translate(axX, axY);
+        ctx.rotate(0.6);
+        ctx.beginPath();
+        ctx.moveTo(0, -5);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(0, 5);
+        ctx.lineTo(3, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Birds — 2-3 small birds that fly in/out
+        const birdCount = 3;
+        for(let b = 0; b < birdCount; b++) {
+            const birdCycle = (t / (1800 + b * 600) + b * 2.1) % (Math.PI * 2);
+            const birdPhase = Math.sin(birdCycle);
+            // Bird visible when in certain phase range (simulates flying in and roosting)
+            if(birdPhase > -0.3) {
+                const bx = tx + Math.cos(birdCycle * 1.3 + b) * 22;
+                const by = ty - 30 + Math.sin(birdCycle * 0.8 + b * 1.5) * 12 - 5;
+                // Only draw if within window bounds
+                if(bx > wx + 4 && bx < wx + ww - 4 && by > wy + 4 && by < wy + wh - 4) {
+                    const wingFlap = Math.sin(t / 80 + b * 3) * 4;
+                    ctx.strokeStyle = '#222';
+                    ctx.lineWidth = 1.2;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - 4, by + wingFlap * 0.5);
+                    ctx.lineTo(bx, by);
+                    ctx.lineTo(bx + 4, by + wingFlap * 0.5);
+                    ctx.stroke();
+                    // Bird body dot
+                    ctx.fillStyle = '#333';
+                    ctx.beginPath(); ctx.arc(bx, by + 1, 1.5, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+        }
+
+    } else if(colorIndex === 1) {
+        // === GREEN: Grass lawn with riding lawnmower ===
+        // Lush green lawn
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(wx, groundY, ww, groundH);
+        // Mowed stripe pattern
+        for(let s = 0; s < 8; s++) {
+            ctx.fillStyle = s % 2 === 0 ? '#45a049' : '#4CAF50';
+            ctx.fillRect(wx, groundY + s * (groundH / 8), ww, groundH / 8);
+        }
+        // Horizon tree line
+        ctx.fillStyle = '#2e7d32';
+        for(let tr = 0; tr < 6; tr++) {
+            ctx.beginPath();
+            ctx.arc(wx + 8 + tr * 11, groundY - 2, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Riding lawnmower — moves back and forth, disappearing off edges
+        const mowerCycle = (t / 3000) % 2; // 0-2 cycle
+        let mowerX;
+        if(mowerCycle < 1) {
+            mowerX = wx - 15 + (ww + 30) * mowerCycle; // left to right
+        } else {
+            mowerX = wx + ww + 15 - (ww + 30) * (mowerCycle - 1); // right to left
+        }
+        const mowerFacing = mowerCycle < 1 ? 1 : -1;
+        // Only draw visible portion
+        if(mowerX > wx - 12 && mowerX < wx + ww + 12) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(wx, wy, ww, wh);
+            ctx.clip();
+
+            const my = groundY + 8;
+            // Mower body — green (John Deere style)
+            ctx.fillStyle = '#2e7d32';
+            ctx.fillRect(mowerX - 8 * mowerFacing, my - 8, 16, 10);
+            // Hood
+            ctx.fillStyle = '#388e3c';
+            ctx.fillRect(mowerX + 4 * mowerFacing, my - 10, 8 * mowerFacing, 6);
+            // Seat
+            ctx.fillStyle = '#f9a825';
+            ctx.fillRect(mowerX - 4 * mowerFacing, my - 12, 5, 5);
+            // Wheels
+            ctx.fillStyle = '#222';
+            ctx.beginPath(); ctx.arc(mowerX - 6 * mowerFacing, my + 3, 3.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(mowerX + 8 * mowerFacing, my + 3, 2.5, 0, Math.PI * 2); ctx.fill();
+            // Yellow wheel rims
+            ctx.fillStyle = '#f9a825';
+            ctx.beginPath(); ctx.arc(mowerX - 6 * mowerFacing, my + 3, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Tiny driver
+            ctx.fillStyle = '#f5d5a8';
+            ctx.fillRect(mowerX - 3 * mowerFacing, my - 16, 4, 5);
+            ctx.fillStyle = '#2e7d32'; // green cap
+            ctx.fillRect(mowerX - 4 * mowerFacing, my - 18, 6, 3);
+            // Grass clipping spray
+            if(mowerX > wx + 5 && mowerX < wx + ww - 5) {
+                for(let g = 0; g < 4; g++) {
+                    const gx = mowerX - mowerFacing * (10 + g * 3) + Math.random() * 4;
+                    const gy = my - 2 + Math.random() * 6;
+                    ctx.fillStyle = `rgba(76,175,80,${0.5 + Math.random() * 0.3})`;
+                    ctx.fillRect(gx, gy, 2, 1);
+                }
+            }
+            ctx.restore();
+        }
+
+    } else if(colorIndex === 2) {
+        // === BLUE: Koi pond with rocks and splashing fish ===
+        // Sandy/stone ground
+        ctx.fillStyle = '#8B7D6B';
+        ctx.fillRect(wx, groundY, ww, groundH);
+
+        // Pond water — blue oval
+        const pondCx = cx, pondCy = groundY + groundH * 0.35;
+        const pondRx = 24, pondRy = 12;
+        // Pond water
+        ctx.fillStyle = '#1a6fa0';
+        ctx.beginPath(); ctx.ellipse(pondCx, pondCy, pondRx, pondRy, 0, 0, Math.PI * 2); ctx.fill();
+        // Water shimmer
+        ctx.fillStyle = `rgba(100,200,255,${0.3 + Math.sin(t / 600) * 0.15})`;
+        ctx.beginPath(); ctx.ellipse(pondCx - 5, pondCy - 3, 8, 4, -0.3, 0, Math.PI * 2); ctx.fill();
+        // Lily pad
+        ctx.fillStyle = '#228b22';
+        ctx.beginPath(); ctx.ellipse(pondCx + 8, pondCy + 2, 5, 3, 0.2, 0, Math.PI * 1.8); ctx.fill();
+
+        // Surrounding rocks
+        const rocks = [
+            [-22, -4, 6, 4], [-16, -8, 5, 3], [18, -6, 7, 4], [22, 0, 5, 3],
+            [-20, 6, 5, 3], [14, 8, 6, 3], [-8, 10, 4, 3], [6, 11, 5, 3]
+        ];
+        for(let r of rocks) {
+            ctx.fillStyle = '#666';
+            ctx.beginPath(); ctx.ellipse(pondCx + r[0], pondCy + r[1], r[2], r[3], 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#777';
+            ctx.beginPath(); ctx.ellipse(pondCx + r[0] - 1, pondCy + r[1] - 1, r[2] * 0.6, r[3] * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // Koi fish splash — periodic
+        const splashCycle = (t / 2500) % 1;
+        if(splashCycle > 0.4 && splashCycle < 0.7) {
+            const splashPct = (splashCycle - 0.4) / 0.3;
+            const fishX = pondCx - 4 + Math.sin(t / 800) * 6;
+            const fishY = pondCy - 4 - Math.sin(splashPct * Math.PI) * 14;
+            // Fish body — orange/white koi
+            ctx.fillStyle = '#ff6633';
+            ctx.save();
+            ctx.translate(fishX, fishY);
+            ctx.rotate(-0.5 + splashPct);
+            // Body
+            ctx.beginPath(); ctx.ellipse(0, 0, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+            // White patches
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.ellipse(2, -1, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+            // Tail
+            ctx.fillStyle = '#ff6633';
+            ctx.beginPath();
+            ctx.moveTo(-4, 0);
+            ctx.lineTo(-8, -3);
+            ctx.lineTo(-8, 3);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+            // Water droplets
+            if(splashPct > 0.1 && splashPct < 0.9) {
+                for(let d = 0; d < 5; d++) {
+                    const dx = fishX + (Math.random() - 0.5) * 16;
+                    const dy = pondCy - 2 - Math.sin(splashPct * Math.PI) * (4 + d * 2);
+                    ctx.fillStyle = `rgba(100,180,255,${0.5 * (1 - splashPct)})`;
+                    ctx.beginPath(); ctx.arc(dx, dy, 1, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+            // Splash rings on water surface
+            const ringSize = splashPct * 10;
+            ctx.strokeStyle = `rgba(150,220,255,${0.4 * (1 - splashPct)})`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.ellipse(fishX, pondCy, ringSize, ringSize * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+        }
+
+    } else if(colorIndex === 3) {
+        // === YELLOW: Sun shining on wheatfield, blowing in breeze ===
+        // Warm sky tint
+        ctx.fillStyle = 'rgba(255,240,200,0.3)';
+        ctx.fillRect(wx, wy, ww, wh * 0.55);
+
+        // Sun — bright golden
+        const sunX = cx + 12, sunY = wy + 15;
+        const sunGlow = ctx.createRadialGradient(sunX, sunY, 3, sunX, sunY, 20);
+        sunGlow.addColorStop(0, 'rgba(255,240,100,0.9)');
+        sunGlow.addColorStop(0.5, 'rgba(255,220,50,0.3)');
+        sunGlow.addColorStop(1, 'rgba(255,200,0,0)');
+        ctx.fillStyle = sunGlow;
+        ctx.beginPath(); ctx.arc(sunX, sunY, 20, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe44d';
+        ctx.beginPath(); ctx.arc(sunX, sunY, 7, 0, Math.PI * 2); ctx.fill();
+        // Sun rays
+        ctx.strokeStyle = 'rgba(255,230,80,0.4)';
+        ctx.lineWidth = 1;
+        for(let r = 0; r < 8; r++) {
+            const angle = r * Math.PI / 4 + t / 8000;
+            ctx.beginPath();
+            ctx.moveTo(sunX + Math.cos(angle) * 9, sunY + Math.sin(angle) * 9);
+            ctx.lineTo(sunX + Math.cos(angle) * 16, sunY + Math.sin(angle) * 16);
+            ctx.stroke();
+        }
+
+        // Wheat field — golden stalks rippling in wind
+        ctx.fillStyle = '#c8a84e';
+        ctx.fillRect(wx, groundY, ww, groundH);
+        // Darker ground underneath
+        ctx.fillStyle = '#a08030';
+        ctx.fillRect(wx, groundY + groundH - 5, ww, 5);
+
+        // Wheat stalks with wind animation
+        const windPhase = t / 500;
+        for(let s = 0; s < 22; s++) {
+            const stalkX = wx + 3 + s * 3;
+            const windOffset = Math.sin(windPhase + s * 0.4) * 3;
+            const stalkH = 14 + Math.sin(s * 1.7) * 4;
+            // Stalk
+            ctx.strokeStyle = '#b8942e';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(stalkX, groundY + 4);
+            ctx.quadraticCurveTo(stalkX + windOffset * 0.5, groundY - stalkH / 2, stalkX + windOffset, groundY - stalkH + 4);
+            ctx.stroke();
+            // Wheat head
+            ctx.fillStyle = '#dab94e';
+            ctx.beginPath();
+            ctx.ellipse(stalkX + windOffset, groundY - stalkH + 3, 2, 4, windOffset * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Wind particle streaks
+        const windStreakX = (t / 8 + 100) % (ww + 40) + wx - 20;
+        if(windStreakX > wx && windStreakX < wx + ww - 10) {
+            ctx.strokeStyle = 'rgba(255,255,200,0.25)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(windStreakX, groundY - 5);
+            ctx.lineTo(windStreakX + 12, groundY - 6);
+            ctx.stroke();
+        }
+    }
+
+    // === Industrial steel window frame (no curtains) ===
+    // Outer steel frame
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(wx, wy, ww, wh);
+    // Inner frame line
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(wx + 3, wy + 3, ww - 6, wh - 6);
+    // Cross bars (industrial muntin)
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx, wy); ctx.lineTo(cx, wy + wh); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx, wy + wh * 0.5); ctx.lineTo(wx + ww, wy + wh * 0.5); ctx.stroke();
+    // Corner rivets
+    const rivetPositions = [[wx + 4, wy + 4],[wx + ww - 4, wy + 4],[wx + 4, wy + wh - 4],[wx + ww - 4, wy + wh - 4]];
+    for(let rv of rivetPositions) {
+        ctx.fillStyle = '#777';
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#555';
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 1, 0, Math.PI * 2); ctx.fill();
+    }
+    // Steel sill at bottom
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(wx - 3, wy + wh, ww + 6, 5);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 2);
+}
+
 // Draw color-coordinated step-ladder for pipe managers
 function drawStepLadder(x, npcY, color) {
     const s = 2;
@@ -2897,6 +3237,11 @@ function drawLevel5PipeRoom() {
     // Right wall gasket BEFORE pipes so gasket renders behind
     drawPipeRoomRightWall(265);
 
+    // Bay windows behind each PM's pipe — unique outdoor scenes
+    for(let wi = 0; wi < level5.npcPipes.length; wi++) {
+        drawPipeRoomWindow(level5.npcPipes[wi].x, 150, wi);
+    }
+
     for(let npc of level5.npcPipes) {
         const pipeY = 240;
 
@@ -3837,6 +4182,11 @@ function drawLevel6PipeRoom() {
     for(let i = 0; i < 4; i++) {
         ctx.fillStyle = COLORS[i].hex;
         ctx.fillRect(-GX, lineY + i * 8, CANVAS_W, 6);
+    }
+
+    // Bay windows behind each PM's pipe — unique outdoor scenes
+    for(let wi = 0; wi < level6.npcPipes.length; wi++) {
+        drawPipeRoomWindow(level6.npcPipes[wi].x, 160, wi);
     }
 
     // Draw pipes running from top wall gaskets to floor gaskets with managers
