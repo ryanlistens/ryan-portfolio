@@ -1509,12 +1509,8 @@ function drawNPC(npc) {
             pct = Math.min((Date.now() - npc.crackStartTime) / 15000, 1);
         }
 
-        if(pct >= 0.66) {
-            // About to burst - jumping up and down frantically
-            isJumping = true;
-            y += -Math.abs(Math.sin(Date.now() / 80)) * 16;
-        } else if(pct > 0) {
-            // Pipe starting to swell - pacing back and forth
+        if(pct > 0) {
+            // Pipe needs attention - pacing back and forth
             isPacing = true;
             x += Math.sin(Date.now() / 250) * 12;
         }
@@ -1958,110 +1954,221 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
 function drawParkingLotWindow(wx, wy, ww, wh) {
     const t = Date.now();
 
-    // Sky gradient background
-    const skyGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh * 0.45);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wx, wy, ww, wh);
+    ctx.clip();
+
+    // === SKY ===
+    const skyGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh * 0.35);
     skyGrad.addColorStop(0, '#7ec8e3');
     skyGrad.addColorStop(1, '#b5ddf0');
     ctx.fillStyle = skyGrad;
     ctx.fillRect(wx, wy, ww, wh);
 
-    // Wispy clouds
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    const cloudX = ((t / 8000) % 1.4 - 0.2) * ww + wx;
-    ctx.beginPath(); ctx.arc(cloudX, wy + 14, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cloudX + 12, wy + 12, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cloudX - 8, wy + 15, 7, 0, Math.PI * 2); ctx.fill();
-    const cloud2X = ((t / 12000 + 0.5) % 1.4 - 0.2) * ww + wx;
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.beginPath(); ctx.arc(cloud2X, wy + 22, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cloud2X + 10, wy + 20, 6, 0, Math.PI * 2); ctx.fill();
+    // Floating clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    const c1x = ((t / 10000) % 1.4 - 0.2) * ww + wx;
+    ctx.beginPath(); ctx.arc(c1x, wy + 10, 8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c1x + 10, wy + 8, 6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c1x - 6, wy + 11, 5, 0, Math.PI*2); ctx.fill();
+    const c2x = ((t / 14000 + 0.55) % 1.4 - 0.2) * ww + wx;
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath(); ctx.arc(c2x, wy + 16, 6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c2x + 8, wy + 14, 5, 0, Math.PI*2); ctx.fill();
 
-    // Ground / asphalt parking lot
-    const groundY = wy + wh * 0.45;
-    const groundH = wh * 0.55;
-    ctx.fillStyle = '#555';
-    ctx.fillRect(wx, groundY, ww, groundH);
+    // === LAYOUT BANDS (top to bottom) ===
+    const bldgTop = wy + wh * 0.18;   // across-the-street building top
+    const bldgBot = wy + wh * 0.42;   // building base / far sidewalk
+    const streetTop = bldgBot;          // street starts
+    const streetBot = wy + wh * 0.54;  // street ends
+    const curbTop = streetBot;          // near curb/sidewalk
+    const curbBot = wy + wh * 0.58;
+    const lotTop = curbBot;             // parking lot asphalt
+    const lotBot = wy + wh;            // bottom of window
 
-    // Parking lot concrete curb at edge
-    ctx.fillStyle = '#999';
-    ctx.fillRect(wx, groundY, ww, 3);
-
-    // Painted white parking lines
-    ctx.strokeStyle = '#ccc';
-    ctx.lineWidth = 1.5;
-    const lineSpacing = ww / 8;
-    for(let i = 1; i < 8; i++) {
-        const lx = wx + i * lineSpacing;
-        ctx.beginPath();
-        ctx.moveTo(lx, groundY + 6);
-        ctx.lineTo(lx, groundY + groundH - 4);
-        ctx.stroke();
+    // === BUILDING ACROSS THE STREET — industrial park office ===
+    // Main facade
+    ctx.fillStyle = '#8a8578';
+    ctx.fillRect(wx, bldgTop, ww, bldgBot - bldgTop);
+    // Darker base strip
+    ctx.fillStyle = '#706a5e';
+    ctx.fillRect(wx, bldgBot - 4, ww, 4);
+    // Roof edge
+    ctx.fillStyle = '#6a6458';
+    ctx.fillRect(wx, bldgTop, ww, 3);
+    // Window rows — office windows in grid
+    const bldgH = bldgBot - bldgTop;
+    for(let row = 0; row < 2; row++) {
+        for(let col = 0; col < 16; col++) {
+            const bwx = wx + 10 + col * 23;
+            const bwy = bldgTop + 6 + row * (bldgH * 0.38);
+            // Window recess
+            ctx.fillStyle = '#5a5548';
+            ctx.fillRect(bwx, bwy, 16, 8);
+            // Glass — slight blue tint, some lit
+            const lit = ((col * 7 + row * 3) % 5) < 2;
+            ctx.fillStyle = lit ? 'rgba(180,210,240,0.7)' : 'rgba(100,140,170,0.5)';
+            ctx.fillRect(bwx + 1, bwy + 1, 14, 6);
+        }
     }
+    // Building entrance (center)
+    const entX = wx + ww * 0.5 - 14;
+    ctx.fillStyle = '#5a5548';
+    ctx.fillRect(entX, bldgBot - 14, 28, 14);
+    ctx.fillStyle = 'rgba(100,140,170,0.6)';
+    ctx.fillRect(entX + 3, bldgBot - 12, 10, 10);
+    ctx.fillRect(entX + 15, bldgBot - 12, 10, 10);
 
-    // Parked cars — 3-4 small cars in alternating spots
-    const carColors = ['#cc2222', '#2255cc', '#228B22', '#f0c040'];
-    const carSpots = [1, 3, 5, 6];
-    for(let c = 0; c < carSpots.length; c++) {
-        const cx = wx + (carSpots[c] + 0.5) * lineSpacing;
-        const cy = groundY + groundH * 0.5;
-        const col = carColors[c % carColors.length];
-        // Car body
-        ctx.fillStyle = col;
-        ctx.fillRect(cx - 8, cy - 3, 16, 7);
-        // Car roof/cabin
-        ctx.fillStyle = col;
-        ctx.fillRect(cx - 5, cy - 6, 10, 4);
-        // Windshield
-        ctx.fillStyle = 'rgba(180,220,255,0.6)';
-        ctx.fillRect(cx - 4, cy - 5, 3, 3);
-        ctx.fillRect(cx + 2, cy - 5, 3, 3);
-        // Wheels
-        ctx.fillStyle = '#222';
-        ctx.beginPath(); ctx.arc(cx - 6, cy + 4, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + 6, cy + 4, 2, 0, Math.PI * 2); ctx.fill();
+    // === PIPETECH OUTDOOR SIGN — brutalist quality ===
+    // Mounted on building facade, upper-right area
+    const signCx = wx + ww * 0.78;
+    const signTop = bldgTop + 2;
+    const signW = 72, signH = 20;
+    // Dark brutalist sign panel (matching indoor style)
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(signCx - signW/2, signTop, signW, signH);
+    // Mounting bolts — 4 corners
+    const boltOff = 3;
+    const boltPositions = [
+        [signCx - signW/2 + boltOff, signTop + boltOff],
+        [signCx + signW/2 - boltOff, signTop + boltOff],
+        [signCx - signW/2 + boltOff, signTop + signH - boltOff],
+        [signCx + signW/2 - boltOff, signTop + signH - boltOff]
+    ];
+    for(let bp of boltPositions) {
+        ctx.fillStyle = '#555';
+        ctx.beginPath(); ctx.arc(bp[0], bp[1], 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#777';
+        ctx.beginPath(); ctx.arc(bp[0] - 0.3, bp[1] - 0.3, 0.6, 0, Math.PI*2); ctx.fill();
     }
-
-    // PipeTech outdoor signpost (right side of lot)
-    const signX = wx + ww * 0.82;
-    const signY = groundY - 2;
-    // Post
-    ctx.fillStyle = '#777';
-    ctx.fillRect(signX - 1.5, signY - 22, 3, 24);
-    // Sign board
-    ctx.fillStyle = '#e8e6dc';
-    ctx.fillRect(signX - 18, signY - 34, 36, 14);
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(signX - 18, signY - 34, 36, 14);
-    // "PIPETECH" text on sign
-    ctx.fillStyle = '#3a3a3a';
-    ctx.font = 'bold 6px Arial';
+    // "PIPETECH" text — cream on dark, matching indoor font style
+    ctx.fillStyle = '#f5f2ec';
+    ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', signX, signY - 25);
-    // Four tiny colored stripes under text
+    ctx.fillText('PIPETECH', signCx, signTop + 10);
+    // Divider line under text
+    ctx.fillStyle = '#555';
+    ctx.fillRect(signCx - signW/2 + 8, signTop + 12, signW - 16, 0.5);
+    // Four colored stripes — contained within panel
+    const stripeL = signCx - signW/2 + 8;
+    const stripeW = signW - 16;
     for(let i = 0; i < 4; i++) {
         ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(signX - 12, signY - 22 + i * 2, 24, 1);
+        ctx.fillRect(stripeL, signTop + 13.5 + i * 1.5, stripeW, 1);
     }
 
-    // Chain-link fence along curb (subtle)
-    ctx.strokeStyle = 'rgba(150,150,150,0.4)';
-    ctx.lineWidth = 0.5;
-    for(let f = 0; f < ww; f += 6) {
+    // === STREET with traffic ===
+    ctx.fillStyle = '#3e3e3e';
+    ctx.fillRect(wx, streetTop, ww, streetBot - streetTop);
+    // Center yellow dashed line
+    const lineY = (streetTop + streetBot) / 2;
+    ctx.strokeStyle = '#c8b020';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath(); ctx.moveTo(wx, lineY); ctx.lineTo(wx + ww, lineY); ctx.stroke();
+    ctx.setLineDash([]);
+    // Street traffic — car driving across
+    const carSpeed = (t / 4000) % 1;
+    const trafficX = wx - 30 + (ww + 60) * carSpeed;
+    if(trafficX > wx - 20 && trafficX < wx + ww + 20) {
+        const carY = lineY - 4;
+        // Car body
+        ctx.fillStyle = '#b0b0b0';
+        ctx.fillRect(trafficX - 14, carY - 3, 28, 7);
+        // Cabin
+        ctx.fillStyle = '#999';
+        ctx.fillRect(trafficX - 7, carY - 6, 14, 4);
+        // Glass
+        ctx.fillStyle = 'rgba(150,200,240,0.5)';
+        ctx.fillRect(trafficX - 5, carY - 5, 5, 3);
+        ctx.fillRect(trafficX + 1, carY - 5, 5, 3);
+        // Wheels
+        ctx.fillStyle = '#222';
+        ctx.beginPath(); ctx.arc(trafficX - 8, carY + 4, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(trafficX + 8, carY + 4, 2, 0, Math.PI*2); ctx.fill();
+    }
+    // Second car going opposite direction (slower)
+    const car2Speed = ((t / 5500) + 0.4) % 1;
+    const traffic2X = wx + ww + 30 - (ww + 60) * car2Speed;
+    if(traffic2X > wx - 20 && traffic2X < wx + ww + 20) {
+        const car2Y = lineY + 4;
+        ctx.fillStyle = '#7a3030';
+        ctx.fillRect(traffic2X - 12, car2Y - 2, 24, 6);
+        ctx.fillStyle = '#6a2525';
+        ctx.fillRect(traffic2X - 6, car2Y - 5, 12, 4);
+        ctx.fillStyle = 'rgba(150,200,240,0.5)';
+        ctx.fillRect(traffic2X - 4, car2Y - 4, 4, 3);
+        ctx.fillRect(traffic2X + 1, car2Y - 4, 4, 3);
+        ctx.fillStyle = '#222';
+        ctx.beginPath(); ctx.arc(traffic2X - 7, car2Y + 4, 1.8, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(traffic2X + 7, car2Y + 4, 1.8, 0, Math.PI*2); ctx.fill();
+    }
+
+    // === CURB / SIDEWALK ===
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(wx, curbTop, ww, curbBot - curbTop);
+    ctx.fillStyle = '#bbb';
+    ctx.fillRect(wx, curbTop, ww, 1.5);
+
+    // === PARKING LOT ===
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(wx, lotTop, ww, lotBot - lotTop);
+    // Asphalt texture — subtle speckle
+    ctx.fillStyle = '#525252';
+    for(let sp = 0; sp < 30; sp++) {
+        ctx.fillRect(wx + (sp * 47 + 13) % ww, lotTop + (sp * 31 + 7) % (lotBot - lotTop), 2, 1);
+    }
+
+    // Parking lines — closer together for proper scale
+    const lotH = lotBot - lotTop;
+    const spotW = ww / 11;
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 1.5;
+    for(let i = 0; i <= 10; i++) {
+        const lx = wx + 8 + i * spotW;
         ctx.beginPath();
-        ctx.moveTo(wx + f, groundY - 1);
-        ctx.lineTo(wx + f + 3, groundY + 4);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(wx + f + 3, groundY - 1);
-        ctx.lineTo(wx + f, groundY + 4);
+        ctx.moveTo(lx, lotTop + 3);
+        ctx.lineTo(lx, lotBot - 2);
         ctx.stroke();
     }
-    // Fence posts
-    ctx.fillStyle = '#888';
-    for(let fp = 0; fp < ww; fp += 40) {
-        ctx.fillRect(wx + fp, groundY - 3, 2, 8);
+    // Horizontal line at top of lot (parking block edge)
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(wx + 8, lotTop + 3); ctx.lineTo(wx + 8 + 10 * spotW, lotTop + 3); ctx.stroke();
+
+    // Parked cars — properly scaled to fit spots
+    const carDefs = [
+        {spot: 0, col: '#c0392b', dark: '#8b2a1f'},
+        {spot: 2, col: '#2980b9', dark: '#1a5a80'},
+        {spot: 3, col: '#f0f0f0', dark: '#bbb'},
+        {spot: 5, col: '#27ae60', dark: '#1a7a40'},
+        {spot: 7, col: '#f39c12', dark: '#c87f0a'},
+        {spot: 8, col: '#555', dark: '#333'},
+        {spot: 9, col: '#8e44ad', dark: '#6a2d80'}
+    ];
+    for(let cd of carDefs) {
+        const cx = wx + 8 + (cd.spot + 0.5) * spotW;
+        const cy = lotTop + lotH * 0.5;
+        const cw = spotW * 0.8;
+        const ch = lotH * 0.55;
+        // Body
+        ctx.fillStyle = cd.col;
+        ctx.fillRect(cx - cw/2, cy - ch/2 + 1, cw, ch);
+        // Cabin
+        ctx.fillStyle = cd.dark;
+        ctx.fillRect(cx - cw*0.35, cy - ch/2 - 2, cw*0.7, ch*0.35);
+        // Glass
+        ctx.fillStyle = 'rgba(150,200,240,0.45)';
+        ctx.fillRect(cx - cw*0.3, cy - ch/2 - 1, cw*0.28, ch*0.25);
+        ctx.fillRect(cx + cw*0.05, cy - ch/2 - 1, cw*0.28, ch*0.25);
+        // Wheels
+        ctx.fillStyle = '#111';
+        ctx.fillRect(cx - cw/2 + 1, cy + ch/2, cw*0.2, 2);
+        ctx.fillRect(cx + cw/2 - cw*0.2 - 1, cy + ch/2, cw*0.2, 2);
     }
+
+    ctx.restore();
 
     // === Window frame — heavy industrial steel ===
     ctx.strokeStyle = '#4a4a4a';
@@ -2071,7 +2178,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(wx + 3, wy + 3, ww - 6, wh - 6);
-    // Horizontal mullion (center)
+    // Horizontal mullion
     ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(wx, wy + wh * 0.45, ww, 3);
     // Vertical mullions — divide into thirds
@@ -2081,9 +2188,9 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     const rivets = [[wx+6,wy+6],[wx+ww-6,wy+6],[wx+6,wy+wh-6],[wx+ww-6,wy+wh-6]];
     for(let rv of rivets) {
         ctx.fillStyle = '#888';
-        ctx.beginPath(); ctx.arc(rv[0], rv[1], 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 2.5, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#555';
-        ctx.beginPath(); ctx.arc(rv[0], rv[1], 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 1, 0, Math.PI*2); ctx.fill();
     }
     // Steel sill at bottom
     ctx.fillStyle = '#4a4a4a';
@@ -3466,52 +3573,6 @@ function drawLevel5PipeRoom() {
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
-
-        if(npc.needsDoc && npc.crackStartTime) {
-            const crackTime = Date.now() - npc.crackStartTime;
-            const pct = Math.min(crackTime / 15000, 1);
-            // Bottleneck bulge at the pipe elbow/curve — pressure building at convergence
-            const elbowX = npc.x + 10;
-            const elbowY = pipeY + 12;
-            const throb = Math.sin(Date.now() / (200 - pct * 120)) * 3 * pct;
-            const bulgeR = 10 + pct * 18 + throb;
-            // Outer pressure glow
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.2 + pct * 0.3;
-            ctx.beginPath();
-            ctx.arc(elbowX, elbowY, bulgeR + 8, 0, Math.PI * 2);
-            ctx.fill();
-            // Inner bulge
-            ctx.globalAlpha = 0.5 + pct * 0.5;
-            ctx.beginPath();
-            ctx.arc(elbowX, elbowY, bulgeR, 0, Math.PI * 2);
-            ctx.fill();
-            // Hot center
-            ctx.fillStyle = `rgba(255,${Math.floor(200 - pct * 180)},0,${0.3 + pct * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(elbowX, elbowY, bulgeR * 0.4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            // Crack lines radiating from bulge when > 30%
-            if(pct > 0.3) {
-                ctx.strokeStyle = `rgba(255,${Math.floor(200 - pct * 200)},0,${0.5 + pct * 0.5})`;
-                ctx.lineWidth = 1 + pct * 1.5;
-                for(let cr = 0; cr < 4; cr++) {
-                    const angle = cr * Math.PI / 2 + Math.sin(Date.now() / 800) * 0.2;
-                    ctx.beginPath();
-                    ctx.moveTo(elbowX, elbowY);
-                    ctx.lineTo(elbowX + Math.cos(angle) * (bulgeR + 4), elbowY + Math.sin(angle) * (bulgeR + 4));
-                    ctx.stroke();
-                }
-            }
-            // Warning text
-            if(pct > 0.5) {
-                ctx.fillStyle = `rgba(255,0,0,${0.4 + Math.sin(Date.now() / 200) * 0.3})`;
-                ctx.font = 'bold 10px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('BOTTLENECK', elbowX, elbowY - bulgeR - 6);
-            }
-        }
 
         // Color-coordinated step-ladder (drawn behind NPC)
         drawStepLadder(npc.x, npc.y, npc.color);
@@ -9708,52 +9769,6 @@ function drawScene() {
         ctx.moveTo(npc.x + 21, pipeY + 25);
         ctx.lineTo(694, pipeY + 25);
         ctx.stroke();
-
-        const crack = cracks.find(c => c.npc === npc);
-        if(crack && !resetting) {
-            const pct = (Date.now() - crack.time) / crack.max;
-            // Bottleneck bulge at the pipe elbow/curve — pressure building at convergence
-            const elbowX = npc.x + 10;
-            const elbowY = pipeY + 12;
-            const throb = Math.sin(Date.now() / (200 - pct * 120)) * 3 * pct;
-            const bulgeR = 10 + pct * 18 + throb;
-            // Outer pressure glow
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.2 + pct * 0.3;
-            ctx.beginPath();
-            ctx.arc(elbowX, elbowY, bulgeR + 8, 0, Math.PI * 2);
-            ctx.fill();
-            // Inner bulge
-            ctx.globalAlpha = 0.5 + pct * 0.5;
-            ctx.beginPath();
-            ctx.arc(elbowX, elbowY, bulgeR, 0, Math.PI * 2);
-            ctx.fill();
-            // Hot center
-            ctx.fillStyle = `rgba(255,${Math.floor(200 - pct * 180)},0,${0.3 + pct * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(elbowX, elbowY, bulgeR * 0.4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            // Crack lines radiating from bulge when > 30%
-            if(pct > 0.3) {
-                ctx.strokeStyle = `rgba(255,${Math.floor(200 - pct * 200)},0,${0.5 + pct * 0.5})`;
-                ctx.lineWidth = 1 + pct * 1.5;
-                for(let cr = 0; cr < 4; cr++) {
-                    const angle = cr * Math.PI / 2 + Math.sin(Date.now() / 800) * 0.2;
-                    ctx.beginPath();
-                    ctx.moveTo(elbowX, elbowY);
-                    ctx.lineTo(elbowX + Math.cos(angle) * (bulgeR + 4), elbowY + Math.sin(angle) * (bulgeR + 4));
-                    ctx.stroke();
-                }
-            }
-            // Warning text
-            if(pct > 0.5) {
-                ctx.fillStyle = `rgba(255,0,0,${0.4 + Math.sin(Date.now() / 200) * 0.3})`;
-                ctx.font = 'bold 10px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('BOTTLENECK', elbowX, elbowY - bulgeR - 6);
-            }
-        }
 
         // Color-coordinated step-ladder (drawn behind NPC)
         drawStepLadder(npc.x, npc.y, npc.color);
