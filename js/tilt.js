@@ -8,7 +8,10 @@
   var cards = document.querySelectorAll('.portfolio-card');
 
   cards.forEach(function (card) {
-    var img = card.querySelector('.card-image');
+    var img       = card.querySelector('.card-image');
+    // data-base-scale lets individual images opt into a persistent zoom
+    // (e.g. to crop canvas margins) that survives the tilt parallax.
+    var baseScale = img ? (parseFloat(img.dataset.baseScale) || 1) : 1;
 
     card.addEventListener('mousemove', function (e) {
       var r   = card.getBoundingClientRect();
@@ -26,11 +29,11 @@
         'perspective(900px) rotateX(' + tiltX + 'deg) rotateY(' + tiltY + 'deg) translateY(-4px)';
       card.style.boxShadow  = '0 20px 48px rgba(0,0,0,0.18)';
 
-      // Image counter-parallax — shifts opposite the tilt
+      // Image counter-parallax — shifts opposite the tilt, preserving base zoom
       if (img) {
         img.style.transition = 'transform 0.05s linear';
         img.style.transform  =
-          'translate(' + (-tiltY * 0.8) + 'px, ' + (tiltX * 0.8) + 'px) scale(1.04)';
+          'translate(' + (-tiltY * 0.8) + 'px, ' + (tiltX * 0.8) + 'px) scale(' + (baseScale * 1.04) + ')';
       }
     });
 
@@ -41,7 +44,7 @@
 
       if (img) {
         img.style.transition = 'transform 0.4s ease';
-        img.style.transform  = '';
+        img.style.transform  = baseScale !== 1 ? 'scale(' + baseScale + ')' : '';
       }
     });
   });
