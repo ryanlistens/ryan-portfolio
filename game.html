@@ -731,11 +731,15 @@ function initLevel(lv) {
         level6.cloningDoorUnlocked = false; // concealed door to furnace room
         level6.cloningDoorOpen = 0; // slide animation 0-1
         level6.npcPipes = [
-            {x: 260, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
-            {x: 360, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
-            {x: 460, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
-            {x: 560, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+            {x: 280, y: 340, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 380, y: 340, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 480, y: 340, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 580, y: 340, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
         ];
+        // Underbelly backroom state
+        level6.mutantPM = { x: 380, y: 310, aggroTimer: 0, shakeIntensity: 0 };
+        level6.barrelDrip = { lastDrip: 0, drips: [] };
+        level6.underbellyFlicker = 0;
 
         ceo.x = 150;
         ceo.y = 180;
@@ -1491,8 +1495,6 @@ function drawNPC(npc) {
     const s = 2;
 
     // Pipe manager animations based on pipe stress level
-    let paceOffset = 0;
-    let jumpOffset = 0;
     let isJumping = false;
     let isPacing = false;
     if(npc.needsDoc) {
@@ -1510,14 +1512,12 @@ function drawNPC(npc) {
         if(pct >= 0.66) {
             // About to burst - jumping up and down frantically
             isJumping = true;
-            jumpOffset = -Math.abs(Math.sin(Date.now() / 80)) * 16;
+            y += -Math.abs(Math.sin(Date.now() / 80)) * 16;
         } else if(pct > 0) {
             // Pipe starting to swell - pacing back and forth
             isPacing = true;
-            paceOffset = Math.sin(Date.now() / 250) * 12;
+            x += Math.sin(Date.now() / 250) * 12;
         }
-        x += paceOffset;
-        y += jumpOffset;
     }
 
     // Shadow stays on ground (uses npc.x, not animated x)
@@ -1526,59 +1526,68 @@ function drawNPC(npc) {
     ctx.ellipse(npc.x, npc.y + 32, 10, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // Hat
     ctx.fillStyle = npc.color.hex;
     ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
 
+    // Head
     ctx.fillStyle = '#f5c89a';
     ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
 
+    // Face
     ctx.fillStyle = '#000';
-    if(npc.state === 'stressed') {
+    if(npc.state === 'stressed' && !isPacing && !isJumping) {
         ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
         ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
         ctx.fillRect(x - s, y - 7*s, 2*s, s);
         ctx.fillStyle = '#f5c89a';
         ctx.fillRect(x - 8*s, y - 9*s, 3*s, 4*s);
+    } else if(isPacing || isJumping) {
+        // Worried face during animations (no static hand)
+        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
+        ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
+        ctx.fillRect(x - s, y - 7*s, 2*s, s);
     } else {
         ctx.fillRect(x - 3*s, y - 10*s, 2*s, 2*s);
         ctx.fillRect(x + s, y - 10*s, 2*s, 2*s);
         ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
     }
 
+    // Torso
     ctx.fillStyle = npc.color.hex;
     ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
-    // Arms swing when pacing, flail when jumping
+
     if(isPacing) {
-        const armSwing = Math.sin(Date.now() / 125) * 4;
-        ctx.fillRect(x - 8*s, y - 3*s + armSwing, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 3*s - armSwing, 2*s, 7*s);
+        // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
+        const stride = Math.sin(Date.now() / 125) * 3;
+        // Arms — shift horizontally with stride, anchored to torso
+        ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
+        // Legs — opposite horizontal stride
+        ctx.fillRect(x - 5*s - stride, y + 6*s, 4*s, 7*s);
+        ctx.fillRect(x + s + stride, y + 6*s, 4*s, 7*s);
+        // Shoes follow legs
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 5*s - stride, y + 13*s, 4*s, 3*s);
+        ctx.fillRect(x + s + stride, y + 13*s, 4*s, 3*s);
     } else if(isJumping) {
-        const armFlail = Math.sin(Date.now() / 60) * 6;
-        ctx.fillRect(x - 8*s, y - 5*s + armFlail, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 5*s - armFlail, 2*s, 7*s);
-    } else {
-        ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
-    }
-    // Legs animate when pacing or jumping
-    if(isPacing) {
-        const legSwing = Math.sin(Date.now() / 125) * 3;
-        ctx.fillRect(x - 5*s, y + 6*s + legSwing, 4*s, 7*s);
-        ctx.fillRect(x + s, y + 6*s - legSwing, 4*s, 7*s);
-    } else if(isJumping) {
-        // Legs tucked up slightly when airborne
-        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 5*s);
-        ctx.fillRect(x + s, y + 6*s, 4*s, 5*s);
-    } else {
+        // Jumping: everything moves with y offset, arms raised up
+        ctx.fillRect(x - 9*s, y - 6*s, 2*s, 6*s);
+        ctx.fillRect(x + 7*s, y - 6*s, 2*s, 6*s);
+        // Legs together underneath
         ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
         ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
-    }
-
-    ctx.fillStyle = '#fff';
-    if(isJumping) {
-        ctx.fillRect(x - 5*s, y + 11*s, 4*s, 3*s);
-        ctx.fillRect(x + s, y + 11*s, 4*s, 3*s);
+        // Shoes
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+        ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
     } else {
+        // Static pose
+        ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+        ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+        ctx.fillStyle = '#fff';
         ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
         ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
     }
@@ -3831,12 +3840,9 @@ function drawLevel6PipeRoom() {
     }
 
     // Draw pipes running from top wall gaskets to floor gaskets with managers
-    // Inverted positions from previous levels (opposite side of wall)
-    const pipePositions = [280, 380, 480, 580]; // Inverted from typical positions
-
     for(let i = 0; i < level6.npcPipes.length; i++) {
         const npc = level6.npcPipes[i];
-        const pipeX = pipePositions[i];
+        const pipeX = npc.x;
 
         // Wall gasket at top - curved mount with round bolted bevel
         // Outer bevel ring (mounted in wall)
@@ -3919,6 +3925,44 @@ function drawLevel6PipeRoom() {
         ctx.fillRect(pipeX - 12, 398, 24, 8);
         ctx.fillStyle = '#666';
         ctx.fillRect(pipeX - 10, 400, 20, 4);
+
+        // Crack visual on pipe when needsDoc
+        if(npc.needsDoc && npc.crackStartTime) {
+            const crackTime = Date.now() - npc.crackStartTime;
+            const pct = Math.min(crackTime / 15000, 1);
+            const crackY = 220 + Math.sin(i * 2.5) * 30;
+            // Growing crack lines on pipe
+            ctx.strokeStyle = `rgba(255,${Math.floor(200 - pct * 200)},0,${0.5 + pct * 0.5})`;
+            ctx.lineWidth = 1.5 + pct * 2;
+            ctx.beginPath();
+            ctx.moveTo(pipeX - 6, crackY - 8 * pct);
+            ctx.lineTo(pipeX - 2, crackY + 4);
+            ctx.lineTo(pipeX + 4, crackY - 3);
+            ctx.lineTo(pipeX + 6, crackY + 10 * pct);
+            ctx.stroke();
+            // Spray particles when close to bursting
+            if(pct > 0.5) {
+                const sprayAlpha = (pct - 0.5) * 2;
+                for(let s = 0; s < 4; s++) {
+                    const sx = pipeX + Math.sin(Date.now() / 100 + s * 1.7) * (8 + pct * 12);
+                    const sy = crackY + Math.cos(Date.now() / 120 + s * 2.3) * (5 + pct * 8);
+                    ctx.fillStyle = `rgba(${npc.color.hex.slice(1).match(/../g).map(h => parseInt(h, 16)).join(',')},${sprayAlpha * 0.6})`;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 2 + pct * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            // Warning text
+            if(pct > 0.3) {
+                ctx.fillStyle = `rgba(255,0,0,${0.4 + Math.sin(Date.now() / 200) * 0.3})`;
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('LEAK', pipeX, crackY - 16);
+            }
+        }
+
+        // Draw NPC at base of pipe
+        drawNPC(npc);
     }
 
     // Death Star trapezoidal blast door to megacomputer (right side)
@@ -5557,6 +5601,402 @@ function drawL6FurnaceRoom() {
         ctx.textAlign = 'center';
         ctx.fillText('Someone discarded their uniform here...', 350, 280);
     }
+}
+
+function drawLevel6Underbelly() {
+    const t = Date.now();
+    // Flickering overhead light effect
+    const flicker = level6.underbellyFlicker;
+    const baseDim = flicker > 0 ? 0.3 + Math.random() * 0.4 : 1;
+    const dimFactor = baseDim;
+
+    // Dark grimy concrete walls
+    ctx.fillStyle = `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Water stain streaks on walls
+    for(let i = 0; i < 8; i++) {
+        const sx = 60 + i * 85;
+        ctx.fillStyle = `rgba(20,35,20,${0.3 * dimFactor})`;
+        ctx.fillRect(sx, 30 + i * 7, 3, 180 + i * 20);
+        ctx.fillStyle = `rgba(15,30,15,${0.15 * dimFactor})`;
+        ctx.fillRect(sx + 3, 50 + i * 12, 5, 160 + i * 15);
+    }
+
+    // Cracked concrete floor
+    ctx.fillStyle = `rgb(${Math.floor(25 * dimFactor)},${Math.floor(22 * dimFactor)},${Math.floor(20 * dimFactor)})`;
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    // Floor cracks
+    ctx.strokeStyle = `rgba(10,10,8,${0.6 * dimFactor})`;
+    ctx.lineWidth = 1;
+    const cracks = [[50,405,120,412],[200,408,280,403],[350,410,440,406],[500,404,580,411],[150,415,230,420],[400,418,500,414]];
+    for(let c of cracks) {
+        ctx.beginPath();
+        ctx.moveTo(c[0], c[1]);
+        ctx.lineTo(c[2], c[3]);
+        ctx.stroke();
+    }
+    // Puddles on floor (greenish tinted)
+    ctx.fillStyle = `rgba(30,80,30,${0.25 * dimFactor})`;
+    ctx.beginPath(); ctx.ellipse(200, 408, 30, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(40,90,20,${0.2 * dimFactor})`;
+    ctx.beginPath(); ctx.ellipse(480, 410, 22, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // === LEAKY OVERHEAD PIPES (running horizontally across ceiling) ===
+    const pipeColors = ['#666','#777','#555'];
+    for(let p = 0; p < 3; p++) {
+        const py = 40 + p * 28;
+        ctx.fillStyle = pipeColors[p];
+        ctx.fillRect(-GX, py, CANVAS_W, 10);
+        // Pipe highlight
+        ctx.fillStyle = `rgba(255,255,255,${0.15 * dimFactor})`;
+        ctx.fillRect(-GX, py, CANVAS_W, 3);
+        // Pipe shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-GX, py + 8, CANVAS_W, 2);
+        // Rust patches
+        ctx.fillStyle = `rgba(139,90,43,${0.4 * dimFactor})`;
+        ctx.fillRect(120 + p * 180, py + 2, 25, 6);
+        ctx.fillRect(350 + p * 90, py + 1, 18, 7);
+    }
+    // Dripping water from pipes
+    const drips = level6.barrelDrip.drips;
+    for(let d = drips.length - 1; d >= 0; d--) {
+        const drip = drips[d];
+        drip.y += drip.speed;
+        if(drip.y > 410) { drips.splice(d, 1); continue; }
+        ctx.fillStyle = `rgba(100,180,100,${0.6 * dimFactor})`;
+        ctx.beginPath();
+        ctx.ellipse(drip.x, drip.y, 1.5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Spawn new drips
+    if(t - level6.barrelDrip.lastDrip > 400) {
+        level6.barrelDrip.lastDrip = t;
+        const drpX = [155, 340, 520, 250, 450][Math.floor(Math.random() * 5)];
+        drips.push({ x: drpX + Math.random() * 10 - 5, y: 50 + Math.random() * 40, speed: 1 + Math.random() * 1.5 });
+    }
+
+    // === FAULTY FLICKERING LIGHT (center ceiling) ===
+    const lightX = 350, lightY = 25;
+    // Light fixture housing
+    ctx.fillStyle = '#444';
+    ctx.fillRect(lightX - 30, lightY, 60, 8);
+    // Fluorescent tube
+    if(flicker <= 0 || Math.random() > 0.3) {
+        ctx.fillStyle = `rgba(255,255,200,${0.8 * dimFactor})`;
+        ctx.fillRect(lightX - 25, lightY + 8, 50, 4);
+        // Light cone
+        ctx.fillStyle = `rgba(255,255,200,${0.06 * dimFactor})`;
+        ctx.beginPath();
+        ctx.moveTo(lightX - 25, lightY + 12);
+        ctx.lineTo(lightX - 80, 400);
+        ctx.lineTo(lightX + 80, 400);
+        ctx.lineTo(lightX + 25, lightY + 12);
+        ctx.closePath();
+        ctx.fill();
+    } else {
+        // Off state — dark tube
+        ctx.fillStyle = '#333';
+        ctx.fillRect(lightX - 25, lightY + 8, 50, 4);
+    }
+
+    // === RADIOACTIVE BARREL (right-center) — glowing, leaking ===
+    const brlX = 520, brlY = 330;
+    // Barrel glow
+    const glowPulse = 0.5 + Math.sin(t / 600) * 0.3;
+    const barrelGlow = ctx.createRadialGradient(brlX, brlY, 10, brlX, brlY, 80);
+    barrelGlow.addColorStop(0, `rgba(0,255,50,${glowPulse * 0.3 * dimFactor})`);
+    barrelGlow.addColorStop(1, 'rgba(0,255,50,0)');
+    ctx.fillStyle = barrelGlow;
+    ctx.beginPath(); ctx.arc(brlX, brlY, 80, 0, Math.PI * 2); ctx.fill();
+    // Barrel body — rusty yellow
+    ctx.fillStyle = '#b8960e';
+    ctx.fillRect(brlX - 22, brlY - 35, 44, 70);
+    // Barrel bands
+    ctx.fillStyle = '#8a7008';
+    ctx.fillRect(brlX - 24, brlY - 35, 48, 5);
+    ctx.fillRect(brlX - 24, brlY + 30, 48, 5);
+    ctx.fillRect(brlX - 23, brlY - 3, 46, 4);
+    // Barrel highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(brlX - 18, brlY - 30, 8, 60);
+    // Radiation symbol on barrel
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(brlX, brlY - 8, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd700';
+    for(let s = 0; s < 3; s++) {
+        const angle = s * (Math.PI * 2 / 3) - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(brlX, brlY - 8);
+        ctx.arc(brlX, brlY - 8, 10, angle - 0.4, angle + 0.4);
+        ctx.closePath();
+        ctx.fill();
+    }
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(brlX, brlY - 8, 4, 0, Math.PI * 2); ctx.fill();
+    // Neon sludge actively dripping from barrel
+    const sludgeStream = Math.sin(t / 200) * 2;
+    ctx.fillStyle = `rgba(0,255,80,${0.7 + Math.sin(t / 300) * 0.2})`;
+    // Main drip stream from barrel base
+    ctx.fillRect(brlX + 8 + sludgeStream, brlY + 35, 4, 10);
+    ctx.beginPath();
+    ctx.ellipse(brlX + 10 + sludgeStream, brlY + 46, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Sludge pool spreading toward sewer
+    const poolPulse = 0.6 + Math.sin(t / 800) * 0.15;
+    ctx.fillStyle = `rgba(0,255,80,${poolPulse * 0.5})`;
+    ctx.beginPath(); ctx.ellipse(brlX + 12, brlY + 55, 18, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(0,255,80,${poolPulse * 0.3})`;
+    ctx.beginPath(); ctx.ellipse(brlX + 25, brlY + 60, 25, 6, 0.3, 0, Math.PI * 2); ctx.fill();
+    // Sludge trail toward sewer cover
+    ctx.strokeStyle = `rgba(0,255,80,${0.4 + Math.sin(t / 500) * 0.15})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(brlX + 40, brlY + 58);
+    ctx.quadraticCurveTo(brlX + 60, brlY + 65, brlX + 55, brlY + 75);
+    ctx.stroke();
+
+    // === SEWER COVER (ground, right of barrel) — "INTO THE EARTH" ===
+    const sewX = brlX + 50, sewY = 400;
+    // Sewer grate — circular manhole
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath(); ctx.ellipse(sewX, sewY, 24, 8, 0, 0, Math.PI * 2); ctx.fill();
+    // Grate lines
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    for(let g = -3; g <= 3; g++) {
+        ctx.beginPath();
+        ctx.moveTo(sewX + g * 6, sewY - 6);
+        ctx.lineTo(sewX + g * 6, sewY + 6);
+        ctx.stroke();
+    }
+    // Cross bars
+    ctx.beginPath(); ctx.moveTo(sewX - 22, sewY); ctx.lineTo(sewX + 22, sewY); ctx.stroke();
+    // Neon glow seeping up from sewer
+    const sewerGlow = 0.3 + Math.sin(t / 700) * 0.2;
+    ctx.fillStyle = `rgba(0,255,80,${sewerGlow * dimFactor})`;
+    ctx.beginPath(); ctx.ellipse(sewX, sewY, 20, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // Steam/vapor wisps from sewer
+    for(let v = 0; v < 3; v++) {
+        const vx = sewX - 8 + v * 8 + Math.sin(t / 400 + v * 2) * 5;
+        const vy = sewY - 10 - v * 8 - Math.sin(t / 300 + v) * 4;
+        ctx.fillStyle = `rgba(0,200,60,${(0.15 - v * 0.04) * dimFactor})`;
+        ctx.beginPath(); ctx.arc(vx, vy, 4 + v * 2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // === INDUSTRIAL DUMPSTER labeled "PM WASTE" (left side) ===
+    const dmpX = 100, dmpY = 340;
+    // Dumpster body — dark green industrial
+    ctx.fillStyle = '#2a4a2a';
+    ctx.fillRect(dmpX - 40, dmpY - 20, 80, 60);
+    // Dumpster lid — slightly open
+    ctx.fillStyle = '#1e3a1e';
+    ctx.fillRect(dmpX - 42, dmpY - 25, 84, 8);
+    // Lid slightly ajar (rotated)
+    ctx.save();
+    ctx.translate(dmpX - 42, dmpY - 25);
+    ctx.rotate(-0.15);
+    ctx.fillStyle = '#1e3a1e';
+    ctx.fillRect(0, -4, 84, 6);
+    ctx.restore();
+    // Dumpster ridges
+    ctx.strokeStyle = '#1a3a1a';
+    ctx.lineWidth = 2;
+    for(let r = 0; r < 3; r++) {
+        ctx.beginPath();
+        ctx.moveTo(dmpX - 38, dmpY - 12 + r * 18);
+        ctx.lineTo(dmpX + 38, dmpY - 12 + r * 18);
+        ctx.stroke();
+    }
+    // Dumpster wheels
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(dmpX - 30, dmpY + 42, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(dmpX + 30, dmpY + 42, 5, 0, Math.PI * 2); ctx.fill();
+    // "PM WASTE" label on dumpster
+    ctx.fillStyle = '#888';
+    ctx.fillRect(dmpX - 32, dmpY + 2, 64, 20);
+    ctx.fillStyle = '#cc2222';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PM WASTE', dmpX, dmpY + 16);
+    // Biohazard symbol on dumpster
+    ctx.fillStyle = '#cc8800';
+    ctx.font = '18px Arial';
+    ctx.fillText('\u2622', dmpX, dmpY - 4);
+    // Overflowing paper trash
+    ctx.fillStyle = '#d4d0c8';
+    ctx.fillRect(dmpX - 20, dmpY - 28, 12, 8);
+    ctx.fillRect(dmpX + 5, dmpY - 30, 14, 10);
+    ctx.fillStyle = '#c8c0b0';
+    ctx.fillRect(dmpX - 8, dmpY - 32, 10, 7);
+    // Visible printed text on papers (tiny scribble lines)
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.5;
+    for(let ln = 0; ln < 3; ln++) {
+        ctx.beginPath();
+        ctx.moveTo(dmpX - 18, dmpY - 26 + ln * 3);
+        ctx.lineTo(dmpX - 10, dmpY - 26 + ln * 3);
+        ctx.stroke();
+    }
+
+    // === MUTANT PM IN CAGE (center) — overgrown, red jumpsuit, disgruntled ===
+    const pm = level6.mutantPM;
+    const pmX = pm.x, pmY = pm.y;
+    const shake = pm.shakeIntensity;
+    const pmShakeX = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+    const pmShakeY = shake > 0 ? (Math.random() - 0.5) * shake * 0.5 : 0;
+
+    // Cage — industrial steel bars
+    const cageX = pmX - 50, cageY = pmY - 80, cageW = 100, cageH = 130;
+    // Cage floor plate
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(cageX - 5, cageY + cageH - 5, cageW + 10, 10);
+    // Cage back wall (darker)
+    ctx.fillStyle = 'rgba(15,12,10,0.5)';
+    ctx.fillRect(cageX, cageY, cageW, cageH);
+
+    // === THE MUTANT PM (drawn inside cage) ===
+    const mx = pmX + pmShakeX, my = pmY + pmShakeY;
+    const breathe = Math.sin(t / 800) * 2;
+
+    // Oversized hunched body in red jumpsuit
+    // Torso — bulky, overgrown
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(mx - 22, my - 30 + breathe, 44, 50);
+    // Darker folds/seams on jumpsuit
+    ctx.fillStyle = '#991a1a';
+    ctx.fillRect(mx - 10, my - 28 + breathe, 3, 46);
+    ctx.fillRect(mx + 8, my - 28 + breathe, 3, 46);
+    // Jumpsuit collar
+    ctx.fillStyle = '#e63333';
+    ctx.fillRect(mx - 14, my - 32 + breathe, 28, 5);
+    // PipeTech patch on chest
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(mx + 10, my - 20 + breathe, 8, 6);
+    ctx.fillStyle = '#333';
+    ctx.font = '4px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PT', mx + 14, my - 15 + breathe);
+
+    // Head — oversized, angry
+    ctx.fillStyle = '#c4a882';
+    ctx.fillRect(mx - 14, my - 55 + breathe, 28, 26);
+    // Bulging forehead
+    ctx.fillStyle = '#b89a72';
+    ctx.fillRect(mx - 16, my - 58 + breathe, 32, 10);
+    // Angry eyes — red-rimmed
+    ctx.fillStyle = '#600';
+    ctx.fillRect(mx - 10, my - 48 + breathe, 7, 6);
+    ctx.fillRect(mx + 3, my - 48 + breathe, 7, 6);
+    ctx.fillStyle = '#ff3300';
+    ctx.fillRect(mx - 8, my - 46 + breathe, 4, 3);
+    ctx.fillRect(mx + 5, my - 46 + breathe, 4, 3);
+    // Pupils — darting
+    const pupilOffset = Math.sin(t / 1200) * 2;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(mx - 7 + pupilOffset, my - 45 + breathe, 2, 2);
+    ctx.fillRect(mx + 6 + pupilOffset, my - 45 + breathe, 2, 2);
+    // Angry thick eyebrows
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(mx - 11, my - 52 + breathe, 9, 3);
+    ctx.fillRect(mx + 2, my - 52 + breathe, 9, 3);
+    // Gritted teeth / snarl
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(mx - 6, my - 36 + breathe, 12, 4);
+    ctx.fillStyle = '#333';
+    for(let tooth = 0; tooth < 4; tooth++) {
+        ctx.fillRect(mx - 5 + tooth * 3, my - 36 + breathe, 1, 4);
+    }
+    // Veins on temple
+    ctx.strokeStyle = `rgba(180,0,0,${0.4 + Math.sin(t / 400) * 0.2})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mx - 14, my - 52 + breathe);
+    ctx.lineTo(mx - 18, my - 48 + breathe);
+    ctx.lineTo(mx - 16, my - 42 + breathe);
+    ctx.stroke();
+
+    // Oversized arms gripping cage bars
+    // Left arm
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(mx - 30, my - 25 + breathe, 10, 30);
+    ctx.fillStyle = '#c4a882';
+    ctx.fillRect(mx - 32, my + 2 + breathe, 10, 12);
+    // Right arm
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(mx + 20, my - 25 + breathe, 10, 30);
+    ctx.fillStyle = '#c4a882';
+    ctx.fillRect(mx + 22, my + 2 + breathe, 10, 12);
+
+    // Legs — thick, hunched posture
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(mx - 16, my + 20 + breathe, 14, 24);
+    ctx.fillRect(mx + 2, my + 20 + breathe, 14, 24);
+    // Heavy boots
+    ctx.fillStyle = '#333';
+    ctx.fillRect(mx - 18, my + 42 + breathe, 16, 6);
+    ctx.fillRect(mx + 2, my + 42 + breathe, 16, 6);
+
+    // Cage bars (front, drawn over PM)
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 4;
+    for(let bar = 0; bar < 8; bar++) {
+        const barX = cageX + 6 + bar * 13;
+        ctx.beginPath();
+        ctx.moveTo(barX, cageY);
+        ctx.lineTo(barX, cageY + cageH);
+        ctx.stroke();
+    }
+    // Horizontal cage bars
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cageX, cageY + 20); ctx.lineTo(cageX + cageW, cageY + 20); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cageX, cageY + cageH - 20); ctx.lineTo(cageX + cageW, cageY + cageH - 20); ctx.stroke();
+    // Cage top
+    ctx.fillStyle = '#555';
+    ctx.fillRect(cageX - 3, cageY - 5, cageW + 6, 8);
+    // Padlock on cage
+    ctx.fillStyle = '#b8960e';
+    ctx.fillRect(cageX + cageW / 2 - 5, cageY + cageH - 3, 10, 12);
+    ctx.fillStyle = '#8a7008';
+    ctx.beginPath();
+    ctx.arc(cageX + cageW / 2, cageY + cageH - 3, 6, Math.PI, 0);
+    ctx.stroke();
+    // "DANGER" sign on cage
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(cageX + cageW + 5, cageY + 30, 40, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('DANGER', cageX + cageW + 25, cageY + 42);
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = '7px Arial';
+    ctx.fillText('DO NOT FEED', cageX + cageW + 25, cageY + 55);
+
+    // PM rage shake — intermittent
+    if(Math.random() < 0.005 && pm.shakeIntensity === 0) {
+        pm.shakeIntensity = 6;
+        pm.aggroTimer = t;
+    }
+    if(pm.shakeIntensity > 0 && t - pm.aggroTimer > 1500) {
+        pm.shakeIntensity = 0;
+    }
+
+    // === DIRECTION PROMPTS ===
+    if(player.x > 620) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(590, 310, 110, 20);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PIPE ROOM \u2192', 645, 326);
+    }
+
+    // Ambient text — gritty atmosphere
+    ctx.fillStyle = `rgba(100,100,80,${0.4 * dimFactor})`;
+    ctx.font = 'italic 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Something drips... something growls...', 350, 140);
 }
 
 function drawLevel6Entryway() {
@@ -8410,6 +8850,19 @@ function drawScene() {
                 ctx.textAlign = 'center';
                 ctx.fillText('HALLWAY \u2192', 650, 326);
             }
+            if(player.x < 80) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(10, 310, 120, 20);
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('\u2190 UNDERBELLY', 70, 326);
+            }
+
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'underbelly') {
+            drawLevel6Underbelly();
 
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
@@ -9472,6 +9925,24 @@ function update() {
                 }
             }
 
+            // NPC pipe crack spawning for Level 6 pipe room (mirrors Level 5 mechanic)
+            if(level6.room === 'pipeRoom') {
+                for(let npc of level6.npcPipes) {
+                    if(!npc.needsDoc && Math.random() < 0.0003) {
+                        npc.needsDoc = true;
+                        npc.crackStartTime = Date.now();
+                    }
+                    if(npc.needsDoc && npc.crackStartTime) {
+                        if(Date.now() - npc.crackStartTime > 15000) {
+                            createExplosion(npc.x, 240);
+                            npc.needsDoc = false;
+                            npc.state = 'happy';
+                            npc.crackStartTime = null;
+                        }
+                    }
+                }
+            }
+
             // Handle viewing detective note
             if(level6.viewingDetectiveNote) {
                 // Handle note scrolling
@@ -10008,7 +10479,7 @@ function update() {
             }
 
             // Movement for horizontal-only rooms (1D)
-            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom') {
+            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
                     player.x = Math.max(10, player.x - 5);
@@ -10304,6 +10775,33 @@ function update() {
                     level6.room = 'employeeHallway';
                     player.x = 80;
                     player.y = 380;
+                }
+
+                // Left — to underbelly backroom (auto)
+                if(player.x < 40) {
+                    level6.room = 'underbelly';
+                    player.x = 640;
+                    player.y = 380;
+                }
+            }
+
+            // === Underbelly Backroom (gritty industrial backroom behind employee level) ===
+            else if(level6.room === 'underbelly') {
+                player.y = 380;
+
+                // Right — back to employee pipe room (auto)
+                if(player.x > 660) {
+                    level6.room = 'employeePipeRoom';
+                    player.x = 80;
+                    player.y = 380;
+                }
+
+                // Faulty light flicker timer
+                if(Math.random() < 0.008 && level6.underbellyFlicker === 0) {
+                    level6.underbellyFlicker = Date.now();
+                }
+                if(level6.underbellyFlicker > 0 && Date.now() - level6.underbellyFlicker > 800) {
+                    level6.underbellyFlicker = 0;
                 }
             }
 
