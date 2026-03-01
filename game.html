@@ -1600,75 +1600,83 @@ function drawNPC(npc) {
     }
 
     if(npc.state === 'fixing') {
-        // Monkey wrench at the pipe elbow
+        // Pipe wrench (Stillson wrench) at the pipe elbow
         const wrenchX = npc.x + 10;
         const wrenchY = 250;
         ctx.save();
         ctx.translate(wrenchX, wrenchY);
         ctx.rotate(npc.fixAnim);
 
-        // === HANDLE — long flat forged steel ===
-        ctx.fillStyle = '#8a8a8a';
+        // === HANDLE — long red grip (pipe wrench style) ===
+        ctx.fillStyle = '#cc3322';
         ctx.beginPath();
-        ctx.moveTo(-28, -3);
-        ctx.lineTo(6, -4);
-        ctx.lineTo(6, 4);
-        ctx.lineTo(-28, 3);
+        ctx.moveTo(-32, -3);
+        ctx.lineTo(2, -4);
+        ctx.lineTo(2, 4);
+        ctx.lineTo(-32, 3);
         ctx.closePath();
         ctx.fill();
+        // Handle grip texture ridges
+        ctx.strokeStyle = '#aa2211';
+        ctx.lineWidth = 0.7;
+        for(let r = 0; r < 6; r++) {
+            ctx.beginPath();
+            ctx.moveTo(-28 + r * 4, -3);
+            ctx.lineTo(-28 + r * 4, 3);
+            ctx.stroke();
+        }
         // Handle spine highlight
-        ctx.fillStyle = '#a0a0a0';
-        ctx.fillRect(-26, -2, 30, 2);
-        // Handle edge shadow
-        ctx.fillStyle = '#6a6a6a';
-        ctx.fillRect(-26, 1, 30, 1);
+        ctx.fillStyle = '#dd4433';
+        ctx.fillRect(-30, -2, 28, 1.5);
+        // Handle end cap
+        ctx.fillStyle = '#aa2211';
+        ctx.fillRect(-33, -3.5, 3, 7);
 
-        // === FIXED JAW — integral to handle, top side ===
+        // === HEEL JAW (fixed, top) — straight, integral to handle ===
         ctx.fillStyle = '#8a8a8a';
         ctx.beginPath();
-        ctx.moveTo(6, -4);
+        ctx.moveTo(2, -4);
         ctx.lineTo(16, -4);
-        ctx.lineTo(18, -12);
-        ctx.lineTo(12, -12);
-        ctx.lineTo(6, -6);
+        ctx.lineTo(18, -14);
+        ctx.lineTo(14, -14);
+        ctx.lineTo(2, -6);
         ctx.closePath();
         ctx.fill();
-        // Jaw inner face (serrated grip surface)
+        // Jaw teeth (serrated grip surface)
         ctx.fillStyle = '#666';
-        ctx.fillRect(13, -11, 4, 7);
-        // Serrations
+        ctx.fillRect(14, -13, 3, 9);
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 0.6;
+        for(let sr = 0; sr < 4; sr++) {
+            ctx.beginPath();
+            ctx.moveTo(14, -12 + sr * 2.2);
+            ctx.lineTo(17, -12 + sr * 2.2);
+            ctx.stroke();
+        }
+
+        // === HOOK JAW (movable, bottom) — curved hook shape ===
+        ctx.fillStyle = '#909090';
+        ctx.beginPath();
+        ctx.moveTo(6, 4);
+        ctx.lineTo(18, 3);
+        ctx.quadraticCurveTo(22, 0, 20, -8);
+        ctx.lineTo(18, -8);
+        ctx.quadraticCurveTo(19, -2, 14, 3);
+        ctx.lineTo(6, 4);
+        ctx.closePath();
+        ctx.fill();
+        // Hook jaw teeth
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 0.6;
         for(let sr = 0; sr < 3; sr++) {
             ctx.beginPath();
-            ctx.moveTo(13, -10 + sr * 2.5);
-            ctx.lineTo(17, -10 + sr * 2.5);
+            ctx.moveTo(17, -6 + sr * 3);
+            ctx.lineTo(20, -6 + sr * 3);
             ctx.stroke();
         }
 
-        // === MOVABLE JAW — slides along handle, bottom side ===
-        ctx.fillStyle = '#909090';
-        ctx.beginPath();
-        ctx.moveTo(6, 4);
-        ctx.lineTo(16, 4);
-        ctx.lineTo(18, 12);
-        ctx.lineTo(12, 12);
-        ctx.lineTo(6, 6);
-        ctx.closePath();
-        ctx.fill();
-        // Jaw inner face
-        ctx.fillStyle = '#666';
-        ctx.fillRect(13, 4, 4, 7);
-        // Serrations
-        for(let sr = 0; sr < 3; sr++) {
-            ctx.beginPath();
-            ctx.moveTo(13, 5 + sr * 2.5);
-            ctx.lineTo(17, 5 + sr * 2.5);
-            ctx.stroke();
-        }
-
-        // === THUMBSCREW — between jaws, knurled wheel ===
-        const tsX = 8, tsY = 0;
+        // === ADJUSTMENT NUT — where jaws meet handle ===
+        const tsX = 4, tsY = 0;
         ctx.fillStyle = '#999';
         ctx.beginPath();
         ctx.arc(tsX, tsY, 4, 0, Math.PI * 2);
@@ -1773,29 +1781,65 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
         ctx.fill();
         ctx.restore();
 
-        // Birds — 2-3 small birds that fly in/out
+        // Birds — fly out of tree and back in (not just hopping)
         const birdCount = 3;
         for(let b = 0; b < birdCount; b++) {
-            const birdCycle = (t / (1800 + b * 600) + b * 2.1) % (Math.PI * 2);
-            const birdPhase = Math.sin(birdCycle);
-            // Bird visible when in certain phase range (simulates flying in and roosting)
-            if(birdPhase > -0.3) {
-                const bx = tx + Math.cos(birdCycle * 1.3 + b) * 22;
-                const by = ty - 30 + Math.sin(birdCycle * 0.8 + b * 1.5) * 12 - 5;
-                // Only draw if within window bounds
-                if(bx > wx + 4 && bx < wx + ww - 4 && by > wy + 4 && by < wy + wh - 4) {
-                    const wingFlap = Math.sin(t / 80 + b * 3) * 4;
+            const birdPeriod = 4000 + b * 1500; // each bird has different flight cycle
+            const birdCycle = ((t + b * 1700) % birdPeriod) / birdPeriod; // 0 to 1
+            let bx, by, isFlying;
+            if(birdCycle < 0.15) {
+                // Perched in tree
+                bx = tx + (b - 1) * 8;
+                by = ty - 28 + b * 4;
+                isFlying = false;
+            } else if(birdCycle < 0.45) {
+                // Flying out of tree toward window edge
+                const flyPct = (birdCycle - 0.15) / 0.3;
+                bx = tx + (b - 1) * 8 + flyPct * (b < 1 ? -28 : 28);
+                by = ty - 30 - flyPct * 15 + Math.sin(flyPct * Math.PI) * 8;
+                isFlying = true;
+            } else if(birdCycle < 0.55) {
+                // Soaring at peak (far from tree)
+                const soarPct = (birdCycle - 0.45) / 0.1;
+                bx = tx + (b < 1 ? -28 : 28) + soarPct * (b < 1 ? -4 : 4);
+                by = ty - 45 + Math.sin(soarPct * Math.PI) * 3;
+                isFlying = true;
+            } else if(birdCycle < 0.85) {
+                // Flying back to tree
+                const retPct = (birdCycle - 0.55) / 0.3;
+                bx = tx + (b < 1 ? -32 : 32) * (1 - retPct) + (b - 1) * 8 * retPct;
+                by = ty - 45 + retPct * 17 + Math.sin(retPct * Math.PI) * 6;
+                isFlying = true;
+            } else {
+                // Settling back in tree
+                bx = tx + (b - 1) * 8;
+                by = ty - 28 + b * 4;
+                isFlying = false;
+            }
+            // Only draw if within window bounds
+            if(bx > wx + 4 && bx < wx + ww - 4 && by > wy + 4 && by < wy + wh - 4) {
+                if(isFlying) {
+                    const wingFlap = Math.sin(t / 60 + b * 3) * 5;
                     ctx.strokeStyle = '#222';
                     ctx.lineWidth = 1.2;
                     ctx.beginPath();
-                    ctx.moveTo(bx - 4, by + wingFlap * 0.5);
+                    ctx.moveTo(bx - 5, by + wingFlap * 0.5);
                     ctx.lineTo(bx, by);
-                    ctx.lineTo(bx + 4, by + wingFlap * 0.5);
+                    ctx.lineTo(bx + 5, by + wingFlap * 0.5);
                     ctx.stroke();
-                    // Bird body dot
-                    ctx.fillStyle = '#333';
-                    ctx.beginPath(); ctx.arc(bx, by + 1, 1.5, 0, Math.PI * 2); ctx.fill();
+                } else {
+                    // Perched — wings folded
+                    ctx.strokeStyle = '#222';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - 2, by - 1);
+                    ctx.lineTo(bx, by);
+                    ctx.lineTo(bx + 2, by - 1);
+                    ctx.stroke();
                 }
+                // Bird body dot
+                ctx.fillStyle = '#333';
+                ctx.beginPath(); ctx.arc(bx, by + 1, 1.5, 0, Math.PI * 2); ctx.fill();
             }
         }
 
@@ -1838,6 +1882,17 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             ctx.save();
             ctx.translate(mowerX, my);
             ctx.scale(mowerFacing, 1);
+            // Grass collection bag (mounted on back/rear of mower, drawn first so mower body overlaps)
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-14, -10, 7, 12);
+            ctx.fillStyle = '#2a5a2a';
+            ctx.fillRect(-13, -9, 5, 10);
+            // Bag mesh texture
+            ctx.strokeStyle = '#3a6a3a';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath(); ctx.moveTo(-13, -7); ctx.lineTo(-8, -7); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-13, -4); ctx.lineTo(-8, -4); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-13, -1); ctx.lineTo(-8, -1); ctx.stroke();
             // Mower body — green (John Deere style)
             ctx.fillStyle = '#2e7d32';
             ctx.fillRect(-8, -8, 16, 10);
@@ -2080,32 +2135,74 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     const lotTop = curbBot;
     const lotBot = wy + wh;
 
-    // === BUILDING ACROSS THE STREET — industrial park office ===
-    ctx.fillStyle = '#8a8578';
-    ctx.fillRect(wx, bldgTop, ww, bldgBot - bldgTop);
-    // Darker base/ground floor strip
-    ctx.fillStyle = '#706a5e';
-    ctx.fillRect(wx, bldgBot - 6, ww, 6);
-    // Roof edge
-    ctx.fillStyle = '#6a6458';
-    ctx.fillRect(wx, bldgTop, ww, 2);
-    // One row of windows near top of building (well above ground floor)
-    const winRowY = bldgTop + 4;
-    for(let col = 0; col < 16; col++) {
-        const bwx = wx + 10 + col * 23;
-        ctx.fillStyle = '#5a5548';
-        ctx.fillRect(bwx, winRowY, 16, 7);
-        const lit = ((col * 7) % 5) < 2;
-        ctx.fillStyle = lit ? 'rgba(180,210,240,0.7)' : 'rgba(100,140,170,0.5)';
-        ctx.fillRect(bwx + 1, winRowY + 1, 14, 5);
+    // === BUILDING ACROSS THE STREET — industrial office complex ===
+    const bldgH = bldgBot - bldgTop;
+    // Main facade
+    ctx.fillStyle = '#7a7068';
+    ctx.fillRect(wx, bldgTop, ww, bldgH);
+    // Concrete panel grid lines (horizontal)
+    ctx.strokeStyle = '#6a6058';
+    ctx.lineWidth = 0.5;
+    for(let py = 0; py < 3; py++) {
+        const ly = bldgTop + 2 + py * (bldgH / 3);
+        ctx.beginPath(); ctx.moveTo(wx, ly); ctx.lineTo(wx + ww, ly); ctx.stroke();
     }
-    // Ground floor entrance (at base, not overlapping windows)
-    const entX = wx + ww * 0.5 - 10;
+    // Vertical panel seams
+    for(let px = 0; px < 8; px++) {
+        const lx = wx + px * (ww / 7);
+        ctx.beginPath(); ctx.moveTo(lx, bldgTop); ctx.lineTo(lx, bldgBot); ctx.stroke();
+    }
+    // Roof parapet with cornice
+    ctx.fillStyle = '#5e564e';
+    ctx.fillRect(wx, bldgTop - 1, ww, 3);
+    ctx.fillStyle = '#8a8078';
+    ctx.fillRect(wx, bldgTop + 1, ww, 1);
+    // Upper row of windows
+    const winRow1Y = bldgTop + 3;
+    for(let col = 0; col < 16; col++) {
+        const bwx = wx + 8 + col * 23;
+        ctx.fillStyle = '#4a4438';
+        ctx.fillRect(bwx, winRow1Y, 16, 5);
+        const lit = ((col * 7) % 5) < 2;
+        ctx.fillStyle = lit ? 'rgba(200,220,240,0.7)' : 'rgba(80,120,150,0.5)';
+        ctx.fillRect(bwx + 1, winRow1Y + 1, 14, 3);
+        // Window sill
+        ctx.fillStyle = '#6a6058';
+        ctx.fillRect(bwx - 1, winRow1Y + 5, 18, 1);
+    }
+    // Lower row of windows
+    const winRow2Y = bldgTop + (bldgH * 0.45);
+    for(let col = 0; col < 16; col++) {
+        const bwx = wx + 8 + col * 23;
+        ctx.fillStyle = '#4a4438';
+        ctx.fillRect(bwx, winRow2Y, 16, 5);
+        const lit2 = ((col * 5 + 3) % 7) < 3;
+        ctx.fillStyle = lit2 ? 'rgba(200,220,240,0.65)' : 'rgba(80,120,150,0.45)';
+        ctx.fillRect(bwx + 1, winRow2Y + 1, 14, 3);
+        ctx.fillStyle = '#6a6058';
+        ctx.fillRect(bwx - 1, winRow2Y + 5, 18, 1);
+    }
+    // Ground floor — darker facade with entrance
+    ctx.fillStyle = '#5a5248';
+    ctx.fillRect(wx, bldgBot - 6, ww, 6);
+    // Main entrance with awning
+    const entX = wx + ww * 0.5 - 14;
+    ctx.fillStyle = '#3a342e';
+    ctx.fillRect(entX, bldgBot - 6, 28, 6);
+    // Glass double doors
+    ctx.fillStyle = 'rgba(120,160,200,0.6)';
+    ctx.fillRect(entX + 3, bldgBot - 5, 10, 4);
+    ctx.fillRect(entX + 15, bldgBot - 5, 10, 4);
+    // Door frame highlight
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(entX + 3, bldgBot - 5, 10, 4);
+    ctx.strokeRect(entX + 15, bldgBot - 5, 10, 4);
+    // Awning over entrance
     ctx.fillStyle = '#4a4438';
-    ctx.fillRect(entX, bldgBot - 6, 20, 6);
-    ctx.fillStyle = 'rgba(100,140,170,0.5)';
-    ctx.fillRect(entX + 2, bldgBot - 5, 7, 4);
-    ctx.fillRect(entX + 11, bldgBot - 5, 7, 4);
+    ctx.fillRect(entX - 4, bldgBot - 7, 36, 2);
+    ctx.fillStyle = '#5a5448';
+    ctx.fillRect(entX - 3, bldgBot - 7, 34, 1);
 
     // === STREET — single lane, one direction (right), no opposing traffic ===
     ctx.fillStyle = '#3e3e3e';
@@ -2148,26 +2245,46 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     const signPostX = wx + 22;
     const signPostBot = lotTop + (lotBot - lotTop) * 0.6; // base planted in parking lot
     const signPostTop = streetTop - 2; // extends above street level
-    // Steel I-beam post — thick, prominent
+    const ibeamH = signPostBot - signPostTop;
+    // Steel I-beam post — wide-flange profile
+    // Left flange
     ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(signPostX - 3, signPostTop, 6, signPostBot - signPostTop);
-    // I-beam web highlight
-    ctx.fillStyle = '#666';
-    ctx.fillRect(signPostX - 1, signPostTop, 2, signPostBot - signPostTop);
-    // Top flange
+    ctx.fillRect(signPostX - 7, signPostTop, 4, ibeamH);
+    // Right flange
+    ctx.fillRect(signPostX + 3, signPostTop, 4, ibeamH);
+    // Web (center)
     ctx.fillStyle = '#555';
-    ctx.fillRect(signPostX - 6, signPostTop - 1, 12, 3);
+    ctx.fillRect(signPostX - 3, signPostTop, 6, ibeamH);
+    // Web highlight
+    ctx.fillStyle = '#666';
+    ctx.fillRect(signPostX - 1, signPostTop, 2, ibeamH);
+    // Left flange highlight
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(signPostX - 6, signPostTop, 2, ibeamH);
+    // Right flange highlight
+    ctx.fillRect(signPostX + 4, signPostTop, 2, ibeamH);
+    // Top cap plate (horizontal)
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(signPostX - 8, signPostTop - 2, 16, 3);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(signPostX - 8, signPostTop - 2, 16, 1);
     // Base plate (ground anchor)
     ctx.fillStyle = '#444';
-    ctx.fillRect(signPostX - 7, signPostBot - 2, 14, 3);
+    ctx.fillRect(signPostX - 9, signPostBot - 2, 18, 4);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(signPostX - 9, signPostBot - 2, 18, 1);
     // Anchor bolts
     ctx.fillStyle = '#333';
-    ctx.beginPath(); ctx.arc(signPostX - 5, signPostBot, 1, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(signPostX + 5, signPostBot, 1, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(signPostX - 6, signPostBot + 1, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(signPostX + 6, signPostBot + 1, 1.2, 0, Math.PI*2); ctx.fill();
+    // Gusset plates (triangular braces at base)
+    ctx.fillStyle = '#4a4a4a';
+    ctx.beginPath(); ctx.moveTo(signPostX - 3, signPostBot - 6); ctx.lineTo(signPostX - 8, signPostBot - 2); ctx.lineTo(signPostX - 3, signPostBot - 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(signPostX + 3, signPostBot - 6); ctx.lineTo(signPostX + 8, signPostBot - 2); ctx.lineTo(signPostX + 3, signPostBot - 2); ctx.fill();
 
-    // Sign panel mounted on top of post — dark with text
+    // Sign panel mounted on top of I-beam — dark with text
     const signW = 60, signH = 16;
-    const signY = signPostTop - signH;
+    const signY = signPostTop - signH - 1;
     ctx.fillStyle = '#2b2b2b';
     ctx.fillRect(signPostX - 4, signY, signW, signH);
     // Sign border
@@ -2184,9 +2301,9 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         ctx.fillStyle = COLORS[i].hex;
         ctx.fillRect(signPostX + 1, signY + 11 + i * 1.2, signW - 10, 0.8);
     }
-    // Mounting bracket (post to sign)
+    // Mounting bracket (I-beam to sign)
     ctx.fillStyle = '#555';
-    ctx.fillRect(signPostX - 2, signY + signH - 1, 4, 3);
+    ctx.fillRect(signPostX - 3, signY + signH - 1, 6, 3);
 
     // === PARKING LOT ===
     ctx.fillStyle = '#4a4a4a';
@@ -2213,70 +2330,175 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(wx + 8, lotTop + 3); ctx.lineTo(wx + 8 + 10 * spotW, lotTop + 3); ctx.stroke();
 
-    // Parked cars — top-down perspective (roof visible, slightly angled)
-    const carDefs = [
-        {spot: 0, col: '#c0392b', dark: '#8b2a1f', glass: '#4a1a1a'},
-        {spot: 2, col: '#2980b9', dark: '#1a5a80', glass: '#1a3a50'},
-        {spot: 3, col: '#f0f0f0', dark: '#bbb', glass: '#889'},
-        {spot: 5, col: '#27ae60', dark: '#1a7a40', glass: '#0a4020'},
-        {spot: 7, col: '#f39c12', dark: '#c87f0a', glass: '#7a4a0a'},
-        {spot: 8, col: '#555', dark: '#333', glass: '#222'},
-        {spot: 9, col: '#8e44ad', dark: '#6a2d80', glass: '#3a1a4a'}
-    ];
-    for(let cd of carDefs) {
-        const cx = wx + 8 + (cd.spot + 0.5) * spotW;
-        const cy = lotTop + lotH * 0.52;
-        const cw = spotW * 0.7;
-        const ch = lotH * 0.7;
-        // Car body (top-down: longer than wide, nose at top)
-        ctx.fillStyle = cd.col;
-        // Rounded car body shape
-        const r = 2;
+    // === PM COLOR-COORDINATED VW BUGS (spots 0-3) ===
+    for(let pi = 0; pi < 4; pi++) {
+        const bugSpot = pi;
+        const bcx = wx + 8 + (bugSpot + 0.5) * spotW;
+        const bcy = lotTop + lotH * 0.52;
+        const bw = spotW * 0.7;
+        const bh = lotH * 0.72;
+        const bugCol = COLORS[pi].hex;
+        // VW Bug body — distinctively rounded shape (top-down)
+        ctx.fillStyle = bugCol;
         ctx.beginPath();
-        ctx.moveTo(cx - cw/2 + r, cy - ch/2);
-        ctx.lineTo(cx + cw/2 - r, cy - ch/2);
-        ctx.quadraticCurveTo(cx + cw/2, cy - ch/2, cx + cw/2, cy - ch/2 + r);
-        ctx.lineTo(cx + cw/2, cy + ch/2 - r);
-        ctx.quadraticCurveTo(cx + cw/2, cy + ch/2, cx + cw/2 - r, cy + ch/2);
-        ctx.lineTo(cx - cw/2 + r, cy + ch/2);
-        ctx.quadraticCurveTo(cx - cw/2, cy + ch/2, cx - cw/2, cy + ch/2 - r);
-        ctx.lineTo(cx - cw/2, cy - ch/2 + r);
-        ctx.quadraticCurveTo(cx - cw/2, cy - ch/2, cx - cw/2 + r, cy - ch/2);
+        // Rounded front (nose at top)
+        ctx.moveTo(bcx - bw*0.3, bcy - bh/2);
+        ctx.quadraticCurveTo(bcx, bcy - bh/2 - 2, bcx + bw*0.3, bcy - bh/2);
+        ctx.lineTo(bcx + bw/2, bcy - bh*0.2);
+        ctx.lineTo(bcx + bw/2, bcy + bh*0.3);
+        // Rounded rear (engine)
+        ctx.quadraticCurveTo(bcx + bw*0.4, bcy + bh/2, bcx, bcy + bh/2 + 1);
+        ctx.quadraticCurveTo(bcx - bw*0.4, bcy + bh/2, bcx - bw/2, bcy + bh*0.3);
+        ctx.lineTo(bcx - bw/2, bcy - bh*0.2);
+        ctx.closePath();
         ctx.fill();
-        // Windshield (front, near top — car faces away from viewer)
-        ctx.fillStyle = cd.glass;
+        // Windshield (small, rounded — VW Bug style)
+        ctx.fillStyle = 'rgba(80,120,160,0.6)';
+        ctx.beginPath();
+        ctx.ellipse(bcx, bcy - bh*0.18, bw*0.28, bh*0.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Roof (center dome)
+        ctx.fillStyle = bugCol;
         ctx.globalAlpha = 0.7;
-        ctx.fillRect(cx - cw*0.35, cy - ch/2 + 2, cw*0.7, ch*0.18);
+        ctx.beginPath();
+        ctx.ellipse(bcx, bcy + bh*0.02, bw*0.25, bh*0.18, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.globalAlpha = 1;
-        // Roof panel (center)
-        ctx.fillStyle = cd.dark;
-        ctx.fillRect(cx - cw*0.3, cy - ch*0.15, cw*0.6, ch*0.3);
-        // Rear windshield
-        ctx.fillStyle = cd.glass;
-        ctx.globalAlpha = 0.6;
-        ctx.fillRect(cx - cw*0.28, cy + ch*0.2, cw*0.56, ch*0.12);
-        ctx.globalAlpha = 1;
+        // Rear window (small oval — VW style)
+        ctx.fillStyle = 'rgba(80,120,160,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(bcx, bcy + bh*0.28, bw*0.2, bh*0.06, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Center ridge line (body seam)
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(bcx, bcy - bh/2 - 1); ctx.lineTo(bcx, bcy + bh/2 + 1); ctx.stroke();
+        // Headlights (round, VW style)
+        ctx.fillStyle = '#ffe';
+        ctx.beginPath(); ctx.arc(bcx - bw*0.3, bcy - bh*0.38, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bcx + bw*0.3, bcy - bh*0.38, 1.5, 0, Math.PI*2); ctx.fill();
         // Tail lights
         ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - cw/2 + 1, cy + ch/2 - 2, cw*0.15, 2);
-        ctx.fillRect(cx + cw/2 - cw*0.15 - 1, cy + ch/2 - 2, cw*0.15, 2);
+        ctx.beginPath(); ctx.arc(bcx - bw*0.3, bcy + bh*0.4, 1, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bcx + bw*0.3, bcy + bh*0.4, 1, 0, Math.PI*2); ctx.fill();
     }
 
-    // Mullet Pro's van — parked in last spot, larger, white with stripe
+    // === SILVER CONVERTIBLE (spot 5) ===
+    {
+        const cvSpot = 5;
+        const cvx = wx + 8 + (cvSpot + 0.5) * spotW;
+        const cvy = lotTop + lotH * 0.52;
+        const cvw = spotW * 0.72;
+        const cvh = lotH * 0.72;
+        // Body — silver, sleek
+        ctx.fillStyle = '#c0c0c0';
+        const cr = 2;
+        ctx.beginPath();
+        ctx.moveTo(cvx - cvw/2 + cr, cvy - cvh/2);
+        ctx.lineTo(cvx + cvw/2 - cr, cvy - cvh/2);
+        ctx.quadraticCurveTo(cvx + cvw/2, cvy - cvh/2, cvx + cvw/2, cvy - cvh/2 + cr);
+        ctx.lineTo(cvx + cvw/2, cvy + cvh/2 - cr);
+        ctx.quadraticCurveTo(cvx + cvw/2, cvy + cvh/2, cvx + cvw/2 - cr, cvy + cvh/2);
+        ctx.lineTo(cvx - cvw/2 + cr, cvy + cvh/2);
+        ctx.quadraticCurveTo(cvx - cvw/2, cvy + cvh/2, cvx - cvw/2, cvy + cvh/2 - cr);
+        ctx.lineTo(cvx - cvw/2, cvy - cvh/2 + cr);
+        ctx.quadraticCurveTo(cvx - cvw/2, cvy - cvh/2, cvx - cvw/2 + cr, cvy - cvh/2);
+        ctx.fill();
+        // No roof — visible interior (tan seats)
+        ctx.fillStyle = '#c8a882';
+        ctx.fillRect(cvx - cvw*0.32, cvy - cvh*0.1, cvw*0.64, cvh*0.35);
+        // Windshield (compact, front only)
+        ctx.fillStyle = 'rgba(150,200,240,0.5)';
+        ctx.fillRect(cvx - cvw*0.3, cvy - cvh/2 + 2, cvw*0.6, cvh*0.12);
+        // Chrome trim along sides
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.moveTo(cvx - cvw/2 + 1, cvy); ctx.lineTo(cvx + cvw/2 - 1, cvy); ctx.stroke();
+        // Headlights & tail lights
+        ctx.fillStyle = '#ffe';
+        ctx.fillRect(cvx - cvw*0.35, cvy - cvh/2 + 1, cvw*0.12, 1.5);
+        ctx.fillRect(cvx + cvw*0.23, cvy - cvh/2 + 1, cvw*0.12, 1.5);
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(cvx - cvw/2 + 1, cvy + cvh/2 - 2, cvw*0.15, 1.5);
+        ctx.fillRect(cvx + cvw/2 - cvw*0.15 - 1, cvy + cvh/2 - 2, cvw*0.15, 1.5);
+    }
+
+    // === BLACK CADILLACS (spots 7 and 8) ===
+    for(let ci = 0; ci < 2; ci++) {
+        const cadSpot = 7 + ci;
+        const cdx = wx + 8 + (cadSpot + 0.5) * spotW;
+        const cdy = lotTop + lotH * 0.50;
+        const cdw = spotW * 0.72;
+        const cdh = lotH * 0.82;
+        // Long body — black luxury sedan
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.moveTo(cdx - cdw/2 + 1, cdy - cdh/2);
+        ctx.lineTo(cdx + cdw/2 - 1, cdy - cdh/2);
+        ctx.quadraticCurveTo(cdx + cdw/2, cdy - cdh/2, cdx + cdw/2, cdy - cdh/2 + 2);
+        ctx.lineTo(cdx + cdw/2, cdy + cdh/2 - 2);
+        ctx.quadraticCurveTo(cdx + cdw/2, cdy + cdh/2, cdx + cdw/2 - 1, cdy + cdh/2);
+        ctx.lineTo(cdx - cdw/2 + 1, cdy + cdh/2);
+        ctx.quadraticCurveTo(cdx - cdw/2, cdy + cdh/2, cdx - cdw/2, cdy + cdh/2 - 2);
+        ctx.lineTo(cdx - cdw/2, cdy - cdh/2 + 2);
+        ctx.quadraticCurveTo(cdx - cdw/2, cdy - cdh/2, cdx - cdw/2 + 1, cdy - cdh/2);
+        ctx.fill();
+        // Windshield
+        ctx.fillStyle = 'rgba(40,60,80,0.7)';
+        ctx.fillRect(cdx - cdw*0.35, cdy - cdh/2 + 2, cdw*0.7, cdh*0.14);
+        // Roof panel
+        ctx.fillStyle = '#222';
+        ctx.fillRect(cdx - cdw*0.3, cdy - cdh*0.12, cdw*0.6, cdh*0.28);
+        // Rear windshield
+        ctx.fillStyle = 'rgba(40,60,80,0.6)';
+        ctx.fillRect(cdx - cdw*0.28, cdy + cdh*0.2, cdw*0.56, cdh*0.1);
+        // Chrome trim
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(cdx - cdw/2 + 1, cdy - cdh*0.05); ctx.lineTo(cdx + cdw/2 - 1, cdy - cdh*0.05); ctx.stroke();
+        // Chrome grille (front)
+        ctx.fillStyle = '#666';
+        ctx.fillRect(cdx - cdw*0.25, cdy - cdh/2 + 1, cdw*0.5, 1);
+        // Headlights
+        ctx.fillStyle = '#ffe';
+        ctx.fillRect(cdx - cdw/2 + 1, cdy - cdh/2 + 1, cdw*0.12, 1.5);
+        ctx.fillRect(cdx + cdw/2 - cdw*0.12 - 1, cdy - cdh/2 + 1, cdw*0.12, 1.5);
+        // Tail lights
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(cdx - cdw/2 + 1, cdy + cdh/2 - 2, cdw*0.18, 1.5);
+        ctx.fillRect(cdx + cdw/2 - cdw*0.18 - 1, cdy + cdh/2 - 2, cdw*0.18, 1.5);
+    }
+
+    // === WHITE COMPACT CARGO VAN (spot 10) ===
     const vanSpot = 10;
     const vanCx = wx + 8 + (vanSpot + 0.3) * spotW;
     const vanCy = lotTop + lotH * 0.48;
-    const vanW = spotW * 0.8;
-    const vanH = lotH * 0.85;
-    ctx.fillStyle = '#e8e0d0';
+    const vanW = spotW * 0.82;
+    const vanH = lotH * 0.88;
+    // Van body — white, boxy
+    ctx.fillStyle = '#f0ece4';
     ctx.fillRect(vanCx - vanW/2, vanCy - vanH/2, vanW, vanH);
-    ctx.fillStyle = '#c8c0b0';
-    ctx.fillRect(vanCx - vanW*0.35, vanCy - vanH/2 + 2, vanW*0.7, vanH*0.12);
-    ctx.fillStyle = '#d0c8b8';
-    ctx.fillRect(vanCx - vanW*0.25, vanCy - vanH*0.1, vanW*0.5, vanH*0.25);
-    // Orange side stripe
-    ctx.fillStyle = '#f39c12';
-    ctx.fillRect(vanCx - vanW/2 + 1, vanCy + 1, vanW - 2, 2);
+    // Windshield (narrow, cab front)
+    ctx.fillStyle = 'rgba(100,140,180,0.5)';
+    ctx.fillRect(vanCx - vanW*0.35, vanCy - vanH/2 + 2, vanW*0.7, vanH*0.1);
+    // Cab roof (smaller than cargo area)
+    ctx.fillStyle = '#e0dcd0';
+    ctx.fillRect(vanCx - vanW*0.3, vanCy - vanH*0.3, vanW*0.6, vanH*0.15);
+    // Cargo area (solid, no rear window)
+    ctx.fillStyle = '#e8e4d8';
+    ctx.fillRect(vanCx - vanW*0.4, vanCy, vanW*0.8, vanH*0.4);
+    // Side panel line
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(vanCx - vanW/2 + 1, vanCy - vanH*0.1); ctx.lineTo(vanCx + vanW/2 - 1, vanCy - vanH*0.1); ctx.stroke();
+    // Rear doors (double)
+    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(vanCx, vanCy + vanH*0.1); ctx.lineTo(vanCx, vanCy + vanH/2 - 1); ctx.stroke();
+    // Tail lights
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(vanCx - vanW/2 + 1, vanCy + vanH/2 - 2, vanW*0.12, 2);
+    ctx.fillRect(vanCx + vanW/2 - vanW*0.12 - 1, vanCy + vanH/2 - 2, vanW*0.12, 2);
 
     ctx.restore();
 
@@ -2343,19 +2565,45 @@ function drawHandWheelValve(pipeX, pipeY, npc) {
         valveAngle = Math.sin(t / 300) * 0.2 * stressPct;
     }
 
-    // Valve bonnet (connecting housing bolted to pipe)
-    ctx.fillStyle = '#666';
-    ctx.fillRect(vx - 5, vy - 5, 10, 10);
+    // === Pipe flanges — valve is bolted inline on the pipe ===
+    // Upper flange (above valve)
     ctx.fillStyle = '#777';
-    ctx.fillRect(vx - 7, vy - 3, 14, 6);
+    ctx.fillRect(vx - 10, vy - 14, 20, 4);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(vx - 10, vy - 14, 20, 1.5);
+    // Upper flange bolts
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(vx - 7, vy - 12, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(vx + 7, vy - 12, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Lower flange (below valve)
+    ctx.fillStyle = '#777';
+    ctx.fillRect(vx - 10, vy + 10, 20, 4);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(vx - 10, vy + 10, 20, 1.5);
+    // Lower flange bolts
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(vx - 7, vy + 12, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(vx + 7, vy + 12, 1.5, 0, Math.PI * 2); ctx.fill();
 
-    // Valve stem extending to the right (perpendicular to vertical pipe)
+    // Valve body (gate valve housing mounted on pipe)
+    ctx.fillStyle = '#666';
+    ctx.fillRect(vx - 8, vy - 8, 16, 16);
+    ctx.fillStyle = '#777';
+    ctx.fillRect(vx - 9, vy - 4, 18, 8);
+    // Body highlight
+    ctx.fillStyle = '#888';
+    ctx.fillRect(vx - 6, vy - 6, 12, 3);
+
+    // Valve stem extending to the right (perpendicular to pipe)
     const stemLen = 12;
     ctx.fillStyle = '#666';
-    ctx.fillRect(vx + 5, vy - 2, stemLen, 4);
+    ctx.fillRect(vx + 7, vy - 2, stemLen, 4);
+    // Stem packing gland
+    ctx.fillStyle = '#777';
+    ctx.fillRect(vx + 6, vy - 4, 5, 8);
 
     // Wheel (offset to the right of the pipe)
-    const wheelCx = vx + 5 + stemLen + valveR;
+    const wheelCx = vx + 7 + stemLen + valveR;
     ctx.save();
     ctx.translate(wheelCx, vy);
     ctx.rotate(valveAngle);
@@ -3716,8 +3964,8 @@ function drawLevel5PipeRoom() {
     // Right wall gasket BEFORE pipes so gasket renders behind
     drawPipeRoomRightWall(265);
 
-    // Single wide parking lot bay window — the shared "work" view from the pipe room
-    drawParkingLotWindow(260, 140, 380, 90);
+    // Single wide parking lot bay window — behind pipe managers, not behind pipes
+    drawParkingLotWindow(260, 275, 380, 95);
 
     for(let npc of level5.npcPipes) {
         const pipeY = 240;
@@ -4397,18 +4645,46 @@ function drawOfficeRoom(officeName) {
         ctx.save(); ctx.translate(tx + 16, ty - 12); ctx.rotate(0.6);
         ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-8, 0); ctx.lineTo(0, 10); ctx.lineTo(5, 0); ctx.closePath(); ctx.fill();
         ctx.restore();
-        // Birds
+        // Birds — fly out of tree and back in
         for(let b = 0; b < 4; b++) {
-            const bc = (t / (1800 + b * 600) + b * 2.1) % (Math.PI * 2);
-            if(Math.sin(bc) > -0.3) {
-                const bx = tx + Math.cos(bc * 1.3 + b) * 55;
-                const by = ty - 80 + Math.sin(bc * 0.8 + b * 1.5) * 30;
-                if(bx > wL + 10 && bx < wL + wW - 10 && by > wT + 5 && by < wBot - 10) {
-                    const wf = Math.sin(t / 80 + b * 3) * 6;
+            const birdPeriod = 4000 + b * 1500;
+            const birdCycle = ((t + b * 1700) % birdPeriod) / birdPeriod;
+            let bx, by, isFlying;
+            if(birdCycle < 0.15) {
+                bx = tx + (b - 1.5) * 18;
+                by = ty - 70 + b * 8;
+                isFlying = false;
+            } else if(birdCycle < 0.45) {
+                const flyPct = (birdCycle - 0.15) / 0.3;
+                bx = tx + (b - 1.5) * 18 + flyPct * (b < 2 ? -70 : 70);
+                by = ty - 75 - flyPct * 30 + Math.sin(flyPct * Math.PI) * 18;
+                isFlying = true;
+            } else if(birdCycle < 0.55) {
+                const soarPct = (birdCycle - 0.45) / 0.1;
+                bx = tx + (b < 2 ? -70 : 70) + (b - 1.5) * 18 + soarPct * (b < 2 ? -10 : 10);
+                by = ty - 105 + Math.sin(soarPct * Math.PI) * 6;
+                isFlying = true;
+            } else if(birdCycle < 0.85) {
+                const retPct = (birdCycle - 0.55) / 0.3;
+                const farX = tx + (b < 2 ? -80 : 80) + (b - 1.5) * 18;
+                bx = farX + (tx + (b - 1.5) * 18 - farX) * retPct;
+                by = ty - 105 + retPct * 35 + Math.sin(retPct * Math.PI) * 12;
+                isFlying = true;
+            } else {
+                bx = tx + (b - 1.5) * 18;
+                by = ty - 70 + b * 8;
+                isFlying = false;
+            }
+            if(bx > wL + 10 && bx < wL + wW - 10 && by > wT + 5 && by < wBot - 10) {
+                if(isFlying) {
+                    const wf = Math.sin(t / 60 + b * 3) * 7;
                     ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
-                    ctx.beginPath(); ctx.moveTo(bx-6,by+wf*0.5); ctx.lineTo(bx,by); ctx.lineTo(bx+6,by+wf*0.5); ctx.stroke();
-                    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(bx, by+1, 2, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(bx-7,by+wf*0.5); ctx.lineTo(bx,by); ctx.lineTo(bx+7,by+wf*0.5); ctx.stroke();
+                } else {
+                    ctx.strokeStyle = '#222'; ctx.lineWidth = 1.2;
+                    ctx.beginPath(); ctx.moveTo(bx-3,by-1); ctx.lineTo(bx,by); ctx.lineTo(bx+3,by-1); ctx.stroke();
                 }
+                ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(bx, by+1, 2, 0, Math.PI*2); ctx.fill();
             }
         }
     } else if(colorIndex === 1) {
@@ -4433,6 +4709,17 @@ function drawOfficeRoom(officeName) {
             ctx.save();
             ctx.translate(mx, my);
             ctx.scale(mf, 1);
+            // Grass collection bag (mounted behind mower, drawn first)
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-26, -18, 12, 22);
+            ctx.fillStyle = '#2a5a2a';
+            ctx.fillRect(-24, -16, 8, 18);
+            // Bag mesh texture
+            ctx.strokeStyle = '#3a6a3a';
+            ctx.lineWidth = 0.7;
+            ctx.beginPath(); ctx.moveTo(-24, -12); ctx.lineTo(-16, -12); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-24, -6); ctx.lineTo(-16, -6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-24, 0); ctx.lineTo(-16, 0); ctx.stroke();
             // Body
             ctx.fillStyle = '#2e7d32'; ctx.fillRect(-16, -16, 32, 20);
             // Hood (front)
@@ -9997,8 +10284,8 @@ function drawScene() {
     // Right wall gasket + boss door BEFORE pipes so gasket renders behind
     drawPipeRoomRightWall(265);
 
-    // Single wide parking lot bay window — the shared "work" view from the pipe room
-    drawParkingLotWindow(260, 140, 380, 90);
+    // Single wide parking lot bay window — behind pipe managers, not behind pipes
+    drawParkingLotWindow(260, 275, 380, 95);
 
     for(let npc of npcs) {
         const pipeY = 240;
