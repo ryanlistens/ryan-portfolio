@@ -952,7 +952,8 @@ function buildEnvironment(sceneData, palette) {
 }
 
 function makeBuilding(x, z, height, palette) {
-  const mesh = new THREE.Mesh(
+  const building = new THREE.Group();
+  const body = new THREE.Mesh(
     new THREE.BoxGeometry(2.7, height, 2.4),
     new THREE.MeshStandardMaterial({
       color: palette.building,
@@ -960,32 +961,81 @@ function makeBuilding(x, z, height, palette) {
       metalness: 0.03
     })
   );
-  mesh.position.set(x, height / 2, z);
-  return mesh;
+  body.position.set(x, height / 2, z);
+  building.add(body);
+
+  // Lit windows for visual depth
+  const windowMat = new THREE.MeshStandardMaterial({
+    color: palette.trim,
+    emissive: palette.trim,
+    emissiveIntensity: 0.3,
+    roughness: 0.4
+  });
+  const rows = Math.max(1, Math.floor(height / 1.1));
+  const cols = 2;
+  const facing = x < 0 ? 1 : -1;
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      if (Math.random() < 0.35) {
+        continue;
+      }
+      const win = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.4, 0.5),
+        windowMat
+      );
+      const wy = 0.9 + row * 1.1;
+      const wx = x + facing * 1.36;
+      const wz = z - 0.5 + col * 1.0;
+      win.position.set(wx, wy, wz);
+      win.rotation.y = facing > 0 ? 0 : Math.PI;
+      building.add(win);
+    }
+  }
+
+  // Rooftop ledge
+  const ledge = new THREE.Mesh(
+    new THREE.BoxGeometry(2.85, 0.1, 2.55),
+    new THREE.MeshStandardMaterial({
+      color: palette.building,
+      roughness: 0.85,
+      metalness: 0.06
+    })
+  );
+  ledge.position.set(x, height + 0.05, z);
+  building.add(ledge);
+
+  return building;
 }
 
 function createRainField(colorHex) {
-  const count = 740;
-  const positions = new Float32Array(count * 3);
+  const count = 600;
+  const positions = new Float32Array(count * 6);
   for (let i = 0; i < count; i += 1) {
-    const idx = i * 3;
-    positions[idx] = (Math.random() - 0.5) * 28;
-    positions[idx + 1] = 0.6 + Math.random() * 12.8;
-    positions[idx + 2] = (Math.random() - 0.5) * 28;
+    const idx = i * 6;
+    const x = (Math.random() - 0.5) * 28;
+    const y = 0.6 + Math.random() * 12.8;
+    const z = (Math.random() - 0.5) * 28;
+    // Top of rain streak
+    positions[idx] = x;
+    positions[idx + 1] = y;
+    positions[idx + 2] = z;
+    // Bottom of rain streak (slightly below)
+    positions[idx + 3] = x + (Math.random() - 0.5) * 0.02;
+    positions[idx + 4] = y - 0.18 - Math.random() * 0.12;
+    positions[idx + 5] = z + (Math.random() - 0.5) * 0.02;
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({
+  const material = new THREE.LineBasicMaterial({
     color: colorHex,
-    size: 0.07,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.35,
     depthWrite: false
   });
-  const points = new THREE.Points(geometry, material);
-  groups.fx.add(points);
-  state.rainPoints = points;
+  const lines = new THREE.LineSegments(geometry, material);
+  groups.fx.add(lines);
+  state.rainPoints = lines;
 }
 
 function placeCharacters(sceneData) {
@@ -1015,26 +1065,57 @@ function normalizePosition(position, index) {
 
 function createActorMesh(color, isPlayer) {
   const actor = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.24, 0.28, 1.05, 12),
-    new THREE.MeshStandardMaterial({
-      color: new THREE.Color(color),
-      roughness: 0.42,
-      metalness: 0.15
-    })
-  );
-  body.position.y = 0.6;
+  const actorColor = new THREE.Color(color);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: actorColor,
+    roughness: 0.42,
+    metalness: 0.15
+  });
 
+  // Torso (jacket/coat)
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22, 0.26, 0.6, 12),
+    bodyMat
+  );
+  body.position.y = 0.72;
+
+  // Legs (darker pants)
+  const legColor = actorColor.clone().multiplyScalar(0.5);
+  const legs = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.2, 0.5, 10),
+    new THREE.MeshStandardMaterial({ color: legColor, roughness: 0.5, metalness: 0.08 })
+  );
+  legs.position.y = 0.28;
+
+  // Shoulders
+  const shoulderL = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09, 8, 6),
+    bodyMat
+  );
+  shoulderL.position.set(-0.24, 0.98, 0);
+  const shoulderR = shoulderL.clone();
+  shoulderR.position.set(0.24, 0.98, 0);
+
+  // Head
   const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 12, 10),
+    new THREE.SphereGeometry(0.2, 12, 10),
     new THREE.MeshStandardMaterial({
       color: 0xf2dfcb,
       roughness: 0.4,
       metalness: 0.02
     })
   );
-  head.position.y = 1.3;
-  actor.add(body, head);
+  head.position.y = 1.22;
+  head.scale.set(1, 1.08, 0.92);
+
+  // Hair (short cap)
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.21, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 })
+  );
+  hair.position.y = 1.26;
+
+  actor.add(body, legs, shoulderL, shoulderR, head, hair);
 
   if (isPlayer) {
     const ring = new THREE.Mesh(
@@ -1164,10 +1245,22 @@ function updateRain(deltaSec) {
   const geometry = state.rainPoints.geometry;
   const attr = geometry.getAttribute("position");
   const array = attr.array;
-  for (let i = 0; i < array.length; i += 3) {
-    array[i + 1] -= (5.8 + Math.random() * 0.8) * deltaSec * state.controls.pace;
-    if (array[i + 1] < 0.2) {
-      array[i + 1] = 11 + Math.random() * 2.7;
+  const fallSpeed = (5.8 + Math.random() * 0.8) * deltaSec * state.controls.pace;
+  // Each rain streak is a pair of vertices (top then bottom)
+  for (let i = 0; i < array.length; i += 6) {
+    array[i + 1] -= fallSpeed;
+    array[i + 4] -= fallSpeed;
+    if (array[i + 4] < 0.2) {
+      const newY = 11 + Math.random() * 2.7;
+      const streakLen = 0.18 + Math.random() * 0.12;
+      array[i + 1] = newY;
+      array[i + 4] = newY - streakLen;
+      const newX = (Math.random() - 0.5) * 28;
+      const newZ = (Math.random() - 0.5) * 28;
+      array[i] = newX;
+      array[i + 2] = newZ;
+      array[i + 3] = newX + (Math.random() - 0.5) * 0.02;
+      array[i + 5] = newZ + (Math.random() - 0.5) * 0.02;
     }
   }
   attr.needsUpdate = true;

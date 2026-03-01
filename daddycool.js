@@ -152,8 +152,8 @@ function buildPlayerMesh() {
   const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.03), suit);
   lapelL.position.set(-0.08, 0.96, 0.1); lapelL.rotation.z = 0.15;
   const lapelR = lapelL.clone(); lapelR.position.set(0.08, 0.96, 0.1); lapelR.rotation.z = -0.15;
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.04, 10), shirt);
-  collar.position.set(0, 1.09, 0.04);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.06, 10), shirt);
+  collar.position.set(0, 1.09, 0.05);
 
   // Neck and head with proper jaw shape
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 10), skin);
@@ -679,21 +679,41 @@ function buildNightclubGeometry() {
   });
 
   for (let i = 0; i < 5; i++) {
-    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 10),
+    const sx = -7.2 + i * 0.9;
+    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.05, 12),
       new THREE.MeshStandardMaterial({ color: 0x6a1a1a, roughness: 0.5 }));
-    stool.position.set(-7.2 + i * 0.9, 0.62, 7.0);
+    stool.position.set(sx, 0.62, 7.0);
     envGroup.add(stool);
     const stoolLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.6, 6),
       new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.4 }));
-    stoolLeg.position.set(-7.2 + i * 0.9, 0.32, 7.0);
+    stoolLeg.position.set(sx, 0.32, 7.0);
     envGroup.add(stoolLeg);
+    // Footrest ring
+    const footrest = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 6, 16),
+      new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.5, roughness: 0.25 }));
+    footrest.rotation.x = Math.PI / 2;
+    footrest.position.set(sx, 0.22, 7.0);
+    envGroup.add(footrest);
+    // Low curved backrest
+    const backrest = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.18, 10, 1, false, Math.PI * 0.75, Math.PI * 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x6a1a1a, roughness: 0.5 }));
+    backrest.position.set(sx, 0.73, 7.14);
+    envGroup.add(backrest);
   }
 
   for (let i = 0; i < 8; i++) {
-    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.2 + Math.random() * 0.12, 6),
-      new THREE.MeshStandardMaterial({ color: [0x2a5a1a, 0x5a2a1a, 0x1a2a5a, 0x8a6a2a][i % 4], roughness: 0.15, metalness: 0.1 }));
-    bottle.position.set(-9.4 + i * 0.45, 2.35, 9.3);
+    const bottleColor = [0x2a5a1a, 0x5a2a1a, 0x1a2a5a, 0x8a6a2a][i % 4];
+    const bottleH = 0.28 + Math.random() * 0.14;
+    const bx = -9.4 + i * 0.45;
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, bottleH, 8),
+      new THREE.MeshStandardMaterial({ color: bottleColor, roughness: 0.12, metalness: 0.12 }));
+    bottle.position.set(bx, 2.35 + bottleH * 0.1, 9.3);
     envGroup.add(bottle);
+    // Bottle neck
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.035, 0.1, 6),
+      new THREE.MeshStandardMaterial({ color: bottleColor, roughness: 0.12, metalness: 0.12 }));
+    neck.position.set(bx, 2.35 + bottleH * 0.1 + bottleH / 2 + 0.05, 9.3);
+    envGroup.add(neck);
   }
 
   const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.3, 6),
@@ -873,10 +893,10 @@ function buildNightclubCharacters() {
   buckle.position.set(0, 0.47, 0.19);
   singer.add(buckle);
   // Bare-chest skin overlays (shirtless look over the white outfit base)
-  const chestSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.145, 0.30, 10),
+  const chestSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.15, 0.30, 10),
     new THREE.MeshStandardMaterial({ color: singerSkin, roughness: 0.42 }));
   chestSkin.position.set(0, 0.76, 0);
-  const abSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.145, 0.17, 10),
+  const abSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.17, 10),
     new THREE.MeshStandardMaterial({ color: singerSkin, roughness: 0.42 }));
   abSkin.position.set(0, 0.56, 0);
   singer.add(chestSkin, abSkin);
@@ -1207,12 +1227,17 @@ function loadBathroomScene() {
 
   // Sink counter with faucet
   envGroup.add(makeBox(-1.1, 0.45, 4.8, 5.8, 0.9, 1.2, 0x2e333d, 0.6));
-  const sinkBasin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52),
-    new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.25, metalness: 0.15 }));
+  const sinkBasinMat = new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.25, metalness: 0.15 });
+  const faucetMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 });
+  const sinkBasin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52), sinkBasinMat);
   sinkBasin.position.set(-0.5, 0.92, 4.82); envGroup.add(sinkBasin);
-  const faucet = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7),
-    new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 }));
+  const faucet = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7), faucetMat);
   faucet.position.set(-0.5, 1.06, 4.69); envGroup.add(faucet);
+  // Second sink basin
+  const sinkBasin2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52), sinkBasinMat);
+  sinkBasin2.position.set(-2.2, 0.92, 4.82); envGroup.add(sinkBasin2);
+  const faucet2 = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7), faucetMat);
+  faucet2.position.set(-2.2, 1.06, 4.69); envGroup.add(faucet2);
 
   // Mirror with slight tarnished reflection — cracked in corner
   const mirror = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 1.6),
@@ -1493,6 +1518,14 @@ function loadMotelRoom() {
   envGroup.add(makeBox(-2.5, 0.35, -1.0, 2.2, 0.7, 3.0, 0x444038, 0.8));
   envGroup.add(makeBox(-2.5, 0.72, -1.0, 2.0, 0.12, 2.8, 0xc8bca0, 0.85));
   envGroup.add(makeBox(-2.5, 0.82, -2.2, 1.6, 0.14, 0.5, 0xe8dcc0, 0.8));
+  // Pillow
+  const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.35),
+    new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 0.85 }));
+  pillow.position.set(-3.1, 0.84, -0.5);
+  envGroup.add(pillow);
+  const pillow2 = pillow.clone();
+  pillow2.position.set(-3.1, 0.84, 0.2);
+  envGroup.add(pillow2);
   envGroup.add(makeBox(-3.5, 1.2, -1.0, 0.15, 1.0, 3.0, 0x3a3020, 0.6));
 
   envGroup.add(makeBox(-2.8, 0.35, 0.9, 0.7, 0.7, 0.5, 0x3a3020, 0.6));
@@ -1509,14 +1542,24 @@ function loadMotelRoom() {
   envGroup.add(tv);
   const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({ color: 0x2a3a4a }));
   tvScreen.position.set(1.8, 0.82, -2.94); envGroup.add(tvScreen);
+  // Rabbit ear antennas
+  const antennaMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.5, roughness: 0.3 });
+  const antennaL = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.4, 5), antennaMat);
+  antennaL.position.set(1.65, 1.37, -3.2); antennaL.rotation.z = 0.35;
+  envGroup.add(antennaL);
+  const antennaR = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.4, 5), antennaMat);
+  antennaR.position.set(1.95, 1.37, -3.2); antennaR.rotation.z = -0.35;
+  envGroup.add(antennaR);
+  // Antenna base knob
+  envGroup.add(makeBox(1.8, 1.2, -3.2, 0.1, 0.06, 0.1, 0x333333, 0.4));
   envGroup.add(makeBox(2.8, 0.45, -3.2, 0.7, 0.9, 0.6, 0xd8d0c0, 0.4));
 
   const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.3, 8),
     new THREE.MeshStandardMaterial({ color: 0x887044, roughness: 0.4 }));
   lamp.position.set(-2.5, 0.85, 1.1); envGroup.add(lamp);
-  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.16, 8),
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 0.2, 10),
     new THREE.MeshStandardMaterial({ color: 0xd4b070, roughness: 0.7 }));
-  shade.position.set(-2.5, 1.06, 1.1); envGroup.add(shade);
+  shade.position.set(-2.5, 1.08, 1.1); envGroup.add(shade);
   const lampGlow = new THREE.PointLight(0xffcc88, 0.6, 6, 2);
   lampGlow.position.set(-2.5, 1.2, 1.1); fxGroup.add(lampGlow);
   // Overhead room fill light
@@ -2521,14 +2564,14 @@ function makePerson(skin, outfit, female) {
     const shoulderL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), om);
     shoulderL.position.set(-0.17, 0.84, 0);
     const shoulderR = shoulderL.clone(); shoulderR.position.set(0.17, 0.84, 0);
-    // Hair - long and flowing
-    const hairBack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.06, 0.45, 12), hm);
-    hairBack.position.set(0, 0.9, -0.04);
-    const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.138, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hm);
+    // Hair - long and flowing with more volume
+    const hairBack = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.08, 0.48, 12), hm);
+    hairBack.position.set(0, 0.88, -0.05);
+    const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.145, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hm);
     hairTop.position.y = 1.1;
-    const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.015, 0.2, 6), hm);
-    hairSideL.position.set(-0.1, 0.98, 0.02);
-    const hairSideR = hairSideL.clone(); hairSideR.position.set(0.1, 0.98, 0.02);
+    const hairSideL = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.02, 0.24, 6), hm);
+    hairSideL.position.set(-0.11, 0.96, 0.02);
+    const hairSideR = hairSideL.clone(); hairSideR.position.set(0.11, 0.96, 0.02);
     // Arms (bare skin) — hang at sides; forearm inward from elbow (no zigzag)
     const la = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.24, 8), sm);
     la.position.set(-0.17, 0.72, 0); la.rotation.z = 0.10;
@@ -2583,7 +2626,11 @@ function makePerson(skin, outfit, female) {
     const rt = lt.clone(); rt.position.set(0.07, 0.30, 0); rt.rotation.z = 0.06;
     const rs = ls.clone(); rs.position.set(0.072, 0.09, 0); rs.rotation.z = 0.03;
     const rsh = lsh.clone(); rsh.position.set(0.072, 0.0, 0.01);
-    root.add(chest, abdomen, pelvis, shoulderL, shoulderR, hairCap);
+    // Shirt collar peeking above suit
+    const collarM = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.04, 8),
+      new THREE.MeshStandardMaterial({ color: lightenColor(outfit, 1.6), roughness: 0.5 }));
+    collarM.position.y = 0.91;
+    root.add(chest, abdomen, pelvis, shoulderL, shoulderR, hairCap, collarM);
     root.add(la, lfa, lh, ra, rfa, rh, lt, ls, lsh, rt, rs, rsh);
     root.add(...faceParts);
   }
@@ -2594,6 +2641,13 @@ function darkenColor(hex, factor) {
   const r = ((hex >> 16) & 0xff) * factor;
   const g = ((hex >> 8) & 0xff) * factor;
   const b = (hex & 0xff) * factor;
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+}
+
+function lightenColor(hex, factor) {
+  const r = Math.min(255, ((hex >> 16) & 0xff) * factor);
+  const g = Math.min(255, ((hex >> 8) & 0xff) * factor);
+  const b = Math.min(255, (hex & 0xff) * factor);
   return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }
 
