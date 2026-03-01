@@ -764,10 +764,18 @@ function buildNightclubGeometry() {
   });
 
   for (let i = 0; i < 8; i++) {
-    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.2 + Math.random() * 0.12, 6),
-      new THREE.MeshStandardMaterial({ color: [0x2a5a1a, 0x5a2a1a, 0x1a2a5a, 0x8a6a2a][i % 4], roughness: 0.15, metalness: 0.1 }));
-    bottle.position.set(-9.4 + i * 0.45, 2.35, 9.3);
+    const bottleColor = [0x2a5a1a, 0x5a2a1a, 0x1a2a5a, 0x8a6a2a][i % 4];
+    const bottleH = 0.28 + Math.random() * 0.14;
+    const bx = -9.4 + i * 0.45;
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, bottleH, 8),
+      new THREE.MeshStandardMaterial({ color: bottleColor, roughness: 0.12, metalness: 0.12 }));
+    bottle.position.set(bx, 2.35 + bottleH * 0.1, 9.3);
     envGroup.add(bottle);
+    // Bottle neck
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.035, 0.1, 6),
+      new THREE.MeshStandardMaterial({ color: bottleColor, roughness: 0.12, metalness: 0.12 }));
+    neck.position.set(bx, 2.35 + bottleH * 0.1 + bottleH / 2 + 0.05, 9.3);
+    envGroup.add(neck);
   }
 
   const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.3, 6),
@@ -947,10 +955,10 @@ function buildNightclubCharacters() {
   buckle.position.set(0, 0.47, 0.19);
   singer.add(buckle);
   // Bare-chest skin overlays (shirtless look over the white outfit base)
-  const chestSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.145, 0.30, 10),
+  const chestSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.15, 0.30, 10),
     new THREE.MeshStandardMaterial({ color: singerSkin, roughness: 0.42 }));
   chestSkin.position.set(0, 0.76, 0);
-  const abSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.145, 0.17, 10),
+  const abSkin = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.17, 10),
     new THREE.MeshStandardMaterial({ color: singerSkin, roughness: 0.42 }));
   abSkin.position.set(0, 0.56, 0);
   singer.add(chestSkin, abSkin);
@@ -1388,12 +1396,17 @@ function loadBathroomScene() {
 
   // Sink counter with faucet
   envGroup.add(makeBox(-1.1, 0.45, 4.8, 5.8, 0.9, 1.2, 0x2e333d, 0.6));
-  const sinkBasin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52),
-    new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.25, metalness: 0.15 }));
+  const sinkBasinMat = new THREE.MeshStandardMaterial({ color: 0xd0d8e0, roughness: 0.25, metalness: 0.15 });
+  const faucetMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 });
+  const sinkBasin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52), sinkBasinMat);
   sinkBasin.position.set(-0.5, 0.92, 4.82); envGroup.add(sinkBasin);
-  const faucet = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7),
-    new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.7, roughness: 0.2 }));
+  const faucet = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7), faucetMat);
   faucet.position.set(-0.5, 1.06, 4.69); envGroup.add(faucet);
+  // Second sink basin
+  const sinkBasin2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.52), sinkBasinMat);
+  sinkBasin2.position.set(-2.2, 0.92, 4.82); envGroup.add(sinkBasin2);
+  const faucet2 = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 7), faucetMat);
+  faucet2.position.set(-2.2, 1.06, 4.69); envGroup.add(faucet2);
 
   // Mirror on back wall — flush against wall (z≈5.82), faces player
   const mirror = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 1.6),
@@ -1699,6 +1712,14 @@ function loadMotelRoom() {
   envGroup.add(makeBox(-2.5, 0.35, -1.0, 2.2, 0.7, 3.0, 0x444038, 0.8));
   envGroup.add(makeBox(-2.5, 0.72, -1.0, 2.0, 0.12, 2.8, 0xc8bca0, 0.85));
   envGroup.add(makeBox(-2.5, 0.82, -2.2, 1.6, 0.14, 0.5, 0xe8dcc0, 0.8));
+  // Pillow
+  const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.35),
+    new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 0.85 }));
+  pillow.position.set(-3.1, 0.84, -0.5);
+  envGroup.add(pillow);
+  const pillow2 = pillow.clone();
+  pillow2.position.set(-3.1, 0.84, 0.2);
+  envGroup.add(pillow2);
   envGroup.add(makeBox(-3.5, 1.2, -1.0, 0.15, 1.0, 3.0, 0x3a3020, 0.6));
 
   envGroup.add(makeBox(-2.8, 0.35, 0.9, 0.7, 0.7, 0.5, 0x3a3020, 0.6));
@@ -1715,14 +1736,24 @@ function loadMotelRoom() {
   envGroup.add(tv);
   const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({ color: 0x2a3a4a }));
   tvScreen.position.set(1.8, 0.82, -2.94); envGroup.add(tvScreen);
+  // Rabbit ear antennas
+  const antennaMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.5, roughness: 0.3 });
+  const antennaL = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.4, 5), antennaMat);
+  antennaL.position.set(1.65, 1.37, -3.2); antennaL.rotation.z = 0.35;
+  envGroup.add(antennaL);
+  const antennaR = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.4, 5), antennaMat);
+  antennaR.position.set(1.95, 1.37, -3.2); antennaR.rotation.z = -0.35;
+  envGroup.add(antennaR);
+  // Antenna base knob
+  envGroup.add(makeBox(1.8, 1.2, -3.2, 0.1, 0.06, 0.1, 0x333333, 0.4));
   envGroup.add(makeBox(2.8, 0.45, -3.2, 0.7, 0.9, 0.6, 0xd8d0c0, 0.4));
 
   const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.3, 8),
     new THREE.MeshStandardMaterial({ color: 0x887044, roughness: 0.4 }));
   lamp.position.set(-2.5, 0.85, 1.1); envGroup.add(lamp);
-  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.16, 8),
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 0.2, 10),
     new THREE.MeshStandardMaterial({ color: 0xd4b070, roughness: 0.7 }));
-  shade.position.set(-2.5, 1.06, 1.1); envGroup.add(shade);
+  shade.position.set(-2.5, 1.08, 1.1); envGroup.add(shade);
   const lampGlow = new THREE.PointLight(0xffcc88, 0.6, 6, 2);
   lampGlow.position.set(-2.5, 1.2, 1.1); fxGroup.add(lampGlow);
   // Overhead room fill light
@@ -3019,6 +3050,13 @@ function darkenColor(hex, factor) {
   const r = ((hex >> 16) & 0xff) * factor;
   const g = ((hex >> 8) & 0xff) * factor;
   const b = (hex & 0xff) * factor;
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+}
+
+function lightenColor(hex, factor) {
+  const r = Math.min(255, ((hex >> 16) & 0xff) * factor);
+  const g = Math.min(255, ((hex >> 8) & 0xff) * factor);
+  const b = Math.min(255, (hex & 0xff) * factor);
   return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }
 
