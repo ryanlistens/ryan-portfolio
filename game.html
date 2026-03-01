@@ -1550,9 +1550,75 @@ function drawNPC(npc) {
     ctx.ellipse(npc.x, 400 - 2, 10, 3, 0, 0, Math.PI * 2); // always at floor
     ctx.fill();
 
+    // Draw wrench BEHIND the PM (on the pipe) before drawing sprite
+    if(npc.state === 'fixing') {
+        // Animate fix timer and trigger climb-down when done
+        if(npc.fixStartTime) {
+            npc.fixAnim += 0.02;
+            const fixElapsed = Date.now() - npc.fixStartTime;
+            if(fixElapsed >= 2000) {
+                cracks = cracks.filter(c => c.npc !== npc);
+                npc.state = 'climbing_down';
+                npc.climbStartTime = Date.now();
+                npc.climbStartY = npc.y;
+                npc.climbTargetY = npc.groundY || 368;
+            }
+        }
+        // Pipe wrench clamped on the pipe behind the PM — only handle sticks out
+        const wrenchX = npc.x;
+        const wrenchY = y - 2;
+        const rock = Math.sin(npc.fixAnim * 4) * 0.18;
+        ctx.save();
+        ctx.translate(wrenchX, wrenchY);
+        ctx.rotate(rock);
+        // Handle sticking out to the right (visible past PM's body)
+        ctx.fillStyle = '#cc3322';
+        ctx.beginPath();
+        ctx.moveTo(4, -3.5);
+        ctx.lineTo(48, -2.5);
+        ctx.lineTo(50, 0);
+        ctx.lineTo(48, 2.5);
+        ctx.lineTo(4, 3.5);
+        ctx.closePath();
+        ctx.fill();
+        // Grip ridges
+        ctx.strokeStyle = '#992211';
+        ctx.lineWidth = 0.8;
+        for(let r = 0; r < 9; r++) {
+            const rx = 8 + r * 4.2;
+            ctx.beginPath();
+            ctx.moveTo(rx, -3);
+            ctx.lineTo(rx, 3);
+            ctx.stroke();
+        }
+        ctx.fillStyle = '#dd4433';
+        ctx.fillRect(8, -2.5, 38, 1.5);
+        // End cap
+        ctx.fillStyle = '#992211';
+        ctx.fillRect(47, -3, 4, 6);
+        // Adjustment nut (visible at the head, where handle meets pipe)
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(2, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 0.8;
+        for(let k = 0; k < 6; k++) {
+            const ka = (k / 6) * Math.PI * 2 + npc.fixAnim * 3;
+            ctx.beginPath();
+            ctx.moveTo(2 + Math.cos(ka) * 2, Math.sin(ka) * 2);
+            ctx.lineTo(2 + Math.cos(ka) * 4, Math.sin(ka) * 4);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     if(isClimbing || npc.state === 'fixing') {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
+        const isFix = npc.state === 'fixing';
+        // Torquing motion: arms rock side-to-side when fixing
+        const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
 
         // Torso (back view — jumpsuit)
         ctx.fillStyle = npc.color.hex;
@@ -1582,20 +1648,27 @@ function drawNPC(npc) {
         ctx.quadraticCurveTo(x, y - 14*s, x - 5*s, y - 13*s);
         ctx.fill();
 
-        // Arms reaching up to ladder rails — alternate up/down
-        ctx.fillStyle = npc.color.hex;
-        ctx.fillRect(x - 8*s, y - 5*s - climbCycle, 2*s, 8*s); // left arm
-        ctx.fillRect(x + 6*s, y - 5*s + climbCycle, 2*s, 8*s); // right arm
-        // Hands (skin color) gripping rungs
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 8*s, y - 6*s - climbCycle, 2*s, 3*s); // left hand
-        ctx.fillRect(x + 6*s, y - 6*s + climbCycle, 2*s, 3*s); // right hand
+        if(isFix) {
+            // Arms reaching forward toward pipe, rocking with torque
+            ctx.fillStyle = npc.color.hex;
+            ctx.fillRect(x - 7*s + torque, y - 4*s, 2*s, 7*s); // left arm
+            ctx.fillRect(x + 5*s + torque, y - 4*s, 2*s, 7*s); // right arm
+            // Hands disappear behind body (reaching into pipe)
+        } else {
+            // Climbing: arms alternate up/down on ladder
+            ctx.fillStyle = npc.color.hex;
+            ctx.fillRect(x - 8*s, y - 5*s - climbCycle, 2*s, 8*s);
+            ctx.fillRect(x + 6*s, y - 5*s + climbCycle, 2*s, 8*s);
+            ctx.fillStyle = '#f5c89a';
+            ctx.fillRect(x - 8*s, y - 6*s - climbCycle, 2*s, 3*s);
+            ctx.fillRect(x + 6*s, y - 6*s + climbCycle, 2*s, 3*s);
+        }
 
-        // Legs — opposite phase from arms (jumpsuit color)
+        // Legs (jumpsuit color)
         ctx.fillStyle = npc.color.hex;
-        ctx.fillRect(x - 4*s, y + 6*s + climbCycle, 4*s, 7*s);  // left leg
-        ctx.fillRect(x + s, y + 6*s - climbCycle, 4*s, 7*s);     // right leg
-        // Shoes on rungs
+        ctx.fillRect(x - 4*s, y + 6*s + climbCycle, 4*s, 7*s);
+        ctx.fillRect(x + s, y + 6*s - climbCycle, 4*s, 7*s);
+        // Shoes
         ctx.fillStyle = '#fff';
         ctx.fillRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3*s);
         ctx.fillRect(x + s, y + 13*s - climbCycle, 4*s, 3*s);
@@ -1676,144 +1749,6 @@ function drawNPC(npc) {
         ctx.fillText('!', x + 20, y - 24);
     }
 
-    if(npc.state === 'fixing') {
-        // Animate wrench rotation and trigger climb-down when done
-        if(npc.fixStartTime) {
-            npc.fixAnim += 0.02; // smooth rotation per frame
-            const fixElapsed = Date.now() - npc.fixStartTime;
-            if(fixElapsed >= 2000) {
-                // Fixing done — clear crack and start climbing down
-                cracks = cracks.filter(c => c.npc !== npc);
-                npc.state = 'climbing_down';
-                npc.climbStartTime = Date.now();
-                npc.climbStartY = npc.y;
-                npc.climbTargetY = npc.groundY || 368;
-            }
-        }
-        // Pipe wrench (Stillson wrench) — handle angled down-right, jaws grip pipe above
-        const wrenchX = npc.x;
-        const wrenchY = 205;
-        ctx.save();
-        ctx.translate(wrenchX, wrenchY);
-        // Rock back-and-forth while tightening
-        const rock = Math.sin(npc.fixAnim * 4) * 0.18;
-        ctx.rotate(rock);
-
-        // Whole wrench rotated so handle goes down-right at ~40°
-        ctx.rotate(0.65);
-
-        // === HANDLE — long, thick, red, tapered ===
-        ctx.fillStyle = '#cc3322';
-        ctx.beginPath();
-        ctx.moveTo(0, -4);
-        ctx.lineTo(48, -3);
-        ctx.lineTo(50, 0);
-        ctx.lineTo(48, 3);
-        ctx.lineTo(0, 4);
-        ctx.closePath();
-        ctx.fill();
-        // Grip ridges
-        ctx.strokeStyle = '#992211';
-        ctx.lineWidth = 0.8;
-        for(let r = 0; r < 9; r++) {
-            const rx = 8 + r * 4.2;
-            ctx.beginPath();
-            ctx.moveTo(rx, -3.2);
-            ctx.lineTo(rx, 3.2);
-            ctx.stroke();
-        }
-        // Handle highlight
-        ctx.fillStyle = '#dd4433';
-        ctx.fillRect(6, -3, 40, 1.5);
-        // End cap
-        ctx.fillStyle = '#992211';
-        ctx.fillRect(47, -3.5, 4, 7);
-
-        // === HEEL JAW (fixed) — straight extension up from handle head ===
-        // This jaw is integral to the handle body
-        ctx.fillStyle = '#888';
-        ctx.beginPath();
-        ctx.moveTo(-2, -4);
-        ctx.lineTo(-6, -4);
-        ctx.lineTo(-8, -22);
-        ctx.lineTo(-2, -22);
-        ctx.closePath();
-        ctx.fill();
-        // Jaw face with teeth (inner side, facing right toward hook jaw)
-        ctx.fillStyle = '#707070';
-        ctx.fillRect(-3, -21, 2, 16);
-        ctx.strokeStyle = '#505050';
-        ctx.lineWidth = 0.8;
-        for(let t = 0; t < 6; t++) {
-            ctx.beginPath();
-            ctx.moveTo(-3, -20 + t * 2.8);
-            ctx.lineTo(-1, -20 + t * 2.8);
-            ctx.stroke();
-        }
-        // Jaw tip
-        ctx.fillStyle = '#777';
-        ctx.fillRect(-8, -22, 7, 2);
-
-        // === HOOK JAW (movable) — separate piece, shorter, below/right ===
-        ctx.fillStyle = '#999';
-        ctx.beginPath();
-        ctx.moveTo(4, 4);
-        ctx.lineTo(6, 4);
-        ctx.lineTo(6, -16);
-        ctx.lineTo(2, -18);
-        ctx.lineTo(0, -16);
-        ctx.lineTo(2, 4);
-        ctx.closePath();
-        ctx.fill();
-        // Hook jaw teeth (inner side, facing left toward heel jaw)
-        ctx.fillStyle = '#777';
-        ctx.fillRect(2, -16, 2, 14);
-        ctx.strokeStyle = '#505050';
-        ctx.lineWidth = 0.8;
-        for(let t = 0; t < 5; t++) {
-            ctx.beginPath();
-            ctx.moveTo(2, -15 + t * 2.8);
-            ctx.lineTo(4, -15 + t * 2.8);
-            ctx.stroke();
-        }
-        // Hook jaw tip (slightly curved)
-        ctx.fillStyle = '#888';
-        ctx.beginPath();
-        ctx.moveTo(0, -16);
-        ctx.lineTo(2, -18);
-        ctx.lineTo(6, -16);
-        ctx.lineTo(4, -15);
-        ctx.closePath();
-        ctx.fill();
-
-        // === ADJUSTMENT NUT — dark, prominent, between jaws ===
-        ctx.fillStyle = '#444';
-        ctx.beginPath();
-        ctx.arc(0, 0, 5, 0, Math.PI * 2);
-        ctx.fill();
-        // Knurled edge
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
-        for(let k = 0; k < 8; k++) {
-            const ka = (k / 8) * Math.PI * 2 + npc.fixAnim * 3;
-            ctx.beginPath();
-            ctx.moveTo(Math.cos(ka) * 3, Math.sin(ka) * 3);
-            ctx.lineTo(Math.cos(ka) * 5, Math.sin(ka) * 5);
-            ctx.stroke();
-        }
-        // Center hex
-        ctx.fillStyle = '#555';
-        ctx.beginPath();
-        for(let h = 0; h < 6; h++) {
-            const ha = (h / 6) * Math.PI * 2;
-            const hx = Math.cos(ha) * 2.5, hy = Math.sin(ha) * 2.5;
-            h === 0 ? ctx.moveTo(hx, hy) : ctx.lineTo(hx, hy);
-        }
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.restore();
-    }
 }
 
 // Draw industrial bay window with unique outdoor scene per PM color
