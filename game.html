@@ -1550,9 +1550,9 @@ function drawNPC(npc) {
     ctx.ellipse(npc.x, 400 - 2, 10, 3, 0, 0, Math.PI * 2); // always at floor
     ctx.fill();
 
-    if(isClimbing) {
-        // === CLIMBING POSE — back to camera, hands and feet on ladder rungs ===
-        const climbCycle = Math.sin(Date.now() / 200) * 4; // alternating limb motion
+    if(isClimbing || npc.state === 'fixing') {
+        // === BACK-FACING POSE — facing the pipe ===
+        const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
 
         // Hat (back view)
         ctx.fillStyle = npc.color.hex;
@@ -1678,101 +1678,107 @@ function drawNPC(npc) {
                 npc.climbTargetY = npc.groundY || 368;
             }
         }
-        // Pipe wrench (Stillson wrench) at the pipe elbow
-        const wrenchX = npc.x + 10;
+        // Pipe wrench (Stillson wrench) gripping the pipe
+        const wrenchX = npc.x;
         const wrenchY = 210;
         ctx.save();
         ctx.translate(wrenchX, wrenchY);
-        ctx.rotate(npc.fixAnim);
+        // Slight rocking motion while fixing
+        const rock = Math.sin(npc.fixAnim * 4) * 0.15;
+        ctx.rotate(rock);
 
-        // === HANDLE — long red grip (pipe wrench style) ===
+        // === HANDLE — long, angled downward-left from jaw head ===
         ctx.fillStyle = '#cc3322';
+        ctx.save();
+        ctx.rotate(Math.PI * 0.7); // handle angles down-left
+        // Tapered handle body
         ctx.beginPath();
-        ctx.moveTo(-32, -3);
-        ctx.lineTo(2, -4);
-        ctx.lineTo(2, 4);
-        ctx.lineTo(-32, 3);
+        ctx.moveTo(0, -3.5);
+        ctx.lineTo(38, -2.5);
+        ctx.lineTo(38, 2.5);
+        ctx.lineTo(0, 3.5);
         ctx.closePath();
         ctx.fill();
-        // Handle grip texture ridges
+        // Grip texture ridges
         ctx.strokeStyle = '#aa2211';
         ctx.lineWidth = 0.7;
-        for(let r = 0; r < 6; r++) {
+        for(let r = 0; r < 7; r++) {
+            const rx = 6 + r * 4;
             ctx.beginPath();
-            ctx.moveTo(-28 + r * 4, -3);
-            ctx.lineTo(-28 + r * 4, 3);
+            ctx.moveTo(rx, -3);
+            ctx.lineTo(rx, 3);
             ctx.stroke();
         }
-        // Handle spine highlight
+        // Handle highlight
         ctx.fillStyle = '#dd4433';
-        ctx.fillRect(-30, -2, 28, 1.5);
-        // Handle end cap
+        ctx.fillRect(4, -2, 32, 1.5);
+        // End cap
         ctx.fillStyle = '#aa2211';
-        ctx.fillRect(-33, -3.5, 3, 7);
+        ctx.fillRect(36, -3, 3, 6);
+        ctx.restore();
 
-        // === HEEL JAW (fixed, top) — straight, integral to handle ===
+        // === HEEL JAW (fixed, upper) — extends up from head ===
         ctx.fillStyle = '#8a8a8a';
         ctx.beginPath();
-        ctx.moveTo(2, -4);
-        ctx.lineTo(16, -4);
-        ctx.lineTo(18, -14);
-        ctx.lineTo(14, -14);
-        ctx.lineTo(2, -6);
+        ctx.moveTo(-3, 0);
+        ctx.lineTo(-4, -16);
+        ctx.lineTo(2, -16);
+        ctx.lineTo(3, -2);
         ctx.closePath();
         ctx.fill();
-        // Jaw teeth (serrated grip surface)
+        // Teeth on inner face
         ctx.fillStyle = '#666';
-        ctx.fillRect(14, -13, 3, 9);
+        ctx.fillRect(-1, -15, 3, 13);
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 0.6;
+        for(let sr = 0; sr < 5; sr++) {
+            ctx.beginPath();
+            ctx.moveTo(-1, -14 + sr * 2.5);
+            ctx.lineTo(2, -14 + sr * 2.5);
+            ctx.stroke();
+        }
+
+        // === HOOK JAW (movable, lower) — curves up to grip pipe ===
+        ctx.fillStyle = '#909090';
+        ctx.beginPath();
+        ctx.moveTo(-3, 2);
+        ctx.lineTo(-4, 14);
+        ctx.quadraticCurveTo(-2, 18, 4, 16);
+        ctx.lineTo(5, -6);
+        ctx.lineTo(3, -6);
+        ctx.lineTo(2, 12);
+        ctx.quadraticCurveTo(0, 14, -2, 12);
+        ctx.lineTo(-1, 2);
+        ctx.closePath();
+        ctx.fill();
+        // Teeth on inner face
         ctx.strokeStyle = '#555';
         ctx.lineWidth = 0.6;
         for(let sr = 0; sr < 4; sr++) {
             ctx.beginPath();
-            ctx.moveTo(14, -12 + sr * 2.2);
-            ctx.lineTo(17, -12 + sr * 2.2);
+            ctx.moveTo(2, -4 + sr * 3);
+            ctx.lineTo(5, -4 + sr * 3);
             ctx.stroke();
         }
 
-        // === HOOK JAW (movable, bottom) — curved hook shape ===
-        ctx.fillStyle = '#909090';
-        ctx.beginPath();
-        ctx.moveTo(6, 4);
-        ctx.lineTo(18, 3);
-        ctx.quadraticCurveTo(22, 0, 20, -8);
-        ctx.lineTo(18, -8);
-        ctx.quadraticCurveTo(19, -2, 14, 3);
-        ctx.lineTo(6, 4);
-        ctx.closePath();
-        ctx.fill();
-        // Hook jaw teeth
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 0.6;
-        for(let sr = 0; sr < 3; sr++) {
-            ctx.beginPath();
-            ctx.moveTo(17, -6 + sr * 3);
-            ctx.lineTo(20, -6 + sr * 3);
-            ctx.stroke();
-        }
-
-        // === ADJUSTMENT NUT — where jaws meet handle ===
-        const tsX = 4, tsY = 0;
+        // === ADJUSTMENT NUT — knurled wheel on the head ===
         ctx.fillStyle = '#999';
         ctx.beginPath();
-        ctx.arc(tsX, tsY, 4, 0, Math.PI * 2);
+        ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
         ctx.fill();
-        // Knurling pattern
+        // Knurling
         ctx.strokeStyle = '#6a6a6a';
         ctx.lineWidth = 0.7;
         for(let k = 0; k < 8; k++) {
             const ka = (k / 8) * Math.PI * 2 + npc.fixAnim * 3;
             ctx.beginPath();
-            ctx.moveTo(tsX + Math.cos(ka) * 2, tsY + Math.sin(ka) * 2);
-            ctx.lineTo(tsX + Math.cos(ka) * 4, tsY + Math.sin(ka) * 4);
+            ctx.moveTo(Math.cos(ka) * 2.5, Math.sin(ka) * 2.5);
+            ctx.lineTo(Math.cos(ka) * 4.5, Math.sin(ka) * 4.5);
             ctx.stroke();
         }
-        // Center dot
         ctx.fillStyle = '#777';
         ctx.beginPath();
-        ctx.arc(tsX, tsY, 1.5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
