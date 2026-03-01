@@ -1520,76 +1520,141 @@ function drawNPC(npc) {
         }
     }
 
+    // Animate climbing position
+    const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
+    if(isClimbing && npc.climbStartTime) {
+        const elapsed = Date.now() - npc.climbStartTime;
+        const duration = 1500; // 1.5s to climb
+        const t = Math.min(elapsed / duration, 1);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // ease in-out
+        y = npc.climbStartY + (npc.climbTargetY - npc.climbStartY) * eased;
+        npc.y = y; // update actual position for ladder standing-rung calc
+        if(t >= 1) {
+            npc.y = npc.climbTargetY;
+            if(npc.state === 'climbing_up') {
+                // Reached the top — start fixing
+                npc.state = 'fixing';
+                npc.fixAnim = 0;
+                npc.fixStartTime = Date.now();
+            } else {
+                // Reached the bottom — done
+                npc.state = 'happy';
+            }
+        }
+        x = npc.x;
+    }
+
     // Shadow stays on ground (uses npc.x, not animated x)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(npc.x, npc.y + 32, 10, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(npc.x, 400 - 2, 10, 3, 0, 0, Math.PI * 2); // always at floor
     ctx.fill();
 
-    // Hat
-    ctx.fillStyle = npc.color.hex;
-    ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
+    if(isClimbing) {
+        // === CLIMBING POSE — back to camera, hands and feet on ladder rungs ===
+        const climbCycle = Math.sin(Date.now() / 200) * 4; // alternating limb motion
 
-    // Head
-    ctx.fillStyle = '#f5c89a';
-    ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+        // Hat (back view)
+        ctx.fillStyle = npc.color.hex;
+        ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
 
-    // Face
-    ctx.fillStyle = '#000';
-    if(npc.state === 'stressed' && !isPacing && !isJumping) {
-        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
-        ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
-        ctx.fillRect(x - s, y - 7*s, 2*s, s);
+        // Head (back — darker hair/hat, no face visible)
+        ctx.fillStyle = '#d4a574'; // slightly darker skin tone for back of head
+        ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+        // Hair on back of head
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(x - 4*s, y - 13*s, 8*s, 4*s);
+
+        // Torso (back view)
+        ctx.fillStyle = npc.color.hex;
+        ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+
+        // Arms reaching up to ladder rails — alternate up/down
+        // Left arm reaches up when right leg steps up, and vice versa
+        ctx.fillStyle = npc.color.hex;
+        ctx.fillRect(x - 8*s, y - 5*s - climbCycle, 2*s, 8*s); // left arm
+        ctx.fillRect(x + 6*s, y - 5*s + climbCycle, 2*s, 8*s); // right arm
+        // Hands (skin color) gripping rungs
         ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 8*s, y - 9*s, 3*s, 4*s);
-    } else if(isPacing || isJumping) {
-        // Worried face during animations (no static hand)
-        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
-        ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
-        ctx.fillRect(x - s, y - 7*s, 2*s, s);
-    } else {
-        ctx.fillRect(x - 3*s, y - 10*s, 2*s, 2*s);
-        ctx.fillRect(x + s, y - 10*s, 2*s, 2*s);
-        ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
-    }
+        ctx.fillRect(x - 8*s, y - 6*s - climbCycle, 2*s, 3*s); // left hand
+        ctx.fillRect(x + 6*s, y - 6*s + climbCycle, 2*s, 3*s); // right hand
 
-    // Torso
-    ctx.fillStyle = npc.color.hex;
-    ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
-
-    if(isPacing) {
-        // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
-        const stride = Math.sin(Date.now() / 125) * 3;
-        // Arms — shift horizontally with stride, anchored to torso
-        ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
-        ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
-        // Legs — opposite horizontal stride
-        ctx.fillRect(x - 5*s - stride, y + 6*s, 4*s, 7*s);
-        ctx.fillRect(x + s + stride, y + 6*s, 4*s, 7*s);
-        // Shoes follow legs
+        // Legs — opposite phase from arms
+        ctx.fillStyle = npc.color.hex;
+        ctx.fillRect(x - 4*s, y + 6*s + climbCycle, 4*s, 7*s);  // left leg
+        ctx.fillRect(x + s, y + 6*s - climbCycle, 4*s, 7*s);     // right leg
+        // Shoes on rungs
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 5*s - stride, y + 13*s, 4*s, 3*s);
-        ctx.fillRect(x + s + stride, y + 13*s, 4*s, 3*s);
-    } else if(isJumping) {
-        // Jumping: everything moves with y offset, arms raised up
-        ctx.fillRect(x - 9*s, y - 6*s, 2*s, 6*s);
-        ctx.fillRect(x + 7*s, y - 6*s, 2*s, 6*s);
-        // Legs together underneath
-        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
-        ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
-        // Shoes
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
-        ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+        ctx.fillRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3*s);
+        ctx.fillRect(x + s, y + 13*s - climbCycle, 4*s, 3*s);
     } else {
-        // Static pose
-        ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
-        ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
-        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
-        ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
-        ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+        // === NORMAL FRONT-FACING SPRITE ===
+
+        // Hat
+        ctx.fillStyle = npc.color.hex;
+        ctx.fillRect(x - 6*s, y - 16*s, 12*s, 4*s);
+
+        // Head
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+
+        // Face
+        ctx.fillStyle = '#000';
+        if(npc.state === 'stressed' && !isPacing && !isJumping) {
+            ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
+            ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
+            ctx.fillRect(x - s, y - 7*s, 2*s, s);
+            ctx.fillStyle = '#f5c89a';
+            ctx.fillRect(x - 8*s, y - 9*s, 3*s, 4*s);
+        } else if(isPacing || isJumping) {
+            // Worried face during animations (no static hand)
+            ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
+            ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
+            ctx.fillRect(x - s, y - 7*s, 2*s, s);
+        } else {
+            ctx.fillRect(x - 3*s, y - 10*s, 2*s, 2*s);
+            ctx.fillRect(x + s, y - 10*s, 2*s, 2*s);
+            ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
+        }
+
+        // Torso
+        ctx.fillStyle = npc.color.hex;
+        ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+
+        if(isPacing) {
+            // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
+            const stride = Math.sin(Date.now() / 125) * 3;
+            // Arms — shift horizontally with stride, anchored to torso
+            ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
+            ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
+            // Legs — opposite horizontal stride
+            ctx.fillRect(x - 5*s - stride, y + 6*s, 4*s, 7*s);
+            ctx.fillRect(x + s + stride, y + 6*s, 4*s, 7*s);
+            // Shoes follow legs
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x - 5*s - stride, y + 13*s, 4*s, 3*s);
+            ctx.fillRect(x + s + stride, y + 13*s, 4*s, 3*s);
+        } else if(isJumping) {
+            // Jumping: everything moves with y offset, arms raised up
+            ctx.fillRect(x - 9*s, y - 6*s, 2*s, 6*s);
+            ctx.fillRect(x + 7*s, y - 6*s, 2*s, 6*s);
+            // Legs together underneath
+            ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+            ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+            // Shoes
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+            ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+        } else {
+            // Static pose
+            ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+            ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
+            ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+            ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+            ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+        }
     }
 
     if(npc.needsDoc) {
@@ -1600,6 +1665,19 @@ function drawNPC(npc) {
     }
 
     if(npc.state === 'fixing') {
+        // Animate wrench rotation and trigger climb-down when done
+        if(npc.fixStartTime) {
+            npc.fixAnim += 0.02; // smooth rotation per frame
+            const fixElapsed = Date.now() - npc.fixStartTime;
+            if(fixElapsed >= 2000) {
+                // Fixing done — clear crack and start climbing down
+                cracks = cracks.filter(c => c.npc !== npc);
+                npc.state = 'climbing_down';
+                npc.climbStartTime = Date.now();
+                npc.climbStartY = npc.y;
+                npc.climbTargetY = npc.groundY || 340;
+            }
+        }
         // Pipe wrench (Stillson wrench) at the pipe elbow
         const wrenchX = npc.x + 10;
         const wrenchY = 210;
@@ -11019,7 +11097,13 @@ function update() {
                 const targetNPC = level5.mulletPro.walkTarget;
                 targetNPC.needsDoc = false;
                 targetNPC.crackStartTime = null;
-                
+                targetNPC.state = 'climbing_up';
+                targetNPC.climbStartTime = Date.now();
+                targetNPC.climbStartY = targetNPC.y;
+                targetNPC.climbTargetY = 210;
+                targetNPC.groundY = targetNPC.y;
+                targetNPC.fixAnim = 0;
+
                 level5.mulletPro.hasDoc = false;
                 level5.mulletPro.docColor = null;
                 level5.mulletPro.state = 'walkingToComputer';
@@ -11411,6 +11495,16 @@ function update() {
                         level5.mulletPro.x += direction * 2;
                         level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
                     } else {
+                        const targetNPC = level5.mulletPro.walkTarget;
+                        targetNPC.needsDoc = false;
+                        targetNPC.crackStartTime = null;
+                        targetNPC.state = 'climbing_up';
+                        targetNPC.climbStartTime = Date.now();
+                        targetNPC.climbStartY = targetNPC.y;
+                        targetNPC.climbTargetY = 210;
+                        targetNPC.groundY = targetNPC.y;
+                        targetNPC.fixAnim = 0;
+
                         level5.mulletPro.hasDoc = false;
                         level5.mulletPro.docColor = null;
                         level5.mulletPro.state = 'walkingToComputer';
@@ -13124,20 +13218,14 @@ if (keys[' '] || keys['action']) {
             for(let npc of npcs) {
                 if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && npc.color.name === player.holding) {
                     npc.needsDoc = false;
-                    npc.state = 'fixing';
+                    npc.state = 'climbing_up';
+                    npc.climbStartTime = Date.now();
+                    npc.climbStartY = npc.y;
+                    npc.climbTargetY = 210; // valve area
+                    npc.groundY = npc.y; // remember ground position
                     npc.fixAnim = 0;
                     player.holding = null;
                     score += 150 * level;
-                    
-                    const fixInterval = setInterval(() => {
-                        npc.fixAnim += 0.3;
-                    }, 50);
-                    
-                    setTimeout(() => {
-                        clearInterval(fixInterval);
-                        cracks = cracks.filter(c => c.npc !== npc);
-                        npc.state = 'happy';
-                    }, 2000);
                     break;
                 }
             }
