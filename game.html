@@ -9537,22 +9537,22 @@ function drawLevel6CEOOffice() {
         const craterCY = 105;
         const craterR = 200;
         const elapsed = Date.now() - level6.missileExplosionTime;
-        const cloudDuration = 2500; // Mushroom cloud phase before crater reveal
+        const cloudDuration = 1500; // Mushroom cloud phase before crater reveal (fast)
 
         if(elapsed < cloudDuration) {
             // === GIANT MUSHROOM CLOUD PHASE ===
             const t = elapsed / cloudDuration; // 0→1 progress
             const cloudT = Date.now();
 
-            // Blinding white flash (first 300ms)
-            if(elapsed < 300) {
-                const flashA = 1 - elapsed / 300;
+            // Blinding white flash (first 150ms)
+            if(elapsed < 150) {
+                const flashA = 1 - elapsed / 150;
                 ctx.fillStyle = `rgba(255,255,220,${flashA})`;
                 ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
             }
 
             // Expanding fireball base (ground zero)
-            const fireR = Math.min(craterR * 1.5, elapsed * 0.4);
+            const fireR = Math.min(craterR * 1.5, elapsed * 0.8);
             const fireGlow = ctx.createRadialGradient(craterCX, craterCY + 40, 5, craterCX, craterCY + 40, fireR);
             fireGlow.addColorStop(0, `rgba(255,255,200,${0.8 * (1 - t * 0.5)})`);
             fireGlow.addColorStop(0.3, `rgba(255,180,50,${0.6 * (1 - t * 0.3)})`);
@@ -9564,7 +9564,7 @@ function drawLevel6CEOOffice() {
             ctx.fill();
 
             // Mushroom stem — rising column of fire and smoke
-            const stemH = Math.min(350, elapsed * 0.2);
+            const stemH = Math.min(350, elapsed * 0.5);
             const stemW = 40 + t * 20;
             const stemGrad = ctx.createLinearGradient(craterCX, craterCY + 40, craterCX, craterCY + 40 - stemH);
             stemGrad.addColorStop(0, `rgba(255,120,20,${0.7 - t * 0.3})`);
@@ -9595,8 +9595,8 @@ function drawLevel6CEOOffice() {
 
             // Mushroom cap — expanding dome of fire and debris
             const capY = craterCY + 40 - stemH;
-            const capRX = Math.min(160, 20 + elapsed * 0.1) + Math.sin(cloudT / 300) * 5;
-            const capRY = Math.min(80, 10 + elapsed * 0.05);
+            const capRX = Math.min(160, 20 + elapsed * 0.25) + Math.sin(cloudT / 300) * 5;
+            const capRY = Math.min(80, 10 + elapsed * 0.12);
             // Outer dark debris cloud
             ctx.fillStyle = `rgba(60,30,10,${0.6 - t * 0.3})`;
             ctx.beginPath();
@@ -9639,7 +9639,7 @@ function drawLevel6CEOOffice() {
             }
 
             // Ground dust ring expanding outward
-            const dustR = Math.min(craterR * 2, elapsed * 0.3);
+            const dustR = Math.min(craterR * 2, elapsed * 0.6);
             ctx.strokeStyle = `rgba(150,120,80,${0.3 * (1 - t)})`;
             ctx.lineWidth = 6;
             ctx.beginPath();
@@ -11934,13 +11934,12 @@ function drawScene() {
                 ctx.fillText('VISIT THE', ccBtn2X + btnW / 2, ccBtnY + 16);
                 ctx.fillText('SPEAKEASY', ccBtn2X + btnW / 2, ccBtnY + 32);
 
-                // Selection indicator
+                // Selection indicator — cursor points at selected button
+                ctx.fillStyle = '#ffd700';
                 if(level6.caseClosedChoice === 0) {
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillText('◀', ccBtn1X - 14, ccBtnY + 24);
+                    ctx.fillText('▶', ccBtn1X - 14, ccBtnY + 24);
                 } else {
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillText('▶', ccBtn2X + btnW + 6, ccBtnY + 24);
+                    ctx.fillText('▶', ccBtn2X - 14, ccBtnY + 24);
                 }
             }
         }
@@ -12173,13 +12172,12 @@ function drawScene() {
                 ctx.fillStyle = level6.youBlewItChoice === 1 ? '#000' : '#999';
                 ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
 
-                // Selection indicator arrows
+                // Selection indicator — cursor points at selected button
+                ctx.fillStyle = '#ffd700';
                 if(level6.youBlewItChoice === 0) {
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillText('◀', btn1X - 14, btnY + 22);
+                    ctx.fillText('▶', btn1X - 14, btnY + 22);
                 } else {
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillText('▶', btn2X + btnW + 6, btnY + 22);
+                    ctx.fillText('▶', btn2X - 14, btnY + 22);
                 }
             }
         }
@@ -13648,7 +13646,7 @@ function update() {
                 // Handle menu navigation after score appears
                 if(level6.caseClosedTimer >= 30) {
                     if(!level6.caseClosedChoice) level6.caseClosedChoice = 0;
-                    
+
                     // Left/Right to choose
                     if(keys['ArrowLeft'] || keys['left']) {
                         level6.caseClosedChoice = 0;
@@ -13660,7 +13658,7 @@ function update() {
                         keys['ArrowRight'] = false;
                         keys['right'] = false;
                     }
-                    
+
                     // Action/Space to select
                     if(keys[' '] || keys['action']) {
                         if(level6.caseClosedChoice === 0) {
@@ -13673,6 +13671,49 @@ function update() {
                         }
                         keys[' '] = false;
                         keys['action'] = false;
+                    }
+                }
+                return;
+            }
+
+            // "You blew it" card — handle before room code to prevent key consumption
+            if(level6.youBlewItCard === 'fading') {
+                level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.08);
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.youBlewItCard = true;
+                    level6.youBlewItTimer = 0;
+                    // Retry blewit music in case autoplay was blocked
+                    if(currentMusic && currentMusic.paused && !musicMuted) {
+                        currentMusic.play().catch(() => {});
+                    }
+                }
+                return;
+            }
+            if(level6.youBlewItCard === true) {
+                level6.youBlewItTimer++;
+                if(level6.youBlewItTimer >= 30) {
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.youBlewItChoice = 0;
+                        keys['ArrowLeft'] = false;
+                        keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.youBlewItChoice = 1;
+                        keys['ArrowRight'] = false;
+                        keys['right'] = false;
+                    }
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        if(level6.youBlewItChoice === 0) {
+                            // Restart level 6
+                            level6.youBlewItCard = false;
+                            initLevel(6);
+                            playMusic('level6');
+                        } else {
+                            // Visit Speakeasy
+                            window.location.href = 'speakeasy.html';
+                        }
                     }
                 }
                 return;
@@ -14722,43 +14763,7 @@ if (keys[' '] || keys['action']) {
                 level6.missileFireTimer--;
             }
 
-            // "You blew it" card fade-in (fast transition)
-            if(level6.youBlewItCard === 'fading') {
-                level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.08);
-                if(level6.detectiveTransAlpha >= 1) {
-                    level6.youBlewItCard = true;
-                    level6.youBlewItTimer = 0;
-                }
-            }
-            if(level6.youBlewItCard === true) {
-                level6.youBlewItTimer++;
-                if(level6.youBlewItTimer >= 30) {
-                    // Arrow key navigation for choices
-                    if(keys['ArrowLeft'] || keys['left']) {
-                        level6.youBlewItChoice = 0;
-                        keys['ArrowLeft'] = false;
-                        keys['left'] = false;
-                    }
-                    if(keys['ArrowRight'] || keys['right']) {
-                        level6.youBlewItChoice = 1;
-                        keys['ArrowRight'] = false;
-                        keys['right'] = false;
-                    }
-                    if(keys[' '] || keys['action']) {
-                        keys[' '] = false;
-                        keys['action'] = false;
-                        if(level6.youBlewItChoice === 0) {
-                            // Restart level 6
-                            level6.youBlewItCard = false;
-                            initLevel(6);
-                            playMusic('level6');
-                        } else {
-                            // Visit Speakeasy
-                            window.location.href = 'speakeasy.html';
-                        }
-                    }
-                }
-            }
+            // (youBlewItCard logic moved earlier — before room code — to prevent key consumption)
 
             // Supercomputer blade door animations
             if (level6.bladeDoor) {
