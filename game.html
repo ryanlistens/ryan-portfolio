@@ -5553,12 +5553,14 @@ function drawOfficeRoom(officeName) {
 }
 // SECTION 10: Level 6 Scene Drawing Functions
 function drawLevel6PipeRoom() {
-    // Red brick wall — clean corporate building style
+    // Red brick wall — clean corporate building style (dynamic tiling for landscape)
     ctx.fillStyle = '#6a2e2e';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    for(let row = 0; row < 20; row++) {
+    const brickRows = Math.ceil((400 + GY) / 20) + 1;
+    const brickCols = Math.ceil(CANVAS_W / 40) + 2;
+    for(let row = 0; row < brickRows; row++) {
         const offset = (row % 2) * 20;
-        for(let col = -1; col < 20; col++) {
+        for(let col = -1; col < brickCols; col++) {
             const bx = col * 40 + offset - GX;
             const by = row * 20 - GY;
             // Per-brick shade variation for natural look
@@ -9455,28 +9457,136 @@ function drawLevel6CEOOffice() {
         const craterCY = 105;
         const craterR = 200;
         const elapsed = Date.now() - level6.missileExplosionTime;
+        const cloudDuration = 2500; // Mushroom cloud phase before crater reveal
 
-        // Radial crater — black scorched earth consuming everything in radius
-        // Outer scorch ring
-        ctx.fillStyle = '#1a0a00';
-        ctx.beginPath();
-        ctx.arc(craterCX, craterCY, Math.min(craterR, elapsed * 0.8), 0, Math.PI * 2);
-        ctx.fill();
+        if(elapsed < cloudDuration) {
+            // === GIANT MUSHROOM CLOUD PHASE ===
+            const t = elapsed / cloudDuration; // 0→1 progress
+            const cloudT = Date.now();
 
-        // Inner crater (darker)
-        ctx.fillStyle = '#0a0500';
-        ctx.beginPath();
-        ctx.arc(craterCX, craterCY, Math.min(craterR * 0.7, elapsed * 0.6), 0, Math.PI * 2);
-        ctx.fill();
+            // Blinding white flash (first 300ms)
+            if(elapsed < 300) {
+                const flashA = 1 - elapsed / 300;
+                ctx.fillStyle = `rgba(255,255,220,${flashA})`;
+                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+            }
 
-        // Deepest crater center
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(craterCX, craterCY, Math.min(craterR * 0.3, elapsed * 0.4), 0, Math.PI * 2);
-        ctx.fill();
+            // Expanding fireball base (ground zero)
+            const fireR = Math.min(craterR * 1.5, elapsed * 0.4);
+            const fireGlow = ctx.createRadialGradient(craterCX, craterCY + 40, 5, craterCX, craterCY + 40, fireR);
+            fireGlow.addColorStop(0, `rgba(255,255,200,${0.8 * (1 - t * 0.5)})`);
+            fireGlow.addColorStop(0.3, `rgba(255,180,50,${0.6 * (1 - t * 0.3)})`);
+            fireGlow.addColorStop(0.6, `rgba(255,80,0,${0.4 * (1 - t * 0.2)})`);
+            fireGlow.addColorStop(1, 'rgba(80,20,0,0)');
+            ctx.fillStyle = fireGlow;
+            ctx.beginPath();
+            ctx.arc(craterCX, craterCY + 40, fireR, 0, Math.PI * 2);
+            ctx.fill();
 
-        // Jagged crater edge (rocky debris rim)
-        if(elapsed > 200) {
+            // Mushroom stem — rising column of fire and smoke
+            const stemH = Math.min(350, elapsed * 0.2);
+            const stemW = 40 + t * 20;
+            const stemGrad = ctx.createLinearGradient(craterCX, craterCY + 40, craterCX, craterCY + 40 - stemH);
+            stemGrad.addColorStop(0, `rgba(255,120,20,${0.7 - t * 0.3})`);
+            stemGrad.addColorStop(0.3, `rgba(200,80,10,${0.6 - t * 0.2})`);
+            stemGrad.addColorStop(0.6, `rgba(140,60,20,${0.5 - t * 0.15})`);
+            stemGrad.addColorStop(1, `rgba(80,60,50,${0.4 - t * 0.1})`);
+            ctx.fillStyle = stemGrad;
+            ctx.beginPath();
+            ctx.moveTo(craterCX - stemW, craterCY + 40);
+            ctx.quadraticCurveTo(craterCX - stemW * 0.7, craterCY + 40 - stemH * 0.5, craterCX - stemW * 1.2, craterCY + 40 - stemH);
+            ctx.lineTo(craterCX + stemW * 1.2, craterCY + 40 - stemH);
+            ctx.quadraticCurveTo(craterCX + stemW * 0.7, craterCY + 40 - stemH * 0.5, craterCX + stemW, craterCY + 40);
+            ctx.closePath();
+            ctx.fill();
+
+            // Inner stem glow — hot core
+            const coreGrad = ctx.createLinearGradient(craterCX, craterCY + 40, craterCX, craterCY + 40 - stemH * 0.8);
+            coreGrad.addColorStop(0, `rgba(255,220,100,${0.5 - t * 0.3})`);
+            coreGrad.addColorStop(1, `rgba(255,150,50,${0.3 - t * 0.2})`);
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath();
+            ctx.moveTo(craterCX - stemW * 0.4, craterCY + 40);
+            ctx.quadraticCurveTo(craterCX - stemW * 0.3, craterCY + 40 - stemH * 0.5, craterCX - stemW * 0.5, craterCY + 40 - stemH * 0.8);
+            ctx.lineTo(craterCX + stemW * 0.5, craterCY + 40 - stemH * 0.8);
+            ctx.quadraticCurveTo(craterCX + stemW * 0.3, craterCY + 40 - stemH * 0.5, craterCX + stemW * 0.4, craterCY + 40);
+            ctx.closePath();
+            ctx.fill();
+
+            // Mushroom cap — expanding dome of fire and debris
+            const capY = craterCY + 40 - stemH;
+            const capRX = Math.min(160, 20 + elapsed * 0.1) + Math.sin(cloudT / 300) * 5;
+            const capRY = Math.min(80, 10 + elapsed * 0.05);
+            // Outer dark debris cloud
+            ctx.fillStyle = `rgba(60,30,10,${0.6 - t * 0.3})`;
+            ctx.beginPath();
+            ctx.ellipse(craterCX, capY, capRX * 1.15, capRY * 1.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Main fire cap
+            const capGrad = ctx.createRadialGradient(craterCX, capY, 5, craterCX, capY, capRX);
+            capGrad.addColorStop(0, `rgba(255,230,120,${0.7 - t * 0.3})`);
+            capGrad.addColorStop(0.3, `rgba(255,150,30,${0.6 - t * 0.25})`);
+            capGrad.addColorStop(0.7, `rgba(200,80,10,${0.5 - t * 0.2})`);
+            capGrad.addColorStop(1, `rgba(100,40,10,${0.3 - t * 0.15})`);
+            ctx.fillStyle = capGrad;
+            ctx.beginPath();
+            ctx.ellipse(craterCX, capY, capRX, capRY, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Hot core center
+            ctx.fillStyle = `rgba(255,255,200,${0.5 - t * 0.3})`;
+            ctx.beginPath();
+            ctx.ellipse(craterCX, capY, capRX * 0.3, capRY * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Toroidal ring around cap
+            ctx.strokeStyle = `rgba(200,100,30,${0.3 - t * 0.15})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.ellipse(craterCX, capY + capRY * 0.3, capRX * 0.9, capRY * 0.4, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Rising smoke/debris above cap
+            for(let sp = 0; sp < 8; sp++) {
+                const spAge = (cloudT / 250 + sp * 8) % 50;
+                const sx = craterCX + Math.sin(cloudT / 500 + sp * 1.5) * (20 + spAge * 0.8);
+                const sy = capY - 10 - spAge * 2.5;
+                const sA = Math.max(0, (0.35 - spAge / 80) * (1 - t * 0.5));
+                const sS = 10 + spAge * 0.6;
+                ctx.fillStyle = `rgba(70,50,35,${sA})`;
+                ctx.beginPath();
+                ctx.arc(sx, sy, sS, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Ground dust ring expanding outward
+            const dustR = Math.min(craterR * 2, elapsed * 0.3);
+            ctx.strokeStyle = `rgba(150,120,80,${0.3 * (1 - t)})`;
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(craterCX, craterCY + 40, dustR, 0, Math.PI * 2);
+            ctx.stroke();
+
+        } else {
+            // === CRATER REVEALED (after mushroom cloud dissipates) ===
+            const craterElapsed = elapsed - cloudDuration;
+
+            // Radial crater — black scorched earth
+            ctx.fillStyle = '#1a0a00';
+            ctx.beginPath();
+            ctx.arc(craterCX, craterCY, Math.min(craterR, craterElapsed * 0.8 + craterR * 0.5), 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#0a0500';
+            ctx.beginPath();
+            ctx.arc(craterCX, craterCY, Math.min(craterR * 0.7, craterElapsed * 0.6 + craterR * 0.3), 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(craterCX, craterCY, Math.min(craterR * 0.3, craterElapsed * 0.4 + craterR * 0.1), 0, Math.PI * 2);
+            ctx.fill();
+
+            // Jagged crater edge
             ctx.strokeStyle = '#3a2a10';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -9510,19 +9620,21 @@ function drawLevel6CEOOffice() {
                 ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
                 ctx.fill();
             }
-        }
 
-        // Initial fireball flash (first 500ms)
-        if(elapsed < 500) {
-            const flashAlpha = Math.max(0, 1 - elapsed / 500);
-            ctx.fillStyle = `rgba(255,200,50,${flashAlpha * 0.6})`;
-            ctx.beginPath();
-            ctx.arc(craterCX, craterCY, craterR * 1.2 * (elapsed / 500), 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = `rgba(255,255,200,${flashAlpha * 0.8})`;
-            ctx.beginPath();
-            ctx.arc(craterCX, craterCY, craterR * 0.4 * (elapsed / 500), 0, Math.PI * 2);
-            ctx.fill();
+            // Lingering smoke wisps from mushroom cloud (fades over 3 seconds)
+            if(craterElapsed < 3000) {
+                const fadeT = craterElapsed / 3000;
+                for(let w = 0; w < 5; w++) {
+                    const wAge = (Date.now() / 300 + w * 12) % 60;
+                    const wx = craterCX + Math.sin(Date.now() / 600 + w * 2) * (40 + wAge);
+                    const wy = craterCY - 60 - wAge * 3;
+                    const wA = Math.max(0, (0.25 - wAge / 100) * (1 - fadeT));
+                    ctx.fillStyle = `rgba(80,60,50,${wA})`;
+                    ctx.beginPath();
+                    ctx.arc(wx, wy, 12 + wAge * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
         }
     }
 
@@ -13916,11 +14028,15 @@ if (keys[' '] || keys['action']) {
     if (level6.blackBoxDropped && !level6.blackBoxPickedUp &&
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
         level6.blackBoxPickedUp = true;
-        // Trigger "You blew it" ending
+        // Trigger "You blew it" ending — instant song start from user gesture context
         level6.youBlewItCard = 'fading';
         level6.youBlewItTimer = 0;
         level6.detectiveTransAlpha = 0;
-        playMusic('blewit');
+        // Play blewit music instantly — directly in user gesture for zero delay
+        if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; }
+        currentMusic = levelMusic['blewit'];
+        currentMusic.currentTime = 0;
+        currentMusic.play().catch(() => { pendingMusicKey = 'blewit'; });
         return;
     }
 
@@ -14308,12 +14424,17 @@ if (keys[' '] || keys['action']) {
                             level6.blackBoxY = ceo.y;
                         }
 
-                        // Check if player is within blast radius
+                        // Check if player is within blast radius — triggers "You blew it" card
                         const playerDist = Math.sqrt(Math.pow(player.x - blastCenterX, 2) + Math.pow(player.y - blastCenterY, 2));
                         if(playerDist < blastRadius) {
-                            // Player caught in blast — "You're Fired" card
-                            state = 'over';
-                            menuChoice = 0;
+                            level6.youBlewItCard = 'fading';
+                            level6.youBlewItTimer = 0;
+                            level6.detectiveTransAlpha = 0;
+                            // Instant blewit music
+                            if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; }
+                            currentMusic = levelMusic['blewit'];
+                            currentMusic.currentTime = 0;
+                            currentMusic.play().catch(() => { pendingMusicKey = 'blewit'; });
                         }
 
                         // Screen shake effect
@@ -14404,9 +14525,9 @@ if (keys[' '] || keys['action']) {
                 level6.missileFireTimer--;
             }
 
-            // "You blew it" card fade-in
+            // "You blew it" card fade-in (fast transition)
             if(level6.youBlewItCard === 'fading') {
-                level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.03);
+                level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.08);
                 if(level6.detectiveTransAlpha >= 1) {
                     level6.youBlewItCard = true;
                     level6.youBlewItTimer = 0;
