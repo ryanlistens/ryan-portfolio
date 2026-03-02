@@ -8242,6 +8242,7 @@ function drawLevel6CEOOffice() {
     const deskX = 350;
     const deskY = 250; // Lower position for better visibility
 
+    if(!level6.craterActive) {
     // Large shadow beneath entire desk (grounding it on floor)
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath();
@@ -8869,6 +8870,7 @@ function drawLevel6CEOOffice() {
         ctx.textAlign = 'center';
         ctx.fillText('ACTION: ANSWER PHONE', phoneX, phoneY - 14);
     }
+    } // end if(!craterActive) — desk, safe, brandy, monitor, phone hidden after missile blast
 
     // Golden trophy cabinet (right side of room — fully visible within game area)
     const cabinetX = 550;
@@ -9216,6 +9218,7 @@ function drawLevel6CEOOffice() {
     const min = Math.floor(cctvT / 60000) % 60;
     const tvX = 445, tvY = 118, tvW = 72, tvH = 54;
 
+    if(!level6.cctv1Destroyed) {
     // TV housing — compact rectangular set on back wall next to safe
     // Back shadow (wall-mounted depth)
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -9466,9 +9469,10 @@ function drawLevel6CEOOffice() {
     ctx.fillRect(tvX + tvW/2 - 10, tvY + tvH + 4, 20, 3);
     ctx.fillStyle = '#222';
     ctx.fillRect(tvX + tvW/2 - 3, tvY + tvH + 4, 6, 10);
-    // Power LED (green when active, dark red when destroyed)
-    ctx.fillStyle = level6.cctv1Destroyed ? '#440000' : '#00ff00';
+    // Power LED
+    ctx.fillStyle = '#00ff00';
     ctx.beginPath(); ctx.arc(tvX + tvW - 4, tvY + tvH + 5, 1.5, 0, Math.PI * 2); ctx.fill();
+    } // end if(!cctv1Destroyed) — entire TV hidden when destroyed
 
 
     // Double-width office door at bottom (can't be opened once entered)
@@ -12176,13 +12180,6 @@ function drawScene() {
                 ctx.fillStyle = level6.youBlewItChoice === 1 ? '#000' : '#999';
                 ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
 
-                // Selection indicator — cursor points at selected button
-                ctx.fillStyle = '#ffd700';
-                if(level6.youBlewItChoice === 0) {
-                    ctx.fillText('▶', btn1X - 14, btnY + 22);
-                } else {
-                    ctx.fillText('▶', btn2X - 14, btnY + 22);
-                }
             }
         }
 
@@ -13683,13 +13680,15 @@ function update() {
             // "You blew it" card — handle before room code to prevent key consumption
             if(level6.youBlewItCard === 'fading') {
                 level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.08);
+                // Continuously retry blewit music during fade so it starts before card shows
+                if(currentMusic && currentMusic.paused && !musicMuted) {
+                    currentMusic.play().catch(() => {});
+                } else if(pendingMusicKey) {
+                    resumePendingMusic();
+                }
                 if(level6.detectiveTransAlpha >= 1) {
                     level6.youBlewItCard = true;
                     level6.youBlewItTimer = 0;
-                    // Retry blewit music in case autoplay was blocked
-                    if(currentMusic && currentMusic.paused && !musicMuted) {
-                        currentMusic.play().catch(() => {});
-                    }
                 }
                 return;
             }
@@ -14270,15 +14269,11 @@ if (keys[' '] || keys['action']) {
     if (level6.blackBoxDropped && !level6.blackBoxPickedUp &&
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
         level6.blackBoxPickedUp = true;
-        // Trigger "You blew it" ending — instant song start from user gesture context
+        // Trigger "You blew it" ending — start music before card fade
+        playMusic('blewit');
         level6.youBlewItCard = 'fading';
         level6.youBlewItTimer = 0;
         level6.detectiveTransAlpha = 0;
-        // Play blewit music instantly — directly in user gesture for zero delay
-        if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; }
-        currentMusic = levelMusic['blewit'];
-        currentMusic.currentTime = 0;
-        currentMusic.play().catch(() => { pendingMusicKey = 'blewit'; });
         return;
     }
 
@@ -14293,7 +14288,7 @@ if (keys[' '] || keys['action']) {
 
     // 1.5. Red Phone Interaction — answer to end the case (ONLY if detective mode active)
     const phoneX = 350, phoneDeskY = 250 - 10;
-    if (level6.ceoDefeated && !level6.caseClosedCard && level6.hasDetectiveHat &&
+    if (level6.ceoDefeated && !level6.caseClosedCard && level6.hasDetectiveHat && !level6.craterActive &&
         Math.abs(player.x - phoneX) < 50 && Math.abs(player.y - phoneDeskY) < 60) {
         // Start Case Closed transition
         level6.caseClosedCard = 'fading';
@@ -14309,7 +14304,7 @@ if (keys[' '] || keys['action']) {
     const monY = 205;
 
     // We strictly check player.y > 180 to ensure they are at the DESK, not the wall
-    if (level6.ceoDefeated && !level6.computerUI && !level6.hasDetectiveHat &&
+    if (level6.ceoDefeated && !level6.computerUI && !level6.hasDetectiveHat && !level6.craterActive &&
         Math.abs(player.x - monX) < 50 &&
         Math.abs(player.y - monY) < 60 &&
         player.y > 180) { // Added strict Y check
@@ -14325,13 +14320,13 @@ if (keys[' '] || keys['action']) {
     // Tightened Y-range (reduced from 90 to 50) so you must walk UP to the wall
     const nearSafe = Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 60;
 
-    if (!level6.safeUnlocked && nearSafe) {
+    if (!level6.safeUnlocked && nearSafe && !level6.craterActive) {
         level6.safeUI = true;
         level6.selectedButton = 0;
         return;
     }
 
-    if (level6.safeUnlocked && nearSafe) {
+    if (level6.safeUnlocked && nearSafe && !level6.craterActive) {
         level6.safeUI = true;
         level6.selectingItem = true;
         level6.itemSelection = 0;
@@ -14425,12 +14420,12 @@ if (keys[' '] || keys['action']) {
                     }
                 }
             
-                // Collision with desk - adjusted for front-facing perspective
+                // Collision with desk - adjusted for front-facing perspective (removed when crater active)
                 const deskX = 350;
                 const deskY = 250; // Matches actual drawn position
                 // Desk collision covers entire desk including top surface (prevents walking on desk)
                 // Desk extends from Y=195 (top) to Y=295 (bottom including legs/shadow)
-                if(player.x > deskX - 90 && player.x < deskX + 90 && player.y > deskY - 60 && player.y < deskY + 50) {
+                if(!level6.craterActive && player.x > deskX - 90 && player.x < deskX + 90 && player.y > deskY - 60 && player.y < deskY + 50) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -14459,20 +14454,20 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
-                // Collision with portrait wall (center back, pushed against wall)
+                // Collision with portrait wall (center back, pushed against wall; removed when crater active)
                 const portraitX = 350;
                 const portraitY = 0;
                 // Portrait is 120px wide, 90px tall
-                if(player.x > portraitX - 60 && player.x < portraitX + 60 && player.y < portraitY + 100) {
+                if(!level6.craterActive && player.x > portraitX - 60 && player.x < portraitX + 60 && player.y < portraitY + 100) {
                     player.x = prevX;
                     player.y = prevY;
                 }
 
-                // Collision with safe (separated from desk, no walkover allowed)
+                // Collision with safe (separated from desk, no walkover allowed; removed when crater active)
                 const safeCollisionX = 350;
                 const safeCollisionY = 100;
                 // Safe is 50px wide, 70px tall - full collision box
-                if(player.x > safeCollisionX - 30 && player.x < safeCollisionX + 30 &&
+                if(!level6.craterActive && player.x > safeCollisionX - 30 && player.x < safeCollisionX + 30 &&
                    player.y > safeCollisionY - 10 && player.y < safeCollisionY + 80) {
                     player.x = prevX;
                     player.y = prevY;
@@ -14672,11 +14667,8 @@ if (keys[' '] || keys['action']) {
                             level6.youBlewItCard = 'fading';
                             level6.youBlewItTimer = 0;
                             level6.detectiveTransAlpha = 0;
-                            // Instant blewit music
-                            if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; }
-                            currentMusic = levelMusic['blewit'];
-                            currentMusic.currentTime = 0;
-                            currentMusic.play().catch(() => { pendingMusicKey = 'blewit'; });
+                            // Start blewit music via playMusic for proper pending/retry handling
+                            playMusic('blewit');
                         }
 
                         // Screen shake effect
