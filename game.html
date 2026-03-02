@@ -499,7 +499,7 @@ let level6 = {
     hasRevolver: false,
     revolverAmmo: 6,
     cashSacks: [],
-    moneyLives: 0,
+    moneyLives: 3,
     ceoDefeated: false,
     computerUI: false,
     computerChoice: 0,
@@ -9360,28 +9360,45 @@ function drawLevel6CEOOffice() {
             ctx.fillRect(px - 1, flowY, 2, 2);
         }
 
-        // Pipe manager figure at base — more detailed
-        const pmY = floorY - 8;
+        // Pipe manager figures — animated working (disappear when means of production delivered)
+        if(!level6.computerCompleted) {
+        // Each PM climbs up/down their ladder at different speeds
+        const climbSpeed = [600, 750, 500, 850]; // ms per cycle, varied
+        const climbRange = floorY - tvY - 28; // how far they can climb
+        const climbOffset = Math.sin(cctvT / climbSpeed[p] + p * 1.5) * 0.5 + 0.5; // 0→1
+        const pmY = floorY - 8 - climbOffset * (climbRange * 0.4); // climb up to 40% of pipe
+        const legCycle = Math.sin(cctvT / 200 + p * 2); // leg animation for climbing
         // Body (colored jumpsuit)
         ctx.fillStyle = pipeColors[p];
         ctx.fillRect(px - 2, pmY + 1, 4, 5);
-        // Legs
+        // Legs — animated climbing motion
         ctx.fillStyle = '#333';
-        ctx.fillRect(px - 1.5, pmY + 6, 1.2, 2.5);
-        ctx.fillRect(px + 0.3, pmY + 6, 1.2, 2.5);
+        ctx.fillRect(px - 1.5, pmY + 6 + legCycle * 1, 1.2, 2.5);
+        ctx.fillRect(px + 0.3, pmY + 6 - legCycle * 1, 1.2, 2.5);
         // Head (skin)
         ctx.fillStyle = '#f5c08a';
         ctx.beginPath(); ctx.arc(px, pmY - 0.5, 1.8, 0, Math.PI * 2); ctx.fill();
         // Hard hat (yellow)
         ctx.fillStyle = '#f39c12';
         ctx.fillRect(px - 2.2, pmY - 2.8, 4.4, 1.5);
-        // Arm reaching to pipe (animated)
+        // Both arms animated — reaching for pipe/wrench motion
         ctx.strokeStyle = '#f5c08a';
         ctx.lineWidth = 0.6;
+        // Left arm reaching to pipe
+        ctx.beginPath();
+        ctx.moveTo(px - 2, pmY + 2);
+        ctx.lineTo(px - 1.5, pmY + 0.5 + Math.sin(cctvT / 300 + p) * 1.5);
+        ctx.stroke();
+        // Right arm working on pipe (wrench motion)
         ctx.beginPath();
         ctx.moveTo(px + 2, pmY + 2);
-        ctx.lineTo(px + 1.5, pmY + 0.5 + Math.sin(cctvT / 400 + p) * 1.2);
+        ctx.lineTo(px + 1.5, pmY - 0.5 + Math.sin(cctvT / 250 + p * 1.3) * 1.8);
         ctx.stroke();
+        // Tiny wrench/tool in right hand
+        ctx.fillStyle = '#aaa';
+        const toolX = px + 1.5, toolY = pmY - 0.5 + Math.sin(cctvT / 250 + p * 1.3) * 1.8;
+        ctx.fillRect(toolX - 0.5, toolY - 1, 1, 2);
+        }
     }
 
     // Doc printer (left side, matching level 5)
@@ -9552,13 +9569,6 @@ function drawLevel6CEOOffice() {
             const t = elapsed / cloudDuration; // 0→1 progress
             const cloudT = Date.now();
 
-            // Blinding white flash (first 150ms)
-            if(elapsed < 150) {
-                const flashA = 1 - elapsed / 150;
-                ctx.fillStyle = `rgba(255,255,220,${flashA})`;
-                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-            }
-
             // Expanding fireball base (ground zero)
             const fireR = Math.min(craterR * 1.5, elapsed * 0.8);
             const fireGlow = ctx.createRadialGradient(craterCX, craterCY + 40, 5, craterCX, craterCY + 40, fireR);
@@ -9653,6 +9663,14 @@ function drawLevel6CEOOffice() {
             ctx.beginPath();
             ctx.arc(craterCX, craterCY + 40, dustR, 0, Math.PI * 2);
             ctx.stroke();
+
+            // Blinding white flash overlay — instant whiteout that fades to reveal mushroom cloud
+            // Full white for first 500ms, then fades 500-900ms
+            if(elapsed < 900) {
+                const flashA = elapsed < 500 ? 1.0 : 1.0 - (elapsed - 500) / 400;
+                ctx.fillStyle = `rgba(255,255,255,${flashA})`;
+                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+            }
 
         } else {
             // === CRATER REVEALED (after mushroom cloud dissipates) ===
@@ -13201,7 +13219,8 @@ function update() {
                 return false;
             };
 
-            // CEO AI logic
+            // CEO AI logic — only run when player is in the CEO office
+            if(level6.room === 'ceoOffice') {
             if(ceo.state === 'offering') {
                 // First walk to middle rug if not there yet
                 if(ceo.walkTarget) {
@@ -13247,7 +13266,7 @@ function update() {
                     }
                 }
             }
-        
+
             if(ceo.state === 'admiring') {
                 const mirrorX = 50;
                 const mirrorTargetX = mirrorX + 50; // Position in front of mirror
@@ -13283,7 +13302,7 @@ function update() {
                     ceo.facing = 'back'; // Face mirror with back to player
                 }
             }
-        
+
             if(ceo.state === 'hunting') {
                 ceo.moveTimer++;
                 const angryMult = level6.ceoAngryMode ? 2 : 1; // 2x speed/aggression as detective
@@ -13339,10 +13358,11 @@ function update() {
                     ceo.shootTimer = 0;
                 }
             }
-        
+
             if(ceo.blinkTimer > 0) {
                 ceo.blinkTimer--;
             }
+            } // end CEO AI room guard
 
 
             // NPC exit sequence
@@ -14095,13 +14115,22 @@ function update() {
 
                     if(level6.hasDetectiveHat && ceo.state !== 'dead') {
                         // Detective entering — normal murder mode (not angry)
+                        ceo.x = 150;
+                        ceo.y = 180;
                         ceo.state = 'hunting';
                         ceo.walkTarget = null;
-                        ceo.ceoAngryMode = false;
+                        level6.ceoAngryMode = false;
                         ceo.shootTimer = 0;
                         ceo.health = 6;
-                    } else {
-                        // Normal entry — Set CEO to walk to middle rug on entry
+                    } else if(ceo.state !== 'dead') {
+                        // Normal entry — reset CEO position and walk to middle rug
+                        ceo.x = 150;
+                        ceo.y = 180;
+                        ceo.facing = 'back';
+                        ceo.state = 'offering';
+                        ceo.health = 6;
+                        ceo.shootTimer = 0;
+                        ceo.hasDrink = true;
                         ceo.walkTarget = {x: 350, y: 340};
                     }
                 }
@@ -14473,6 +14502,18 @@ if (keys[' '] || keys['action']) {
                     player.y = prevY;
                 }
 
+                // Collision with decorative missile (wall-mounted, left of safe; removed when exploded)
+                if(!level6.missileExploded && player.x > 230 && player.x < 270 && player.y < 170) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+
+                // Collision with CCTV TV (wall-mounted, right of safe; removed when destroyed)
+                if(!level6.cctv1Destroyed && player.x > 435 && player.x < 530 && player.y < 185) {
+                    player.x = prevX;
+                    player.y = prevY;
+                }
+
                 // Back wall collision - prevent walking behind/above wall-mounted objects
                 // This creates a barrier along the entire back wall (y < 40)
                 if(player.y < 40) {
@@ -14545,7 +14586,7 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
-                if(!bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
+                if(level6.room === 'ceoOffice' && !bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
                     ceo.health--;
                     ceo.blinkTimer = 10;
 
