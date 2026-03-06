@@ -237,6 +237,10 @@ foundingFatherImg.src = 'images/IMG_0412.png';
 const oshaPosterImg = new Image();
 oshaPosterImg.src = 'images/content.png';
 
+// Red office framed poster
+const redOfficePosterImg = new Image();
+redOfficePosterImg.src = 'images/AB132381-843D-482E-8D63-BEBD5A8BE6BC.png';
+
 // Title screen image
 const titleScreenImg = new Image();
 titleScreenImg.src = 'images/mullet-pro-title.PNG'; // Photorealistic Mullet Pro cover art
@@ -564,6 +568,11 @@ let level5 = {
     hasRedKey: false,
     redKeyOnGround: false,
     redKeyEverDropped: false,
+    // Yellow cat AI state
+    yellowCat: { x: 520, y: 380, facing: 'left', idleTimer: 0, state: 'idle', tailPhase: 0 },
+    // Shining book interaction
+    shiningDialogue: false,
+    shiningDialogueTimer: 0,
     mulletPro: {
         x: 180,
         y: 380,
@@ -670,6 +679,9 @@ function initLevel(lv) {
     level5.hasRedKey = false;
     level5.redKeyOnGround = false;
     level5.redKeyEverDropped = false;
+    level5.yellowCat = { x: 520, y: 380, facing: 'left', idleTimer: 0, state: 'idle', tailPhase: 0 };
+    level5.shiningDialogue = false;
+    level5.shiningDialogueTimer = 0;
     level5.mulletPro.hasDoc = false;
     level5.mulletPro.docColor = null;
     level5.mulletPro.giveTimer = 0;
@@ -1791,10 +1803,10 @@ function drawNPC(npc) {
     }
 
     if(npc.needsDoc) {
-        ctx.fillStyle = '#b8860b';
-        ctx.font = 'bold 28px monospace';
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 26px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('!', x + 20, y - 24);
+        ctx.fillText('!', x + 20, y - 26);
     }
 
 }
@@ -4541,6 +4553,191 @@ function drawLevel6EdgeDoor(side, roomStyle) {
 }
 
 
+// === PIPE ROOM FURNITURE DRAWING HELPERS ===
+
+// Office water cooler with occasional rising air bubble animation
+function drawWaterCooler(x, y) {
+    const t = Date.now();
+    // Cooler cabinet body
+    ctx.fillStyle = '#d8d8d8';
+    ctx.fillRect(x - 14, y - 50, 28, 50);
+    // Front panel inset
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(x - 12, y - 48, 24, 34);
+    // Water bottle (big blue jug on top)
+    ctx.fillStyle = '#a8d8f0';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 58, 11, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(x - 9, y - 78, 18, 20);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 78, 9, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Bottle cap (blue)
+    ctx.fillStyle = '#1a6ea8';
+    ctx.fillRect(x - 6, y - 82, 12, 6);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 82, 6, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Bottle highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(x - 7, y - 76, 4, 12);
+    // Dispenser spigots (hot/cold)
+    ctx.fillStyle = '#cc3333';
+    ctx.fillRect(x - 12, y - 22, 7, 5);
+    ctx.fillStyle = '#3366cc';
+    ctx.fillRect(x + 5, y - 22, 7, 5);
+    // Collection tray
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(x - 13, y - 18, 26, 4);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(x - 11, y - 16, 22, 2);
+    // Side vents
+    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 0.8;
+    for(let v = 0; v < 4; v++) {
+        ctx.beginPath(); ctx.moveTo(x + 11, y - 44 + v * 8); ctx.lineTo(x + 11, y - 38 + v * 8); ctx.stroke();
+    }
+    // Brand label
+    ctx.fillStyle = '#3366cc';
+    ctx.fillRect(x - 10, y - 38, 20, 10);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('AQUA', x, y - 31);
+    // Bubble animation — one bubble rises every ~30 seconds
+    const bubbleCycle = Math.floor(t / 30000);
+    const bubblePhase = (t % 30000) / 30000;
+    if(bubblePhase < 0.12) {
+        const bPct = bubblePhase / 0.12;
+        const bY = y - 60 - bPct * 14;
+        const bSize = 1.5 + bPct * 1.5;
+        ctx.fillStyle = `rgba(180,230,255,${0.7 * (1 - bPct)})`;
+        ctx.beginPath(); ctx.arc(x + 3, bY, bSize, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(100,180,240,${0.5 * (1 - bPct)})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+    }
+    // Base/feet
+    ctx.fillStyle = '#999';
+    ctx.fillRect(x - 13, y, 26, 4);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(x - 11, y + 2, 8, 4);
+    ctx.fillRect(x + 3, y + 2, 8, 4);
+    // Label
+    ctx.fillStyle = '#ddd';
+    ctx.font = 'bold 6px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('WATER', x, y + 14);
+}
+
+// Tool cabinet (metal, industrial, 3 drawers with handles)
+function drawToolCabinet(x, y) {
+    // Cabinet body — gunmetal steel
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(x - 24, y - 64, 48, 64);
+    // Side panel depth effect
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(x + 20, y - 64, 4, 64);
+    // Top edge
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(x - 24, y - 66, 48, 4);
+    // Three drawers with recessed panels
+    const drawerHeights = [18, 18, 22];
+    let dy = y - 62;
+    for(let d = 0; d < 3; d++) {
+        const dh = drawerHeights[d];
+        // Drawer face
+        ctx.fillStyle = '#525252';
+        ctx.fillRect(x - 22, dy, 44, dh - 2);
+        // Drawer recessed panel
+        ctx.fillStyle = '#464646';
+        ctx.fillRect(x - 20, dy + 3, 40, dh - 8);
+        // Drawer handle (brushed steel bar)
+        ctx.fillStyle = '#888';
+        ctx.fillRect(x - 12, dy + (dh/2) - 3, 24, 6);
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(x - 11, dy + (dh/2) - 2, 22, 2);
+        // Drawer gap line
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x - 22, dy + dh - 2, 44, 2);
+        dy += dh;
+    }
+    // Lock detail on top drawer
+    ctx.fillStyle = '#d4af37';
+    ctx.beginPath(); ctx.arc(x, y - 62 + 9, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#b8941e';
+    ctx.beginPath(); ctx.arc(x, y - 62 + 9, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#333'; ctx.fillRect(x - 0.5, y - 62 + 9, 1, 3);
+    // Label plate
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(x - 16, y - 66, 32, 4);
+    ctx.fillStyle = '#8a6a00';
+    ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('TOOLS', x, y - 63);
+    // Base feet
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x - 20, y - 2, 8, 4);
+    ctx.fillRect(x + 12, y - 2, 8, 4);
+}
+
+// Marker board with multicolored sticky notes
+function drawMarkerBoard(x, y) {
+    const t = Date.now();
+    // Wooden frame
+    ctx.fillStyle = '#6b4226';
+    ctx.fillRect(x - 55, y - 42, 110, 84);
+    // White board surface
+    ctx.fillStyle = '#f0f0ee';
+    ctx.fillRect(x - 51, y - 38, 102, 76);
+    // Board tray (marker/eraser tray at bottom)
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(x - 53, y + 36, 106, 6);
+    // Subtle marker residue/smear on board
+    ctx.strokeStyle = 'rgba(60,90,200,0.12)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - 30, y - 20); ctx.lineTo(x + 10, y - 20); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 30, y - 10); ctx.lineTo(x + 20, y - 10); ctx.stroke();
+    ctx.strokeStyle = 'rgba(200,50,50,0.10)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x - 20, y + 5); ctx.lineTo(x + 15, y + 5); ctx.stroke();
+    // Markers in tray
+    ctx.fillStyle = '#cc3333'; ctx.fillRect(x - 40, y + 37, 5, 4);
+    ctx.fillStyle = '#3366cc'; ctx.fillRect(x - 33, y + 37, 5, 4);
+    ctx.fillStyle = '#228b22'; ctx.fillRect(x - 26, y + 37, 5, 4);
+    ctx.fillStyle = '#111'; ctx.fillRect(x - 19, y + 37, 5, 4);
+    // Eraser
+    ctx.fillStyle = '#eee'; ctx.fillRect(x + 30, y + 37, 14, 4);
+    ctx.fillStyle = '#ddd'; ctx.fillRect(x + 31, y + 38, 12, 2);
+    // Sticky notes — multicolored, slightly angled
+    const notes = [
+        {nx: x + 20, ny: y - 28, w: 26, h: 24, color: '#ffe44d', angle: 0.08, lines: 3},
+        {nx: x - 38, ny: y - 30, w: 24, h: 22, color: '#ff8fa0', angle: -0.06, lines: 2},
+        {nx: x + 15, ny: y + 2, w: 28, h: 25, color: '#90ee90', angle: 0.04, lines: 3},
+        {nx: x - 35, ny: y + 5, w: 22, h: 20, color: '#87ceeb', angle: -0.1, lines: 2},
+        {nx: x - 8, ny: y - 25, w: 20, h: 18, color: '#ffa64d', angle: 0.12, lines: 2},
+    ];
+    for(let n of notes) {
+        ctx.save();
+        ctx.translate(n.nx + n.w/2, n.ny + n.h/2);
+        ctx.rotate(n.angle);
+        // Note shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.fillRect(-n.w/2 + 2, -n.h/2 + 2, n.w, n.h);
+        // Note body
+        ctx.fillStyle = n.color;
+        ctx.fillRect(-n.w/2, -n.h/2, n.w, n.h);
+        // Top fold darker strip (tape effect)
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        ctx.fillRect(-n.w/2, -n.h/2, n.w, 4);
+        // Handwriting lines
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.8;
+        for(let l = 0; l < n.lines; l++) {
+            const ly = -n.h/2 + 7 + l * 5;
+            const lw = n.w - 6 - (l === n.lines - 1 ? n.w * 0.35 : 0);
+            ctx.beginPath(); ctx.moveTo(-n.w/2 + 3, ly); ctx.lineTo(-n.w/2 + 3 + lw, ly); ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
 // SECTION 9: Level 5 Scene Drawing Functions (Part 1)
 function drawLevel5PipeRoom() {
     // Industrial painted concrete slab brick wall
@@ -4568,31 +4765,31 @@ function drawLevel5PipeRoom() {
     // Rubber matting floor (matching levels 1-4)
     drawRubberMattingFloor(400);
 
-    // Ceiling surface and overhead fixtures (drawn early, behind pipes)
-    drawCeilingSurface(8);
-    drawGrimyAirDuct(555, 8, 115);
+    // Ceiling surface — pushed down from y=8 to y=28 for breathing room at top
+    drawCeilingSurface(28);
+    drawGrimyAirDuct(555, 28, 115);
 
-    // Brutalist bolted metal PipeTech sign
+    // Brutalist bolted metal PipeTech sign — lowered to avoid crowding ceiling
     // Drop shadow (sign protrudes from wall)
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(24, 34, 222, 112);
+    ctx.fillRect(24, 54, 222, 112);
     // Sign body
     ctx.fillStyle = '#7a7a7a';
-    ctx.fillRect(20, 30, 220, 110);
+    ctx.fillRect(20, 50, 220, 110);
     ctx.fillStyle = '#6a6a6a';
-    ctx.fillRect(25, 35, 210, 100);
+    ctx.fillRect(25, 55, 210, 100);
     ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(28, 38, 204, 94);
+    ctx.fillRect(28, 58, 204, 94);
 
     for(let bx = 0; bx < 2; bx++) {
         for(let by = 0; by < 2; by++) {
             ctx.fillStyle = '#3a3a3a';
             ctx.beginPath();
-            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
+            ctx.arc(35 + bx * 190, 65 + by * 80, 4, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#8a8a8a';
             ctx.beginPath();
-            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
+            ctx.arc(34 + bx * 190, 64 + by * 80, 2, 0, Math.PI * 2);
             ctx.fill();
         }
     }
@@ -4600,21 +4797,21 @@ function drawLevel5PipeRoom() {
     ctx.fillStyle = '#f5f2ec';
     ctx.font = 'bold 36px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', 130, 75);
+    ctx.fillText('PIPETECH', 130, 95);
 
     ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(50, 82, 160, 1);
+    ctx.fillRect(50, 102, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
     ctx.font = '10px Arial';
-    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
 
     // Four colored stripe bands on the sign (below tagline)
     for(let i = 0; i < 4; i++) {
         ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(35, 104 + i * 6, 190, 4);
+        ctx.fillRect(35, 124 + i * 6, 190, 4);
         ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.fillRect(35, 104 + i * 6, 190, 1);
+        ctx.fillRect(35, 124 + i * 6, 190, 1);
     }
 
     // Dark concrete sub-floor (under rubber matting edge)
@@ -4660,6 +4857,15 @@ function drawLevel5PipeRoom() {
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
 
+    // Water cooler — between doc printer and 3D printer area
+    drawWaterCooler(115, 400);
+
+    // Tool cabinet — floor-level under PipeTech sign
+    drawToolCabinet(130, 400);
+
+    // Marker board — right of PipeTech sign on wall (adjusted for moved sign)
+    drawMarkerBoard(285, 110);
+
     // Right wall gasket BEFORE pipes so gasket renders behind
     drawPipeRoomRightWall(225);
 
@@ -4667,32 +4873,33 @@ function drawLevel5PipeRoom() {
     drawParkingLotWindow(280, 275, 380, 95);
 
     for(let npc of level5.npcPipes) {
-        const pipeY = 200;
+        const pipeY = 210;
+        const gasketY = 74; // Lowered from 54 to give ceiling breathing room
 
         // Wall gasket at top - curved mount with round bolted bevel (matching level 6)
         // Outer bevel ring (mounted in wall)
         ctx.fillStyle = '#999';
         ctx.beginPath();
-        ctx.arc(npc.x, 54, 18, 0, Math.PI * 2);
+        ctx.arc(npc.x, gasketY, 18, 0, Math.PI * 2);
         ctx.fill();
 
         // Inner gasket plate (recessed)
         ctx.fillStyle = '#666';
         ctx.beginPath();
-        ctx.arc(npc.x, 54, 14, 0, Math.PI * 2);
+        ctx.arc(npc.x, gasketY, 14, 0, Math.PI * 2);
         ctx.fill();
 
         // Center pipe opening
         ctx.fillStyle = '#444';
         ctx.beginPath();
-        ctx.arc(npc.x, 54, 8, 0, Math.PI * 2);
+        ctx.arc(npc.x, gasketY, 8, 0, Math.PI * 2);
         ctx.fill();
 
         // Round bolts around the bevel (6 bolts evenly spaced)
         for(let b = 0; b < 6; b++) {
             const angle = (b / 6) * Math.PI * 2;
             const boltX = npc.x + Math.cos(angle) * 12;
-            const boltY = 54 + Math.sin(angle) * 12;
+            const boltY = gasketY + Math.sin(angle) * 12;
 
             // Bolt head
             ctx.fillStyle = '#555';
@@ -4707,12 +4914,12 @@ function drawLevel5PipeRoom() {
             ctx.fill();
         }
 
-        // Pipe starts from inner gasket opening (56) not outer edge (58)
+        // Pipe starts from inner gasket opening
         ctx.strokeStyle = npc.color.hex;
         ctx.lineWidth = 14;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(npc.x, 56);
+        ctx.moveTo(npc.x, gasketY + 8);
         ctx.lineTo(npc.x, pipeY);
         ctx.stroke();
 
@@ -4720,10 +4927,10 @@ function drawLevel5PipeRoom() {
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(npc.x - 4, 56);
+        ctx.moveTo(npc.x - 4, gasketY + 8);
         ctx.lineTo(npc.x - 4, pipeY);
         ctx.stroke();
-        
+
         ctx.strokeStyle = npc.color.hex;
         ctx.lineWidth = 14;
         ctx.beginPath();
@@ -4780,17 +4987,17 @@ function drawLevel5PipeRoom() {
     }
 
     // Overhead ceiling fixtures (drawn after pipes so they render in front)
-    drawIndustrialFan(420, 32, 80);
-    drawCCTVCamera(260, 12, true);
+    drawIndustrialFan(420, 52, 80);
+    drawCCTVCamera(260, 32, true);
 
     // Right edge door prompt
     if(player.x >= 600) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(660 - 70, 310, 140, 20);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(660 - 85, 308, 170, 24);
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('ACTION: HALLWAY \u2192', 660, 326);
+        ctx.fillText('[ ACTION ] HALLWAY \u2192', 660, 325);
     }
 }
 
@@ -5161,10 +5368,12 @@ function drawLevel5FurnaceRoom() {
         ctx.fillText('FURNACE', furnace.x, furnace.y - 60);
     }
     if(Math.abs(player.x - furnace.x) < 90 && player.holding) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(furnace.x - 130, furnace.y - 76, 260, 24);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('PRESS ACTION TO BURN DOC', furnace.x, furnace.y - 60);
+        ctx.fillText('[ ACTION ] - BURN DOC', furnace.x, furnace.y - 58);
     }
 
     // Draw golden key on the ground (dropped from furnace after burning red doc)
@@ -5197,10 +5406,12 @@ function drawLevel5FurnaceRoom() {
         ctx.stroke();
         // Pickup prompt
         if(Math.abs(player.x - furnace.x) < 60 && !player.holding) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(kx - 120, ky - 46, 240, 24);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 18px Arial';
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('PRESS ACTION - PICK UP KEY', kx, ky - 30);
+            ctx.fillText('[ ACTION ] - PICK UP KEY', kx, ky - 28);
         }
     }
 
@@ -5229,6 +5440,202 @@ function drawLevel5FurnaceRoom() {
             ctx.fillText('CLONING LAB →', rdX + rdW/2, rdY - 6);
         }
     }
+}
+
+// Yellow cat drawing — sits, looks around, walks toward player
+function drawYellowCat(x, y, facing, state) {
+    const t = Date.now();
+    const tailWag = Math.sin(t / 300) * 18;
+    ctx.save();
+    ctx.translate(x, y);
+    if(facing === 'right') ctx.scale(-1, 1);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(0, 2, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Tail (behind body)
+    ctx.strokeStyle = '#d4a017'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(8, -4);
+    ctx.quadraticCurveTo(20 + Math.cos(t/400)*4, -10, 16 + Math.cos(t/400)*8, -20 + Math.sin(t/400)*5);
+    ctx.stroke();
+    ctx.strokeStyle = '#f5c842'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(8, -4);
+    ctx.quadraticCurveTo(20 + Math.cos(t/400)*4, -10, 16 + Math.cos(t/400)*8, -20 + Math.sin(t/400)*5);
+    ctx.stroke();
+
+    // Body
+    ctx.fillStyle = '#d4a017';
+    ctx.beginPath(); ctx.ellipse(0, -6, 10, 8, 0, 0, Math.PI * 2); ctx.fill();
+    // Belly highlight
+    ctx.fillStyle = '#f5d060';
+    ctx.beginPath(); ctx.ellipse(0, -5, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+    // Back stripe
+    ctx.strokeStyle = '#b8861e'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-4, -12); ctx.lineTo(-3, -2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, -13); ctx.lineTo(1, -2); ctx.stroke();
+
+    // Head
+    ctx.fillStyle = '#d4a017';
+    ctx.beginPath(); ctx.arc(-1, -18, 9, 0, Math.PI * 2); ctx.fill();
+
+    // Ears
+    ctx.fillStyle = '#d4a017';
+    ctx.beginPath(); ctx.moveTo(-9, -24); ctx.lineTo(-4, -30); ctx.lineTo(0, -23); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(7, -24); ctx.lineTo(10, -31); ctx.lineTo(12, -23); ctx.closePath(); ctx.fill();
+    // Inner ear
+    ctx.fillStyle = '#e8a0a0';
+    ctx.beginPath(); ctx.moveTo(-8, -25); ctx.lineTo(-4, -29); ctx.lineTo(-1, -24); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(8, -25); ctx.lineTo(10, -30); ctx.lineTo(11, -24); ctx.closePath(); ctx.fill();
+
+    // Eyes — blink occasionally
+    const blink = Math.floor(t / 3000) % 8 === 0 && (t % 3000) < 150;
+    ctx.fillStyle = '#2a8a2a';
+    if(blink) {
+        ctx.fillRect(-6, -20, 4, 1);
+        ctx.fillRect(2, -20, 4, 1);
+    } else {
+        ctx.beginPath(); ctx.arc(-4, -19, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(3, -19, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(-4, -19, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(3, -19, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.beginPath(); ctx.arc(-3.3, -19.6, 0.7, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(3.7, -19.6, 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Nose + mouth
+    ctx.fillStyle = '#e88080';
+    ctx.beginPath(); ctx.moveTo(-1, -15); ctx.lineTo(1, -15); ctx.lineTo(0, -14); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#b86060'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(-2, -12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(2, -12); ctx.stroke();
+
+    // Whiskers
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(-12, -14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(-11, -12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, -15); ctx.lineTo(12, -14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, -15); ctx.lineTo(11, -12); ctx.stroke();
+
+    // Legs (animated when walking)
+    const legAnim = state === 'walking' ? Math.sin(t / 120) * 5 : 0;
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(-8, -2, 5, 6 + legAnim);
+    ctx.fillRect(-2, -2, 5, 6 - legAnim);
+    // Paws
+    ctx.fillStyle = '#e8c040';
+    ctx.beginPath(); ctx.ellipse(-5.5, 4 + legAnim, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0.5, 4 - legAnim, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+}
+
+// Office plant — tropical floor plant (snake plant / monstera style)
+function drawOfficePlant(x, y) {
+    // Terracotta pot
+    ctx.fillStyle = '#c1683a';
+    ctx.beginPath();
+    ctx.moveTo(x - 16, y);
+    ctx.lineTo(x - 12, y - 22);
+    ctx.lineTo(x + 12, y - 22);
+    ctx.lineTo(x + 16, y);
+    ctx.closePath(); ctx.fill();
+    // Pot rim
+    ctx.fillStyle = '#d4774a';
+    ctx.fillRect(x - 17, y - 24, 34, 5);
+    // Pot detail band
+    ctx.strokeStyle = '#a85428'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x - 15, y - 10); ctx.lineTo(x + 15, y - 10); ctx.stroke();
+    // Soil
+    ctx.fillStyle = '#4a3020';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 23, 11, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Large tropical leaves
+    const leaves = [
+        {ox: -6, oy: -28, angle: -0.7, len: 42, w: 10},
+        {ox: 6, oy: -32, angle: 0.5, len: 46, w: 11},
+        {ox: 0, oy: -26, angle: -1.4, len: 36, w: 9},
+        {ox: -4, oy: -36, angle: 0.2, len: 50, w: 12},
+        {ox: 8, oy: -28, angle: 1.1, len: 38, w: 9},
+    ];
+    for(let l of leaves) {
+        ctx.save();
+        ctx.translate(x + l.ox, y + l.oy);
+        ctx.rotate(l.angle);
+        // Leaf body
+        const leafGrad = ctx.createLinearGradient(0, 0, 0, -l.len);
+        leafGrad.addColorStop(0, '#228b22');
+        leafGrad.addColorStop(0.5, '#2ea52e');
+        leafGrad.addColorStop(1, '#1a6e1a');
+        ctx.fillStyle = leafGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(-l.w, -l.len * 0.4, -l.w * 0.8, -l.len * 0.7, 0, -l.len);
+        ctx.bezierCurveTo(l.w * 0.8, -l.len * 0.7, l.w, -l.len * 0.4, 0, 0);
+        ctx.fill();
+        // Midrib
+        ctx.strokeStyle = '#1a6e1a'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -l.len); ctx.stroke();
+        // Monstera splits (on larger leaves)
+        if(l.len > 40) {
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-l.w*0.5, -l.len*0.5); ctx.lineTo(-l.w*0.6, -l.len*0.65); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(l.w*0.5, -l.len*0.6); ctx.lineTo(l.w*0.7, -l.len*0.75); ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
+// Blue futon — low Japanese-style sofa bed
+function drawBlueFuton(x, y) {
+    const futonColor = '#1e4a8a';
+    const futonHighlight = '#2860aa';
+    const cushionColor = '#2255a0';
+    // Base frame (low wooden legs)
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(x - 50, y - 4, 100, 6);
+    ctx.fillRect(x - 48, y + 2, 8, 8);
+    ctx.fillRect(x + 40, y + 2, 8, 8);
+    // Futon base cushion — thick and low
+    ctx.fillStyle = futonColor;
+    ctx.fillRect(x - 48, y - 20, 96, 18);
+    // Base cushion top highlight
+    ctx.fillStyle = futonHighlight;
+    ctx.fillRect(x - 48, y - 20, 96, 4);
+    // Seat cushion dividers
+    ctx.strokeStyle = '#163880'; ctx.lineWidth = 1;
+    for(let c = 0; c < 3; c++) {
+        ctx.beginPath(); ctx.moveTo(x - 16 + c * 16, y - 20); ctx.lineTo(x - 16 + c * 16, y - 2); ctx.stroke();
+    }
+    // Backrest
+    ctx.fillStyle = futonColor;
+    ctx.fillRect(x - 50, y - 50, 14, 32);
+    ctx.fillStyle = futonHighlight;
+    ctx.fillRect(x - 50, y - 50, 14, 5);
+    // Backrest buttons
+    ctx.fillStyle = '#163880';
+    for(let b = 0; b < 3; b++) {
+        ctx.beginPath(); ctx.arc(x - 43, y - 42 + b * 10, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    // Throw pillow
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(x - 42, y - 42, 18, 22);
+    ctx.fillStyle = '#ffa500';
+    ctx.strokeStyle = '#cc8800'; ctx.lineWidth = 0.8;
+    ctx.strokeRect(x - 39, y - 39, 12, 16);
+    // Piping trim
+    ctx.fillStyle = '#4a90d9';
+    ctx.fillRect(x - 48, y - 2, 96, 3);
+    // Label
+    ctx.fillStyle = '#e8e8e8';
+    ctx.font = 'bold 7px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('FUTON', x, y + 14);
 }
 
 function drawOfficeRoom(officeName) {
@@ -5758,7 +6165,181 @@ function drawOfficeRoom(officeName) {
         }
     }
     ctx.restore();
-    
+
+    // === OFFICE-SPECIFIC FURNITURE & DECORATIONS ===
+
+    if(officeName === 'GREEN') {
+        // Lush tropical office plant — left wall corner
+        drawOfficePlant(140, 330);
+        // Small cactus on right windowsill
+        ctx.fillStyle = '#3a8a3a';
+        ctx.fillRect(538, 225, 8, 18);
+        ctx.fillStyle = '#2e7a2e';
+        ctx.beginPath(); ctx.arc(542, 228, 6, Math.PI, 0); ctx.fill();
+        // Cactus arms
+        ctx.fillStyle = '#3a8a3a';
+        ctx.fillRect(534, 232, 8, 4);
+        ctx.fillRect(546, 230, 8, 4);
+        ctx.beginPath(); ctx.arc(534, 232, 4, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.arc(554, 230, 4, Math.PI, 0); ctx.fill();
+        // Mini terracotta pot for cactus
+        ctx.fillStyle = '#c1683a';
+        ctx.fillRect(536, 240, 12, 9);
+        ctx.fillStyle = '#d4774a';
+        ctx.fillRect(535, 239, 14, 3);
+    }
+
+    if(officeName === 'BLUE') {
+        // Blue futon — right side of office
+        drawBlueFuton(560, 360);
+    }
+
+    if(officeName === 'YELLOW') {
+        // Yellow cat — drawn after player is placed (at bottom of function)
+        // (cat is drawn separately in drawScene after drawOfficeRoom)
+    }
+
+    if(officeName === 'RED') {
+        // === Framed poster (photo) — left wall ===
+        const posterX = 140, posterY = 80;
+        const posterW = 90, posterH = 110;
+        // Ornate red frame
+        ctx.fillStyle = '#8B0000';
+        ctx.fillRect(posterX - 8, posterY - 8, posterW + 16, posterH + 16);
+        ctx.fillStyle = '#6a0000';
+        ctx.fillRect(posterX - 6, posterY - 6, posterW + 12, posterH + 12);
+        ctx.fillStyle = '#aa1111';
+        ctx.fillRect(posterX - 4, posterY - 4, posterW + 8, posterH + 8);
+        // Photo image
+        if(redOfficePosterImg.complete && redOfficePosterImg.naturalWidth > 0) {
+            ctx.drawImage(redOfficePosterImg, posterX, posterY, posterW, posterH);
+        } else {
+            ctx.fillStyle = '#2a1a1a';
+            ctx.fillRect(posterX, posterY, posterW, posterH);
+        }
+        // Frame inner edge
+        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1;
+        ctx.strokeRect(posterX - 1, posterY - 1, posterW + 2, posterH + 2);
+
+        // === Mini bookshelf — right wall ===
+        const shelfX = 540, shelfY = 200;
+        // Shelf unit — dark wood
+        ctx.fillStyle = '#3a2010';
+        ctx.fillRect(shelfX - 5, shelfY, 110, 130);
+        ctx.fillStyle = '#4a2a14';
+        ctx.fillRect(shelfX, shelfY + 4, 100, 122);
+        // Shelf boards (3 shelves)
+        const shelfColors = ['#5a3520', '#5a3520', '#5a3520'];
+        for(let s = 0; s < 3; s++) {
+            ctx.fillStyle = '#5a3520';
+            ctx.fillRect(shelfX, shelfY + 4 + s * 40, 100, 5);
+        }
+        // Back panel wood grain
+        ctx.strokeStyle = 'rgba(80,50,30,0.3)'; ctx.lineWidth = 1;
+        for(let g = 0; g < 5; g++) {
+            ctx.beginPath(); ctx.moveTo(shelfX + 20 + g * 18, shelfY + 4); ctx.lineTo(shelfX + 20 + g * 18, shelfY + 126); ctx.stroke();
+        }
+
+        // Books on shelves — specific titles with colors
+        const books = [
+            // Top shelf
+            {x: shelfX + 4, sh: 0, w: 12, h: 32, color: '#cc2222', title: 'THE\nSHINING', spine: '#ff4444', interactive: true},
+            {x: shelfX + 18, sh: 0, w: 14, h: 34, color: '#1a4a8a', title: 'HUNT\nRED OCT', spine: '#2255aa'},
+            {x: shelfX + 34, sh: 0, w: 10, h: 30, color: '#cc0000', title: 'COMM\nMANIF', spine: '#ff2222'},
+            {x: shelfX + 46, sh: 0, w: 13, h: 33, color: '#8B0000', title: 'RED\nDRAGON', spine: '#cc1111'},
+            {x: shelfX + 61, sh: 0, w: 14, h: 31, color: '#2d5a1e', title: 'THE\nJUNGLE', spine: '#3a7a28'},
+            {x: shelfX + 77, sh: 0, w: 11, h: 29, color: '#4a2a00', title: '', spine: '#6a3a00'},
+            // Second shelf — misc
+            {x: shelfX + 4, sh: 1, w: 11, h: 33, color: '#5a1a8a', title: '', spine: '#7a2aaa'},
+            {x: shelfX + 17, sh: 1, w: 13, h: 30, color: '#1a6a3a', title: '', spine: '#228a4a'},
+            {x: shelfX + 32, sh: 1, w: 10, h: 35, color: '#8a5a1a', title: '', spine: '#aa7a2a'},
+            {x: shelfX + 44, sh: 1, w: 14, h: 32, color: '#2a2a6a', title: '', spine: '#3a3a8a'},
+            {x: shelfX + 60, sh: 1, w: 12, h: 28, color: '#6a1a1a', title: '', spine: '#8a2a2a'},
+            {x: shelfX + 74, sh: 1, w: 15, h: 34, color: '#1a4a1a', title: '', spine: '#2a6a2a'},
+            // Third shelf — misc
+            {x: shelfX + 4, sh: 2, w: 13, h: 31, color: '#4a0a0a', title: '', spine: '#6a1a1a'},
+            {x: shelfX + 19, sh: 2, w: 11, h: 29, color: '#0a3a6a', title: '', spine: '#1a5a8a'},
+            {x: shelfX + 32, sh: 2, w: 14, h: 33, color: '#2a4a0a', title: '', spine: '#3a6a1a'},
+            {x: shelfX + 48, sh: 2, w: 10, h: 27, color: '#5a3a0a', title: '', spine: '#7a5a1a'},
+            {x: shelfX + 60, sh: 2, w: 13, h: 35, color: '#6a0a5a', title: '', spine: '#8a1a7a'},
+            {x: shelfX + 75, sh: 2, w: 12, h: 30, color: '#1a1a1a', title: '', spine: '#3a3a3a'},
+        ];
+        for(let bk of books) {
+            const by = shelfY + 9 + bk.sh * 40;
+            // Book body
+            ctx.fillStyle = bk.color;
+            ctx.fillRect(bk.x, by, bk.w, bk.h);
+            // Spine highlight
+            ctx.fillStyle = bk.spine;
+            ctx.fillRect(bk.x, by, 2, bk.h);
+            // Top edge
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.fillRect(bk.x, by, bk.w, 2);
+            // Title text (for named books only, very small)
+            if(bk.title) {
+                ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                ctx.font = 'bold 4px Arial';
+                ctx.textAlign = 'center';
+                const lines = bk.title.split('\n');
+                lines.forEach((line, li) => {
+                    ctx.fillText(line, bk.x + bk.w/2, by + 8 + li * 6);
+                });
+            }
+            // Interactive highlight (The Shining glows red)
+            if(bk.interactive) {
+                ctx.strokeStyle = 'rgba(255,50,50,0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(bk.x - 1, by - 1, bk.w + 2, bk.h + 2);
+                // Subtle glow
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 6;
+                ctx.strokeRect(bk.x, by, bk.w, bk.h);
+                ctx.shadowBlur = 0;
+            }
+        }
+        // Bookshelf shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(shelfX + 105, shelfY + 5, 8, 125);
+        ctx.fillRect(shelfX - 2, shelfY + 128, 115, 6);
+
+        // Bookshelf interaction prompt
+        const nearShining = Math.abs(player.x - (shelfX + 8)) < 50 && player.y > shelfY && player.y < shelfY + 140 && !level5.viewingEmail && !level5.viewingLetter && !level5.shiningDialogue;
+        if(nearShining) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(shelfX - 55, shelfY - 30, 220, 24);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - READ THE SHINING', shelfX + 55, shelfY - 12);
+        }
+
+        // Shining dialogue box
+        if(level5.shiningDialogue) {
+            ctx.fillStyle = 'rgba(0,0,0,0.92)';
+            ctx.fillRect(150, 150, 400, 180);
+            ctx.strokeStyle = '#cc2222'; ctx.lineWidth = 4;
+            ctx.strokeRect(150, 150, 400, 180);
+            // Blood-drip decoration on box top
+            for(let d = 0; d < 6; d++) {
+                const dripX = 180 + d * 60;
+                ctx.fillStyle = '#cc0000';
+                ctx.fillRect(dripX, 150, 6, 8 + Math.sin(d * 1.7) * 5);
+                ctx.beginPath(); ctx.arc(dripX + 3, 160 + Math.sin(d * 1.7) * 5, 4, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.fillStyle = '#cc2222';
+            ctx.font = 'bold 48px Arial'; ctx.textAlign = 'center';
+            ctx.fillText('RED RUM!', 350, 230);
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'italic 16px Georgia, serif';
+            ctx.fillText('"Come play with us, Danny."', 350, 272);
+            ctx.font = 'bold 13px Arial';
+            ctx.fillStyle = '#888';
+            ctx.fillText('— Stephen King, The Shining', 350, 298);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('[ ACTION TO CLOSE ]', 350, 322);
+        }
+    }
+
     const deskX = 350;
     const deskY = 250;
 
@@ -5902,55 +6483,34 @@ function drawOfficeRoom(officeName) {
     // Exit area (no physical door - open space)
     if(player.y > 420 && Math.abs(player.x - 350) < 70) {
         // Exit prompt with dark background for visibility
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(200, 418, 300, 24);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px Arial';
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(185, 416, 330, 26);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('PRESS ACTION - EXIT TO HALLWAY', 350, 435);
-
-        // Arrow pointing down/out
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(340, 445);
-        ctx.lineTo(350, 455);
-        ctx.lineTo(360, 445);
-        ctx.fill();
+        ctx.fillText('[ ACTION ] - EXIT TO HALLWAY', 350, 433);
     }
 
-    // Monitor interaction prompt - more visible and clearer range
+    // Monitor interaction prompt
     if(Math.abs(player.x - deskX) < 60 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px Arial';
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(deskX - 130, deskY - 22, 260, 24);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('PRESS ACTION - VIEW MONITOR', deskX, deskY - 5);
-
-        // Arrow pointing to monitor
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(deskX - 5, deskY);
-        ctx.lineTo(deskX, deskY + 5);
-        ctx.lineTo(deskX + 5, deskY);
-        ctx.fill();
+        ctx.fillText('[ ACTION ] - VIEW MONITOR', deskX, deskY - 4);
     }
 
-    // Letter interaction prompt (RED office only) - aligned with letter position
+    // Letter interaction prompt (RED office only)
     if(officeName === 'RED') {
         const letterX = deskX - 25;
         if(Math.abs(player.x - letterX) < 35 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(letterX - 110, deskY - 10, 220, 24);
+            ctx.fillStyle = '#ffd700';
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('ACTION - VIEW LETTER', letterX, deskY + 5);
-
-            // Arrow pointing to letter
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.moveTo(letterX - 5, deskY + 8);
-            ctx.lineTo(letterX, deskY + 3);
-            ctx.lineTo(letterX + 5, deskY + 8);
-            ctx.fill();
+            ctx.fillText('[ ACTION ] - VIEW LETTER', letterX, deskY + 8);
         }
     }
 }
@@ -6165,17 +6725,17 @@ function drawLevel6PipeRoom() {
     }
 
     if(player.x > 620 && !level6.supercomputerUnlocked) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(550 - 105, 280 - 14, 210, 22);
-        ctx.fillStyle = '#00ccff';
-        ctx.fillText('ACTION TO ENTER CODE', 550, 280);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(550 - 115, 280 - 16, 230, 24);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText('[ ACTION ] - ENTER CODE', 550, 280);
     } else if(player.x > 620 && level6.supercomputerUnlocked) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(550 - 85, 280 - 14, 170, 22);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(550 - 90, 280 - 16, 180, 24);
         ctx.fillStyle = '#00ff88';
         ctx.fillText('ACCESS GRANTED →', 550, 280);
     }
@@ -6630,12 +7190,12 @@ function drawLevel6MegacomputerRoom() {
         ctx.stroke();
         // Prompt
         if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 60) {
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(hatX - 65, hatY - 30, 130, 20);
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(hatX - 85, hatY - 32, 170, 24);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 12px Arial';
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('ACTION: TAKE HAT', hatX, hatY - 14);
+            ctx.fillText('[ ACTION ] - TAKE HAT', hatX, hatY - 14);
         }
     }
     // Hide hat from detective body once picked up (already wearing it)
@@ -6646,18 +7206,12 @@ function drawLevel6MegacomputerRoom() {
     const noteInteractX = noteX + 9; // Center of note
     const noteInteractY = noteY + 12; // Center of note
     if(!level6.viewingDetectiveNote && Math.abs(player.x - noteInteractX) < 50 && Math.abs(player.y - noteInteractY) < 50) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(noteInteractX - 100, noteY - 36, 200, 24);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('ACTION - VIEW NOTE', noteInteractX, noteY - 20);
-
-        // Arrow pointing to note
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath();
-        ctx.moveTo(noteInteractX - 5, noteY - 8);
-        ctx.lineTo(noteInteractX, noteY - 3);
-        ctx.lineTo(noteInteractX + 5, noteY - 8);
-        ctx.fill();
+        ctx.fillText('[ ACTION ] - VIEW NOTE', noteInteractX, noteY - 18);
     }
 
     // Dropped pistol near detective
@@ -6680,10 +7234,12 @@ function drawLevel6MegacomputerRoom() {
         ctx.shadowBlur = 0;
         // Pickup prompt
         if(Math.abs(player.x - gx) < 50) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(gx - 100, gy - 34, 200, 24);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 14px Arial';
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('ACTION TO TAKE PISTOL', gx, gy - 18);
+            ctx.fillText('[ ACTION ] - TAKE PISTOL', gx, gy - 16);
         }
     }
 
@@ -6846,20 +7402,20 @@ function drawLevel6EmployeeLobby() {
 
     // Direction prompts
     if(player.x > 560) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(elvX + elvW/2 - 80, elvY - 42, 160, 20);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(elvX + elvW/2 - 90, elvY - 44, 180, 24);
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('ACTION: ELEVATOR', elvX + elvW/2, elvY - 26);
+        ctx.fillText('[ ACTION ] - ELEVATOR', elvX + elvW/2, elvY - 26);
     }
     if(player.x < 80) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(40 - 70, 360, 140, 20);
-        ctx.fillStyle = '#fff';
-        ctx.fillText('← CLONING LAB', 40, 376);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(40 - 80, 358, 160, 24);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText('← CLONING LAB', 40, 375);
     }
 }
 
@@ -7192,19 +7748,19 @@ function drawLevel6CloningRoom() {
         ctx.shadowBlur = 0;
 
         if (player.x < 80 && level6.hasKeycard) {
-            ctx.font = 'bold 12px Arial';
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(50 - 65, cdY + cdH + 8, 130, 18);
-            ctx.fillStyle = '#00ccff';
-            ctx.fillText('ACTION: USE KEYCARD', 50, cdY + cdH + 22);
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(50 - 90, cdY + cdH + 6, 180, 24);
+            ctx.fillStyle = '#ffd700';
+            ctx.fillText('[ ACTION ] - USE KEYCARD', 50, cdY + cdH + 23);
         } else if (player.x < 80 && !level6.hasKeycard) {
-            ctx.font = 'bold 12px Arial';
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(50 - 65, cdY + cdH + 8, 130, 18);
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(50 - 80, cdY + cdH + 6, 160, 24);
             ctx.fillStyle = '#ff6666';
-            ctx.fillText('KEYCARD REQUIRED', 50, cdY + cdH + 22);
+            ctx.fillText('KEYCARD REQUIRED', 50, cdY + cdH + 23);
         }
     } else {
         // Unlocked reader — green
@@ -7384,12 +7940,12 @@ function drawLevel6CloningRoom() {
             ctx.shadowBlur = 0;
         }
         if (Math.abs(player.x - kx) < 50) {
-            ctx.font = 'bold 12px Arial';
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(kx - 65, ky - 24, 130, 18);
-            ctx.fillStyle = '#00ccff';
-            ctx.fillText('ACTION: TAKE KEYCARD', kx, ky - 10);
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(kx - 100, ky - 28, 200, 24);
+            ctx.fillStyle = '#ffd700';
+            ctx.fillText('[ ACTION ] - TAKE KEYCARD', kx, ky - 10);
         }
     }
 
@@ -8555,18 +9111,18 @@ function drawLevel6Entryway() {
     if(Math.abs(player.x - 350) < 100 && player.y > 360) {
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(350 - 115, 420 - 14, 230, 22);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(350 - 120, 420 - 16, 240, 24);
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('PRESS ACTION TO ENTER', 350, 420);
+        ctx.fillText('[ ACTION ] - ENTER CEO OFFICE', 350, 420);
     }
     if(player.x > 540) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(eelvX + eelvW/2 - 80, eelvY - 44, 160, 20);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(eelvX + eelvW/2 - 90, eelvY - 46, 180, 24);
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('ACTION: ELEVATOR', eelvX + eelvW/2, eelvY - 28);
+        ctx.fillText('[ ACTION ] - ELEVATOR', eelvX + eelvW/2, eelvY - 28);
     }
 }
 
@@ -9265,12 +9821,12 @@ function drawLevel6CEOOffice() {
     }
     // Interaction prompt for phone
     if(level6.ceoDefeated && !level6.caseClosedCard && level6.hasDetectiveHat && Math.abs(player.x - phoneX) < 50 && Math.abs(player.y - (deskY - 10)) < 60) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(phoneX - 75, phoneY - 30, 150, 20);
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(phoneX - 105, phoneY - 32, 210, 24);
         ctx.fillStyle = '#ff4444';
-        ctx.font = 'bold 12px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('ACTION: ANSWER PHONE', phoneX, phoneY - 14);
+        ctx.fillText('[ ACTION ] - ANSWER PHONE', phoneX, phoneY - 14);
     }
     } // end if(!craterActive) — desk, safe, brandy, monitor, phone hidden after missile blast
 
@@ -10186,10 +10742,10 @@ function drawLevel6CEOOffice() {
         // Pickup prompt
         if(Math.abs(player.x - bbx) < 40 && Math.abs(player.y - bby) < 40) {
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
-            ctx.fillRect(bbx - 60, bby - 30, 120, 18);
+            ctx.fillRect(bbx - 100, bby - 32, 200, 24);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 11px Arial';
-            ctx.fillText('PRESS ACTION TO PICK UP', bbx, bby - 16);
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('[ ACTION ] - PICK UP', bbx, bby - 14);
         }
     }
 }
@@ -10246,7 +10802,7 @@ function drawEmailUI(officeName) {
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
     ctx.fillRect(-GX, 450, CANVAS_W, CANVAS_H);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, 481);
@@ -10257,20 +10813,24 @@ function drawLetterUI() {
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Display letter image at fixed game-area size for consistent zoom in portrait/landscape
+    // Display letter image zoomed 2x for mobile readability — user scrolls to see full letter
     if(letterImg.complete && letterImg.naturalWidth > 0) {
-        const maxWidth = GAME_W;
+        const ZOOM = 2.0;
+        const zoomedWidth = GAME_W * ZOOM;
         const viewportHeight = GAME_H - 45;
-        const scale = maxWidth / letterImg.naturalWidth;
+        const scale = zoomedWidth / letterImg.naturalWidth;
         const fullHeight = letterImg.naturalHeight * scale;
+
+        // Center the zoomed image horizontally
+        const offsetX = (GAME_W - zoomedWidth) / 2;
 
         ctx.save();
         ctx.beginPath();
-        ctx.rect(0, 0, maxWidth, viewportHeight);
+        ctx.rect(0, 0, GAME_W, viewportHeight);
         ctx.clip();
 
         const letterY = -level5.letterScrollOffset;
-        ctx.drawImage(letterImg, 0, letterY, maxWidth, fullHeight);
+        ctx.drawImage(letterImg, offsetX, letterY, zoomedWidth, fullHeight);
 
         ctx.restore();
     }
@@ -10289,21 +10849,25 @@ function drawDetectiveNoteUI() {
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Display detective note image at fixed game-area size for consistent zoom in portrait/landscape
+    // Display detective note image zoomed 2x for mobile readability — user scrolls to see full note
     if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
-        const maxWidth = GAME_W;
+        const ZOOM = 2.0;
+        const zoomedWidth = GAME_W * ZOOM;
         const viewportHeight = GAME_H - 45;
-        const scale = maxWidth / detectiveNoteImg.naturalWidth;
+        const scale = zoomedWidth / detectiveNoteImg.naturalWidth;
         const fullHeight = detectiveNoteImg.naturalHeight * scale;
+
+        // Center the zoomed image horizontally
+        const offsetX = (GAME_W - zoomedWidth) / 2;
 
         ctx.save();
         ctx.beginPath();
-        ctx.rect(0, 0, maxWidth, viewportHeight);
+        ctx.rect(0, 0, GAME_W, viewportHeight);
         ctx.clip();
 
         // Draw image offset by scroll amount
         const noteY = -level6.noteScrollOffset;
-        ctx.drawImage(detectiveNoteImg, 0, noteY, maxWidth, fullHeight);
+        ctx.drawImage(detectiveNoteImg, offsetX, noteY, zoomedWidth, fullHeight);
 
         ctx.restore();
     }
@@ -11845,13 +12409,19 @@ function drawScene() {
     }
 
     if(!level5.viewingEmail && !level5.viewingLetter && !level5.viewingPortrait) {
+        // Draw yellow cat in yellow's office
+        if(level5.currentOffice === 'YELLOW') {
+            const cat = level5.yellowCat;
+            drawYellowCat(cat.x, cat.y, cat.facing, cat.state);
+        }
+
         drawBaldManager(player.x, player.y, player.facing, player.holding);
 
         if(player.holding) {
             drawHeldDoc(player.x, player.y, player.holding);
         }
     }
-    
+
     if(fadeAlpha > 0) {
         ctx.fillStyle = `rgba(232,230,220,${fadeAlpha})`;
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
@@ -12610,61 +13180,61 @@ function drawScene() {
     }
 
 
-    // Levels 1-4 standard pipe room — industrial brushed steel walls
-    ctx.fillStyle = '#c8c4c0';
+    // Levels 1-4 standard pipe room — painted concrete brick walls (matching level 5 style)
+    const l14BrickBase = level === 1 ? '#9a9690' : level === 2 ? '#8a8278' : level === 3 ? '#7d7870' : '#726e68';
+    const l14BrickR = level === 1 ? 158 : level === 2 ? 142 : level === 3 ? 128 : 116;
+    const l14BrickG = level === 1 ? 150 : level === 2 ? 134 : level === 3 ? 120 : 108;
+    const l14BrickB = level === 1 ? 140 : level === 2 ? 124 : level === 3 ? 110 : 100;
+    ctx.fillStyle = l14BrickBase;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-
-    // Brushed metal horizontal grain lines
-    ctx.strokeStyle = 'rgba(175,170,165,0.4)';
-    ctx.lineWidth = 0.5;
-    for(let gy = -GY; gy < 400; gy += 4) {
-        ctx.beginPath();
-        ctx.moveTo(-GX, gy);
-        ctx.lineTo(-GX + CANVAS_W, gy);
-        ctx.stroke();
+    const brickRowsL14 = Math.ceil((400 + GY) / 24) + 1;
+    const brickColsL14 = Math.ceil(CANVAS_W / 50) + 2;
+    for(let row = 0; row < brickRowsL14; row++) {
+        const offset = (row % 2) * 25;
+        for(let col = -1; col < brickColsL14; col++) {
+            const bx = col * 50 + offset - GX;
+            const by = row * 24 - GY;
+            const shade = ((row * 13 + col * 29) & 7);
+            ctx.fillStyle = `rgb(${l14BrickR + shade * 2},${l14BrickG + shade * 2},${l14BrickB + shade * 2})`;
+            ctx.fillRect(bx + 1, by + 1, 48, 22);
+            ctx.strokeStyle = 'rgba(60,55,50,0.45)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(bx, by, 50, 24);
+        }
     }
-    // Subtle vertical panel seams
-    ctx.strokeStyle = 'rgba(155,150,145,0.35)';
-    ctx.lineWidth = 1;
-    for(let px = -GX; px < CANVAS_W; px += 120) {
-        ctx.beginPath();
-        ctx.moveTo(px, -GY);
-        ctx.lineTo(px, 400);
-        ctx.stroke();
-    }
-    // Light sheen highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    ctx.fillRect(-GX, -GY, CANVAS_W, 200);
+    // Subtle paint wash over bricks
+    ctx.fillStyle = 'rgba(160,155,145,0.12)';
+    ctx.fillRect(-GX, -GY, CANVAS_W, 400 + GY);
 
     drawRubberMattingFloor(400);
 
-    // Ceiling surface and overhead fixtures (drawn early, behind pipes)
-    drawCeilingSurface(8);
-    drawGrimyAirDuct(555, 8, 115);
+    // Ceiling surface — pushed down to y=28 for breathing room at top
+    drawCeilingSurface(28);
+    drawGrimyAirDuct(555, 28, 115);
 
     // (wall area above — windows now drawn per-NPC below)
 
-    // Brutalist bolted metal PipeTech sign
+    // Brutalist bolted metal PipeTech sign — lowered to avoid crowding ceiling
     // Drop shadow (sign protrudes from wall)
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(24, 34, 222, 112);
+    ctx.fillRect(24, 54, 222, 112);
     // Sign body
     ctx.fillStyle = '#7a7a7a';
-    ctx.fillRect(20, 30, 220, 110);
+    ctx.fillRect(20, 50, 220, 110);
     ctx.fillStyle = '#6a6a6a';
-    ctx.fillRect(25, 35, 210, 100);
+    ctx.fillRect(25, 55, 210, 100);
     ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(28, 38, 204, 94);
+    ctx.fillRect(28, 58, 204, 94);
 
     for(let bx = 0; bx < 2; bx++) {
         for(let by = 0; by < 2; by++) {
             ctx.fillStyle = '#3a3a3a';
             ctx.beginPath();
-            ctx.arc(35 + bx * 190, 45 + by * 80, 4, 0, Math.PI * 2);
+            ctx.arc(35 + bx * 190, 65 + by * 80, 4, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#8a8a8a';
             ctx.beginPath();
-            ctx.arc(34 + bx * 190, 44 + by * 80, 2, 0, Math.PI * 2);
+            ctx.arc(34 + bx * 190, 64 + by * 80, 2, 0, Math.PI * 2);
             ctx.fill();
         }
     }
@@ -12672,21 +13242,21 @@ function drawScene() {
     ctx.fillStyle = '#f5f2ec';
     ctx.font = 'bold 36px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', 130, 75);
+    ctx.fillText('PIPETECH', 130, 95);
 
     ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(50, 82, 160, 1);
+    ctx.fillRect(50, 102, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
     ctx.font = '10px Arial';
-    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 97);
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
 
     // Four colored stripe bands on the sign (below tagline)
     for(let i = 0; i < 4; i++) {
         ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(35, 104 + i * 6, 190, 4);
+        ctx.fillRect(35, 124 + i * 6, 190, 4);
         ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.fillRect(35, 104 + i * 6, 190, 1);
+        ctx.fillRect(35, 124 + i * 6, 190, 1);
     }
 
     // Dark concrete sub-floor (under rubber matting edge)
@@ -12703,6 +13273,15 @@ function drawScene() {
         draw3DPrinter(printer3d.x, printer3d.y);
     }
 
+    // Water cooler — between doc printer and 3D printer area
+    drawWaterCooler(115, 400);
+
+    // Tool cabinet — under PipeTech sign
+    drawToolCabinet(130, 400);
+
+    // Marker board — right of PipeTech sign
+    drawMarkerBoard(285, 110);
+
     // Right wall gasket + boss door BEFORE pipes so gasket renders behind
     drawPipeRoomRightWall(225);
 
@@ -12715,52 +13294,50 @@ function drawScene() {
     }
 
     for(let npc of npcs) {
-        const pipeY = 200;
+        const pipeY = 210;
+        const gasketY = 74; // Lowered from 54 to give ceiling breathing room
 
-        // Wall gasket at top - curved mount with round bolted bevel (matching level 6)
-        // Outer bevel ring (mounted in wall)
+        // Wall gasket at top - curved mount with round bolted bevel
         ctx.fillStyle = '#999';
         ctx.beginPath();
-        ctx.arc(npc.x, 54, 18, 0, Math.PI * 2);
+        ctx.arc(npc.x, gasketY, 18, 0, Math.PI * 2);
         ctx.fill();
 
         // Inner gasket plate (recessed)
         ctx.fillStyle = '#666';
         ctx.beginPath();
-        ctx.arc(npc.x, 54, 14, 0, Math.PI * 2);
+        ctx.arc(npc.x, gasketY, 14, 0, Math.PI * 2);
         ctx.fill();
 
         // Center pipe opening
         ctx.fillStyle = '#444';
         ctx.beginPath();
-        ctx.arc(npc.x, 54, 8, 0, Math.PI * 2);
+        ctx.arc(npc.x, gasketY, 8, 0, Math.PI * 2);
         ctx.fill();
 
         // Round bolts around the bevel (6 bolts evenly spaced)
         for(let b = 0; b < 6; b++) {
             const angle = (b / 6) * Math.PI * 2;
             const boltX = npc.x + Math.cos(angle) * 12;
-            const boltY = 54 + Math.sin(angle) * 12;
+            const boltY = gasketY + Math.sin(angle) * 12;
 
-            // Bolt head
             ctx.fillStyle = '#555';
             ctx.beginPath();
             ctx.arc(boltX, boltY, 3, 0, Math.PI * 2);
             ctx.fill();
 
-            // Bolt shadow/depth
             ctx.fillStyle = '#333';
             ctx.beginPath();
             ctx.arc(boltX, boltY, 1.5, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Pipe starts from inner gasket opening (56) not outer edge (58)
+        // Pipe starts from inner gasket opening
         ctx.strokeStyle = npc.color.hex;
         ctx.lineWidth = 14;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(npc.x, 56);
+        ctx.moveTo(npc.x, gasketY + 8);
         ctx.lineTo(npc.x, pipeY);
         ctx.stroke();
 
@@ -12768,7 +13345,7 @@ function drawScene() {
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(npc.x - 4, 56);
+        ctx.moveTo(npc.x - 4, gasketY + 8);
         ctx.lineTo(npc.x - 4, pipeY);
         ctx.stroke();
 
@@ -12810,8 +13387,8 @@ function drawScene() {
     }
 
     // Overhead ceiling fixtures (drawn after pipes so they render in front)
-    drawIndustrialFan(420, 32, 80);
-    drawCCTVCamera(260, 12, true);
+    drawIndustrialFan(420, 52, 80);
+    drawCCTVCamera(260, 32, true);
 
     for(let exp of explosions) {
         ctx.fillStyle = `rgba(255,100,0,${exp.alpha})`;
@@ -13188,11 +13765,12 @@ function update() {
                 keys.upProcessed = true;
             }
             if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                // Calculate max scroll based on image height (matches drawLetterUI using GAME_W/GAME_H)
+                // Calculate max scroll based on image height (matches drawLetterUI 2x zoom)
                 if(letterImg.complete && letterImg.naturalWidth > 0) {
-                    const maxWidth = GAME_W;
+                    const ZOOM = 2.0;
+                    const zoomedWidth = GAME_W * ZOOM;
                     const viewportHeight = GAME_H - 45;
-                    const scale = maxWidth / letterImg.naturalWidth;
+                    const scale = zoomedWidth / letterImg.naturalWidth;
                     const fullHeight = letterImg.naturalHeight * scale;
                     const maxScroll = Math.max(0, fullHeight - viewportHeight);
                     level5.letterScrollOffset = Math.min(maxScroll, level5.letterScrollOffset + 30);
@@ -13396,6 +13974,57 @@ function update() {
                     player.facing = 'down';
                 }
             }
+
+            // Bookshelf / Shining book interaction (RED office)
+            if(level5.currentOffice === 'RED') {
+                const shelfX = 540;
+                const shelfY = 200;
+                const nearShining = Math.abs(player.x - (shelfX + 8)) < 50 && player.y > shelfY && player.y < shelfY + 140;
+                if(nearShining && (keys[' '] || keys['action']) && !level5.viewingEmail && !level5.viewingLetter) {
+                    level5.shiningDialogue = !level5.shiningDialogue;
+                    level5.shiningDialogueTimer = 0;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+                // Close dialogue via action
+                if(level5.shiningDialogue && (keys[' '] || keys['action'])) {
+                    level5.shiningDialogue = false;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+            }
+
+            // Yellow cat AI — follows player when in YELLOW office
+            if(level5.currentOffice === 'YELLOW') {
+                const cat = level5.yellowCat;
+                const dx = player.x - cat.x;
+                const dy = player.y - cat.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                cat.tailPhase = (cat.tailPhase || 0) + 0.05;
+                if(dist > 80) {
+                    // Move toward player
+                    cat.state = 'walking';
+                    const speed = 1.8;
+                    cat.x += (dx / dist) * speed;
+                    cat.y += (dy / dist) * speed;
+                    cat.facing = dx < 0 ? 'left' : 'right';
+                } else if(dist > 30) {
+                    // Wander slowly
+                    cat.state = 'idle';
+                    cat.idleTimer = (cat.idleTimer || 0) + 1;
+                    if(cat.idleTimer > 60) {
+                        cat.x += (dx / dist) * 0.5;
+                        cat.y += (dy / dist) * 0.5;
+                        if(cat.idleTimer > 90) cat.idleTimer = 0;
+                    }
+                } else {
+                    cat.state = 'idle';
+                    cat.idleTimer = 0;
+                }
+                // Keep cat in office bounds
+                cat.x = Math.max(50, Math.min(650, cat.x));
+                cat.y = Math.max(120, Math.min(460, cat.y));
+            }
         }
 
 
@@ -13575,11 +14204,12 @@ function update() {
                     keys.upProcessed = true;
                 }
                 if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                    // Calculate max scroll based on image height (matches drawDetectiveNoteUI using GAME_W/GAME_H)
+                    // Calculate max scroll based on image height (matches drawDetectiveNoteUI 2x zoom)
                     if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
-                        const maxWidth = GAME_W;
+                        const ZOOM = 2.0;
+                        const zoomedWidth = GAME_W * ZOOM;
                         const viewportHeight = GAME_H - 45;
-                        const scale = maxWidth / detectiveNoteImg.naturalWidth;
+                        const scale = zoomedWidth / detectiveNoteImg.naturalWidth;
                         const fullHeight = detectiveNoteImg.naturalHeight * scale;
                         const maxScroll = Math.max(0, fullHeight - viewportHeight);
                         level6.noteScrollOffset = Math.min(maxScroll, level6.noteScrollOffset + 30);
