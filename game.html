@@ -444,7 +444,8 @@ let player = {
     y: 380,
     holding: null,
     facing: 'forward',
-    lastMove: 0
+    lastMove: 0,
+    shootTimer: 0
 };
 
 let computer = {x: 180, y: 350};
@@ -562,6 +563,9 @@ let level5 = {
     emailScrollOffset: 0,
     letterScrollOffset: 0,
     blueEmailRead: false,
+    napFadeOut: false,
+    napFadeIn: false,
+    napFadeAlpha: 0,
     ceoLetterOpened: false,
     redEmailRead: false,
     redDoorLocked: true,
@@ -646,6 +650,7 @@ function initLevel(lv) {
     muzzleFlashes = [];
     player.holding = null;
     player.facing = 'down';
+    player.shootTimer = 0;
     player.x = 350;
     player.y = 380;
     ui = {show: false, selectedColor: 0, confirming: false, gunUI: false, gunChoice: 0};
@@ -3278,6 +3283,8 @@ function draw3DPrinter(x, y) {
 }
 
 function drawGhostGun(x, y, facing) {
+    // Concealed unless actively shooting
+    if(player.shootTimer === 0) facing = 'down';
     const skinColor = '#f5c89a';
     const sleeveColor = '#800020'; // Red jacket sleeve
 
@@ -3434,6 +3441,8 @@ function drawGhostGun(x, y, facing) {
 }
 
 function drawRevolver(x, y, facing) {
+    // Concealed unless actively shooting
+    if(player.shootTimer === 0) facing = 'down';
     const s = 2;
     const skinColor = '#d4a882';
 
@@ -4704,7 +4713,7 @@ function drawToolCabinet(x, y) {
 }
 
 // Marker board with multicolored sticky notes
-function drawMarkerBoard(x, y) {
+function drawMarkerBoard(x, y, boardLv) {
     const t = Date.now();
     // Wooden frame
     ctx.fillStyle = '#6b4226';
@@ -4727,9 +4736,6 @@ function drawMarkerBoard(x, y) {
     // Eraser
     ctx.fillStyle = '#eee'; ctx.fillRect(x + 30, y + 37, 14, 4);
     ctx.fillStyle = '#ddd'; ctx.fillRect(x + 31, y + 38, 12, 2);
-
-    // === Level-specific board content ===
-    const boardLv = (typeof level5 !== 'undefined' && level5.room !== undefined) ? 5 : level;
 
     if(boardLv === 1) {
         // Level 1 welcome message — blue dry-erase marker, large and readable
@@ -4757,41 +4763,36 @@ function drawMarkerBoard(x, y) {
         ctx.beginPath(); ctx.arc(x, y + 18, 4, 0, Math.PI); ctx.stroke();
         ctx.restore();
     } else if(boardLv === 4) {
-        // Level 4 — Mathematical Constants board
+        // Level 4 — full-board black marker text, circled in red, stickies at bottom
         ctx.save();
         ctx.beginPath(); ctx.rect(x - 51, y - 38, 102, 76); ctx.clip();
-        ctx.fillStyle = '#f0f0ee';
-        ctx.fillRect(x - 51, y - 38, 102, 76); // clear board
+        // Clear board
+        ctx.fillStyle = '#f5f5f0';
+        ctx.fillRect(x - 51, y - 38, 102, 76);
         ctx.textAlign = 'center';
-        // Header: "Mathematical Constants:" — black, underlined, small to fit
-        ctx.font = 'bold 8px Arial';
+        // Header in bold black marker
+        ctx.font = 'bold 9px Arial';
         ctx.fillStyle = '#111';
-        ctx.fillText('Mathematical Constants:', x, y - 28);
-        const headerW4 = ctx.measureText('Mathematical Constants:').width;
-        ctx.strokeStyle = '#111'; ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.moveTo(x - headerW4/2, y - 26); ctx.lineTo(x + headerW4/2, y - 26); ctx.stroke();
-
-        // "1 PROMOTION" line 1 in bold red
+        ctx.fillText('Mathematical constant:', x, y - 20);
+        // Key equation in large bold black marker
         ctx.font = 'bold 13px Arial';
-        ctx.fillStyle = '#cc0000';
-        ctx.fillText('1 PROMOTION', x, y - 12);
-        // "= 6 FIRES" line 2
-        ctx.fillText('= 6 FIRES', x, y + 3);
-        // Circle around both clue lines
-        ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.ellipse(x, y - 5, 46, 15, 0, 0, Math.PI * 2); ctx.stroke();
-
-        // Data science formulas in 4 PM colors — small surrounding clutter
-        const fmls = [
-            {text: 'σ=√Σ(x-μ)²/N', color: '#e74c3c', cx: x - 22, cy: y + 20},
-            {text: 'P(A|B)=P(B|A)/P(B)', color: '#27ae60', cx: x + 22, cy: y + 20},
-            {text: 'ŷ=β₀+β₁x+ε', color: '#005f99', cx: x - 24, cy: y + 30},
-            {text: '∇L=Σloss(y,f(x))', color: '#d4a017', cx: x + 20, cy: y + 30},
+        ctx.fillText('1 promotion', x, y - 4);
+        ctx.fillText('= 6 fires', x, y + 11);
+        // Red circle around the equation
+        ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.ellipse(x, y + 4, 48, 16, 0, 0, Math.PI * 2); ctx.stroke();
+        // Tiny sticky notes along bottom of board (small, not covering main text)
+        const tinyNotes = [
+            {nx: x - 42, color: '#ffe44d'},
+            {nx: x - 14, color: '#ff8fa0'},
+            {nx: x + 14, color: '#90ee90'},
+            {nx: x + 28, color: '#87ceeb'},
         ];
-        ctx.font = '6px Arial';
-        for(let f of fmls) {
-            ctx.fillStyle = f.color;
-            ctx.fillText(f.text, f.cx, f.cy);
+        for(let n of tinyNotes) {
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(n.nx + 1, y + 26, 12, 10);
+            ctx.fillStyle = n.color;
+            ctx.fillRect(n.nx, y + 25, 12, 10);
         }
         ctx.restore();
     } else {
@@ -4946,7 +4947,7 @@ function drawLevel5PipeRoom() {
     drawToolCabinet(65, 400);
 
     // Marker board — below PipeTech sign on wall (sign bottom y=160, board at y=215)
-    drawMarkerBoard(150, 215);
+    drawMarkerBoard(150, 215, 5);
 
     // Right wall gasket BEFORE pipes so gasket renders behind
     // pipeY=210, horizontal pipe runs at pipeY+25=235 — gasket centered on pipe
@@ -6718,6 +6719,20 @@ function drawOfficeRoom(officeName) {
             ctx.fillText('[ ACTION ] - VIEW LETTER', letterX, deskY + 8);
         }
     }
+
+    // Futon nap prompt (BLUE office only)
+    if(officeName === 'BLUE' && !level5.napFadeOut && !level5.napFadeIn) {
+        // Futon is at x=560; player approaches from the left (x < 510)
+        if(player.x > 430 && player.x < 520 && player.y > 300 && player.y < 415) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.font = 'bold 16px Arial';
+            const napW = ctx.measureText('[ ACTION ] - NAP').width + 20;
+            ctx.fillRect(560 - napW / 2, 308, napW, 24);
+            ctx.fillStyle = '#ffd700';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - NAP', 560, 325);
+        }
+    }
 }
 // SECTION 10: Level 6 Scene Drawing Functions
 function drawLevel6PipeRoom() {
@@ -6742,8 +6757,19 @@ function drawLevel6PipeRoom() {
         }
     }
 
-    // Rubber matting floor
+    // Rubber matting floor (main working area)
     drawRubberMattingFloor(400);
+
+    // Elevator lobby tile section (left ~170px in front of elevator) — dark industrial tile
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-GX, 400, 170 + GX, CANVAS_H);
+    for(let i = -4; i < 6; i++) {
+        for(let j = 0; j < 3; j++) {
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+        }
+    }
 
     // Ceiling surface and overhead fixtures (drawn early, behind sign)
     drawCeilingSurface(8);
@@ -13458,7 +13484,7 @@ function drawScene() {
     if(level !== 4) drawToolCabinet(65, 400);
 
     // Marker board — below PipeTech sign on wall (sign bottom y=160, board at y=215)
-    drawMarkerBoard(150, 215);
+    drawMarkerBoard(150, 215, level);
 
     // Right wall gasket + boss door BEFORE pipes so gasket renders behind
     // pipeY=210, horizontal pipe runs at pipeY+25=235 — gasket centered on pipe
@@ -13733,6 +13759,12 @@ function drawScene() {
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
+    // Nap fade overlay — black screen for futon sleep transition
+    if(level5.napFadeAlpha > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${level5.napFadeAlpha})`;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    }
+
     // Draw mute indicator (always on top during gameplay)
     if(state === 'playing') {
         drawMuteIndicator();
@@ -13857,6 +13889,27 @@ function update() {
     
     // LEVEL 5 LOGIC
     if(level === 5) {
+        // Nap fade transition (Blue office futon)
+        if(level5.napFadeOut) {
+            level5.napFadeAlpha = Math.min(1, level5.napFadeAlpha + 0.04);
+            if(level5.napFadeAlpha >= 1) {
+                level5.napFadeOut = false;
+                level5.napFadeIn = true;
+                // Replenish clock and reset Blue's window to blue sky
+                timer = 180;
+                level5.blueEmailRead = false;
+                document.getElementById('timer').textContent = timer;
+            }
+            return; // Pause all other logic while fading out
+        }
+        if(level5.napFadeIn) {
+            level5.napFadeAlpha = Math.max(0, level5.napFadeAlpha - 0.04);
+            if(level5.napFadeAlpha <= 0) {
+                level5.napFadeIn = false;
+            }
+            return; // Pause all other logic while fading in
+        }
+
         // Mullet Pro AI
         if(level5.mulletPro.state === 'walkingToComputer') {
             if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
@@ -14165,6 +14218,14 @@ function update() {
                 if(player.x > 510 && player.x < 620 && player.y > 310 && player.y < 375) {
                     player.x = prevX;
                     player.y = prevY;
+                }
+                // Futon nap — press action while standing beside futon
+                if(!level5.napFadeOut && !level5.napFadeIn &&
+                   player.x > 430 && player.x < 520 && player.y > 300 && player.y < 415 &&
+                   (keys[' '] || keys['action'])) {
+                    level5.napFadeOut = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
                 }
             }
             // GREEN office: plant collision (left wall)
@@ -15203,6 +15264,7 @@ function update() {
                             bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
                             level6.revolverAmmo--;
                             muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                            player.shootTimer = 20;
                         }
                     }
                 }
@@ -15245,6 +15307,7 @@ function update() {
                         bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
                         level6.revolverAmmo--;
                         muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                        player.shootTimer = 20;
                     }
                 }
 
@@ -16291,6 +16354,7 @@ if (keys[' '] || keys['action']) {
             if(direction !== 0) {
                 bullets.push({x: player.x, y: player.y - 25, vx: direction * 12});
                 createMuzzleFlash(player.x, player.y - 25, player.facing);
+                player.shootTimer = 20;
                 ghostGun.ammo = 0;
                 ghostGun.hasGun = false;
             }
@@ -16446,6 +16510,7 @@ function gameLoop() {
     }
 
     frame++;
+    if(player.shootTimer > 0) player.shootTimer--;
     const now = Date.now();
     counter += now - lastTime;
     lastTime = now;
