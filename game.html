@@ -563,6 +563,9 @@ let level5 = {
     emailScrollOffset: 0,
     letterScrollOffset: 0,
     blueEmailRead: false,
+    napFadeOut: false,
+    napFadeIn: false,
+    napFadeAlpha: 0,
     ceoLetterOpened: false,
     redEmailRead: false,
     redDoorLocked: true,
@@ -6714,6 +6717,20 @@ function drawOfficeRoom(officeName) {
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('[ ACTION ] - VIEW LETTER', letterX, deskY + 8);
+        }
+    }
+
+    // Futon nap prompt (BLUE office only)
+    if(officeName === 'BLUE' && !level5.napFadeOut && !level5.napFadeIn) {
+        // Futon is at x=560; player approaches from the left (x < 510)
+        if(player.x > 430 && player.x < 520 && player.y > 300 && player.y < 415) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.font = 'bold 16px Arial';
+            const napW = ctx.measureText('[ ACTION ] - NAP').width + 20;
+            ctx.fillRect(560 - napW / 2, 308, napW, 24);
+            ctx.fillStyle = '#ffd700';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - NAP', 560, 325);
         }
     }
 }
@@ -13742,6 +13759,12 @@ function drawScene() {
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
+    // Nap fade overlay — black screen for futon sleep transition
+    if(level5.napFadeAlpha > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${level5.napFadeAlpha})`;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    }
+
     // Draw mute indicator (always on top during gameplay)
     if(state === 'playing') {
         drawMuteIndicator();
@@ -13866,6 +13889,27 @@ function update() {
     
     // LEVEL 5 LOGIC
     if(level === 5) {
+        // Nap fade transition (Blue office futon)
+        if(level5.napFadeOut) {
+            level5.napFadeAlpha = Math.min(1, level5.napFadeAlpha + 0.04);
+            if(level5.napFadeAlpha >= 1) {
+                level5.napFadeOut = false;
+                level5.napFadeIn = true;
+                // Replenish clock and reset Blue's window to blue sky
+                timer = 180;
+                level5.blueEmailRead = false;
+                document.getElementById('timer').textContent = timer;
+            }
+            return; // Pause all other logic while fading out
+        }
+        if(level5.napFadeIn) {
+            level5.napFadeAlpha = Math.max(0, level5.napFadeAlpha - 0.04);
+            if(level5.napFadeAlpha <= 0) {
+                level5.napFadeIn = false;
+            }
+            return; // Pause all other logic while fading in
+        }
+
         // Mullet Pro AI
         if(level5.mulletPro.state === 'walkingToComputer') {
             if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
@@ -14174,6 +14218,14 @@ function update() {
                 if(player.x > 510 && player.x < 620 && player.y > 310 && player.y < 375) {
                     player.x = prevX;
                     player.y = prevY;
+                }
+                // Futon nap — press action while standing beside futon
+                if(!level5.napFadeOut && !level5.napFadeIn &&
+                   player.x > 430 && player.x < 520 && player.y > 300 && player.y < 415 &&
+                   (keys[' '] || keys['action'])) {
+                    level5.napFadeOut = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
                 }
             }
             // GREEN office: plant collision (left wall)
