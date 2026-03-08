@@ -46,8 +46,8 @@ const key = new THREE.DirectionalLight(0xffd2a6, 1.3);
 const fill = new THREE.DirectionalLight(0x7aa7ff, 0.7);
 key.position.set(8, 16, 7);
 key.castShadow = true;
-key.shadow.mapSize.width = 2048;
-key.shadow.mapSize.height = 2048;
+key.shadow.mapSize.width = 1024;
+key.shadow.mapSize.height = 1024;
 key.shadow.camera.near = 0.5;
 key.shadow.camera.far = 40;
 key.shadow.camera.left = -15;
@@ -115,7 +115,7 @@ syncViewport();
 window.addEventListener("resize", syncViewport);
 
 function initRendererProfile() {
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.0));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
@@ -2501,8 +2501,8 @@ function updateDriving(delta) {
     }
   }
 
-  camera.position.set(d.playerCar.position.x * 0.7, 3.5, 10);
-  camera.lookAt(d.playerCar.position.x * 0.7, 0.5, -5);
+  camera.position.set(d.playerCar.position.x * 0.3, 6, 12);
+  camera.lookAt(d.playerCar.position.x * 0.3, 0, -5);
 
   if (d.progress >= d.target) {
     d.progress = d.target;
@@ -2806,7 +2806,7 @@ function updateCamera(delta) {
   let desired, lerpSpeed;
   // Fixed isometric-style offset — camera never spins, just follows position.
   // Offset: slightly right and well behind/above. Good for the nightclub layout.
-  const CAM_X = 0.0, CAM_Y = 5.5, CAM_Z = 7.0;
+  const CAM_X = 3.0, CAM_Y = 7.8, CAM_Z = 6.5;
   if (state.player.seated) {
     desired = tempA.set(
       state.player.pos.x + CAM_X * 0.6,
