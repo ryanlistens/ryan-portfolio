@@ -2968,13 +2968,13 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
     ctx.lineTo(700, pipeY + 21);
     ctx.stroke();
 
-    // --- Stationary pipe aneurysm — bulge grows in one spot, throbs at high stress ---
+    // --- Stationary pipe aneurysm on VERTICAL section — bulge grows above each NPC ---
     if (stressPct > 0) {
         const now = Date.now();
-        // Bulge sits ~60% along the horizontal run
-        const horizLen = 700 - elbowX;
-        const bx = elbowX + horizLen * 0.60;
-        const by = horizY;
+        // Bulge sits ~55% down the vertical run (visually above the NPC)
+        const vertLen = pipeY - gasketY;
+        const bx = npc.x;
+        const by = gasketY + vertLen * 0.55;
 
         // Pulsing throb: frequency and amplitude increase with stress
         const pulseFreq = 1.8 + stressPct * 4.2;       // Hz equivalent
@@ -2982,30 +2982,30 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
         const throb     = 1 + Math.sin(now * pulseFreq * 0.006) * pulseAmp;
 
         // Bulge grows from nothing to large balloon as stress rises
-        const maxRadialR = pipeR + 2 + stressPct * 18;  // bulge outward
-        const maxAxialR  = pipeR + 1 + stressPct * 10;  // elongates along pipe
+        const maxRadialR = pipeR + 2 + stressPct * 18;  // bulge outward (horizontal, perpendicular to vertical pipe)
+        const maxAxialR  = pipeR + 1 + stressPct * 10;  // elongates along pipe (vertical)
         const radialR = maxRadialR * throb;
         const axialR  = maxAxialR  * throb;
 
         ctx.save();
         ctx.globalAlpha = 0.72 + stressPct * 0.28;
 
-        // Dark bulge shadow underneath
+        // Dark bulge shadow (offset right/down)
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath();
-        ctx.ellipse(bx + 2, by + 3, axialR * 1.05, radialR * 1.05, 0, 0, Math.PI * 2);
+        ctx.ellipse(bx + 2, by + 3, radialR * 1.05, axialR * 1.05, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Main bulge — same pipe color
+        // Main bulge — same pipe color; radialR is horizontal (swell), axialR is vertical (along pipe)
         ctx.fillStyle = npc.color.hex;
         ctx.beginPath();
-        ctx.ellipse(bx, by, axialR, radialR, 0, 0, Math.PI * 2);
+        ctx.ellipse(bx, by, radialR, axialR, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Highlight specular
         ctx.fillStyle = 'rgba(255,255,255,0.30)';
         ctx.beginPath();
-        ctx.ellipse(bx - axialR * 0.30, by - radialR * 0.38, axialR * 0.38, radialR * 0.35, 0, 0, Math.PI * 2);
+        ctx.ellipse(bx - radialR * 0.30, by - axialR * 0.38, radialR * 0.38, axialR * 0.35, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // At very high stress: stress cracks / veins radiating from bulge
@@ -3016,10 +3016,10 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
             const numCracks = 5;
             for (let c = 0; c < numCracks; c++) {
                 const ang = (c / numCracks) * Math.PI * 2 + now * 0.0003;
-                const cx1 = bx + Math.cos(ang) * axialR * 0.7;
-                const cy1 = by + Math.sin(ang) * radialR * 0.7;
-                const cx2 = bx + Math.cos(ang + 0.2) * (axialR + 6 + crackAlpha * 8);
-                const cy2 = by + Math.sin(ang + 0.2) * (radialR + 6 + crackAlpha * 8);
+                const cx1 = bx + Math.cos(ang) * radialR * 0.7;
+                const cy1 = by + Math.sin(ang) * axialR * 0.7;
+                const cx2 = bx + Math.cos(ang + 0.2) * (radialR + 6 + crackAlpha * 8);
+                const cy2 = by + Math.sin(ang + 0.2) * (axialR + 6 + crackAlpha * 8);
                 ctx.beginPath();
                 ctx.moveTo(cx1, cy1);
                 ctx.lineTo(cx2, cy2);
@@ -5336,8 +5336,12 @@ function drawLevel5PipeRoom() {
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
         // Color-coordinated step-ladder (drawn behind NPC)
-        drawStepLadder(npc.x, npc.y, npc.color);
-        drawNPC(npc);
+        // Skip NPC sprite while its acid-burst melt animation is playing
+        const isMeltingL5 = acidBursts.some(ab => ab.npc === npc);
+        if (!isMeltingL5) {
+            drawStepLadder(npc.x, npc.y, npc.color);
+            drawNPC(npc);
+        }
     }
 
     // Acid burst dissolve effects
@@ -14235,8 +14239,12 @@ function drawScene() {
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
         // Color-coordinated step-ladder (drawn behind NPC)
-        drawStepLadder(npc.x, npc.y, npc.color);
-        drawNPC(npc);
+        // Skip NPC sprite while its acid-burst melt animation is playing
+        const isMelting = acidBursts.some(ab => ab.npc === npc);
+        if (!isMelting) {
+            drawStepLadder(npc.x, npc.y, npc.color);
+            drawNPC(npc);
+        }
     }
 
     // Acid burst dissolve effects (pipe burst → PM melted before reset)
