@@ -466,6 +466,7 @@ let ui = {
 
 let npcs = [];
 let cracks = [];
+let acidBursts = []; // acid-dissolve events triggered on pipe burst
 let keys = {};
 let explosions = [];
 let bullets = [];
@@ -651,6 +652,7 @@ function initLevel(lv) {
     level = lv;
     npcs = [];
     cracks = [];
+    acidBursts = [];
     explosions = [];
     bullets = [];
     muzzleFlashes = [];
@@ -2905,6 +2907,128 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(wx - 3, wy + wh, ww + 6, 5);
     ctx.fillStyle = '#555';
     ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 2);
+}
+
+// Draw one pipe (vertical → elbow → horizontal) with:
+//   • bendy-straw ridges
+//   • bolted ring seal at the elbow joint
+//   • boa-constrictor swell when stressPct > 0
+// stressPct: 0 = idle, 1 = about to burst
+function drawPipeSection(npc, pipeY, gasketY, stressPct) {
+    const pipeR   = 7;
+    const elbowX  = npc.x + 25;
+    const horizY  = pipeY + 25;
+
+    // --- Drop shadow path ---
+    ctx.strokeStyle = 'rgba(0,0,0,0.20)';
+    ctx.lineWidth   = 20;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(npc.x + 5, gasketY);
+    ctx.lineTo(npc.x + 5, pipeY);
+    ctx.quadraticCurveTo(npc.x + 5, pipeY + 29, npc.x + 30, pipeY + 29);
+    ctx.lineTo(700, pipeY + 29);
+    ctx.stroke();
+
+    // --- Main colored pipe ---
+    ctx.strokeStyle = npc.color.hex;
+    ctx.lineWidth   = 14;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(npc.x, gasketY);
+    ctx.lineTo(npc.x, pipeY);
+    ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
+    ctx.lineTo(700, pipeY + 25);
+    ctx.stroke();
+
+    // --- Bendy-straw grooves ---
+    // Vertical section: thin horizontal rings every 15 px
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    for (let gy = gasketY + 8; gy < pipeY - 4; gy += 15) {
+        ctx.fillRect(npc.x - pipeR, gy, pipeR * 2, 2.5);
+    }
+    // Horizontal section: thin vertical rings every 15 px
+    for (let gx = elbowX + 10; gx < 698; gx += 15) {
+        ctx.fillRect(gx, horizY - pipeR, 2.5, pipeR * 2);
+    }
+
+    // --- Bolted ring seal at the elbow joint ---
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.arc(elbowX - 2, pipeY + 2, pipeR + 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#909090';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(elbowX - 2, pipeY + 2, pipeR + 3, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let b = 0; b < 4; b++) {
+        const ba = (b / 4) * Math.PI * 2;
+        ctx.fillStyle = '#666';
+        ctx.beginPath();
+        ctx.arc(
+            (elbowX - 2) + Math.cos(ba) * (pipeR + 3),
+            (pipeY + 2)  + Math.sin(ba) * (pipeR + 3),
+            2, 0, Math.PI * 2
+        );
+        ctx.fill();
+    }
+    ctx.restore();
+
+    // --- Highlight stripe ---
+    ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'butt';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(npc.x - 4, gasketY);
+    ctx.lineTo(npc.x - 4, pipeY);
+    ctx.quadraticCurveTo(npc.x - 4, pipeY + 21, npc.x + 29, pipeY + 21);
+    ctx.lineTo(700, pipeY + 21);
+    ctx.stroke();
+
+    // --- Boa-constrictor traveling swell ---
+    if (stressPct > 0) {
+        const vertLen  = pipeY - gasketY;
+        const horizLen = 700 - elbowX;
+        const totalLen = vertLen + horizLen;
+        const speed    = 0.5 + stressPct * 2.5;    // accelerates under pressure
+        const axialR   = 22 + stressPct * 10;       // half-length along pipe axis
+        const radialR  = pipeR + 1 + stressPct * 11; // half-width perpendicular (grows!)
+        const phase    = (Date.now() * speed / 3000) % 1;
+        const bulgePos = phase * totalLen;
+
+        ctx.save();
+        ctx.fillStyle  = npc.color.hex;
+        ctx.globalAlpha = 0.75 + stressPct * 0.25;
+
+        if (bulgePos < vertLen) {
+            // Lump travelling down the vertical section
+            const by = gasketY + bulgePos;
+            ctx.beginPath();
+            ctx.ellipse(npc.x, by, radialR, axialR, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.22)';
+            ctx.beginPath();
+            ctx.ellipse(npc.x - radialR * 0.38, by - axialR * 0.32, radialR * 0.34, axialR * 0.40, 0, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Lump travelling along the horizontal section
+            const bx = elbowX + (bulgePos - vertLen);
+            ctx.beginPath();
+            ctx.ellipse(bx, horizY, axialR, radialR, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.22)';
+            ctx.beginPath();
+            ctx.ellipse(bx - axialR * 0.32, horizY - radialR * 0.38, axialR * 0.40, radialR * 0.34, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
 }
 
 // Hand wheel turn-valve on pipe section (vertical or horizontal orientation)
@@ -5200,68 +5324,12 @@ function drawLevel5PipeRoom() {
             ctx.fill();
         }
 
-        // Wall shadow — single continuous path avoids bubble at elbow junction
-        ctx.strokeStyle = 'rgba(0,0,0,0.20)';
-        ctx.lineWidth = 20;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(npc.x + 5, gasketY);
-        ctx.lineTo(npc.x + 5, pipeY);
-        ctx.quadraticCurveTo(npc.x + 5, pipeY + 29, npc.x + 30, pipeY + 29);
-        ctx.lineTo(700, pipeY + 29);
-        ctx.stroke();
-
-        // Pipe — single continuous path: vertical from gasket → elbow → horizontal to wall
-        ctx.strokeStyle = npc.color.hex;
-        ctx.lineWidth = 14;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(npc.x, gasketY);
-        ctx.lineTo(npc.x, pipeY);
-        ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
-        ctx.lineTo(700, pipeY + 25);
-        ctx.stroke();
-
-        // Pipe shine highlights — single continuous path: vertical left-side → elbow outer curve → horizontal top-side
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'butt';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(npc.x - 4, gasketY);
-        ctx.lineTo(npc.x - 4, pipeY);
-        ctx.quadraticCurveTo(npc.x - 4, pipeY + 21, npc.x + 29, pipeY + 21);
-        ctx.lineTo(700, pipeY + 21);
-        ctx.stroke();
-
-        // Animated flow effect on horizontal pipe section — dark dashes for visibility against any pipe color
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-        ctx.lineWidth = 5;
-        ctx.lineCap = 'butt';
-        ctx.setLineDash([12, 10]);
-        ctx.lineDashOffset = -Date.now() / 150;
-        ctx.beginPath();
-        ctx.moveTo(npc.x + 25, pipeY + 25);
-        ctx.lineTo(700, pipeY + 25);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-
-        // Diagonal swell — colored bars on vertical pipe above valve (hidden while PM is fixing)
+        // Grooved pipe with boa-constrictor swell (drawPipeSection handles shadow, ridges, seal, swell)
+        let l5StressPct = 0;
         if(npc.needsDoc && npc.crackStartTime && npc.state !== 'fixing') {
-            const crackTime = Date.now() - npc.crackStartTime;
-            const pct = Math.min(crackTime / 15000, 1);
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.4 + pct * 0.6;
-            const sz = 18 + pct * 28;
-            for(let i = 0; i < 3; i++) {
-                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 55 + i * 8, sz, 8);
-            }
-            ctx.globalAlpha = 1;
+            l5StressPct = Math.min((Date.now() - npc.crackStartTime) / 15000, 1);
         }
+        drawPipeSection(npc, pipeY, gasketY, l5StressPct);
 
         // Hand wheel turn-valve on horizontal pipe section (right of elbow)
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
@@ -5270,6 +5338,9 @@ function drawLevel5PipeRoom() {
         drawStepLadder(npc.x, npc.y, npc.color);
         drawNPC(npc);
     }
+
+    // Acid burst dissolve effects
+    for(let ab of acidBursts) { drawAcidBurst(ab); }
 
     drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc);
 
@@ -12540,6 +12611,82 @@ function drawMuteIndicator() {
     }
 }
 
+// Render the acid-burst + PM-dissolve animation for one burst event
+function drawAcidBurst(ab) {
+    const elapsed = Date.now() - ab.startTime;
+    const t = ab.life; // 0..1
+
+    // --- Drips falling from pipe burst point ---
+    for (let d = 0; d < 8; d++) {
+        const dripPhase = (d / 8 + elapsed / 700) % 1;
+        const dripX = ab.x + Math.sin(d * 1.7) * 22;
+        const dripY = ab.pipeY + dripPhase * (392 - ab.pipeY);
+        ctx.fillStyle = `rgba(140,255,40,${(1 - dripPhase) * 0.85})`;
+        ctx.beginPath();
+        ctx.ellipse(dripX, dripY, 3, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // --- Spreading acid puddle on floor ---
+    const puddleRx = 18 + t * 90;
+    const puddleRy = 8 + t * 28;
+    const acidGrad = ctx.createRadialGradient(ab.npcX, 396, 0, ab.npcX, 396, puddleRx);
+    acidGrad.addColorStop(0,    `rgba(190,255,30,${0.88 - t * 0.2})`);
+    acidGrad.addColorStop(0.55, `rgba(100,220,10,${0.65 - t * 0.1})`);
+    acidGrad.addColorStop(1,    'rgba(40,160,0,0)');
+    ctx.fillStyle = acidGrad;
+    ctx.beginPath();
+    ctx.ellipse(ab.npcX, 396, puddleRx, puddleRy, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- PM silhouette dissolving into the puddle ---
+    const dissolveT = Math.max(0, t * 1.6 - 0.25); // delayed start
+    if (dissolveT > 0) {
+        const meltX = ab.npcX;
+        const meltBaseY = 368;
+        ctx.save();
+        ctx.translate(meltX, meltBaseY + dissolveT * 22);
+        ctx.scale(1 + dissolveT * 0.55, 1 - dissolveT * 0.82);
+        ctx.globalAlpha = Math.max(0, 1 - dissolveT * 1.1);
+        ctx.fillStyle = `rgba(80,255,20,${1 - dissolveT})`;
+        // Head
+        ctx.beginPath();
+        ctx.arc(0, -44, 9, 0, Math.PI * 2);
+        ctx.fill();
+        // Torso
+        ctx.fillRect(-12, -35, 24, 22);
+        // Arms
+        ctx.fillRect(-20, -33, 8, 15);
+        ctx.fillRect( 12, -33, 8, 15);
+        // Legs
+        ctx.fillRect(-10, -13, 9, 20);
+        ctx.fillRect(  1, -13, 9, 20);
+        ctx.restore();
+
+        // Acid glow halo around melt point
+        const glowR = 28 + dissolveT * 32;
+        const glowGrad = ctx.createRadialGradient(meltX, meltBaseY - 18, 0, meltX, meltBaseY - 18, glowR);
+        glowGrad.addColorStop(0, `rgba(160,255,40,${dissolveT * 0.45})`);
+        glowGrad.addColorStop(1, 'rgba(60,180,0,0)');
+        ctx.fillStyle = glowGrad;
+        ctx.beginPath();
+        ctx.arc(meltX, meltBaseY - 18, glowR, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // --- Bubbling foam at the puddle edge ---
+    for (let b = 0; b < 10; b++) {
+        const bPhase = (b / 10 * 2.2 + elapsed / 480) % 2;
+        if (bPhase > 1) continue;
+        const bx = ab.npcX + Math.sin(b * 2.5) * 38;
+        const by = 395 - bPhase * 28;
+        ctx.fillStyle = `rgba(210,255,90,${(1 - bPhase) * 0.75})`;
+        ctx.beginPath();
+        ctx.arc(bx, by, 2 + (b % 3), 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 function drawScene() {
     // Clear full expanded canvas and translate to center game area
     ctx.save();
@@ -13848,68 +13995,13 @@ function drawScene() {
             ctx.fill();
         }
 
-        // Wall shadow — single continuous path avoids bubble at elbow junction
-        ctx.strokeStyle = 'rgba(0,0,0,0.20)';
-        ctx.lineWidth = 20;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(npc.x + 5, gasketY);
-        ctx.lineTo(npc.x + 5, pipeY);
-        ctx.quadraticCurveTo(npc.x + 5, pipeY + 29, npc.x + 30, pipeY + 29);
-        ctx.lineTo(700, pipeY + 29);
-        ctx.stroke();
-
-        // Pipe — single continuous path: vertical from gasket → elbow → horizontal to wall
-        ctx.strokeStyle = npc.color.hex;
-        ctx.lineWidth = 14;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(npc.x, gasketY);
-        ctx.lineTo(npc.x, pipeY);
-        ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
-        ctx.lineTo(700, pipeY + 25);
-        ctx.stroke();
-
-        // Pipe shine highlights — single continuous path: vertical left-side → elbow outer curve → horizontal top-side
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'butt';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(npc.x - 4, gasketY);
-        ctx.lineTo(npc.x - 4, pipeY);
-        ctx.quadraticCurveTo(npc.x - 4, pipeY + 21, npc.x + 29, pipeY + 21);
-        ctx.lineTo(700, pipeY + 21);
-        ctx.stroke();
-
-        // Animated flow effect on horizontal pipe section — dark dashes for visibility against any pipe color
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-        ctx.lineWidth = 5;
-        ctx.lineCap = 'butt';
-        ctx.setLineDash([12, 10]);
-        ctx.lineDashOffset = -Date.now() / 150;
-        ctx.beginPath();
-        ctx.moveTo(npc.x + 25, pipeY + 25);
-        ctx.lineTo(700, pipeY + 25);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-
-        // Diagonal swell — colored bars on vertical pipe above valve (hidden while PM is fixing)
+        // Grooved pipe with boa-constrictor swell (drawPipeSection handles shadow, ridges, seal, swell)
         const crack = cracks.find(c => c.npc === npc);
+        let stressPct = 0;
         if(crack && !resetting && npc.state !== 'fixing') {
-            const pct = (Date.now() - crack.time) / crack.max;
-            ctx.fillStyle = npc.color.hex;
-            ctx.globalAlpha = 0.4 + pct * 0.6;
-            const sz = 18 + pct * 28;
-            for(let i = 0; i < 3; i++) {
-                ctx.fillRect(npc.x - sz / 2 + (i - 1) * 5, pipeY - 55 + i * 8, sz, 8);
-            }
-            ctx.globalAlpha = 1;
+            stressPct = Math.min((Date.now() - crack.time) / crack.max, 1);
         }
+        drawPipeSection(npc, pipeY, gasketY, stressPct);
 
         // Hand wheel turn-valve on horizontal pipe section (right of elbow)
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
@@ -13918,6 +14010,9 @@ function drawScene() {
         drawStepLadder(npc.x, npc.y, npc.color);
         drawNPC(npc);
     }
+
+    // Acid burst dissolve effects (pipe burst → PM melted before reset)
+    for(let ab of acidBursts) { drawAcidBurst(ab); }
 
     // Overhead ceiling fixtures (drawn after pipes so they render in front)
     drawIndustrialFan(420, 52, 80);
@@ -14290,6 +14385,16 @@ function update() {
             if(npc.needsDoc && npc.crackStartTime) {
                 if(Date.now() - npc.crackStartTime > 15000) {
                     createExplosion(npc.x + 10, 252);
+                    acidBursts.push({
+                        npc:       npc,
+                        x:         npc.x + 10,
+                        pipeY:     252,
+                        npcX:      npc.x,
+                        startTime: Date.now(),
+                        life:      0,
+                        done:      false,
+                        penalise:  false  // no lives-- in level 5
+                    });
                     npc.needsDoc = false;
                     npc.state = 'happy';
                     npc.y = 368; // reset to ground
@@ -14297,7 +14402,7 @@ function update() {
                 }
             }
         }
-        
+
                 // Handle email scrolling
         if(level5.viewingEmail) {
             if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
@@ -14793,6 +14898,10 @@ function update() {
                     if(npc.needsDoc && npc.crackStartTime) {
                         if(Date.now() - npc.crackStartTime > 15000) {
                             createExplosion(npc.x + 10, 252);
+                            acidBursts.push({
+                                npc: npc, x: npc.x + 10, pipeY: 252, npcX: npc.x,
+                                startTime: Date.now(), life: 0, done: false, penalise: false
+                            });
                             npc.needsDoc = false;
                             npc.state = 'happy';
                             npc.y = 368; // reset to ground
@@ -16791,20 +16900,45 @@ if (keys[' '] || keys['action']) {
         if(!keys['ArrowRight'] && !keys['right']) keys.rightProcessed = false;
     }
     
+    // Advance acid burst animations; trigger reset when each completes
+    for(let i = acidBursts.length - 1; i >= 0; i--) {
+        const ab = acidBursts[i];
+        ab.life = Math.min((Date.now() - ab.startTime) / 2500, 1);
+        if(ab.life >= 1 && !ab.done) {
+            ab.done = true;
+            if(ab.penalise) {
+                lives--;
+                updateLives();
+                resetting = true;
+                fadeOut = true;
+                fadeAlpha = 0;
+                if(lives <= 0) {
+                    state = 'over';
+                    menuChoice = 0;
+                }
+            }
+        }
+        if(Date.now() - ab.startTime > 4000) {
+            acidBursts.splice(i, 1);
+        }
+    }
+
     for(let i = cracks.length - 1; i >= 0; i--) {
         let crack = cracks[i];
         if(Date.now() - crack.time > crack.max) {
             createExplosion(crack.npc.x + 10, 252);
+            // Delay the reset — let the acid dissolve animation play out first
+            acidBursts.push({
+                npc:       crack.npc,
+                x:         crack.npc.x + 10,
+                pipeY:     252,
+                npcX:      crack.npc.x,
+                startTime: Date.now(),
+                life:      0,
+                done:      false,
+                penalise:  true   // lives-- fires when dissolve completes
+            });
             cracks.splice(i, 1);
-            lives--;
-            updateLives();
-            resetting = true;
-            fadeOut = true;
-            fadeAlpha = 0;
-            if(lives <= 0) {
-                state = 'over';
-                menuChoice = 0;
-            }
             return;
         }
     }
