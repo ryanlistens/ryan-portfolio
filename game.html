@@ -2954,29 +2954,7 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
         ctx.fillRect(gx, horizY - pipeR, 2.5, pipeR * 2);
     }
 
-    // --- Bolted ring seal at the elbow joint ---
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.beginPath();
-    ctx.arc(elbowX - 2, pipeY + 2, pipeR + 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#909090';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(elbowX - 2, pipeY + 2, pipeR + 3, 0, Math.PI * 2);
-    ctx.stroke();
-    for (let b = 0; b < 4; b++) {
-        const ba = (b / 4) * Math.PI * 2;
-        ctx.fillStyle = '#666';
-        ctx.beginPath();
-        ctx.arc(
-            (elbowX - 2) + Math.cos(ba) * (pipeR + 3),
-            (pipeY + 2)  + Math.sin(ba) * (pipeR + 3),
-            2, 0, Math.PI * 2
-        );
-        ctx.fill();
-    }
-    ctx.restore();
+    // (elbow ring seal removed — cleaner bend)
 
     // --- Highlight stripe ---
     ctx.strokeStyle = 'rgba(255,255,255,0.30)';
@@ -2990,42 +2968,65 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
     ctx.lineTo(700, pipeY + 21);
     ctx.stroke();
 
-    // --- Boa-constrictor traveling swell ---
+    // --- Stationary pipe aneurysm — bulge grows in one spot, throbs at high stress ---
     if (stressPct > 0) {
-        const vertLen  = pipeY - gasketY;
+        const now = Date.now();
+        // Bulge sits ~60% along the horizontal run
         const horizLen = 700 - elbowX;
-        const totalLen = vertLen + horizLen;
-        const speed    = 0.5 + stressPct * 2.5;    // accelerates under pressure
-        const axialR   = 22 + stressPct * 10;       // half-length along pipe axis
-        const radialR  = pipeR + 1 + stressPct * 11; // half-width perpendicular (grows!)
-        const phase    = (Date.now() * speed / 3000) % 1;
-        const bulgePos = phase * totalLen;
+        const bx = elbowX + horizLen * 0.60;
+        const by = horizY;
+
+        // Pulsing throb: frequency and amplitude increase with stress
+        const pulseFreq = 1.8 + stressPct * 4.2;       // Hz equivalent
+        const pulseAmp  = 0.08 + stressPct * 0.28;
+        const throb     = 1 + Math.sin(now * pulseFreq * 0.006) * pulseAmp;
+
+        // Bulge grows from nothing to large balloon as stress rises
+        const maxRadialR = pipeR + 2 + stressPct * 18;  // bulge outward
+        const maxAxialR  = pipeR + 1 + stressPct * 10;  // elongates along pipe
+        const radialR = maxRadialR * throb;
+        const axialR  = maxAxialR  * throb;
 
         ctx.save();
-        ctx.fillStyle  = npc.color.hex;
-        ctx.globalAlpha = 0.75 + stressPct * 0.25;
+        ctx.globalAlpha = 0.72 + stressPct * 0.28;
 
-        if (bulgePos < vertLen) {
-            // Lump travelling down the vertical section
-            const by = gasketY + bulgePos;
-            ctx.beginPath();
-            ctx.ellipse(npc.x, by, radialR, axialR, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.22)';
-            ctx.beginPath();
-            ctx.ellipse(npc.x - radialR * 0.38, by - axialR * 0.32, radialR * 0.34, axialR * 0.40, 0, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            // Lump travelling along the horizontal section
-            const bx = elbowX + (bulgePos - vertLen);
-            ctx.beginPath();
-            ctx.ellipse(bx, horizY, axialR, radialR, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.22)';
-            ctx.beginPath();
-            ctx.ellipse(bx - axialR * 0.32, horizY - radialR * 0.38, axialR * 0.40, radialR * 0.34, 0, 0, Math.PI * 2);
-            ctx.fill();
+        // Dark bulge shadow underneath
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath();
+        ctx.ellipse(bx + 2, by + 3, axialR * 1.05, radialR * 1.05, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Main bulge — same pipe color
+        ctx.fillStyle = npc.color.hex;
+        ctx.beginPath();
+        ctx.ellipse(bx, by, axialR, radialR, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Highlight specular
+        ctx.fillStyle = 'rgba(255,255,255,0.30)';
+        ctx.beginPath();
+        ctx.ellipse(bx - axialR * 0.30, by - radialR * 0.38, axialR * 0.38, radialR * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // At very high stress: stress cracks / veins radiating from bulge
+        if (stressPct > 0.65) {
+            const crackAlpha = (stressPct - 0.65) / 0.35;
+            ctx.strokeStyle = `rgba(30,0,0,${crackAlpha * 0.7})`;
+            ctx.lineWidth = 0.8;
+            const numCracks = 5;
+            for (let c = 0; c < numCracks; c++) {
+                const ang = (c / numCracks) * Math.PI * 2 + now * 0.0003;
+                const cx1 = bx + Math.cos(ang) * axialR * 0.7;
+                const cy1 = by + Math.sin(ang) * radialR * 0.7;
+                const cx2 = bx + Math.cos(ang + 0.2) * (axialR + 6 + crackAlpha * 8);
+                const cy2 = by + Math.sin(ang + 0.2) * (radialR + 6 + crackAlpha * 8);
+                ctx.beginPath();
+                ctx.moveTo(cx1, cy1);
+                ctx.lineTo(cx2, cy2);
+                ctx.stroke();
+            }
         }
+
         ctx.globalAlpha = 1;
         ctx.restore();
     }
@@ -12611,79 +12612,305 @@ function drawMuteIndicator() {
     }
 }
 
-// Render the acid-burst + PM-dissolve animation for one burst event
+// Render the acid-burst + PM-dissolve animation — Raiders of the Lost Ark / Wicked Witch style
 function drawAcidBurst(ab) {
     const elapsed = Date.now() - ab.startTime;
     const t = ab.life; // 0..1
 
-    // --- Drips falling from pipe burst point ---
-    for (let d = 0; d < 8; d++) {
-        const dripPhase = (d / 8 + elapsed / 700) % 1;
-        const dripX = ab.x + Math.sin(d * 1.7) * 22;
+    // --- Acid spray burst from pipe ---
+    for (let d = 0; d < 12; d++) {
+        const dripPhase = (d / 12 + elapsed / 600) % 1;
+        const spreadX = Math.sin(d * 1.9 + d * 0.4) * 28;
+        const dripX = ab.x + spreadX;
         const dripY = ab.pipeY + dripPhase * (392 - ab.pipeY);
-        ctx.fillStyle = `rgba(140,255,40,${(1 - dripPhase) * 0.85})`;
+        const dripLen = 5 + (d % 4) * 2;
+        ctx.fillStyle = `rgba(120,255,20,${(1 - dripPhase) * 0.9})`;
         ctx.beginPath();
-        ctx.ellipse(dripX, dripY, 3, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(dripX, dripY, 2.5, dripLen, 0, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // --- Spreading acid puddle on floor ---
-    const puddleRx = 18 + t * 90;
-    const puddleRy = 8 + t * 28;
+    // --- Spreading acid puddle (hissing, bubbling) ---
+    const puddleRx = 18 + t * 100;
+    const puddleRy = 8 + t * 32;
     const acidGrad = ctx.createRadialGradient(ab.npcX, 396, 0, ab.npcX, 396, puddleRx);
-    acidGrad.addColorStop(0,    `rgba(190,255,30,${0.88 - t * 0.2})`);
-    acidGrad.addColorStop(0.55, `rgba(100,220,10,${0.65 - t * 0.1})`);
-    acidGrad.addColorStop(1,    'rgba(40,160,0,0)');
+    acidGrad.addColorStop(0,    `rgba(210,255,20,${0.92 - t * 0.18})`);
+    acidGrad.addColorStop(0.45, `rgba(110,230,10,${0.72 - t * 0.10})`);
+    acidGrad.addColorStop(1,    'rgba(30,140,0,0)');
     ctx.fillStyle = acidGrad;
     ctx.beginPath();
     ctx.ellipse(ab.npcX, 396, puddleRx, puddleRy, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // --- PM silhouette dissolving into the puddle ---
-    const dissolveT = Math.max(0, t * 1.6 - 0.25); // delayed start
-    if (dissolveT > 0) {
-        const meltX = ab.npcX;
-        const meltBaseY = 368;
-        ctx.save();
-        ctx.translate(meltX, meltBaseY + dissolveT * 22);
-        ctx.scale(1 + dissolveT * 0.55, 1 - dissolveT * 0.82);
-        ctx.globalAlpha = Math.max(0, 1 - dissolveT * 1.1);
-        ctx.fillStyle = `rgba(80,255,20,${1 - dissolveT})`;
-        // Head
+    // --- Bubbling foam (hissing acid) ---
+    for (let b = 0; b < 14; b++) {
+        const bPhase = (b / 14 * 2.5 + elapsed / 400) % 2;
+        if (bPhase > 1) continue;
+        const bx = ab.npcX + Math.sin(b * 2.3) * (puddleRx * 0.75);
+        const by = 396 - bPhase * 34;
+        ctx.fillStyle = `rgba(220,255,80,${(1 - bPhase) * 0.80})`;
         ctx.beginPath();
-        ctx.arc(0, -44, 9, 0, Math.PI * 2);
-        ctx.fill();
-        // Torso
-        ctx.fillRect(-12, -35, 24, 22);
-        // Arms
-        ctx.fillRect(-20, -33, 8, 15);
-        ctx.fillRect( 12, -33, 8, 15);
-        // Legs
-        ctx.fillRect(-10, -13, 9, 20);
-        ctx.fillRect(  1, -13, 9, 20);
-        ctx.restore();
-
-        // Acid glow halo around melt point
-        const glowR = 28 + dissolveT * 32;
-        const glowGrad = ctx.createRadialGradient(meltX, meltBaseY - 18, 0, meltX, meltBaseY - 18, glowR);
-        glowGrad.addColorStop(0, `rgba(160,255,40,${dissolveT * 0.45})`);
-        glowGrad.addColorStop(1, 'rgba(60,180,0,0)');
-        ctx.fillStyle = glowGrad;
-        ctx.beginPath();
-        ctx.arc(meltX, meltBaseY - 18, glowR, 0, Math.PI * 2);
+        ctx.arc(bx, by, 1.5 + (b % 4), 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // --- Bubbling foam at the puddle edge ---
-    for (let b = 0; b < 10; b++) {
-        const bPhase = (b / 10 * 2.2 + elapsed / 480) % 2;
-        if (bPhase > 1) continue;
-        const bx = ab.npcX + Math.sin(b * 2.5) * 38;
-        const by = 395 - bPhase * 28;
-        ctx.fillStyle = `rgba(210,255,90,${(1 - bPhase) * 0.75})`;
+    // --- DRAMATIC PM MELT — Raiders/Wicked Witch ---
+    // Phase 0–0.15: initial hit, PM staggers, arms raise
+    // Phase 0.15–0.50: face melts — eyes run down, skin drips, mouth gapes in silent scream
+    // Phase 0.50–0.75: skull briefly visible, body slumps/collapses
+    // Phase 0.75–1.0:  just a steaming heap dissolving into puddle
+    const dissolveT = Math.max(0, t * 1.55 - 0.12);
+    if (dissolveT > 0) {
+        const meltX = ab.npcX;
+        const floorY = 392;
+        const bodyTop = floorY - 60;
+        const now2 = Date.now();
+
+        ctx.save();
+
+        // Overall body sinking — center of mass slides downward and spreads
+        const sinkY   = dissolveT * 38;       // body drops toward floor
+        const splayX  = 1 + dissolveT * 1.6;  // body widens as it collapses
+        const shrinkY = 1 - dissolveT * 0.78; // body shortens vertically
+
+        // Melt color: skin→acid green
+        const skinR = Math.round(200 - dissolveT * 130);
+        const skinG = Math.round(160 + dissolveT * 80);
+        const skinB = Math.round(100 - dissolveT * 90);
+        const bodyAlpha = Math.max(0, 1 - dissolveT * 0.88);
+        const jumpsuit  = ab.npc ? ab.npc.color.hex : '#cc4444';
+
+        ctx.globalAlpha = bodyAlpha;
+        ctx.translate(meltX, bodyTop + sinkY);
+        ctx.scale(splayX, shrinkY);
+
+        // --- TORSO (melting/spreading) ---
+        const torsoW = 22 + dissolveT * 12;
+        const torsoH = 20 + dissolveT * 8;
+        ctx.fillStyle = jumpsuit;
+        ctx.fillRect(-torsoW / 2, 2, torsoW, torsoH);
+
+        // Melting flesh drips off torso sides
+        if (dissolveT > 0.15) {
+            const dripsT = (dissolveT - 0.15) / 0.85;
+            ctx.fillStyle = `rgb(${skinR},${skinG},${skinB})`;
+            for (let d = 0; d < 5; d++) {
+                const dripOff  = d * 7 - 14;
+                const dripLen  = dripsT * (14 + d * 5);
+                ctx.beginPath();
+                ctx.ellipse(dripOff, torsoH + 2 + dripLen / 2, 2.5, dripLen / 2 + 1, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- ARMS — Home Alone / The Scream pose: elbows out wide, forearms bent in pressing cheeks ---
+        const poseSnap  = Math.min(1, dissolveT * 6);   // snaps into pose instantly on hit
+        const armMeltPct = Math.max(0, dissolveT - 0.45) / 0.55;
+        const armAlpha   = Math.max(0, 1 - armMeltPct * 1.2);
+        // Tremble intensifies mid-melt
+        const tremble = Math.sin(Date.now() * 0.04) * (dissolveT * 3);
+
+        ctx.save();
+        ctx.globalAlpha = bodyAlpha * armAlpha;
+        ctx.strokeStyle = jumpsuit;
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Left arm: shoulder → elbow (out & up) → hand pressed to left cheek
+        const lShoulderX = -torsoW / 2 + 2;
+        const lElbowX    = -17 - tremble;
+        const lElbowY    = -5 + poseSnap * -3;
+        const lHandX     = -8;
+        const lHandY     = headY + 4;
         ctx.beginPath();
-        ctx.arc(bx, by, 2 + (b % 3), 0, Math.PI * 2);
+        ctx.moveTo(lShoulderX * poseSnap + (-torsoW/2) * (1-poseSnap), 3);
+        ctx.lineTo(lElbowX * poseSnap,  lElbowY * poseSnap + 3 * (1-poseSnap));
+        ctx.lineTo(lHandX  * poseSnap,  lHandY  * poseSnap + 3 * (1-poseSnap));
+        ctx.stroke();
+
+        // Right arm: shoulder → elbow (out & up) → hand pressed to right cheek
+        const rShoulderX = torsoW / 2 - 2;
+        const rElbowX    = 17 + tremble;
+        const rElbowY    = -5 + poseSnap * -3;
+        const rHandX     = 8;
+        const rHandY     = headY + 4;
+        ctx.beginPath();
+        ctx.moveTo(rShoulderX * poseSnap + (torsoW/2) * (1-poseSnap), 3);
+        ctx.lineTo(rElbowX * poseSnap,  rElbowY * poseSnap + 3 * (1-poseSnap));
+        ctx.lineTo(rHandX  * poseSnap,  rHandY  * poseSnap + 3 * (1-poseSnap));
+        ctx.stroke();
+
+        // Hands pressing cheeks — small filled circles
+        ctx.fillStyle = `rgb(${skinR},${skinG},${skinB})`;
+        ctx.beginPath(); ctx.arc(lHandX * poseSnap, lHandY * poseSnap + 3*(1-poseSnap), 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rHandX * poseSnap, rHandY * poseSnap + 3*(1-poseSnap), 3, 0, Math.PI*2); ctx.fill();
+
+        ctx.globalAlpha = bodyAlpha;
+        ctx.restore();
+
+        // --- LEGS — buckle and melt into puddle ---
+        const legBuckle = Math.min(1, dissolveT * 1.8);
+        const legMeltH  = Math.max(0, 16 * (1 - dissolveT * 1.5));
+        ctx.fillStyle = jumpsuit;
+        // Left leg: tips inward as it buckles
+        ctx.save();
+        ctx.translate(-7, torsoH + 2);
+        ctx.rotate(legBuckle * 0.4);
+        ctx.fillRect(-4, 0, 8, legMeltH);
+        ctx.restore();
+        // Right leg
+        ctx.save();
+        ctx.translate(7, torsoH + 2);
+        ctx.rotate(-legBuckle * 0.4);
+        ctx.fillRect(-4, 0, 8, legMeltH);
+        ctx.restore();
+
+        // --- HEAD & FACE --- the money shot
+        const headY = -14;
+        const headR = 9;
+
+        if (dissolveT < 0.65) {
+            // Face slightly squished inward where hands press the cheeks
+            const cheekSquish = Math.min(1, poseSnap);
+            ctx.fillStyle = `rgb(${skinR},${skinG},${skinB})`;
+            ctx.beginPath();
+            // Oval head — slightly narrower at cheeks where hands press in
+            ctx.ellipse(0, headY, headR * (1 - cheekSquish * 0.12), headR, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // === THE SCREAM FACE — wide from the very first frame ===
+            const eyeMelt = dissolveT < 0.10
+                ? dissolveT / 0.10   // snap open immediately
+                : Math.min(1, (dissolveT - 0.10) / 0.55 + 1); // stays open then melts
+
+            // Wide horror eyes: large whites, tiny pupils, eyebrows arched up
+            const eyeOpenness = Math.min(1, dissolveT * 10 + 0.5); // open almost immediately
+            // Eyebrows: arched up high in horror
+            ctx.strokeStyle = `rgb(${Math.max(0,skinR-60)},${Math.max(0,skinG-60)},${Math.max(0,skinB-60)})`;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(-3.5, headY - 3.5 - eyeOpenness * 1.5, 3, Math.PI * 1.1, Math.PI * 1.9);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(3.5, headY - 3.5 - eyeOpenness * 1.5, 3, Math.PI * 1.1, Math.PI * 1.9);
+            ctx.stroke();
+
+            // Eye whites — large, round, terrified
+            const eyeW = 2.6 + eyeOpenness * 0.6;
+            const eyeH = 2.8 + eyeOpenness * 1.0;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.ellipse(-3.5, headY - 1.5, eyeW, eyeH, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse( 3.5, headY - 1.5, eyeW, eyeH, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Pupils — small, high in socket (looking up in frozen terror)
+            const pupilY = headY - 2.8 - eyeOpenness * 0.5;
+            if (dissolveT < 0.45) {
+                ctx.fillStyle = '#111';
+                ctx.beginPath(); ctx.arc(-3.5, pupilY, 1.1, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc( 3.5, pupilY, 1.1, 0, Math.PI * 2); ctx.fill();
+            } else {
+                // Eyes melting — pupils elongate downward into dark streaks
+                const eyeDropL = (dissolveT - 0.45) / 0.20 * 10;
+                const eyeDropR = eyeDropL * 0.9;
+                ctx.fillStyle = `rgba(10,10,10,0.9)`;
+                ctx.beginPath();
+                ctx.ellipse(-3.5, headY - 1.5 + eyeDropL / 2, 1.8, 1.4 + eyeDropL / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(3.5, headY - 1.5 + eyeDropR / 2, 1.8, 1.4 + eyeDropR / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // === BIG O MOUTH — the whole point of the pose ===
+            // Gaping, round scream hole. Snaps open with the pose.
+            const mouthSnap  = Math.min(1, dissolveT * 8);
+            const mouthMelt  = Math.max(0, dissolveT - 0.25) / 0.40;
+            const mouthW = 3.5 + mouthSnap * 2.8 + mouthMelt * 2;
+            const mouthH = 3.0 + mouthSnap * 4.5 + mouthMelt * 3;  // tall oval scream
+            // Throat darkness
+            ctx.fillStyle = 'rgba(15,0,0,0.95)';
+            ctx.beginPath();
+            ctx.ellipse(0, headY + 4.5, mouthW, mouthH, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Teeth on top lip — upper row visible in wide scream
+            if (mouthSnap > 0.5) {
+                ctx.fillStyle = '#e8e8e8';
+                for (let t2 = 0; t2 < 4; t2++) {
+                    ctx.fillRect(-3.5 + t2 * 2, headY + 1.5, 1.6, 2.5);
+                }
+            }
+
+            // Skin dripping off chin/sides of face as melt progresses
+            if (dissolveT > 0.22) {
+                const faceDrip = (dissolveT - 0.22) / 0.43;
+                ctx.fillStyle = `rgba(${skinR},${skinG},${skinB},0.88)`;
+                for (let fd = 0; fd < 5; fd++) {
+                    const fdx = (fd - 2) * 4.2;
+                    const fdy = headY + headR * 0.55 + faceDrip * (10 + fd * 4.5);
+                    ctx.beginPath();
+                    ctx.ellipse(fdx, fdy, 1.6, faceDrip * 5.5 + 0.8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        } else {
+            // Skull phase (0.65+) — skin gone, bare skull with screaming rictus still visible
+            const skullT = Math.min(1, (dissolveT - 0.65) / 0.20);
+            ctx.globalAlpha = bodyAlpha * (1 - skullT * 0.6);
+            ctx.fillStyle = '#e8e0c8';  // bone white
+            ctx.beginPath();
+            ctx.arc(0, headY, headR * 0.86, 0, Math.PI * 2);
+            ctx.fill();
+            // Hollow eye sockets
+            ctx.fillStyle = 'rgba(0,0,0,0.88)';
+            ctx.beginPath(); ctx.ellipse(-3.5, headY - 1.5, 3.2, 3.8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse( 3.5, headY - 1.5, 3.2, 3.8, 0, 0, Math.PI * 2); ctx.fill();
+            // Jaw still in a scream — open rictus
+            ctx.fillStyle = 'rgba(10,0,0,0.9)';
+            ctx.beginPath();
+            ctx.ellipse(0, headY + 5, 4.5, 4.8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Upper teeth row
+            ctx.fillStyle = '#ddd';
+            for (let tooth = 0; tooth < 5; tooth++) {
+                ctx.fillRect(-5 + tooth * 2.4, headY + 1, 1.8, 3);
+            }
+            // Lower jaw separation line
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(-5.5, headY + 3.8, 12, 1.2);
+        }
+
+        // --- Acid glow halo intensifies during melt ---
+        ctx.globalAlpha = 1;
+        ctx.restore();
+
+        ctx.save();
+        const glowR = 30 + dissolveT * 44;
+        const glowGrad = ctx.createRadialGradient(meltX, bodyTop + sinkY - 18, 0, meltX, bodyTop + sinkY - 18, glowR);
+        glowGrad.addColorStop(0, `rgba(170,255,30,${dissolveT * 0.55})`);
+        glowGrad.addColorStop(0.6, `rgba(80,200,10,${dissolveT * 0.20})`);
+        glowGrad.addColorStop(1, 'rgba(20,120,0,0)');
+        ctx.fillStyle = glowGrad;
+        ctx.beginPath();
+        ctx.arc(meltX, bodyTop + sinkY - 18, glowR, 0, Math.PI * 2);
         ctx.fill();
+
+        // Steam wisps rising from acid reaction
+        if (dissolveT > 0.20) {
+            const steamT = (dissolveT - 0.20) / 0.80;
+            for (let s = 0; s < 6; s++) {
+                const sPhase = (s / 6 + elapsed / 900) % 1;
+                const sx = meltX + Math.sin(s * 1.8) * 22;
+                const sy = (bodyTop + sinkY) - sPhase * 50;
+                ctx.globalAlpha = (1 - sPhase) * steamT * 0.35;
+                ctx.fillStyle = `rgba(200,255,160,1)`;
+                ctx.beginPath();
+                ctx.arc(sx, sy, 4 + sPhase * 7, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 }
 
