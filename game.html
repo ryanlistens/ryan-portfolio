@@ -770,6 +770,8 @@ function initLevel(lv) {
         level6.caseClosedChoice = 0;
         level6.bladeDoor = { openPct: 0, state: 'closed' }; // supercomputer blade door
         level6.bladeDoorMega = { openPct: 0, state: 'closed' }; // megacomputer side blade door
+        level6.bladeDoorMegaRight = { openPct: 0, state: 'closed' }; // megacomputer right door to bridge
+        level6.bladeDoorBridgeLeft = { openPct: 0, state: 'closed' }; // bridge room left door
         level6.elevatorTarget = null; // which floor elevator is going to
         // Employee Level / Cloning Room state
         level6.cloningBoss = { x: 350, y: 365, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0 };
@@ -8333,6 +8335,664 @@ function drawLevel6MegacomputerRoom() {
         }
     }
 
+    // Right blast door — leads to Nuclear Assembly Bridge
+    const megaRightDoorX = 612, megaRightDoorY = 275, megaRightDoorW = 68, megaRightDoorH = 125;
+    drawDeathStarBlastDoor(megaRightDoorX, megaRightDoorY, megaRightDoorW, megaRightDoorH, 'right', level6.bladeDoorMegaRight.openPct, false, true);
+
+    // Navigation hint when near right door
+    if(player.x > 570) {
+        ctx.font = 'bold 15px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(560, 260, 130, 22);
+        ctx.fillStyle = '#ff9966';
+        ctx.fillText('BRIDGE OVERLOOK →', 625, 276);
+    }
+
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NUCLEAR ASSEMBLY BRIDGE — narrow catwalk overlooking the warhead factory floor
+// Player walks along a grated walkway; below the railing is the full assembly
+// plant: radioactive acid pool → pipe goop feed → missile fill station →
+// conveyor belt → crate loading → armored truck loading bay (continuously animated)
+// ═══════════════════════════════════════════════════════════════════════════════
+function drawNuclearAssemblyBridge() {
+    const _t = Date.now();
+
+    // ── BACKGROUND: deep industrial void ──────────────────────────────────────
+    ctx.fillStyle = '#080a08';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Ambient acid glow rising from pool below
+    const acidAmb = ctx.createRadialGradient(130, 420, 15, 130, 360, 230);
+    acidAmb.addColorStop(0, 'rgba(60,220,10,0.13)');
+    acidAmb.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = acidAmb;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // ── CEILING STRUCTURE ─────────────────────────────────────────────────────
+    ctx.fillStyle = '#0c0c0c';
+    ctx.fillRect(-GX, -GY, CANVAS_W, 36);
+    ctx.fillStyle = '#161616';
+    ctx.fillRect(-GX, 0, CANVAS_W, 18);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-GX, 20, CANVAS_W, 16);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-GX, 28, CANVAS_W, 5);
+
+    // Vertical support columns descending from ceiling
+    for(let col = 65; col < 700; col += 105) {
+        ctx.fillStyle = '#0e0e0e';
+        ctx.fillRect(col - 5, 0, 14, 286);
+        ctx.fillStyle = '#181818';
+        ctx.fillRect(col - 6, 0, 12, 286);
+        ctx.fillStyle = '#202020';
+        ctx.fillRect(col - 4, 0, 8, 286);
+        // Base cap
+        ctx.fillStyle = '#252525';
+        ctx.fillRect(col - 10, 280, 20, 10);
+    }
+
+    // Overhead cable runs
+    ctx.strokeStyle = '#1c1c1c'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-GX, 48); ctx.lineTo(CANVAS_W, 48); ctx.stroke();
+    ctx.strokeStyle = '#161616'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-GX, 62); ctx.lineTo(CANVAS_W, 62); ctx.stroke();
+
+    // Hanging industrial lamps
+    for(let lx = 80; lx < 700; lx += 140) {
+        const flk = 0.75 + Math.sin(_t * 0.0027 + lx * 0.05) * 0.12;
+        ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(lx, 40); ctx.lineTo(lx, 108); ctx.stroke();
+        ctx.fillStyle = '#1e1e18';
+        ctx.beginPath();
+        ctx.moveTo(lx - 12, 108); ctx.lineTo(lx + 12, 108);
+        ctx.lineTo(lx + 8, 120); ctx.lineTo(lx - 8, 120); ctx.closePath(); ctx.fill();
+        ctx.fillRect(lx - 8, 103, 16, 8);
+        ctx.globalAlpha = flk * 0.14;
+        const cone = ctx.createRadialGradient(lx, 124, 1, lx, 165, 72);
+        cone.addColorStop(0, '#ffffcc'); cone.addColorStop(1, 'rgba(255,255,180,0)');
+        ctx.fillStyle = cone;
+        ctx.beginPath();
+        ctx.moveTo(lx - 7, 122); ctx.lineTo(lx - 72, 248); ctx.lineTo(lx + 72, 248); ctx.lineTo(lx + 7, 122);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = `rgba(255,255,180,${flk * 0.85})`;
+        ctx.beginPath(); ctx.arc(lx, 116, 3, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ── FACTORY BACK WALL ─────────────────────────────────────────────────────
+    ctx.fillStyle = '#0e120e';
+    ctx.fillRect(-GX, 290, CANVAS_W, 140);
+    ctx.strokeStyle = '#131713'; ctx.lineWidth = 0.5;
+    for(let bx = -GX; bx < CANVAS_W; bx += 46) {
+        ctx.beginPath(); ctx.moveTo(bx, 290); ctx.lineTo(bx, 430); ctx.stroke();
+    }
+    for(let by = 302; by < 430; by += 22) {
+        ctx.beginPath(); ctx.moveTo(-GX, by); ctx.lineTo(CANVAS_W, by); ctx.stroke();
+    }
+
+    // ── FACTORY FLOOR ─────────────────────────────────────────────────────────
+    const factFloor = 428;
+    ctx.fillStyle = '#121a12';
+    ctx.fillRect(-GX, factFloor, CANVAS_W, CANVAS_H - factFloor + GY);
+    ctx.strokeStyle = '#192219'; ctx.lineWidth = 1;
+    for(let gx = -GX; gx < CANVAS_W; gx += 36) {
+        ctx.beginPath(); ctx.moveTo(gx, factFloor); ctx.lineTo(gx, CANVAS_H); ctx.stroke();
+    }
+    for(let gy = factFloor + 26; gy < CANVAS_H; gy += 26) {
+        ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
+    }
+
+    // ── RADIOACTIVE ACID POOL ─────────────────────────────────────────────────
+    const poolX = 14, poolY = 308, poolW = 158, poolH = 114;
+
+    // Containment walls
+    ctx.fillStyle = '#1a2a18';
+    ctx.fillRect(poolX - 8, poolY - 6, poolW + 16, poolH + 14);
+    ctx.fillStyle = '#22351e';
+    ctx.fillRect(poolX - 4, poolY - 3, poolW + 8, poolH + 7);
+    ctx.strokeStyle = '#2a4224'; ctx.lineWidth = 1;
+    for(let rx = poolX; rx < poolX + poolW; rx += 22) {
+        ctx.beginPath(); ctx.moveTo(rx, poolY - 3); ctx.lineTo(rx, poolY + poolH + 4); ctx.stroke();
+    }
+
+    // Acid liquid — bright radioactive green/yellow-green
+    const acidPulse = 0.82 + Math.sin(_t * 0.0022) * 0.18;
+    const acidGrad = ctx.createLinearGradient(poolX, poolY, poolX, poolY + poolH);
+    acidGrad.addColorStop(0,   '#a0ff28');
+    acidGrad.addColorStop(0.2, '#60ee08');
+    acidGrad.addColorStop(0.8, '#25aa00');
+    acidGrad.addColorStop(1,   '#107700');
+    ctx.globalAlpha = acidPulse;
+    ctx.fillStyle = acidGrad;
+    ctx.fillRect(poolX, poolY, poolW, poolH);
+    ctx.globalAlpha = 1;
+
+    // Acid glow halo
+    ctx.shadowColor = '#88ff00'; ctx.shadowBlur = 38;
+    ctx.fillStyle = 'rgba(80,255,0,0.18)';
+    ctx.fillRect(poolX - 5, poolY - 3, poolW + 10, poolH + 6);
+    ctx.shadowBlur = 0;
+
+    // Surface bubbles
+    const bT = _t / 275;
+    for(let b = 0; b < 11; b++) {
+        const bProg = (bT * 0.9 + b * 0.12) % 1;
+        const bxP = poolX + 10 + ((b * 16 + Math.sin(bT * 0.3 + b * 1.8) * 11) % (poolW - 22));
+        const byP = poolY + poolH - bProg * (poolH - 10);
+        const bR = 1.5 + (b % 3) * 1.1;
+        ctx.globalAlpha = 0.7 * (1 - bProg * 0.5);
+        ctx.fillStyle = '#c8ff80';
+        ctx.beginPath(); ctx.arc(bxP, byP, bR, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Ripple rings
+    for(let r = 0; r < 4; r++) {
+        const rAge = (_t / 720 + r * 0.75) % 2.5;
+        ctx.globalAlpha = Math.max(0, 0.4 - rAge * 0.16);
+        ctx.strokeStyle = '#aaff40'; ctx.lineWidth = 1.5;
+        const rCx = poolX + poolW * (0.18 + r * 0.2);
+        ctx.beginPath();
+        ctx.ellipse(rCx, poolY + 16, rAge * 16 + 4, rAge * 7 + 2, 0, 0, Math.PI*2);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Pool label
+    ctx.fillStyle = 'rgba(0,28,0,0.85)';
+    ctx.fillRect(poolX, poolY - 22, poolW, 18);
+    ctx.strokeStyle = '#00aa00'; ctx.lineWidth = 1;
+    ctx.strokeRect(poolX, poolY - 22, poolW, 18);
+    ctx.fillStyle = '#80ff20';
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('☢  RADIOACTIVE ACID POOL  ☢', poolX + poolW/2, poolY - 9);
+
+    // ── BIOMATTER INPUT HOPPER ────────────────────────────────────────────────
+    const hopX = poolX + 10, hopY = poolY - 72;
+    ctx.fillStyle = '#201008';
+    ctx.beginPath();
+    ctx.moveTo(hopX, hopY); ctx.lineTo(hopX + 66, hopY);
+    ctx.lineTo(hopX + 50, hopY + 64); ctx.lineTo(hopX + 16, hopY + 64);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#603010'; ctx.lineWidth = 2; ctx.stroke();
+    // Hopper striations
+    ctx.strokeStyle = '#301a08'; ctx.lineWidth = 1;
+    for(let h = 8; h < 62; h += 13) {
+        const hFrac = h / 64;
+        ctx.beginPath();
+        ctx.moveTo(hopX + hFrac * 16, hopY + h);
+        ctx.lineTo(hopX + 66 - hFrac * 16, hopY + h);
+        ctx.stroke();
+    }
+
+    // CARBON BIOMATTER label
+    ctx.fillStyle = '#5c2200';
+    ctx.fillRect(hopX - 10, hopY - 24, 88, 20);
+    ctx.strokeStyle = '#cc4400'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(hopX - 10, hopY - 24, 88, 20);
+    ctx.fillStyle = '#ff9944'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('CARBON BIOMATTER', hopX + 34, hopY - 12);
+    ctx.fillStyle = '#cc7733'; ctx.font = '5px monospace';
+    ctx.fillText('INPUT FEED', hopX + 34, hopY - 4);
+
+    // Source sub-label (2 lines)
+    ctx.fillStyle = '#3c1008';
+    ctx.fillRect(hopX - 16, hopY - 52, 108, 24);
+    ctx.strokeStyle = '#883300'; ctx.lineWidth = 1;
+    ctx.strokeRect(hopX - 16, hopY - 52, 108, 24);
+    ctx.fillStyle = '#ff6622'; ctx.font = '5px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('SOURCE: SLAUGHTERED PMs', hopX + 38, hopY - 38);
+    ctx.fillText('+ ABORTED CLONE EGGS', hopX + 38, hopY - 29);
+
+    // Dripping biomatter into acid
+    const dripT = (_t / 520) % 1;
+    if(dripT < 0.58) {
+        const dProg = dripT / 0.58;
+        ctx.globalAlpha = 0.9 - dProg * 0.4;
+        ctx.fillStyle = '#7a2a00';
+        ctx.beginPath();
+        ctx.arc(hopX + 33, hopY + 64 + dProg * (poolY - hopY - 64), 2.5 + dProg * 1.5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    // ── ATOMIC FISSION REACTOR ────────────────────────────────────────────────
+    const reactX = poolX + poolW + 30, reactY = poolY + 44;
+    ctx.fillStyle = '#141e12';
+    ctx.beginPath(); ctx.arc(reactX, reactY, 29, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#2a4028'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(reactX, reactY, 29, 0, Math.PI*2); ctx.stroke();
+    const rPulse = 0.55 + Math.sin(_t * 0.0038) * 0.22;
+    ctx.shadowColor = '#40ff40'; ctx.shadowBlur = 22;
+    ctx.fillStyle = `rgba(40,200,40,${rPulse * 0.55})`;
+    ctx.beginPath(); ctx.arc(reactX, reactY, 20, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffff00'; ctx.font = '18px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('☢', reactX, reactY + 6);
+    // Reactor label
+    ctx.fillStyle = '#0a180a';
+    ctx.fillRect(reactX - 38, reactY + 33, 76, 14);
+    ctx.fillStyle = '#44ff44'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('ATOMIC FISSION', reactX, reactY + 43);
+
+    // Reactor–pool connecting pipes
+    ctx.strokeStyle = '#2a3828'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(poolX + poolW, poolY + 32); ctx.lineTo(reactX - 29, reactY - 8); ctx.stroke();
+    ctx.strokeStyle = '#384a34'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(poolX + poolW, poolY + 32); ctx.lineTo(reactX - 29, reactY - 8); ctx.stroke();
+    ctx.strokeStyle = `rgba(50,200,30,${0.35 + Math.sin(_t*0.004)*0.12})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(poolX + poolW, poolY + 32); ctx.lineTo(reactX - 29, reactY - 8); ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    // ── PIPE NETWORK: reactor → missile fill station ──────────────────────────
+    const mainPipeY = poolY + 54;
+    const pipeFromX = reactX + 29, pipeToX = 372;
+
+    // Main pipe (with goop glow core)
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 20; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(pipeFromX, mainPipeY); ctx.lineTo(pipeToX, mainPipeY); ctx.stroke();
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 14;
+    ctx.beginPath(); ctx.moveTo(pipeFromX, mainPipeY); ctx.lineTo(pipeToX, mainPipeY); ctx.stroke();
+    ctx.strokeStyle = `rgba(55,210,10,${0.42 + Math.sin(_t*0.003)*0.18})`; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(pipeFromX, mainPipeY); ctx.lineTo(pipeToX, mainPipeY); ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    // Segment rings
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5;
+    for(let px = pipeFromX + 15; px < pipeToX - 7; px += 22) {
+        ctx.beginPath(); ctx.moveTo(px, mainPipeY - 7); ctx.lineTo(px, mainPipeY + 7); ctx.stroke();
+    }
+    // Flanges
+    for(const fx of [pipeFromX + 4, pipeToX - 4]) {
+        ctx.fillStyle = '#404040';
+        ctx.beginPath(); ctx.arc(fx, mainPipeY, 11, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath(); ctx.arc(fx, mainPipeY, 7, 0, Math.PI*2); ctx.fill();
+        for(let bolt = 0; bolt < 6; bolt++) {
+            const ba = bolt/6*Math.PI*2;
+            ctx.fillStyle = '#505050';
+            ctx.beginPath(); ctx.arc(fx + Math.cos(ba)*9, mainPipeY + Math.sin(ba)*9, 1.8, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    // "NUCLEAR MISSILE GOOP" pipe label
+    const goopLX = (pipeFromX + pipeToX) / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.fillRect(goopLX - 74, mainPipeY - 26, 148, 16);
+    ctx.strokeStyle = '#40aa00'; ctx.lineWidth = 1;
+    ctx.strokeRect(goopLX - 74, mainPipeY - 26, 148, 16);
+    ctx.fillStyle = '#80ff20'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('▼   NUCLEAR MISSILE GOOP   ▼', goopLX, mainPipeY - 14);
+
+    // Flow particles
+    const flowT = (_t / 1000) % 1;
+    for(let p = 0; p < 6; p++) {
+        const fpx = pipeFromX + ((flowT + p/6) % 1) * (pipeToX - pipeFromX);
+        ctx.fillStyle = 'rgba(100,255,50,0.55)';
+        ctx.beginPath(); ctx.arc(fpx, mainPipeY, 2.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ── MISSILE FILL STATION ──────────────────────────────────────────────────
+    const fillX = pipeToX, fillY = factFloor - 60;
+
+    // Vertical drop pipe
+    ctx.strokeStyle = '#282828'; ctx.lineWidth = 16; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(fillX, mainPipeY); ctx.lineTo(fillX, fillY + 8); ctx.stroke();
+    ctx.strokeStyle = '#363636'; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.moveTo(fillX, mainPipeY); ctx.lineTo(fillX, fillY + 8); ctx.stroke();
+    ctx.strokeStyle = `rgba(50,190,10,${0.4 + Math.sin(_t*0.0045)*0.15})`; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(fillX, mainPipeY); ctx.lineTo(fillX, fillY + 8); ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    // Nozzle head
+    ctx.fillStyle = '#2e2e2e';
+    ctx.fillRect(fillX - 14, fillY, 28, 20);
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(fillX - 9, fillY + 18, 18, 12);
+    ctx.fillStyle = `rgba(60,200,10,${0.7 + Math.sin(_t*0.006)*0.3})`;
+    ctx.shadowColor = '#40ff00'; ctx.shadowBlur = 8;
+    ctx.fillRect(fillX - 5, fillY + 28, 10, 5);
+    ctx.shadowBlur = 0;
+
+    // Goop drip from nozzle
+    const nDrip = (_t / 360) % 1;
+    if(nDrip < 0.68) {
+        const ndP = nDrip / 0.68;
+        ctx.globalAlpha = 0.9 - ndP * 0.35;
+        ctx.fillStyle = '#55cc08'; ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 6;
+        ctx.beginPath(); ctx.arc(fillX, fillY + 33 + ndP * 18, 3 + ndP * 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+
+    // Fill station housing label
+    ctx.fillStyle = '#202420';
+    ctx.fillRect(fillX - 32, fillY - 14, 64, 14);
+    ctx.strokeStyle = '#303830'; ctx.lineWidth = 1;
+    ctx.strokeRect(fillX - 32, fillY - 14, 64, 14);
+    ctx.fillStyle = '#888'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('FILL STATION', fillX, fillY - 5);
+
+    // ── CONVEYOR BELT ─────────────────────────────────────────────────────────
+    const convY = factFloor - 8;
+    const convX1 = 218, convX2 = 572;
+    const beltH = 14;
+
+    // Belt frame
+    ctx.fillStyle = '#181818';
+    ctx.fillRect(convX1 - 12, convY - 2, convX2 - convX1 + 24, beltH + 12);
+
+    // Moving belt texture
+    const beltOff = (_t / 460) % 20;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(convX1, convY, convX2 - convX1, beltH + 8);
+    ctx.fillStyle = '#2d2d2d';
+    for(let bx = convX1 - (beltOff % 20); bx < convX2 + 20; bx += 20) {
+        if(bx >= convX1 && bx <= convX2) ctx.fillRect(bx, convY + 2, 12, beltH + 4);
+    }
+    ctx.strokeStyle = '#181818'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(convX1, convY, convX2 - convX1, beltH + 8);
+
+    // Belt rollers
+    const rSpin = (_t * 0.003) % (Math.PI*2);
+    for(const rx of [convX1 + 10, convX2 - 10]) {
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath(); ctx.arc(rx, convY + beltH/2 + 4, 14, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#363636';
+        ctx.beginPath(); ctx.arc(rx, convY + beltH/2 + 4, 9, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#454545'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(rx + Math.cos(rSpin)*7, convY + beltH/2 + 4 + Math.sin(rSpin)*7);
+        ctx.lineTo(rx - Math.cos(rSpin)*7, convY + beltH/2 + 4 - Math.sin(rSpin)*7);
+        ctx.stroke();
+    }
+
+    // Missiles on conveyor (sliding right)
+    const missileW = 52, missileH = 14;
+    const mSpacing = 105;
+    const mOff = (_t / 1400 % 1) * mSpacing;
+    for(let m = 0; m < 5; m++) {
+        const mx = convX1 + 20 + (m * mSpacing + mOff) % (convX2 - convX1 - 30);
+        if(mx + missileW > convX2 - 5) continue;
+        const my = convY - missileH + 2;
+        // Casing
+        ctx.fillStyle = '#525252';
+        ctx.fillRect(mx, my, missileW, missileH);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(mx + missileW - 8, my, 8, missileH);
+        // Nose cone
+        ctx.fillStyle = '#383838';
+        ctx.beginPath();
+        ctx.moveTo(mx + missileW, my); ctx.lineTo(mx + missileW + 13, my + missileH/2);
+        ctx.lineTo(mx + missileW, my + missileH); ctx.closePath(); ctx.fill();
+        // Tail fin
+        ctx.fillStyle = '#404040';
+        ctx.beginPath();
+        ctx.moveTo(mx, my + missileH); ctx.lineTo(mx - 9, my + missileH + 8);
+        ctx.lineTo(mx + 10, my + missileH); ctx.closePath(); ctx.fill();
+        // Goop window
+        const wGlow = 0.65 + Math.sin(_t*0.005 + m*1.2) * 0.25;
+        ctx.fillStyle = `rgba(50,200,8,${wGlow})`;
+        ctx.shadowColor = '#60ff00'; ctx.shadowBlur = 5;
+        ctx.fillRect(mx + 10, my + 3, 22, missileH - 6);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('☢', mx + 21, my + missileH - 2);
+    }
+
+    // Conveyor label
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.fillRect(convX1, convY - 30, 126, 16);
+    ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 1;
+    ctx.strokeRect(convX1, convY - 30, 126, 16);
+    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('⚔  PRIVATE WARFARE OUTPUT  ⚔', convX1 + 63, convY - 18);
+
+    // ── CRATE LOADING STATION ─────────────────────────────────────────────────
+    const crateBaseX = 508, crateBaseY = factFloor - 8;
+    const crateLoadT = (_t / 2300) % 1;
+
+    // Stack of 3 military crates
+    for(let c = 0; c < 3; c++) {
+        const cX = crateBaseX + c * 2, cY = crateBaseY - 30 - c * 32, cW = 58, cH = 30;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(cX + 3, cY + 3, cW, cH);
+        ctx.fillStyle = '#2e2e18';
+        ctx.fillRect(cX, cY, cW, cH);
+        ctx.strokeStyle = '#50501a'; ctx.lineWidth = 1.5;
+        ctx.strokeRect(cX, cY, cW, cH);
+        ctx.strokeStyle = '#3a3a18'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cX, cY+10); ctx.lineTo(cX+cW, cY+10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cX, cY+20); ctx.lineTo(cX+cW, cY+20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cX+19, cY); ctx.lineTo(cX+19, cY+cH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cX+38, cY); ctx.lineTo(cX+38, cY+cH); ctx.stroke();
+        for(const [bx,by] of [[cX,cY],[cX+cW-5,cY],[cX,cY+cH-5],[cX+cW-5,cY+cH-5]]) {
+            ctx.fillStyle = '#666648'; ctx.fillRect(bx, by, 5, 5);
+        }
+        ctx.fillStyle = '#cc1100'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('CLASSIFIED', cX + cW/2, cY + 10);
+        ctx.fillStyle = '#ff2200'; ctx.font = '5px monospace';
+        ctx.fillText('ARMED WARHEAD', cX + cW/2, cY + 19);
+        ctx.fillStyle = '#884400';
+        ctx.fillText('PRIVATIZED', cX + cW/2, cY + 26);
+    }
+
+    // Missile dropping into top crate
+    if(crateLoadT > 0.55) {
+        const dropFrac = (crateLoadT - 0.55) / 0.45;
+        const topCrY = crateBaseY - 30 - 2 * 32;
+        const dStartY = convY - missileH;
+        const dY = dStartY + dropFrac * (topCrY - dStartY);
+        if(dY < topCrY) {
+            ctx.fillStyle = '#525252';
+            ctx.fillRect(crateBaseX + 4, dY, 50, 12);
+            ctx.fillStyle = 'rgba(50,200,8,0.7)';
+            ctx.fillRect(crateBaseX + 13, dY + 2, 22, 8);
+            ctx.fillStyle = '#ffff00'; ctx.font = '7px Arial'; ctx.textAlign = 'center';
+            ctx.fillText('☢', crateBaseX + 25, dY + 10);
+        }
+    }
+
+    // Crane arm above loading
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(crateBaseX - 4, factFloor - 108, 8, 108);
+    ctx.fillRect(crateBaseX - 4, factFloor - 108, 64, 6);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(crateBaseX + 60, factFloor - 108); ctx.lineTo(crateBaseX + 60, factFloor - 76); ctx.stroke();
+    ctx.beginPath(); ctx.arc(crateBaseX + 60, factFloor - 70, 6, 0.1*Math.PI, 1.1*Math.PI); ctx.stroke();
+
+    // ── ARMORED TRUCK LOADING BAY ─────────────────────────────────────────────
+    const bayX = 592, bayFloor = factFloor;
+
+    // Bay ramp markings
+    ctx.fillStyle = '#141814';
+    ctx.fillRect(bayX - 2, bayFloor - 50, 112, 58);
+    for(let hi = 0; hi < 6; hi++) {
+        ctx.fillStyle = hi % 2 === 0 ? '#2e2c0a' : '#121208';
+        ctx.fillRect(bayX - 2 + hi * 19, bayFloor - 50, 19, 10);
+    }
+    ctx.fillStyle = '#555'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('LOADING BAY', bayX + 55, bayFloor - 28);
+    ctx.fillStyle = '#444'; ctx.font = '5px monospace';
+    ctx.fillText('AUTH. VEHICLES ONLY', bayX + 55, bayFloor - 20);
+
+    // Truck animation: back-in → load → drive-off (6.5s cycle)
+    const tCycleMs = 6500;
+    const tPhase = (_t % tCycleMs) / tCycleMs;
+    const dockTruckX = bayX - 4;
+
+    const drawTruck = (tx, ty, loaded) => {
+        // Cab
+        ctx.fillStyle = '#1e2c16';
+        ctx.fillRect(tx, ty - 46, 36, 46);
+        ctx.fillStyle = '#182214';
+        ctx.fillRect(tx + 4, ty - 42, 26, 16);
+        ctx.fillStyle = 'rgba(80,130,90,0.22)';
+        ctx.fillRect(tx + 6, ty - 40, 22, 12);
+        ctx.fillStyle = '#162012';
+        for(let gi = 0; gi < 4; gi++) ctx.fillRect(tx + 6 + gi*6, ty - 24, 4, 8);
+        // Trailer
+        ctx.fillStyle = '#1c2818';
+        ctx.fillRect(tx + 36, ty - 44, 74, 44);
+        ctx.strokeStyle = '#2e3e24'; ctx.lineWidth = 1.5;
+        ctx.strokeRect(tx + 36, ty - 44, 74, 44);
+        ctx.strokeStyle = '#263218'; ctx.lineWidth = 1;
+        for(let ri = 0; ri < 4; ri++) {
+            ctx.beginPath(); ctx.moveTo(tx + 54 + ri*14, ty - 44); ctx.lineTo(tx + 54 + ri*14, ty); ctx.stroke();
+        }
+        for(let bi = 0; bi < 3; bi++) {
+            ctx.fillStyle = '#3a4430';
+            ctx.beginPath(); ctx.arc(tx + 44 + bi*22, ty - 40, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(tx + 44 + bi*22, ty - 10, 2, 0, Math.PI*2); ctx.fill();
+        }
+        if(loaded) {
+            ctx.shadowColor = '#00ff00'; ctx.shadowBlur = 8;
+            ctx.fillStyle = '#00ee00';
+            ctx.beginPath(); ctx.arc(tx + 40, ty - 40, 4, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#aa0000';
+            ctx.fillRect(tx + 50, ty - 36, 54, 24);
+            ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 1;
+            ctx.strokeRect(tx + 50, ty - 36, 54, 24);
+            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('ARMED', tx + 77, ty - 25);
+            ctx.font = '5px monospace';
+            ctx.fillText('WARHEADS', tx + 77, ty - 17);
+        }
+        // Wheels
+        const wS = (loaded ? _t * 0.004 : _t * 0.003) % (Math.PI*2);
+        for(const wx of [tx + 15, tx + 54, tx + 85]) {
+            ctx.fillStyle = '#141414';
+            ctx.beginPath(); ctx.arc(wx, ty + 4, 13, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#252525';
+            ctx.beginPath(); ctx.arc(wx, ty + 4, 9, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#383838'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(wx + Math.cos(wS)*6, ty + 4 + Math.sin(wS)*6);
+            ctx.lineTo(wx - Math.cos(wS)*6, ty + 4 - Math.sin(wS)*6);
+            ctx.stroke();
+            ctx.fillStyle = '#484848';
+            ctx.beginPath(); ctx.arc(wx, ty + 4, 3, 0, Math.PI*2); ctx.fill();
+        }
+        // Exhaust when leaving
+        if(loaded) {
+            for(let sm = 0; sm < 3; sm++) {
+                const sAge = (_t / 180 + sm * 0.45) % 1;
+                ctx.globalAlpha = 0.28 * (1 - sAge);
+                ctx.fillStyle = '#777';
+                ctx.beginPath(); ctx.arc(tx + 8, ty - 48 - sAge * 28, 4 + sAge * 9, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+    };
+
+    // Truck position per cycle phase
+    let truckX;
+    if(tPhase < 0.28) {
+        truckX = 730 - (tPhase / 0.28) * (730 - (dockTruckX - 112));
+    } else if(tPhase < 0.68) {
+        truckX = dockTruckX - 112;
+    } else {
+        truckX = dockTruckX - 112 + ((tPhase - 0.68) / 0.32) * 230;
+    }
+    if(truckX < 760 && truckX > -130) drawTruck(truckX, bayFloor, tPhase >= 0.68);
+
+    // "MEANS OF PRODUCTION: PRIVATE WARFARE" banner above bay
+    ctx.fillStyle = '#280000';
+    ctx.fillRect(568, 290, 134, 14);
+    ctx.strokeStyle = '#880000'; ctx.lineWidth = 1;
+    ctx.strokeRect(568, 290, 134, 14);
+    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('⚔  PRIVATE WARFARE CAPABILITY  ⚔', 635, 300);
+    ctx.fillStyle = '#ff2222'; ctx.font = '5px monospace';
+    ctx.fillText('MEANS OF PRODUCTION', 635, 308);
+
+    // ── BRIDGE WALKWAY (drawn over factory) ───────────────────────────────────
+    const bridgePlatY = 398;  // bridge floor (player at y=380)
+    const railTopY    = 280;  // top of railing
+
+    // Platform floor
+    ctx.fillStyle = '#1e1c1c';
+    ctx.fillRect(-GX, bridgePlatY - 2, CANVAS_W, 24);
+    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 1;
+    for(let gx = -GX; gx < CANVAS_W; gx += 11) {
+        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 2); ctx.lineTo(gx, bridgePlatY + 22); ctx.stroke();
+    }
+    for(let gy = bridgePlatY + 5; gy < bridgePlatY + 22; gy += 7) {
+        ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
+    }
+
+    // Edge warning strip
+    for(let sw = -GX; sw < CANVAS_W; sw += 28) {
+        ctx.fillStyle = sw % 56 < 28 ? '#302800' : '#201400';
+        ctx.fillRect(sw, bridgePlatY - 2, 28, 5);
+    }
+
+    // Undercarriage
+    ctx.fillStyle = '#161414';
+    ctx.fillRect(-GX, bridgePlatY + 22, CANVAS_W, 14);
+    ctx.strokeStyle = '#1e1c1c'; ctx.lineWidth = 3;
+    for(let bx = -GX + 15; bx < CANVAS_W; bx += 55) {
+        ctx.beginPath(); ctx.moveTo(bx, bridgePlatY + 22); ctx.lineTo(bx + 28, bridgePlatY + 36); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx + 28, bridgePlatY + 22); ctx.lineTo(bx, bridgePlatY + 36); ctx.stroke();
+    }
+
+    // Railing posts
+    for(let px = -GX + 14; px < CANVAS_W; px += 32) {
+        ctx.fillStyle = '#0e0c0c';
+        ctx.fillRect(px + 1, railTopY + 1, 5, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#2c2828';
+        ctx.fillRect(px, railTopY, 5, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#383030';
+        ctx.fillRect(px + 1, railTopY, 3, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#3a3434';
+        ctx.fillRect(px - 2, railTopY - 4, 9, 5);
+    }
+    // Top rail bar
+    ctx.fillStyle = '#181616';
+    ctx.fillRect(-GX, railTopY - 4, CANVAS_W, 6);
+    ctx.fillStyle = '#2a2626';
+    ctx.fillRect(-GX, railTopY - 2, CANVAS_W, 3);
+    // Mid rail
+    const midR = railTopY + (bridgePlatY - railTopY) * 0.48;
+    ctx.fillStyle = '#202020';
+    ctx.fillRect(-GX, midR - 2, CANVAS_W, 4);
+    ctx.fillStyle = '#2a2626';
+    ctx.fillRect(-GX, midR - 1, CANVAS_W, 2);
+
+    // ⚠ Caution/radiation sign mounted on railing
+    ctx.fillStyle = '#302810';
+    ctx.fillRect(290, railTopY + 6, 122, 50);
+    ctx.strokeStyle = '#cc9900'; ctx.lineWidth = 2;
+    ctx.strokeRect(290, railTopY + 6, 122, 50);
+    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('⚠  CAUTION', 351, railTopY + 22);
+    ctx.fillStyle = '#ccaa44'; ctx.font = '6px monospace';
+    ctx.fillText('RADIOACTIVE ZONE BELOW', 351, railTopY + 33);
+    ctx.fillText('THIS BRIDGE — NO FALLS', 351, railTopY + 42);
+    ctx.fillStyle = '#888'; ctx.font = '5px monospace';
+    ctx.fillText('UNAUTHORIZED FALLS PROHIBITED', 351, railTopY + 50);
+
+    // Left blast door (entrance from megacomputer room)
+    const ldX = 18, ldY = 258, ldW = 64, ldH = 138;
+    drawDeathStarBlastDoor(ldX, ldY, ldW, ldH, 'left', level6.bladeDoorBridgeLeft.openPct, false, true);
+
+    // Ceiling cap (covers area above railing top)
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(-GX, -GY, CANVAS_W, railTopY - 4);
+    ctx.fillStyle = '#0f0f0f';
+    ctx.fillRect(-GX, 0, CANVAS_W, 15);
+
+    // Nav hint
+    if(player.x < 85) {
+        ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(8, 340, 128, 22);
+        ctx.fillStyle = '#ff9966';
+        ctx.fillText('← SUPERCOMPUTER', 72, 356);
+    }
 }
 
 function drawLevel6EmployeeLobby() {
@@ -13829,6 +14489,12 @@ function drawScene() {
             // Draw player in megacomputer room
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
+        } else if(level6.room === 'nuclearBridge') {
+            drawNuclearAssemblyBridge();
+
+            // Draw player on bridge
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); }
         } else if(level6.room === 'entryway') {
             drawLevel6Entryway();
 
@@ -16218,7 +16884,7 @@ function update() {
             }
 
             // Movement for horizontal-only rooms (1D)
-            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
+            if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
                     player.x = Math.max(10, player.x - 5);
@@ -16293,6 +16959,13 @@ function update() {
                     player.y = 380;
                 }
 
+                // Right exit — bridge overlook
+                if(player.x > 660 && level6.bladeDoorMegaRight.openPct > 0.7) {
+                    level6.room = 'nuclearBridge';
+                    player.x = 100;
+                    player.y = 380;
+                }
+
                 // Detective note interaction - aligned with actual note position
                 const detectiveX = 540;
                 const detectiveY = 445;
@@ -16345,8 +17018,21 @@ function update() {
                 } else {
                     level6.radiationTimer = 0;
                 }
-            } 
-        
+            }
+
+            else if(level6.room === 'nuclearBridge') {
+                player.y = 380;
+
+                // Left exit — back to megacomputer room
+                if(player.x < 40 && level6.bladeDoorBridgeLeft.openPct > 0.7) {
+                    level6.room = 'megacomputer';
+                    player.x = 640;
+                    player.y = 380;
+                }
+                // Right wall — dead end (bridge terminates)
+                if(player.x > 660) player.x = 660;
+            }
+
             else if(level6.room === 'employeeLobby') {
                 player.y = 380;
 
@@ -17307,6 +17993,37 @@ if (keys[' '] || keys['action']) {
                         if (level6.bladeDoorMega.state === 'closed') level6.bladeDoorMega.state = 'opening';
                     } else if (level6.room === 'megacomputer' && player.x >= 120 && level6.bladeDoorMega.state === 'open') {
                         level6.bladeDoorMega.state = 'closing';
+                    }
+                }
+                // Bridge doors — megacomputer right door and bridge left door
+                if (level6.bladeDoorMegaRight) {
+                    if (level6.bladeDoorMegaRight.state === 'opening') {
+                        level6.bladeDoorMegaRight.openPct = Math.min(1, level6.bladeDoorMegaRight.openPct + 0.04);
+                        if (level6.bladeDoorMegaRight.openPct >= 1) level6.bladeDoorMegaRight.state = 'open';
+                    } else if (level6.bladeDoorMegaRight.state === 'closing') {
+                        level6.bladeDoorMegaRight.openPct = Math.max(0, level6.bladeDoorMegaRight.openPct - 0.06);
+                        if (level6.bladeDoorMegaRight.openPct <= 0) level6.bladeDoorMegaRight.state = 'closed';
+                    }
+                    // Open when player approaches right side of megacomputer room
+                    if (level6.room === 'megacomputer' && player.x > 520) {
+                        if (level6.bladeDoorMegaRight.state === 'closed' || level6.bladeDoorMegaRight.state === 'closing') level6.bladeDoorMegaRight.state = 'opening';
+                    } else if (level6.room === 'megacomputer' && player.x <= 520 && level6.bladeDoorMegaRight.state === 'open') {
+                        level6.bladeDoorMegaRight.state = 'closing';
+                    }
+                }
+                if (level6.bladeDoorBridgeLeft) {
+                    if (level6.bladeDoorBridgeLeft.state === 'opening') {
+                        level6.bladeDoorBridgeLeft.openPct = Math.min(1, level6.bladeDoorBridgeLeft.openPct + 0.04);
+                        if (level6.bladeDoorBridgeLeft.openPct >= 1) level6.bladeDoorBridgeLeft.state = 'open';
+                    } else if (level6.bladeDoorBridgeLeft.state === 'closing') {
+                        level6.bladeDoorBridgeLeft.openPct = Math.max(0, level6.bladeDoorBridgeLeft.openPct - 0.06);
+                        if (level6.bladeDoorBridgeLeft.openPct <= 0) level6.bladeDoorBridgeLeft.state = 'closed';
+                    }
+                    // Open when player is near left side of bridge room
+                    if (level6.room === 'nuclearBridge' && player.x < 120) {
+                        if (level6.bladeDoorBridgeLeft.state === 'closed' || level6.bladeDoorBridgeLeft.state === 'closing') level6.bladeDoorBridgeLeft.state = 'opening';
+                    } else if (level6.room === 'nuclearBridge' && player.x >= 120 && level6.bladeDoorBridgeLeft.state === 'open') {
+                        level6.bladeDoorBridgeLeft.state = 'closing';
                     }
                 }
             }
