@@ -8687,8 +8687,8 @@ function drawNuclearAssemblyBridge() {
     ctx.fillStyle = '#181818';
     ctx.fillRect(convX1 - 12, convY - 2, convX2 - convX1 + 24, beltH + 12);
 
-    // Moving belt texture
-    const beltOff = (_t / 460) % 20;
+    // Moving belt texture — speed synced to missile scroll rate (105px per 1400ms)
+    const beltOff = (_t / 267) % 20;
     ctx.fillStyle = '#222';
     ctx.fillRect(convX1, convY, convX2 - convX1, beltH + 8);
     ctx.fillStyle = '#2d2d2d';
@@ -8698,8 +8698,8 @@ function drawNuclearAssemblyBridge() {
     ctx.strokeStyle = '#181818'; ctx.lineWidth = 1.5;
     ctx.strokeRect(convX1, convY, convX2 - convX1, beltH + 8);
 
-    // Belt rollers
-    const rSpin = (_t * 0.003) % (Math.PI*2);
+    // Belt rollers — angular speed synced to missile surface speed (105/(1400*7) rad/ms)
+    const rSpin = (_t * 0.0107) % (Math.PI*2);
     for(const rx of [convX1 + 10, convX2 - 10]) {
         ctx.fillStyle = '#2a2a2a';
         ctx.beginPath(); ctx.arc(rx, convY + beltH/2 + 4, 14, 0, Math.PI*2); ctx.fill();
@@ -8745,13 +8745,13 @@ function drawNuclearAssemblyBridge() {
         ctx.fillText('☢', mx + 21, my + missileH - 2);
     }
 
-    // Conveyor label
-    ctx.fillStyle = 'rgba(0,0,0,0.82)';
-    ctx.fillRect(convX1, convY - 30, 126, 16);
+    // Conveyor label — slightly larger for mobile legibility, with direction arrow
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(convX1, convY - 34, 160, 20);
     ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 1;
-    ctx.strokeRect(convX1, convY - 30, 126, 16);
-    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('⚔  PRIVATE WARFARE OUTPUT  ⚔', convX1 + 63, convY - 18);
+    ctx.strokeRect(convX1, convY - 34, 160, 20);
+    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('WARHEAD CONVEYOR  →', convX1 + 80, convY - 20);
 
     // ── CRATE LOADING STATION ─────────────────────────────────────────────────
     const crateBaseX = 508, crateBaseY = factFloor - 8;
@@ -8902,6 +8902,48 @@ function drawNuclearAssemblyBridge() {
     }
     if(truckX < 760 && truckX > -130) drawTruck(truckX, bayFloor, tPhase >= 0.68);
 
+    // Loading animation — visible while truck is docked (phase 0.28–0.68)
+    if(tPhase >= 0.28 && tPhase < 0.68) {
+        const loadFrac = (tPhase - 0.28) / 0.40; // 0→1 over docked phase
+        const trailerX = truckX + 50; // mid-trailer x
+        const trailerTopY = bayFloor - 44;
+
+        // Animated crane hook descending to trailer
+        const hookY = trailerTopY - 40 + loadFrac * 36;
+        ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(trailerX, trailerTopY - 55); ctx.lineTo(trailerX, hookY); ctx.stroke();
+        ctx.fillStyle = '#888';
+        ctx.fillRect(trailerX - 6, hookY, 12, 5);
+
+        // Warhead crate descending with crane
+        if(loadFrac < 0.75) {
+            const crateY = hookY + 5;
+            ctx.fillStyle = '#2e2e18';
+            ctx.fillRect(trailerX - 10, crateY, 20, 14);
+            ctx.strokeStyle = '#50501a'; ctx.lineWidth = 1;
+            ctx.strokeRect(trailerX - 10, crateY, 20, 14);
+            ctx.fillStyle = '#cc1100'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('☢', trailerX, crateY + 10);
+        }
+
+        // Loading progress bar
+        const barX = truckX + 36, barY = bayFloor - 52, barW = 74, barH = 6;
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = '#00cc44';
+        ctx.fillRect(barX, barY, barW * loadFrac, barH);
+        ctx.strokeStyle = '#00ff66'; ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+
+        // "LOADING" label with blinking dots
+        const dotCount = Math.floor((_t / 400) % 4);
+        const dots = '.'.repeat(dotCount);
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(barX, barY - 12, barW, 10);
+        ctx.fillStyle = '#00ff88'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('LOADING' + dots, barX + barW / 2, barY - 4);
+    }
+
     // "MEANS OF PRODUCTION: PRIVATE WARFARE" banner above bay
     ctx.fillStyle = '#280000';
     ctx.fillRect(568, 290, 134, 14);
@@ -8912,7 +8954,77 @@ function drawNuclearAssemblyBridge() {
     ctx.fillStyle = '#ff2222'; ctx.font = '5px monospace';
     ctx.fillText('MEANS OF PRODUCTION', 635, 308);
 
-    // === ARMED AND DANGEROUS CLONING BOSS — patrols the bridge catwalk ===
+    // ── BRIDGE WALKWAY (drawn over factory) ───────────────────────────────────
+    const bridgePlatY = 398;  // bridge floor (player at y=380)
+    const railTopY    = 280;  // top of railing
+
+    // Platform floor
+    ctx.fillStyle = '#1e1c1c';
+    ctx.fillRect(-GX, bridgePlatY - 2, CANVAS_W, 24);
+    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 1;
+    for(let gx = -GX; gx < CANVAS_W; gx += 11) {
+        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 2); ctx.lineTo(gx, bridgePlatY + 22); ctx.stroke();
+    }
+    for(let gy = bridgePlatY + 5; gy < bridgePlatY + 22; gy += 7) {
+        ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
+    }
+
+    // Edge warning strip
+    for(let sw = -GX; sw < CANVAS_W; sw += 28) {
+        ctx.fillStyle = sw % 56 < 28 ? '#302800' : '#201400';
+        ctx.fillRect(sw, bridgePlatY - 2, 28, 5);
+    }
+
+    // Undercarriage
+    ctx.fillStyle = '#161414';
+    ctx.fillRect(-GX, bridgePlatY + 22, CANVAS_W, 14);
+    ctx.strokeStyle = '#1e1c1c'; ctx.lineWidth = 3;
+    for(let bx = -GX + 15; bx < CANVAS_W; bx += 55) {
+        ctx.beginPath(); ctx.moveTo(bx, bridgePlatY + 22); ctx.lineTo(bx + 28, bridgePlatY + 36); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx + 28, bridgePlatY + 22); ctx.lineTo(bx, bridgePlatY + 36); ctx.stroke();
+    }
+
+    // Railing posts
+    for(let px = -GX + 14; px < CANVAS_W; px += 32) {
+        ctx.fillStyle = '#0e0c0c';
+        ctx.fillRect(px + 1, railTopY + 1, 5, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#2c2828';
+        ctx.fillRect(px, railTopY, 5, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#383030';
+        ctx.fillRect(px + 1, railTopY, 3, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#3a3434';
+        ctx.fillRect(px - 2, railTopY - 4, 9, 5);
+    }
+    // Top rail bar
+    ctx.fillStyle = '#181616';
+    ctx.fillRect(-GX, railTopY - 4, CANVAS_W, 6);
+    ctx.fillStyle = '#2a2626';
+    ctx.fillRect(-GX, railTopY - 2, CANVAS_W, 3);
+    // Mid rail
+    const midR = railTopY + (bridgePlatY - railTopY) * 0.48;
+    ctx.fillStyle = '#202020';
+    ctx.fillRect(-GX, midR - 2, CANVAS_W, 4);
+    ctx.fillStyle = '#2a2626';
+    ctx.fillRect(-GX, midR - 1, CANVAS_W, 2);
+
+    // ⚠ Caution/radiation sign mounted on railing
+    ctx.fillStyle = '#302810';
+    ctx.fillRect(290, railTopY + 6, 122, 50);
+    ctx.strokeStyle = '#cc9900'; ctx.lineWidth = 2;
+    ctx.strokeRect(290, railTopY + 6, 122, 50);
+    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('⚠  CAUTION', 351, railTopY + 22);
+    ctx.fillStyle = '#ccaa44'; ctx.font = '6px monospace';
+    ctx.fillText('RADIOACTIVE ZONE BELOW', 351, railTopY + 33);
+    ctx.fillText('THIS BRIDGE — NO FALLS', 351, railTopY + 42);
+    ctx.fillStyle = '#888'; ctx.font = '5px monospace';
+    ctx.fillText('UNAUTHORIZED FALLS PROHIBITED', 351, railTopY + 50);
+
+    // Left blast door (entrance from megacomputer room)
+    const ldX = 18, ldY = 258, ldW = 64, ldH = 138;
+    drawDeathStarBlastDoor(ldX, ldY, ldW, ldH, 'left', level6.bladeDoorBridgeLeft.openPct, false, true);
+
+    // === ARMED AND DANGEROUS CLONING BOSS — drawn after railing so appears in front of fence ===
     {
         const bcb = level6.bridgeCloningBoss;
         if(bcb.alive) {
@@ -9054,89 +9166,19 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
-    // ── BRIDGE WALKWAY (drawn over factory) ───────────────────────────────────
-    const bridgePlatY = 398;  // bridge floor (player at y=380)
-    const railTopY    = 280;  // top of railing
-
-    // Platform floor
-    ctx.fillStyle = '#1e1c1c';
-    ctx.fillRect(-GX, bridgePlatY - 2, CANVAS_W, 24);
-    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 1;
-    for(let gx = -GX; gx < CANVAS_W; gx += 11) {
-        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 2); ctx.lineTo(gx, bridgePlatY + 22); ctx.stroke();
-    }
-    for(let gy = bridgePlatY + 5; gy < bridgePlatY + 22; gy += 7) {
-        ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
-    }
-
-    // Edge warning strip
-    for(let sw = -GX; sw < CANVAS_W; sw += 28) {
-        ctx.fillStyle = sw % 56 < 28 ? '#302800' : '#201400';
-        ctx.fillRect(sw, bridgePlatY - 2, 28, 5);
-    }
-
-    // Undercarriage
-    ctx.fillStyle = '#161414';
-    ctx.fillRect(-GX, bridgePlatY + 22, CANVAS_W, 14);
-    ctx.strokeStyle = '#1e1c1c'; ctx.lineWidth = 3;
-    for(let bx = -GX + 15; bx < CANVAS_W; bx += 55) {
-        ctx.beginPath(); ctx.moveTo(bx, bridgePlatY + 22); ctx.lineTo(bx + 28, bridgePlatY + 36); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(bx + 28, bridgePlatY + 22); ctx.lineTo(bx, bridgePlatY + 36); ctx.stroke();
-    }
-
-    // Railing posts
-    for(let px = -GX + 14; px < CANVAS_W; px += 32) {
-        ctx.fillStyle = '#0e0c0c';
-        ctx.fillRect(px + 1, railTopY + 1, 5, bridgePlatY - railTopY - 2);
-        ctx.fillStyle = '#2c2828';
-        ctx.fillRect(px, railTopY, 5, bridgePlatY - railTopY - 2);
-        ctx.fillStyle = '#383030';
-        ctx.fillRect(px + 1, railTopY, 3, bridgePlatY - railTopY - 2);
-        ctx.fillStyle = '#3a3434';
-        ctx.fillRect(px - 2, railTopY - 4, 9, 5);
-    }
-    // Top rail bar
-    ctx.fillStyle = '#181616';
-    ctx.fillRect(-GX, railTopY - 4, CANVAS_W, 6);
-    ctx.fillStyle = '#2a2626';
-    ctx.fillRect(-GX, railTopY - 2, CANVAS_W, 3);
-    // Mid rail
-    const midR = railTopY + (bridgePlatY - railTopY) * 0.48;
-    ctx.fillStyle = '#202020';
-    ctx.fillRect(-GX, midR - 2, CANVAS_W, 4);
-    ctx.fillStyle = '#2a2626';
-    ctx.fillRect(-GX, midR - 1, CANVAS_W, 2);
-
-    // ⚠ Caution/radiation sign mounted on railing
-    ctx.fillStyle = '#302810';
-    ctx.fillRect(290, railTopY + 6, 122, 50);
-    ctx.strokeStyle = '#cc9900'; ctx.lineWidth = 2;
-    ctx.strokeRect(290, railTopY + 6, 122, 50);
-    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('⚠  CAUTION', 351, railTopY + 22);
-    ctx.fillStyle = '#ccaa44'; ctx.font = '6px monospace';
-    ctx.fillText('RADIOACTIVE ZONE BELOW', 351, railTopY + 33);
-    ctx.fillText('THIS BRIDGE — NO FALLS', 351, railTopY + 42);
-    ctx.fillStyle = '#888'; ctx.font = '5px monospace';
-    ctx.fillText('UNAUTHORIZED FALLS PROHIBITED', 351, railTopY + 50);
-
-    // Left blast door (entrance from megacomputer room)
-    const ldX = 18, ldY = 258, ldW = 64, ldH = 138;
-    drawDeathStarBlastDoor(ldX, ldY, ldW, ldH, 'left', level6.bladeDoorBridgeLeft.openPct, false, true);
-
     // Ceiling cap (covers area above railing top)
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(-GX, -GY, CANVAS_W, railTopY - 4);
     ctx.fillStyle = '#0f0f0f';
     ctx.fillRect(-GX, 0, CANVAS_W, 15);
 
-    // Nav hint
+    // Nav hint — drawn below bridge platform to avoid overlapping blast door
     if(player.x < 85) {
         ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(8, 340, 128, 22);
+        ctx.fillRect(8, 448, 160, 24);
         ctx.fillStyle = '#ff9966';
-        ctx.fillText('← SUPERCOMPUTER', 72, 356);
+        ctx.fillText('← SUPERCOMPUTER', 88, 465);
     }
 }
 
@@ -17176,6 +17218,22 @@ function update() {
                 }
                 // Right wall — dead end (bridge terminates)
                 if(player.x > 660) player.x = 660;
+
+                // Fire detective revolver on bridge
+                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    let vx = 0;
+                    if(player.facing === 'left') vx = -12;
+                    else if(player.facing === 'right') vx = 12;
+                    else vx = player.x < 350 ? 12 : -12;
+                    if(vx !== 0) {
+                        bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                        level6.revolverAmmo--;
+                        muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                        player.shootTimer = 20;
+                    }
+                }
             }
 
             else if(level6.room === 'employeeLobby') {
