@@ -443,6 +443,7 @@ let lives = 3;
 let frame = 0;
 let cardTimer = 0;
 let menuChoice = 0;
+let skipPressCount = 0; // Tracks cheat presses near blue PM on level 1
 
 let player = {
     x: 350,
@@ -862,6 +863,7 @@ function startGame() {
     cardTimer = 0;
     boss.bossKills = 0;
     ghostGun = {hasGun: false, ammo: 0, printing: false, printProgress: 0, printingHeart: false};
+    skipPressCount = 0;
     initLevel(1);
     updateLives();
 
@@ -8810,7 +8812,7 @@ function drawNuclearAssemblyBridge() {
     ctx.beginPath(); ctx.arc(crateBaseX + 60, factFloor - 70, 6, 0.1*Math.PI, 1.1*Math.PI); ctx.stroke();
 
     // ── ARMORED TRUCK LOADING BAY ─────────────────────────────────────────────
-    const bayX = 592, bayFloor = factFloor;
+    const bayX = 572, bayFloor = factFloor;
 
     // Bay ramp markings
     ctx.fillStyle = '#141814';
@@ -8949,13 +8951,13 @@ function drawNuclearAssemblyBridge() {
 
     // "MEANS OF PRODUCTION: PRIVATE WARFARE" banner above bay
     ctx.fillStyle = '#280000';
-    ctx.fillRect(568, 290, 134, 14);
+    ctx.fillRect(548, 290, 134, 14);
     ctx.strokeStyle = '#880000'; ctx.lineWidth = 1;
-    ctx.strokeRect(568, 290, 134, 14);
+    ctx.strokeRect(548, 290, 134, 14);
     ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('⚔  PRIVATE WARFARE CAPABILITY  ⚔', 635, 300);
+    ctx.fillText('⚔  PRIVATE WARFARE CAPABILITY  ⚔', 615, 300);
     ctx.fillStyle = '#ff2222'; ctx.font = '5px monospace';
-    ctx.fillText('MEANS OF PRODUCTION', 635, 308);
+    ctx.fillText('MEANS OF PRODUCTION', 615, 308);
 
     // ── BRIDGE WALKWAY (drawn over factory) ───────────────────────────────────
     const bridgePlatY = 398;  // bridge floor (player at y=380)
@@ -9216,9 +9218,9 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
-    // Ceiling cap (covers area above railing top)
+    // Ceiling cap (covers area above railing top — GY offset ensures it reaches game coords on all screen sizes)
     ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(-GX, -GY, CANVAS_W, railTopY - 4);
+    ctx.fillRect(-GX, -GY, CANVAS_W, railTopY - 4 + GY);
     ctx.fillStyle = '#0f0f0f';
     ctx.fillRect(-GX, 0, CANVAS_W, 15);
 
@@ -14942,6 +14944,16 @@ function drawScene() {
                         ctx.font = 'bold 10px Arial';
                         ctx.textAlign = 'center';
                         ctx.fillText('x3', drop.x, drop.y + 16 + dropBob);
+                        // Pickup prompt when player is near
+                        if(Math.abs(player.x - drop.x) < 50) {
+                            ctx.font = 'bold 13px Arial';
+                            const ammoLabelW = ctx.measureText('[ ACTION ] - TAKE AMMO').width + 16;
+                            const ammoLabelX = Math.max(0, Math.min(drop.x - ammoLabelW / 2, GAME_W - ammoLabelW));
+                            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+                            ctx.fillRect(ammoLabelX, drop.y - 32, ammoLabelW, 20);
+                            ctx.fillStyle = '#ffd700';
+                            ctx.fillText('[ ACTION ] - TAKE AMMO', drop.x, drop.y - 18);
+                        }
                     }
                 }
             }
@@ -15701,6 +15713,20 @@ function drawScene() {
     if(hasGhostGun) {
         drawGhostGun(player.x, player.y, player.facing);
         drawAmmoCounter(player.x, player.y, ghostGun.ammo);
+    }
+
+    // Level skip cheat hint: show counter when near blue PM on level 1
+    if(level === 1 && skipPressCount > 0) {
+        const bluePM = npcs.find(n => n.color.name === 'BLUE');
+        if(bluePM && Math.abs(player.x - bluePM.x) < 50) {
+            ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+            const hint = skipPressCount + '/20';
+            const hw = ctx.measureText(hint).width + 12;
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(player.x - hw / 2, player.y - 78, hw, 16);
+            ctx.fillStyle = '#005f99';
+            ctx.fillText(hint, player.x, player.y - 67);
+        }
     }
 
     if(ui.show) {
@@ -17419,8 +17445,28 @@ function update() {
             else if(level6.room === 'employeeHallway') {
                 player.y = 380;
 
-                // Fire detective pistol in hallway
-                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                // Pick up hallway boss drops — check BEFORE gun firing so ACTION collects ammo instead of shooting
+                let hallwayActionConsumed = false;
+                if(level6.hallwayDrops && level6.hallwayDrops.length > 0) {
+                    for(let drop of level6.hallwayDrops) {
+                        if(drop.claimed) continue;
+                        if(Math.abs(player.x - drop.x) < 50 && (keys[' '] || keys['action'])) {
+                            drop.claimed = true;
+                            keys[' '] = false;
+                            keys['action'] = false;
+                            hallwayActionConsumed = true;
+                            if(drop.type === 'ammo') {
+                                level6.revolverAmmo += (drop.amount || 3);
+                            } else if(drop.type === 'life') {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                            }
+                        }
+                    }
+                }
+
+                // Fire detective pistol in hallway (only if action wasn't consumed by ammo pickup)
+                if(!hallwayActionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
                     keys[' '] = false;
                     keys['action'] = false;
                     let vx = 0;
@@ -17432,22 +17478,6 @@ function update() {
                         level6.revolverAmmo--;
                         muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
                         player.shootTimer = 20;
-                    }
-                }
-
-                // Pick up hallway boss drops
-                if(level6.hallwayDrops && level6.hallwayDrops.length > 0) {
-                    for(let drop of level6.hallwayDrops) {
-                        if(drop.claimed) continue;
-                        if(Math.abs(player.x - drop.x) < 40 && Math.abs(player.y - drop.y) < 40) {
-                            drop.claimed = true;
-                            if(drop.type === 'ammo') {
-                                level6.revolverAmmo += (drop.amount || 3);
-                            } else if(drop.type === 'life') {
-                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
-                                updateLives();
-                            }
-                        }
                     }
                 }
 
@@ -18552,7 +18582,27 @@ if (keys[' '] || keys['action']) {
     if(keys[' '] || keys['action']) {
         keys[' '] = false;
         keys['action'] = false;
-        
+
+        // Level 1 skip cheat: press ACTION 20 times in front of the blue PM to jump to level 6
+        if(level === 1 && !ui.show && !ui.gunUI) {
+            const bluePM = npcs.find(n => n.color.name === 'BLUE');
+            if(bluePM && Math.abs(player.x - bluePM.x) < 50) {
+                skipPressCount++;
+                if(skipPressCount >= 20) {
+                    skipPressCount = 0;
+                    level = 6;
+                    timer = 300;
+                    initLevel(6);
+                    state = 'levelCard';
+                    cardTimer = 0;
+                    playMusic('level6');
+                    return;
+                }
+            } else {
+                skipPressCount = 0;
+            }
+        }
+
         const atComputer = Math.abs(player.x - computer.x) < 60;
         const at3DPrinter = level === 4 && Math.abs(player.x - printer3d.x) < 60;
         
