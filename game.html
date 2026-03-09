@@ -443,7 +443,8 @@ let lives = 3;
 let frame = 0;
 let cardTimer = 0;
 let menuChoice = 0;
-let skipPressCount = 0; // Tracks cheat presses near blue PM on level 1
+let skipPressCount = 0;      // Tracks cheat presses near blue PM on level 1 (→ level 6)
+let skipGreenPressCount = 0; // Tracks cheat presses near green PM on level 1 (→ level 5)
 
 let player = {
     x: 350,
@@ -7596,6 +7597,47 @@ function drawLevel6PipeRoom() {
         ctx.fillRect(550 - 90, 280 - 16, 180, 24);
         ctx.fillStyle = '#00ff88';
         ctx.fillText('ACCESS GRANTED →', 550, 280);
+    }
+
+    // === PIPE MANAGERS — drawn in front of server room at floor level ===
+    for(let npc of level6.npcPipes) {
+        const pipeY = 210;
+        const gasketY = 74;
+
+        // Wall gasket at top
+        ctx.fillStyle = '#999';
+        ctx.beginPath();
+        ctx.arc(npc.x, gasketY, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#666';
+        ctx.beginPath();
+        ctx.arc(npc.x, gasketY, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(npc.x, gasketY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        for(let b = 0; b < 6; b++) {
+            const angle = (b / 6) * Math.PI * 2;
+            ctx.fillStyle = '#555';
+            ctx.beginPath();
+            ctx.arc(npc.x + Math.cos(angle) * 12, gasketY + Math.sin(angle) * 12, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(npc.x + Math.cos(angle) * 12, gasketY + Math.sin(angle) * 12, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Pipe section (no active cracks in level 6 — decorative)
+        let l6StressPct = 0;
+        if(npc.crackStartTime && npc.state !== 'fixing') {
+            l6StressPct = Math.min((Date.now() - npc.crackStartTime) / 15000, 1);
+        }
+        drawPipeSection(npc, pipeY, gasketY, l6StressPct);
+        drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
+        drawStepLadder(npc.x, npc.y, npc.color);
+        drawNPC(npc);
     }
 }
 
@@ -15836,16 +15878,28 @@ function drawScene() {
         drawAmmoCounter(player.x, player.y, ghostGun.ammo);
     }
 
-    // Level skip cheat hint: show counter when near blue PM on level 1
-    if(level === 1 && skipPressCount > 0) {
+    // Level skip cheat hints — only reveal counter after 5 presses (keep secret during normal play)
+    if(level === 1 && skipPressCount > 5) {
         const bluePM = npcs.find(n => n.color.name === 'BLUE');
         if(bluePM && Math.abs(player.x - bluePM.x) < 50) {
             ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
-            const hint = skipPressCount + '/20';
+            const hint = (skipPressCount - 5) + '/15';
             const hw = ctx.measureText(hint).width + 12;
             ctx.fillStyle = 'rgba(0,0,0,0.75)';
             ctx.fillRect(player.x - hw / 2, player.y - 78, hw, 16);
             ctx.fillStyle = '#005f99';
+            ctx.fillText(hint, player.x, player.y - 67);
+        }
+    }
+    if(level === 1 && skipGreenPressCount > 5) {
+        const greenPM = npcs.find(n => n.color.name === 'GREEN');
+        if(greenPM && Math.abs(player.x - greenPM.x) < 50) {
+            ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+            const hint = (skipGreenPressCount - 5) + '/15';
+            const hw = ctx.measureText(hint).width + 12;
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(player.x - hw / 2, player.y - 78, hw, 16);
+            ctx.fillStyle = '#1a8a1a';
             ctx.fillText(hint, player.x, player.y - 67);
         }
     }
@@ -18768,11 +18822,13 @@ if (keys[' '] || keys['action']) {
         keys[' '] = false;
         keys['action'] = false;
 
-        // Level 1 skip cheat: press ACTION 20 times in front of the blue PM to jump to level 6
+        // Level 1 skip cheats — secret: no indicator for first 5 consecutive presses
         if(level === 1 && !ui.show && !ui.gunUI) {
             const bluePM = npcs.find(n => n.color.name === 'BLUE');
+            const greenPM = npcs.find(n => n.color.name === 'GREEN');
             if(bluePM && Math.abs(player.x - bluePM.x) < 50) {
                 skipPressCount++;
+                skipGreenPressCount = 0;
                 if(skipPressCount >= 20) {
                     skipPressCount = 0;
                     level = 6;
@@ -18783,8 +18839,22 @@ if (keys[' '] || keys['action']) {
                     playMusic('level6');
                     return;
                 }
+            } else if(greenPM && Math.abs(player.x - greenPM.x) < 50) {
+                skipGreenPressCount++;
+                skipPressCount = 0;
+                if(skipGreenPressCount >= 20) {
+                    skipGreenPressCount = 0;
+                    level = 5;
+                    timer = 300;
+                    initLevel(5);
+                    state = 'levelCard';
+                    cardTimer = 0;
+                    playMusic('level5');
+                    return;
+                }
             } else {
                 skipPressCount = 0;
+                skipGreenPressCount = 0;
             }
         }
 
