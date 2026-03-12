@@ -8725,559 +8725,289 @@ function drawNuclearAssemblyBridge() {
     }
 
     // ── 8-STATION ANIMATED PRODUCTION LINE ────────────────────────────────────
-    // Stations L→R across x=0..700, visible in railing window y=256..390
+    // Single belt runs L→R; items travel it and transform at each station.
+    // Watch one item: blob → acid goo → fission orb → goop drop → missile fill → armed → crated → truck
     {
-        const FLOOR_Y = 390;
-        const VISIBLE_TOP = 256;
+        const BLT_Y  = 382;
+        const BLT_X0 = 18, BLT_X1 = 612;
+        const BLT_W  = BLT_X1 - BLT_X0;   // 594
+        const PERIOD = 9600;   // ms per full traversal; 5 items → one exits every ~1.9s
+        const N_ITEMS = 5;
 
-        // ── Station separators ──────────────────────────────────────────────
-        ctx.strokeStyle = 'rgba(40,60,40,0.5)';
+        // Zone breakpoints (7 zones on belt, 0-6; zone 7 = truck bay off belt)
+        // Zone 0: 18–106   BIOMATTER
+        // Zone 1: 106–193  ACID BATH
+        // Zone 2: 193–280  FISSION
+        // Zone 3: 280–367  GOOP PIPE
+        // Zone 4: 367–454  FILL STATION
+        // Zone 5: 454–541  ARMED (complete missiles riding belt)
+        // Zone 6: 541–612  CRATING
+        var SEP = [106, 193, 280, 367, 454, 541];
+        var getZone = function(x) {
+            for (var z = 0; z < SEP.length; z++) { if (x < SEP[z]) return z; }
+            return SEP.length;
+        };
+
+        // ── Separators ───────────────────────────────────────────────────────
+        ctx.strokeStyle = 'rgba(40,60,40,0.35)';
         ctx.lineWidth = 1;
-        [87, 175, 262, 350, 437, 524, 612].forEach(function(sx) {
-            ctx.beginPath(); ctx.moveTo(sx, 258); ctx.lineTo(sx, 388); ctx.stroke();
+        SEP.forEach(function(sx) {
+            ctx.beginPath(); ctx.moveTo(sx, 258); ctx.lineTo(sx, 392); ctx.stroke();
+        });
+
+        // ── Belt ─────────────────────────────────────────────────────────────
+        ctx.fillStyle = '#0e0e0e';
+        ctx.fillRect(BLT_X0, BLT_Y - 5, BLT_W, 12);
+        ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
+        ctx.strokeRect(BLT_X0, BLT_Y - 5, BLT_W, 12);
+        var bOff = (_t / 460) % 18;
+        ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+        for (var bsx = BLT_X0 + bOff - 18; bsx < BLT_X1; bsx += 18) {
+            if (bsx > BLT_X0 && bsx < BLT_X1) {
+                ctx.beginPath(); ctx.moveTo(bsx, BLT_Y-5); ctx.lineTo(bsx, BLT_Y+7); ctx.stroke();
+            }
+        }
+        // Direction arrows every ~80px so it reads left→right
+        ctx.fillStyle = 'rgba(60,80,60,0.55)';
+        ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+        for (var ax = BLT_X0 + 40; ax < BLT_X1 - 20; ax += 88) {
+            ctx.fillText('›', ax, BLT_Y + 4);
+        }
+
+        // ── Station machinery (above the belt) ───────────────────────────────
+
+        // S1 BIOMATTER — tapered hopper mouth feeds onto belt
+        ctx.fillStyle = '#2a1a0a';
+        ctx.beginPath();
+        ctx.moveTo(24, 270); ctx.lineTo(90, 270);
+        ctx.lineTo(66, BLT_Y - 5); ctx.lineTo(48, BLT_Y - 5);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#1a0f05';
+        ctx.beginPath();
+        ctx.moveTo(30, 274); ctx.lineTo(84, 274);
+        ctx.lineTo(63, BLT_Y - 7); ctx.lineTo(51, BLT_Y - 7);
+        ctx.closePath(); ctx.fill();
+
+        // S2 ACID BATH — tank with glowing acid
+        var acidPulse = 0.6 + Math.sin(_t * 0.002) * 0.25;
+        ctx.fillStyle = '#112211';
+        ctx.fillRect(112, 300, 68, 76);
+        ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 16 * acidPulse;
+        ctx.strokeStyle = '#224422'; ctx.lineWidth = 2;
+        ctx.strokeRect(112, 300, 68, 76);
+        ctx.shadowBlur = 0;
+        var ag = 60 + Math.floor(acidPulse * 30);
+        ctx.fillStyle = 'rgb(0,' + ag + ',8)';
+        ctx.fillRect(116, 304, 60, 68);
+        [{bx:124,p:1100,s:3},{bx:136,p:870,s:2},{bx:148,p:1500,s:3},{bx:160,p:1020,s:2},{bx:172,p:1300,s:2}].forEach(function(b) {
+            var bp = (_t % b.p) / b.p;
+            ctx.globalAlpha = (1 - bp) * 0.65;
+            ctx.strokeStyle = '#80ff40'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(b.bx, 366 - bp * 58, b.s, 0, Math.PI*2); ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u2622', 146, 296);
+
+        // S3 FISSION REACTOR — cylinder w/ pulsing rings
+        ctx.fillStyle = '#1a2218'; ctx.fillRect(213, 286, 48, 92);
+        ctx.strokeStyle = '#2a3a28'; ctx.lineWidth = 2; ctx.strokeRect(213, 286, 48, 92);
+        ctx.fillStyle = '#223322';
+        ctx.beginPath(); ctx.ellipse(237, 286, 26, 11, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1; ctx.stroke();
+        var rT = Math.sin(_t * 0.0018);
+        [13, 18, 23].forEach(function(r, ri) {
+            ctx.globalAlpha = Math.max(0, 0.44 - ri * 0.13 + rT * 0.1);
+            ctx.strokeStyle = '#44ff22'; ctx.lineWidth = 1.5;
+            ctx.shadowColor = '#44ff22'; ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.ellipse(237, 286, r, r * 0.42, 0, 0, Math.PI*2); ctx.stroke();
         });
         ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        ctx.fillStyle = '#88ff44'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u2622', 237, 342);
+        // Drip outlet to belt
+        ctx.fillStyle = '#223322'; ctx.fillRect(233, 378, 8, 9);
 
-        // ── Station 1: BIOMATTER INPUT (x=0..87, cx=43) ────────────────────
-        {
-            // Label plate
-            ctx.fillStyle = '#1a1a0a';
-            ctx.fillRect(4, 258, 78, 12);
-            ctx.fillStyle = '#ff8800'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('BIOMATTER IN', 43, 267);
-            ctx.globalAlpha = 1;
-
-            // Funnel/hopper body — trapezoid: wide top, narrow bottom
-            ctx.fillStyle = '#2a1a0a';
-            ctx.beginPath();
-            ctx.moveTo(14, 272);
-            ctx.lineTo(72, 272);
-            ctx.lineTo(56, 335);
-            ctx.lineTo(30, 335);
-            ctx.closePath();
-            ctx.fill();
-            ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Funnel interior highlight
-            ctx.fillStyle = '#1a0f05';
-            ctx.beginPath();
-            ctx.moveTo(20, 276);
-            ctx.lineTo(66, 276);
-            ctx.lineTo(53, 330);
-            ctx.lineTo(33, 330);
-            ctx.closePath();
-            ctx.fill();
-
-            // Chute going right from bottom of funnel
-            ctx.fillStyle = '#3a2010';
-            ctx.fillRect(30, 335, 54, 8);
-            ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 1;
-            ctx.strokeRect(30, 335, 54, 8);
-
-            // Animated organic chunks falling through hopper
-            var chunkColors = ['#5a2e08', '#6b3510', '#4a2006', '#7a4018'];
-            for (var ci = 0; ci < 4; ci++) {
-                var cPhase = ((_t / 900) + ci * 0.25) % 1;
-                var chunkY = 278 + cPhase * 52;
-                var chunkX = 36 + Math.sin(cPhase * Math.PI * 3 + ci) * 6;
-                var chunkW = 8 - ci * 1;
-                var chunkH = 6 - ci * 0.5;
-                ctx.fillStyle = chunkColors[ci % chunkColors.length];
-                ctx.globalAlpha = 0.85;
-                ctx.beginPath();
-                ctx.ellipse(chunkX, chunkY, chunkW, chunkH, 0.3 + ci * 0.4, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-        }
-
-        // ── Station 2: ACID DISSOLVE BATH (x=87..175, cx=131) ─────────────
-        {
-            // Connecting chute from Station 1 into tank
-            ctx.fillStyle = '#3a2010';
-            ctx.fillRect(74, 335, 24, 6);
-            ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 1;
-            ctx.strokeRect(74, 335, 24, 6);
-            ctx.fillStyle = '#3a2010';
-            ctx.beginPath();
-            ctx.moveTo(84, 341); ctx.lineTo(98, 341);
-            ctx.lineTo(96, 322); ctx.lineTo(86, 322);
-            ctx.closePath();
-            ctx.fill();
-
-            var acidPulse = Math.sin(_t * 0.0022);
-
-            // Tank outer walls
-            ctx.fillStyle = '#112211';
-            ctx.fillRect(92, 320, 78, 68);
-            ctx.strokeStyle = '#224422'; ctx.lineWidth = 3;
-            ctx.strokeRect(92, 320, 78, 68);
-
-            // Tank inner acid — animated green
-            var acidGreen = 80 + Math.floor(acidPulse * 20);
-            ctx.fillStyle = 'rgb(0,' + acidGreen + ',10)';
-            ctx.fillRect(96, 324, 70, 60);
-
-            // Glow around tank
-            ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 25;
-            ctx.strokeStyle = '#44aa22'; ctx.lineWidth = 2;
-            ctx.strokeRect(92, 320, 78, 68);
-            ctx.shadowBlur = 0;
-
-            // Acid surface line
-            ctx.strokeStyle = '#80ff40'; ctx.lineWidth = 1;
-            ctx.globalAlpha = 0.7 + acidPulse * 0.2;
-            ctx.beginPath(); ctx.moveTo(96, 328); ctx.lineTo(166, 328); ctx.stroke();
-            ctx.globalAlpha = 1;
-
-            // Bubbles rising in acid
-            var bubbleData = [
-                {bx: 104, baseY: 380, period: 1400, size: 3},
-                {bx: 118, baseY: 380, period: 1100, size: 2},
-                {bx: 131, baseY: 380, period: 1700, size: 4},
-                {bx: 144, baseY: 380, period: 1250, size: 2},
-                {bx: 157, baseY: 380, period: 1600, size: 3},
-                {bx: 112, baseY: 380, period: 900,  size: 2},
-            ];
-            bubbleData.forEach(function(b) {
-                var bPhase = (_t % b.period) / b.period;
-                var bY = b.baseY - bPhase * 54;
-                ctx.globalAlpha = (1 - bPhase) * 0.7;
-                ctx.strokeStyle = '#80ff40'; ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.arc(b.bx, bY, b.size, 0, Math.PI * 2); ctx.stroke();
-            });
-            ctx.globalAlpha = 1;
-
-            // ☢ symbol on tank wall
-            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('\u2622', 131, 316);
-            ctx.font = '10px monospace'; ctx.fillStyle = '#88cc44';
-            ctx.fillText('ACID', 131, 376);
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-        }
-
-        // ── Station 3: FISSION CHAMBER (x=175..262, cx=218) ───────────────
-        {
-            // Connecting pipe: acid tank right (x=170, y=355) to reactor left (x=200, y=340)
-            ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 4;
-            ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 8;
-            ctx.beginPath(); ctx.moveTo(170, 350); ctx.lineTo(200, 340); ctx.stroke();
-            ctx.shadowBlur = 0;
-
-            // Flow particles along connecting pipe
-            for (var fp3 = 0; fp3 < 3; fp3++) {
-                var fPhase3 = ((_t / 600) + fp3 * 0.33) % 1;
-                var fpx3 = 170 + (200 - 170) * fPhase3;
-                var fpy3 = 350 + (340 - 350) * fPhase3;
-                ctx.globalAlpha = Math.sin(fPhase3 * Math.PI) * 0.9;
-                ctx.fillStyle = '#80ff40';
-                ctx.shadowColor = '#80ff40'; ctx.shadowBlur = 6;
-                ctx.beginPath(); ctx.arc(fpx3, fpy3, 2.5, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-
-            // Reactor body — dark steel cylinder
-            ctx.fillStyle = '#1a2218';
-            ctx.fillRect(200, 295, 36, 77);
-            ctx.strokeStyle = '#2a3a28'; ctx.lineWidth = 2;
-            ctx.strokeRect(200, 295, 36, 77);
-
-            // Top cap ellipse
-            ctx.fillStyle = '#223322';
-            ctx.beginPath(); ctx.ellipse(218, 295, 20, 8, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // Pulsing green glow rings
-            var ringT3 = Math.sin(_t * 0.0018);
-            [14, 19, 24].forEach(function(r, ri) {
-                var rAlpha = (0.5 - ri * 0.15) + ringT3 * 0.1;
-                ctx.globalAlpha = Math.max(0, rAlpha);
-                ctx.strokeStyle = '#44ff22'; ctx.lineWidth = 1.5;
-                ctx.shadowColor = '#44ff22'; ctx.shadowBlur = 10;
-                ctx.beginPath(); ctx.ellipse(218, 295, r, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
-            });
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-
-            // ☢ emoji in reactor body center
-            ctx.fillStyle = '#88ff44'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('\u2622', 218, 342);
-
-            // Output pipe stub going right from cx=254, y=320
-            ctx.fillStyle = '#223322';
-            ctx.fillRect(236, 316, 26, 8);
-            ctx.strokeStyle = '#44aa22'; ctx.lineWidth = 1;
-            ctx.strokeRect(236, 316, 26, 8);
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-        }
-
-        // ── Station 4: GOOP PIPE TRANSPORT (x=262..350, cx=306) ───────────
-        {
-            var pipeY = 320;
-
-            // Outer pipe (dark)
-            ctx.fillStyle = '#1a2a18';
-            ctx.fillRect(255, pipeY - 6, 100, 14);
-
-            // Inner pipe (lighter)
-            ctx.fillStyle = '#224422';
-            ctx.fillRect(256, pipeY - 5, 98, 12);
-
-            // Glowing core
-            ctx.fillStyle = '#004400';
-            ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 8;
-            ctx.fillRect(258, pipeY - 3, 94, 8);
-            ctx.shadowBlur = 0;
-
-            // Pipe border
-            ctx.strokeStyle = '#335533'; ctx.lineWidth = 1;
-            ctx.strokeRect(255, pipeY - 6, 100, 14);
-
-            // Segment rings every 18px
+        // S4 GOOP PIPE — horizontal pressurized conduit
+        var pY4 = 310;
+        ctx.fillStyle = '#1a2a18'; ctx.fillRect(280, pY4 - 6, 87, 14);
+        ctx.fillStyle = '#003300';
+        ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 6;
+        ctx.fillRect(282, pY4 - 4, 83, 10); ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#335533'; ctx.lineWidth = 1; ctx.strokeRect(280, pY4 - 6, 87, 14);
+        for (var rx4 = 280 + 16; rx4 < 367; rx4 += 16) {
             ctx.strokeStyle = '#446644'; ctx.lineWidth = 2;
-            for (var rx = 255 + 18; rx < 355; rx += 18) {
-                ctx.beginPath(); ctx.moveTo(rx, pipeY - 6); ctx.lineTo(rx, pipeY + 8); ctx.stroke();
-            }
-
-            // Flanges at each end
-            ctx.fillStyle = '#334433';
-            ctx.fillRect(253, pipeY - 8, 6, 18);
-            ctx.fillRect(349, pipeY - 8, 6, 18);
-
-            // Animated glow particles flowing left to right
-            for (var gp4 = 0; gp4 < 6; gp4++) {
-                var gpPhase4 = ((_t / 800) + gp4 / 6) % 1;
-                var gpx4 = 258 + gpPhase4 * 94;
-                ctx.globalAlpha = Math.sin(gpPhase4 * Math.PI) * 0.9;
-                ctx.fillStyle = '#80ff20';
-                ctx.shadowColor = '#80ff20'; ctx.shadowBlur = 6;
-                ctx.beginPath(); ctx.arc(gpx4, pipeY, 2.5, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-
-            // Pressure gauge at cx=305, y=308
-            ctx.fillStyle = '#223322';
-            ctx.beginPath(); ctx.arc(305, 308, 10, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1;
-            ctx.stroke();
-            ctx.fillStyle = '#112211';
-            ctx.beginPath(); ctx.arc(305, 308, 7, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#ff4422'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(305, 308);
-            ctx.lineTo(305 + 5 * Math.cos(-0.8), 308 + 5 * Math.sin(-0.8));
-            ctx.stroke();
-
-            // Pipe label plate
-            ctx.fillStyle = '#0a1a0a';
-            ctx.fillRect(285, 311, 30, 10);
-            ctx.fillStyle = '#80ff20'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('GOOP', 300, 319);
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+            ctx.beginPath(); ctx.moveTo(rx4, pY4 - 6); ctx.lineTo(rx4, pY4 + 8); ctx.stroke();
         }
+        ctx.fillStyle = '#334433'; ctx.fillRect(278, pY4 - 8, 6, 18); ctx.fillRect(361, pY4 - 8, 6, 18);
+        // Pressure gauge
+        ctx.fillStyle = '#223322'; ctx.beginPath(); ctx.arc(323, pY4 - 10, 9, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = '#ff4422'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(323, pY4 - 10);
+        ctx.lineTo(323 + 5 * Math.cos(-0.8), pY4 - 10 + 5 * Math.sin(-0.8)); ctx.stroke();
+        // Outlet pipe to belt
+        ctx.fillStyle = '#223322'; ctx.fillRect(319, pY4 + 8, 8, BLT_Y - pY4 - 8 + 5);
 
-        // ── Station 5: MISSILE FILL STATION (x=350..437, cx=393) ──────────
-        {
-            // Vertical drop pipe from y=320 down to nozzle at y=352
-            ctx.fillStyle = '#223322';
-            ctx.fillRect(386, 320, 8, 32);
-            ctx.strokeStyle = '#44aa22'; ctx.lineWidth = 1;
-            ctx.strokeRect(386, 320, 8, 32);
+        // S5 FILL NOZZLE — supply pipe + nozzle head
+        ctx.fillStyle = '#223322'; ctx.fillRect(407, 304, 8, 60);
+        ctx.fillStyle = '#334433'; ctx.fillRect(399, 358, 22, 20);
+        ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1; ctx.strokeRect(399, 358, 22, 20);
+        ctx.fillStyle = '#80ff40'; ctx.shadowColor = '#80ff40'; ctx.shadowBlur = 8;
+        ctx.fillRect(405, 377, 10, 5); ctx.shadowBlur = 0;
 
-            // Nozzle head
-            ctx.fillStyle = '#334433';
-            ctx.fillRect(380, 352, 20, 22);
-            ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1;
-            ctx.strokeRect(380, 352, 20, 22);
-            // Nozzle tip glow
-            ctx.fillStyle = '#80ff40';
-            ctx.shadowColor = '#80ff40'; ctx.shadowBlur = 10;
-            ctx.fillRect(386, 372, 8, 4);
-            ctx.shadowBlur = 0;
+        // S6 — belt only (armed missiles visible here, no overhead machinery)
+        var qcOn = ((_t / 700) % 1) > 0.5;
+        ctx.fillStyle = qcOn ? '#00ff44' : '#004411';
+        ctx.shadowColor = qcOn ? '#00ff44' : 'transparent'; ctx.shadowBlur = qcOn ? 7 : 0;
+        ctx.beginPath(); ctx.arc(497, 268, 4, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
 
-            // Platform for missiles
-            ctx.fillStyle = '#2a2a2a';
-            ctx.fillRect(370, 376, 60, 6);
-
-            var msH5 = 26;
-            // Left missile (unfilled/empty)
-            ctx.fillStyle = '#4a4a5a';
-            ctx.fillRect(374, 378 - msH5, 14, msH5);
-            ctx.strokeStyle = '#6a6a7a'; ctx.lineWidth = 1;
-            ctx.strokeRect(374, 378 - msH5, 14, msH5);
+        // S7 CRATING — stacked completed crates + crane lowering next missile
+        [{y:358, lbl:'CLASSIFIED'}, {y:330, lbl:'ARMED'}].forEach(function(cr) {
+            ctx.fillStyle = '#2e2e18'; ctx.fillRect(546, cr.y, 48, 24);
+            ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1; ctx.strokeRect(546, cr.y, 48, 24);
+            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
+            ctx.beginPath(); ctx.moveTo(570, cr.y); ctx.lineTo(570, cr.y + 24); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(546, cr.y + 12); ctx.lineTo(594, cr.y + 12); ctx.stroke();
+            ctx.fillStyle = '#aaaa60'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
+            ctx.fillText(cr.lbl, 570, cr.y + 14);
+        });
+        // Crane post + arm
+        ctx.fillStyle = '#3a3a3a'; ctx.fillRect(574, 258, 6, 44); ctx.fillRect(574, 260, 28, 5);
+        ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(600, 265, 4, 0, Math.PI*2); ctx.fill();
+        var crT = (_t / 1900) % 1;
+        var cLen = crT < 0.5 ? crT / 0.5 * 26 : (1 - crT) / 0.5 * 26;
+        ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(600, 269); ctx.lineTo(600, 269 + cLen); ctx.stroke();
+        if (crT < 0.5) {
+            var mCrY = 269 + cLen;
+            ctx.fillStyle = '#4a4a5a'; ctx.fillRect(593, mCrY, 12, 20);
             ctx.fillStyle = '#5a5a6a';
-            ctx.beginPath();
-            ctx.moveTo(374, 378 - msH5);
-            ctx.lineTo(381, 378 - msH5 - 12);
-            ctx.lineTo(388, 378 - msH5);
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#0a0a12';
-            ctx.fillRect(377, 378 - msH5 + 4, 8, msH5 - 6);
-
-            // Right missile (being filled)
-            ctx.fillStyle = '#4a4a5a';
-            ctx.fillRect(396, 378 - msH5, 14, msH5);
-            ctx.strokeStyle = '#6a6a7a'; ctx.lineWidth = 1;
-            ctx.strokeRect(396, 378 - msH5, 14, msH5);
-            ctx.fillStyle = '#5a5a6a';
-            ctx.beginPath();
-            ctx.moveTo(396, 378 - msH5);
-            ctx.lineTo(403, 378 - msH5 - 12);
-            ctx.lineTo(410, 378 - msH5);
-            ctx.closePath(); ctx.fill();
-            // Interior with animated fill level
-            var fillPhase5 = (_t / 2000) % 1;
-            var fillH5 = Math.floor(fillPhase5 * (msH5 - 6));
-            ctx.fillStyle = '#0a0a12';
-            ctx.fillRect(399, 378 - msH5 + 4, 8, msH5 - 6);
-            ctx.fillStyle = '#40ff20';
-            ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 4;
-            ctx.fillRect(399, 378 - msH5 + 4 + (msH5 - 6) - fillH5, 8, fillH5);
-            ctx.shadowBlur = 0;
-
-            // Animated injection stream
-            if (fillPhase5 < 0.95) {
-                ctx.globalAlpha = 0.6 + Math.sin(_t * 0.008) * 0.2;
-                ctx.fillStyle = '#80ff40';
-                ctx.shadowColor = '#80ff40'; ctx.shadowBlur = 6;
-                ctx.fillRect(390, 376, 4, 2);
-                ctx.shadowBlur = 0;
-                ctx.globalAlpha = 1;
-            }
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+            ctx.beginPath(); ctx.moveTo(593, mCrY); ctx.lineTo(599, mCrY - 9); ctx.lineTo(605, mCrY); ctx.closePath(); ctx.fill();
         }
 
-        // ── Station 6: CONVEYOR BELT (x=437..524, cx=480) ─────────────────
-        {
-            // End rollers
-            ctx.fillStyle = '#444444';
-            ctx.beginPath(); ctx.arc(448, 384, 11, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(513, 384, 11, 0, Math.PI * 2); ctx.fill();
-
-            // Belt surface
-            ctx.fillStyle = '#2a2a2a';
-            ctx.fillRect(437, 379, 87, 10);
-
-            // Animated belt slats
-            var beltOff6 = (_t / 267) % 20;
-            ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
-            for (var bx6 = 437 - (20 - beltOff6); bx6 < 524; bx6 += 20) {
-                if (bx6 >= 437 && bx6 <= 524) {
-                    ctx.beginPath(); ctx.moveTo(bx6, 379); ctx.lineTo(bx6, 389); ctx.stroke();
-                }
+        // ── ITEMS: 5 items cycling L→R on belt, transforming by zone ─────────
+        var drawItem = function(stg, x, y) {
+            ctx.save(); ctx.textAlign = 'center';
+            switch (stg) {
+                case 0: // Raw biomatter chunk
+                    ctx.fillStyle = '#6b3510';
+                    ctx.beginPath(); ctx.ellipse(x, y - 9, 8, 6, 0.3, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#4a2006';
+                    ctx.beginPath(); ctx.ellipse(x + 2, y - 7, 5, 3, -0.2, 0, Math.PI*2); ctx.fill();
+                    break;
+                case 1: // Acid-dissolved green blob
+                    ctx.globalAlpha = 0.8 + Math.sin(_t * 0.003) * 0.15;
+                    ctx.fillStyle = '#40ff10';
+                    ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 10;
+                    ctx.beginPath(); ctx.ellipse(x, y - 7, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+                    break;
+                case 2: // Fission-processed glowing orb
+                    ctx.fillStyle = '#001400';
+                    ctx.beginPath(); ctx.arc(x, y - 9, 9, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#44ff22'; ctx.lineWidth = 2;
+                    ctx.shadowColor = '#44ff22'; ctx.shadowBlur = 14;
+                    ctx.beginPath(); ctx.arc(x, y - 9, 9, 0, Math.PI*2); ctx.stroke();
+                    ctx.shadowBlur = 0;
+                    break;
+                case 3: // Goop droplet falling from pipe outlet
+                    ctx.fillStyle = '#80ff20';
+                    ctx.shadowColor = '#80ff20'; ctx.shadowBlur = 12;
+                    ctx.beginPath(); ctx.arc(x, y - 9, 5, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0;
+                    break;
+                case 4: // Missile silhouette — half-filled with green goop
+                    var mH4 = 22, mW4 = 11;
+                    ctx.fillStyle = '#4a4a5a'; ctx.fillRect(x - mW4/2, y - mH4, mW4, mH4);
+                    ctx.fillStyle = '#5a5a6a';
+                    ctx.beginPath(); ctx.moveTo(x - mW4/2, y - mH4); ctx.lineTo(x, y - mH4 - 9); ctx.lineTo(x + mW4/2, y - mH4); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 4;
+                    ctx.fillRect(x - mW4/2 + 2, y - mH4/2 + 1, mW4 - 4, mH4/2 - 3); ctx.shadowBlur = 0;
+                    break;
+                case 5: // Armed complete missile ☢
+                    var mH5 = 24, mW5 = 11;
+                    ctx.fillStyle = '#4a4a5a'; ctx.fillRect(x - mW5/2, y - mH5, mW5, mH5);
+                    ctx.strokeStyle = '#6a6a7a'; ctx.lineWidth = 1; ctx.strokeRect(x - mW5/2, y - mH5, mW5, mH5);
+                    ctx.fillStyle = '#5a5a6a';
+                    ctx.beginPath(); ctx.moveTo(x - mW5/2, y - mH5); ctx.lineTo(x, y - mH5 - 9); ctx.lineTo(x + mW5/2, y - mH5); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#30ee10'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 5;
+                    ctx.fillRect(x - mW5/2 + 2, y - mH5 + 2, mW5 - 4, mH5 - 4); ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#80ff40'; ctx.font = '9px monospace';
+                    ctx.fillText('\u2622', x, y - mH5 + 16);
+                    break;
+                case 6: // Missile descending into open crate
+                    ctx.fillStyle = '#4a4a5a'; ctx.fillRect(x - 5, y - 22, 10, 18);
+                    ctx.fillStyle = '#80ff40'; ctx.font = '8px monospace';
+                    ctx.fillText('\u2622', x, y - 10);
+                    ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x - 13, y); ctx.lineTo(x - 13, y - 20);
+                    ctx.moveTo(x + 13, y); ctx.lineTo(x + 13, y - 20);
+                    ctx.moveTo(x - 13, y); ctx.lineTo(x + 13, y);
+                    ctx.stroke();
+                    break;
             }
+            ctx.restore();
+        };
 
-            // 5 missiles riding belt
-            var missileOffset6 = ((_t / 1600) % 1) * 16;
-            var msConvH6 = 26;
-            for (var mi6 = 0; mi6 < 5; mi6++) {
-                var mx6 = 444 + mi6 * 17 + missileOffset6;
-                while (mx6 > 516) mx6 -= 5 * 17;
-                while (mx6 < 441) mx6 += 5 * 17;
-                if (mx6 < 437 || mx6 > 517) continue;
-
-                ctx.fillStyle = '#4a4a5a';
-                ctx.fillRect(mx6, 379 - msConvH6, 12, msConvH6);
-                ctx.strokeStyle = '#6a6a7a'; ctx.lineWidth = 0.5;
-                ctx.strokeRect(mx6, 379 - msConvH6, 12, msConvH6);
-                ctx.fillStyle = '#5a5a6a';
-                ctx.beginPath();
-                ctx.moveTo(mx6, 379 - msConvH6);
-                ctx.lineTo(mx6 + 6, 379 - msConvH6 - 10);
-                ctx.lineTo(mx6 + 12, 379 - msConvH6);
-                ctx.closePath(); ctx.fill();
-                ctx.fillStyle = '#80ff40'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-                ctx.shadowColor = '#80ff40'; ctx.shadowBlur = 4;
-                ctx.fillText('\u2622', mx6 + 6, 379 - msConvH6 + 14);
-                ctx.shadowBlur = 0;
-            }
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        for (var ni = 0; ni < N_ITEMS; ni++) {
+            var iPhase = ((_t / PERIOD) + ni / N_ITEMS) % 1;
+            var ix = BLT_X0 + iPhase * BLT_W;
+            var stg = getZone(ix);
+            drawItem(stg, ix, BLT_Y);
         }
 
-        // ── Station 7: CRATE LOADING (x=524..612, cx=568) ─────────────────
-        {
-            var crateData7 = [
-                {y: 356, h: 30, label: 'CLASSIFIED'},
-                {y: 326, h: 30, label: 'ARMED'},
-                {y: 296, h: 30, label: 'WARHEAD'},
-            ];
-            crateData7.forEach(function(cr) {
-                ctx.fillStyle = '#2e2e18';
-                ctx.fillRect(530, cr.y, 58, cr.h);
-                ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1;
-                ctx.strokeRect(530, cr.y, 58, cr.h);
-                ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
-                ctx.beginPath(); ctx.moveTo(559, cr.y); ctx.lineTo(559, cr.y + cr.h); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(530, cr.y + cr.h / 2); ctx.lineTo(588, cr.y + cr.h / 2); ctx.stroke();
-                [[531,cr.y+1],[585,cr.y+1],[531,cr.y+cr.h-3],[585,cr.y+cr.h-3]].forEach(function(pt) {
-                    ctx.fillStyle = '#6a6a40';
-                    ctx.fillRect(pt[0], pt[1], 3, 3);
-                });
-                ctx.fillStyle = '#aaaa60'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-                ctx.fillText(cr.label, 559, cr.y + cr.h / 2 + 2);
-            });
-
-            // Crane post
-            ctx.fillStyle = '#3a3a3a';
-            ctx.fillRect(557, 256, 6, 40);
-            ctx.strokeStyle = '#5a5a5a'; ctx.lineWidth = 1;
-            ctx.strokeRect(557, 256, 6, 40);
-            // Crane arm
-            ctx.fillStyle = '#3a3a3a';
-            ctx.fillRect(557, 258, 35, 5);
-            ctx.strokeStyle = '#5a5a5a'; ctx.lineWidth = 1;
-            ctx.strokeRect(557, 258, 35, 5);
-            // Pulley
-            ctx.fillStyle = '#555555';
-            ctx.beginPath(); ctx.arc(590, 263, 5, 0, Math.PI * 2); ctx.fill();
-
-            // Crane animation
-            var crateLoadT7 = (_t / 2300) % 1;
-            var cableLen7, showMissile7;
-            if (crateLoadT7 < 0.55) {
-                cableLen7 = crateLoadT7 / 0.55 * 30;
-                showMissile7 = true;
-            } else {
-                cableLen7 = (1 - (crateLoadT7 - 0.55) / 0.45) * 30;
-                showMissile7 = false;
-            }
-            ctx.strokeStyle = '#888888'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(590, 268); ctx.lineTo(590, 268 + cableLen7); ctx.stroke();
-            if (showMissile7) {
-                var mTopY7 = 268 + cableLen7;
-                var msCrH7 = 26;
-                ctx.fillStyle = '#4a4a5a';
-                ctx.fillRect(583, mTopY7, 12, msCrH7);
-                ctx.strokeStyle = '#6a6a7a'; ctx.lineWidth = 0.5;
-                ctx.strokeRect(583, mTopY7, 12, msCrH7);
-                ctx.fillStyle = '#5a5a6a';
-                ctx.beginPath();
-                ctx.moveTo(583, mTopY7);
-                ctx.lineTo(589, mTopY7 - 10);
-                ctx.lineTo(595, mTopY7);
-                ctx.closePath(); ctx.fill();
-            } else {
-                ctx.strokeStyle = '#888888'; ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                ctx.arc(590, 268 + cableLen7, 3, 0, Math.PI); ctx.stroke();
-            }
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        // ── TRUCK: backed in from right (cab right, trailer opening left) ─────
+        // Truck always reverses in from the right; drives away rightward when full
+        var trCycle = (_t / 9000) % 1;
+        var trOff;
+        if (trCycle < 0.60)      trOff = 0;                                       // docked
+        else if (trCycle < 0.78) trOff = ((trCycle - 0.60) / 0.18) * 110;         // driving away right
+        else                     trOff = (1 - (trCycle - 0.78) / 0.22) * 110;     // backing in from right
+        var trX = 614 + trOff;
+        // Trailer (rear opening faces LEFT toward dock)
+        ctx.fillStyle = '#22222e'; ctx.fillRect(trX, 326, 64, 50);
+        ctx.strokeStyle = '#33334a'; ctx.lineWidth = 1; ctx.strokeRect(trX, 326, 64, 50);
+        // Rear door frame — left edge
+        ctx.strokeStyle = '#555566'; ctx.lineWidth = 2; ctx.strokeRect(trX, 326, 18, 50);
+        // Cab to the RIGHT of trailer (windshield faces right = truck is reversed toward dock)
+        ctx.fillStyle = '#3a2828'; ctx.fillRect(trX + 62, 332, 30, 44);
+        ctx.strokeStyle = '#5a4848'; ctx.lineWidth = 1; ctx.strokeRect(trX + 62, 332, 30, 44);
+        ctx.fillStyle = '#001122'; ctx.fillRect(trX + 74, 336, 13, 16);  // windshield (right-facing)
+        // Wheels
+        ctx.fillStyle = '#111';
+        [trX + 10, trX + 48, trX + 70].forEach(function(wx) {
+            ctx.beginPath(); ctx.arc(wx, 376, 7, 0, Math.PI*2); ctx.fill();
+        });
+        // Status text
+        if (trOff < 4) {
+            ctx.fillStyle = '#00ff88'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('LOADING' + '.'.repeat(Math.floor((_t / 500) % 4)), trX + 32, 354);
         }
-
-        // ── Station 8: TRUCK OUT (x=612..700, cx=656) ─────────────────────
-        {
-            // Banner above bay
-            ctx.fillStyle = '#280000';
-            ctx.fillRect(614, 259, 84, 14);
-            ctx.strokeStyle = '#880000'; ctx.lineWidth = 1;
-            ctx.strokeRect(614, 259, 84, 14);
+        if (trCycle > 0.60 && trCycle < 0.78 && trOff > 22) {
             ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('\u2694 PRIVATE WARFARE \u2694', 656, 269);
-
-            // Loading bay floor markings
-            for (var bx8 = 614; bx8 < 698; bx8 += 10) {
-                ctx.fillStyle = (Math.floor((bx8 - 614) / 10) % 2 === 0) ? '#2a1a0a' : '#1a1a1a';
-                ctx.fillRect(bx8, 382, 10, 8);
-            }
-
-            // Truck animation cycle
-            var truckCycle8 = (_t / 6500) % 1;
-            var truckX8, truckPhase8;
-            if (truckCycle8 < 0.28) {
-                truckX8 = 700 - (truckCycle8 / 0.28) * 80;
-                truckPhase8 = 'docking';
-            } else if (truckCycle8 < 0.68) {
-                truckX8 = 620;
-                truckPhase8 = 'docked';
-            } else {
-                truckX8 = 620 + ((truckCycle8 - 0.68) / 0.32) * 100;
-                truckPhase8 = 'leaving';
-            }
-
-            if (truckX8 < 720) {
-                var trailerX8 = truckX8 + 26;
-                // Trailer
-                ctx.fillStyle = '#2a2a3a';
-                ctx.fillRect(trailerX8, 332, 60, 44);
-                ctx.strokeStyle = '#3a3a4a'; ctx.lineWidth = 1;
-                ctx.strokeRect(trailerX8, 332, 60, 44);
-                ctx.fillStyle = '#111111';
-                ctx.beginPath(); ctx.arc(trailerX8 + 12, 376, 7, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(trailerX8 + 48, 376, 7, 0, Math.PI * 2); ctx.fill();
-                // Cab
-                ctx.fillStyle = '#3a2a2a';
-                ctx.fillRect(truckX8, 338, 30, 38);
-                ctx.strokeStyle = '#5a4a4a'; ctx.lineWidth = 1;
-                ctx.strokeRect(truckX8, 338, 30, 38);
-                ctx.fillStyle = '#001122';
-                ctx.fillRect(truckX8 + 4, 342, 16, 14);
-                ctx.fillStyle = '#111111';
-                ctx.beginPath(); ctx.arc(truckX8 + 8, 376, 7, 0, Math.PI * 2); ctx.fill();
-
-                if (truckPhase8 === 'docked') {
-                    var dockFrac8 = (truckCycle8 - 0.28) / 0.40;
-                    var barX8 = trailerX8 + 4;
-                    var barY8 = 362;
-                    var barW8 = 52;
-                    var barH8 = 5;
-                    ctx.fillStyle = '#111111';
-                    ctx.fillRect(barX8, barY8, barW8, barH8);
-                    ctx.fillStyle = '#00cc44';
-                    ctx.fillRect(barX8, barY8, barW8 * Math.min(dockFrac8, 1), barH8);
-                    ctx.strokeStyle = '#00ff66'; ctx.lineWidth = 1;
-                    ctx.strokeRect(barX8, barY8, barW8, barH8);
-                    var dotCt8 = Math.floor((_t / 400) % 4);
-                    ctx.fillStyle = '#00ff88'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-                    ctx.fillText('LOADING' + '.'.repeat(dotCt8), trailerX8 + 30, 360);
-                }
-
-                if (truckPhase8 === 'leaving') {
-                    ctx.fillStyle = '#ff2222'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-                    ctx.fillText('ARMED WARHEADS', trailerX8 + 30, 350);
-                    ctx.fillStyle = '#00ff44';
-                    ctx.shadowColor = '#00ff44'; ctx.shadowBlur = 8;
-                    ctx.beginPath(); ctx.arc(trailerX8 + 54, 336, 3, 0, Math.PI * 2); ctx.fill();
-                    ctx.shadowBlur = 0;
-                }
-            }
-
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+            ctx.fillText('ARMED', trX + 32, 350);
         }
 
-        // ── Overall flow lines connecting adjacent station pairs ────────────
-        {
-            var flowLineY8 = 340;
-            var stationCenters8 = [43, 131, 218, 306, 393, 480, 568, 656];
-            var flowColors8 = ['#c85010', '#80ff00', '#44ff22', '#80ff20', '#80ff40', '#aaffaa', '#cccc40', '#ff8844'];
-            for (var si8 = 0; si8 < stationCenters8.length - 1; si8++) {
-                var ax8 = stationCenters8[si8];
-                var bx8 = stationCenters8[si8 + 1];
-                ctx.strokeStyle = flowColors8[si8];
-                ctx.globalAlpha = 0.25;
-                ctx.lineWidth = 2;
-                ctx.shadowColor = flowColors8[si8]; ctx.shadowBlur = 4;
-                ctx.beginPath(); ctx.moveTo(ax8 + 20, flowLineY8); ctx.lineTo(bx8 - 20, flowLineY8); ctx.stroke();
-                ctx.shadowBlur = 0;
-                for (var fp8 = 0; fp8 < 3; fp8++) {
-                    var fpPhase8 = ((_t / 900) + fp8 * 0.33 + si8 * 0.15) % 1;
-                    var fpx8 = (ax8 + 20) + fpPhase8 * ((bx8 - 20) - (ax8 + 20));
-                    ctx.globalAlpha = Math.sin(fpPhase8 * Math.PI) * 0.8;
-                    ctx.fillStyle = flowColors8[si8];
-                    ctx.shadowColor = flowColors8[si8]; ctx.shadowBlur = 6;
-                    ctx.beginPath(); ctx.arc(fpx8, flowLineY8, 2, 0, Math.PI * 2); ctx.fill();
-                    ctx.shadowBlur = 0;
-                }
-            }
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.lineWidth = 1;
-        }
+        // ── Station name plates ───────────────────────────────────────────────
+        [{x: 62,  t: 'BIOMATTER', c: '#ff8800'},
+         {x: 149, t: 'ACID BATH', c: '#88cc44'},
+         {x: 236, t: 'FISSION',   c: '#44ff22'},
+         {x: 323, t: 'GOOP PIPE', c: '#80ff20'},
+         {x: 410, t: 'FILL',      c: '#80ff40'},
+         {x: 497, t: 'ARMED \u2622', c: '#aaffaa'},
+         {x: 576, t: 'CRATING',   c: '#cccc40'},
+         {x: 656, t: 'SHIP OUT',  c: '#ff8844'}
+        ].forEach(function(sl) {
+            ctx.fillStyle = '#080808'; ctx.fillRect(sl.x - 28, 258, 56, 10);
+            ctx.fillStyle = sl.c; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+            ctx.fillText(sl.t, sl.x, 266);
+        });
 
-        // Reset all ctx state
+        // Reset ctx state
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
         ctx.shadowColor = 'transparent';
