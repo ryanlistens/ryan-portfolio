@@ -8867,8 +8867,17 @@ function drawNuclearAssemblyBridge() {
     ctx.lineCap = 'butt';
 
     // ── PIPE NETWORK: reactor → missile fill station ──────────────────────────
-    const mainPipeY = poolY + 54;
+    const mainPipeY = poolY + 18;  // elevated so fill station + conveyor fit in visible railing zone
     const pipeFromX = reactX + 29, pipeToX = 372;
+
+    // Short vertical riser from reactor top to main pipe level
+    ctx.strokeStyle = '#282828'; ctx.lineWidth = 14; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(reactX, reactY - 29); ctx.lineTo(reactX, mainPipeY + 1); ctx.stroke();
+    ctx.strokeStyle = '#363636'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(reactX, reactY - 29); ctx.lineTo(reactX, mainPipeY + 1); ctx.stroke();
+    ctx.strokeStyle = `rgba(50,190,10,${0.4 + Math.sin(_t*0.0045)*0.15})`; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(reactX, reactY - 29); ctx.lineTo(reactX, mainPipeY + 1); ctx.stroke();
+    ctx.lineCap = 'butt';
 
     // Main pipe (with goop glow core)
     ctx.strokeStyle = '#222'; ctx.lineWidth = 20; ctx.lineCap = 'round';
@@ -8915,7 +8924,7 @@ function drawNuclearAssemblyBridge() {
     }
 
     // ── MISSILE FILL STATION ──────────────────────────────────────────────────
-    const fillX = pipeToX, fillY = factFloor - 60;
+    const fillX = pipeToX, fillY = mainPipeY + 4;  // just below horizontal pipe
 
     // Vertical drop pipe
     ctx.strokeStyle = '#282828'; ctx.lineWidth = 16; ctx.lineCap = 'round';
@@ -8936,13 +8945,28 @@ function drawNuclearAssemblyBridge() {
     ctx.fillRect(fillX - 5, fillY + 28, 10, 5);
     ctx.shadowBlur = 0;
 
-    // Goop drip from nozzle
+    // Goop injection stream — visible stream flowing from nozzle tip downward
     const nDrip = (_t / 360) % 1;
-    if(nDrip < 0.68) {
-        const ndP = nDrip / 0.68;
-        ctx.globalAlpha = 0.9 - ndP * 0.35;
-        ctx.fillStyle = '#55cc08'; ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 6;
-        ctx.beginPath(); ctx.arc(fillX, fillY + 33 + ndP * 18, 3 + ndP * 2.5, 0, Math.PI*2); ctx.fill();
+    const nozzleTip = fillY + 33;  // exact y where goop exits nozzle
+    if(nDrip < 0.72) {
+        const ndP = nDrip / 0.72;
+        const streamLen = ndP * 24;
+        // Continuous green stream column
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = '#55cc08'; ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 8;
+        ctx.fillRect(fillX - 2, nozzleTip, 4, streamLen);
+        // Expanding drop at stream tip
+        ctx.beginPath(); ctx.arc(fillX, nozzleTip + streamLen, 3 + ndP * 2, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    } else {
+        // Brief bright flash as drop splashes into missile cavity
+        const splashP = (nDrip - 0.72) / 0.28;
+        ctx.globalAlpha = 0.7 * (1 - splashP);
+        ctx.fillStyle = '#aaff22'; ctx.shadowColor = '#ccff44'; ctx.shadowBlur = 12;
+        for(let sp = 0; sp < 3; sp++) {
+            const sAngle = (sp / 3) * Math.PI + Math.PI * 0.2;
+            ctx.beginPath(); ctx.arc(fillX + Math.cos(sAngle)*5*splashP, nozzleTip + 18 + Math.sin(sAngle)*4*splashP, 2, 0, Math.PI*2); ctx.fill();
+        }
         ctx.shadowBlur = 0; ctx.globalAlpha = 1;
     }
 
@@ -8955,7 +8979,7 @@ function drawNuclearAssemblyBridge() {
     ctx.fillText('FILL STATION', fillX, fillY - 7);
 
     // ── CONVEYOR BELT ─────────────────────────────────────────────────────────
-    const convY = factFloor - 8;
+    const convY = 368;  // explicitly positioned in railing-visible zone (above bridge at y=396)
     const convX1 = 218, convX2 = 572;
     const beltH = 14;
 
@@ -8989,36 +9013,62 @@ function drawNuclearAssemblyBridge() {
     }
 
     // Missiles on conveyor (sliding right)
-    const missileW = 52, missileH = 14;
-    const mSpacing = 105;
+    const missileW = 62, missileH = 18;  // enlarged for clear visibility
+    const mSpacing = 110;
     const mOff = (_t / 1400 % 1) * mSpacing;
     for(let m = 0; m < 5; m++) {
         const mx = convX1 + 20 + (m * mSpacing + mOff) % (convX2 - convX1 - 30);
         if(mx + missileW > convX2 - 5) continue;
         const my = convY - missileH + 2;
-        // Casing
-        ctx.fillStyle = '#525252';
+        // Casing body — silver-gray steel
+        ctx.fillStyle = '#5a5a5a';
         ctx.fillRect(mx, my, missileW, missileH);
-        ctx.fillStyle = '#444';
-        ctx.fillRect(mx + missileW - 8, my, 8, missileH);
+        ctx.fillStyle = '#484848';
+        ctx.fillRect(mx + missileW - 10, my, 10, missileH);  // rear bulkhead
+        // Casing highlight stripe
+        ctx.fillStyle = '#6e6e6e';
+        ctx.fillRect(mx + 2, my + 2, missileW - 14, 3);
         // Nose cone
-        ctx.fillStyle = '#383838';
+        ctx.fillStyle = '#3a3a3a';
         ctx.beginPath();
-        ctx.moveTo(mx + missileW, my); ctx.lineTo(mx + missileW + 13, my + missileH/2);
+        ctx.moveTo(mx + missileW, my); ctx.lineTo(mx + missileW + 16, my + missileH/2);
         ctx.lineTo(mx + missileW, my + missileH); ctx.closePath(); ctx.fill();
-        // Tail fin
+        ctx.fillStyle = '#4a4a4a';
+        ctx.beginPath();
+        ctx.moveTo(mx + missileW, my + 3); ctx.lineTo(mx + missileW + 10, my + missileH/2);
+        ctx.lineTo(mx + missileW, my + missileH - 3); ctx.closePath(); ctx.fill();
+        // Tail fins — two visible
         ctx.fillStyle = '#404040';
         ctx.beginPath();
-        ctx.moveTo(mx, my + missileH); ctx.lineTo(mx - 9, my + missileH + 8);
-        ctx.lineTo(mx + 10, my + missileH); ctx.closePath(); ctx.fill();
-        // Goop window
-        const wGlow = 0.65 + Math.sin(_t*0.005 + m*1.2) * 0.25;
-        ctx.fillStyle = `rgba(50,200,8,${wGlow})`;
-        ctx.shadowColor = '#60ff00'; ctx.shadowBlur = 5;
-        ctx.fillRect(mx + 10, my + 3, 22, missileH - 6);
+        ctx.moveTo(mx, my); ctx.lineTo(mx - 8, my - 8);
+        ctx.lineTo(mx + 6, my); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(mx, my + missileH); ctx.lineTo(mx - 8, my + missileH + 8);
+        ctx.lineTo(mx + 6, my + missileH); ctx.closePath(); ctx.fill();
+        // Goop window — bright radioactive green, hollow cavity fill
+        const underNozzle = (mx + 10 <= fillX && fillX <= mx + 42);
+        const wGlow = underNozzle ? 0.95 : (0.55 + Math.sin(_t*0.005 + m*1.2) * 0.25);
+        ctx.fillStyle = `rgba(40,210,8,${wGlow})`;
+        ctx.shadowColor = '#60ff00'; ctx.shadowBlur = underNozzle ? 14 : 6;
+        ctx.fillRect(mx + 10, my + 3, 30, missileH - 6);
         ctx.shadowBlur = 0;
-        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('☢', mx + 21, my + missileH - 2);
+        // Goop injection squirt when under nozzle
+        if(underNozzle) {
+            const sqT = (_t / 200) % 1;
+            ctx.globalAlpha = 0.8 - sqT * 0.5;
+            ctx.fillStyle = '#88ff22';
+            ctx.shadowColor = '#aaff00'; ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(fillX, my + 4 + sqT * (missileH - 8), 3 + sqT * 2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        // Warhead label on casing
+        ctx.fillStyle = '#cc0000'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('☢', mx + 25, my + missileH - 4);
+        ctx.fillStyle = '#ff4444'; ctx.font = '5px monospace';
+        ctx.fillText('WARHEAD', mx + 48, my + 7);
     }
 
     // Conveyor label — raised well above bridge platform so it stays visible
@@ -9030,7 +9080,7 @@ function drawNuclearAssemblyBridge() {
     ctx.fillText('WARHEAD CONVEYOR  →', convX1 + 87, convY - 44);
 
     // ── CRATE LOADING STATION ─────────────────────────────────────────────────
-    const crateBaseX = 508, crateBaseY = factFloor - 8;
+    const crateBaseX = 508, crateBaseY = 374;  // visible above bridge platform
     const crateLoadT = (_t / 2300) % 1;
 
     // Stack of 3 military crates
@@ -9058,32 +9108,51 @@ function drawNuclearAssemblyBridge() {
         ctx.fillText('PRIVATIZED', cX + cW/2, cY + 26);
     }
 
-    // Missile dropping into top crate
-    if(crateLoadT > 0.55) {
-        const dropFrac = (crateLoadT - 0.55) / 0.45;
-        const topCrY = crateBaseY - 30 - 2 * 32;
-        const dStartY = convY - missileH;
-        const dY = dStartY + dropFrac * (topCrY - dStartY);
-        if(dY < topCrY) {
-            ctx.fillStyle = '#525252';
-            ctx.fillRect(crateBaseX + 4, dY, 50, 12);
-            ctx.fillStyle = 'rgba(50,200,8,0.7)';
-            ctx.fillRect(crateBaseX + 13, dY + 2, 22, 8);
-            ctx.fillStyle = '#ffff00'; ctx.font = '7px Arial'; ctx.textAlign = 'center';
-            ctx.fillText('☢', crateBaseX + 25, dY + 10);
+    // Crane picks up missile from conveyor end and drops it into top crate
+    {
+        const topCrY = crateBaseY - 30 - 2 * 32;  // y=280, top of uppermost crate
+        const craneDropStartY = topCrY - 36;       // missile starts 36px above crate opening
+        if(crateLoadT < 0.55) {
+            // Phase 0–0.55: crane lowers missile into crate from above
+            const dropFrac = crateLoadT / 0.55;
+            const dY = craneDropStartY + dropFrac * 36;  // descends INTO crate top
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(crateBaseX + 4, dY, missileW - 2, missileH - 2);
+            ctx.fillStyle = 'rgba(40,210,8,0.85)';
+            ctx.fillRect(crateBaseX + 14, dY + 2, 28, missileH - 6);
+            ctx.fillStyle = '#cc0000'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('☢', crateBaseX + 28, dY + missileH - 4);
+        } else {
+            // Phase 0.55–1.0: crane hook descends empty to pick up next missile
+            const hookFrac = (crateLoadT - 0.55) / 0.45;
+            const hookY = craneDropStartY - 20 + hookFrac * 50;
+            ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(crateBaseX + 30, crateBaseY - 90); ctx.lineTo(crateBaseX + 30, hookY); ctx.stroke();
+            ctx.fillStyle = '#777';
+            ctx.fillRect(crateBaseX + 23, hookY, 14, 4);
+            ctx.beginPath(); ctx.moveTo(crateBaseX + 27, hookY + 4); ctx.lineTo(crateBaseX + 22, hookY + 9);
+            ctx.lineTo(crateBaseX + 27, hookY + 9); ctx.stroke();
         }
     }
 
-    // Crane arm above loading
+    // Crane arm above loading — anchored to crateBaseY so it's fully visible
+    const craneTop = crateBaseY - 90;  // y=284 — well above crates, in visible zone
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(crateBaseX - 4, factFloor - 108, 8, 108);
-    ctx.fillRect(crateBaseX - 4, factFloor - 108, 64, 6);
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(crateBaseX + 60, factFloor - 108); ctx.lineTo(crateBaseX + 60, factFloor - 76); ctx.stroke();
-    ctx.beginPath(); ctx.arc(crateBaseX + 60, factFloor - 70, 6, 0.1*Math.PI, 1.1*Math.PI); ctx.stroke();
+    ctx.fillRect(crateBaseX - 4, craneTop, 8, crateBaseY - craneTop);      // vertical post
+    ctx.fillRect(crateBaseX - 4, craneTop, 64, 6);                          // horizontal arm
+    ctx.fillStyle = '#252525';
+    ctx.fillRect(crateBaseX - 3, craneTop + 1, 6, crateBaseY - craneTop - 2); // post highlight
+    ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 2;
+    // Second vertical at arm end with pulley
+    ctx.beginPath(); ctx.moveTo(crateBaseX + 60, craneTop); ctx.lineTo(crateBaseX + 60, craneTop + 32); ctx.stroke();
+    ctx.strokeStyle = '#444';
+    ctx.beginPath(); ctx.arc(crateBaseX + 60, craneTop + 36, 7, 0.1*Math.PI, 1.1*Math.PI); ctx.stroke();
+    // Crane base plate
+    ctx.fillStyle = '#222';
+    ctx.fillRect(crateBaseX - 10, crateBaseY - 4, 20, 6);
 
     // ── ARMORED TRUCK LOADING BAY ─────────────────────────────────────────────
-    const bayX = 572, bayFloor = factFloor;
+    const bayX = 572, bayFloor = 388;  // raised into visible zone so truck is partially visible
 
     // Bay ramp markings
     ctx.fillStyle = '#141814';
