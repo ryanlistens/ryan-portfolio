@@ -8724,28 +8724,54 @@ function drawNuclearAssemblyBridge() {
         ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
     }
 
-    // ── ASSEMBLY PROCESS FLOW BANNER ──────────────────────────────────────────
-    // Shows the left-to-right production chain across the factory floor
+    // ── PRODUCTION FLOW CONNECTORS ─────────────────────────────────────────────
+    // Animated flow trails connecting each stage — show don't tell
     {
-        const bY = 292, bH = 16;
-        ctx.fillStyle = 'rgba(0,8,0,0.88)';
-        ctx.fillRect(10, bY, 620, bH);
-        ctx.strokeStyle = '#1a3a10'; ctx.lineWidth = 1;
-        ctx.strokeRect(10, bY, 620, bH);
-        ctx.font = '7px monospace'; ctx.textAlign = 'left';
-        const steps = [
-            [14,  '#884400', '① BIOMATTER'],
-            [98,  '#226622', '→ ② ACID'],
-            [148, '#44aa22', '→ ③ FISSION'],
-            [215, '#66dd22', '→ ④ GOOP PIPE'],
-            [300, '#88ff22', '→ ⑤ FILL'],
-            [346, '#aaffaa', '→ ⑥ CONVEYOR'],
-            [436, '#ffcc44', '→ ⑦ CRATE'],
-            [494, '#ff8844', '→ ⑧ TRUCK OUT'],
+        const flowT = (_t / 700) % 1;
+
+        // Stage nodes: [x-center, y-center, glow-color, icon]
+        const nodes = [
+            { cx: 85,  cy: 338, col: '#c85010', icon: '🜸'  },  // biomatter hopper
+            { cx: 203, cy: 352, col: '#40ff20', icon: '☢'   },  // reactor
+            { cx: 372, cy: 322, col: '#60ee10', icon: '▼'   },  // fill station
+            { cx: 395, cy: 378, col: '#aaffaa', icon: '→'   },  // conveyor midpoint
+            { cx: 537, cy: 340, col: '#cccc40', icon: '⊞'   },  // crate station
+            { cx: 610, cy: 375, col: '#ff8844', icon: '⬛'  },  // truck bay
         ];
-        for(const [sx, sc, st] of steps) {
-            ctx.fillStyle = sc;
-            ctx.fillText(st, sx, bY + 11);
+
+        // Draw animated flow trails between consecutive nodes
+        for(let i = 0; i < nodes.length - 1; i++) {
+            const a = nodes[i], b = nodes[i + 1];
+            const segT = (flowT + i * 0.18) % 1;
+            // Draw 4 particles along the segment
+            for(let p = 0; p < 4; p++) {
+                const pf = (segT + p * 0.25) % 1;
+                const px = a.cx + (b.cx - a.cx) * pf;
+                const py = a.cy + (b.cy - a.cy) * pf;
+                const alpha = Math.sin(pf * Math.PI) * 0.7;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = a.col;
+                ctx.shadowColor = a.col; ctx.shadowBlur = 8;
+                ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // Draw glowing stage-node circles above each machine
+        for(const nd of nodes) {
+            const pulse = 0.6 + Math.sin(_t * 0.003 + nd.cx * 0.05) * 0.3;
+            ctx.globalAlpha = pulse * 0.5;
+            ctx.fillStyle = nd.col;
+            ctx.shadowColor = nd.col; ctx.shadowBlur = 18;
+            ctx.beginPath(); ctx.arc(nd.cx, nd.cy - 22, 8, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+            // Bright core dot
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = 0.85;
+            ctx.beginPath(); ctx.arc(nd.cx, nd.cy - 22, 3, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1;
         }
     }
 
@@ -8876,11 +8902,11 @@ function drawNuclearAssemblyBridge() {
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffff00'; ctx.font = '18px Arial'; ctx.textAlign = 'center';
     ctx.fillText('☢', reactX, reactY + 6);
-    // Reactor label — positioned above reactor circle to stay readable above bridge
-    ctx.fillStyle = '#0a180a';
-    ctx.fillRect(reactX - 46, reactY - 34, 92, 20);
-    ctx.fillStyle = '#44ff44'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('ATOMIC FISSION', reactX, reactY - 20);
+    // Reactor: second ☢ glow ring — shows it's fissioning without a text label
+    ctx.globalAlpha = 0.22 + Math.sin(_t * 0.002) * 0.1;
+    ctx.strokeStyle = '#80ff80'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(reactX, reactY, 36, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 1;
 
     // Reactor–pool connecting pipes
     ctx.strokeStyle = '#2a3828'; ctx.lineWidth = 8; ctx.lineCap = 'round';
@@ -8931,14 +8957,7 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
-    // "NUCLEAR MISSILE GOOP" pipe label
-    const goopLX = (pipeFromX + pipeToX) / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(goopLX - 84, mainPipeY - 32, 168, 24);
-    ctx.strokeStyle = '#40aa00'; ctx.lineWidth = 1;
-    ctx.strokeRect(goopLX - 84, mainPipeY - 32, 168, 24);
-    ctx.fillStyle = '#80ff20'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('▼  NUCLEAR MISSILE GOOP  ▼', goopLX, mainPipeY - 16);
+    // Pipe glow halo — the animated green core and moving particles show what flows through it
 
     // Flow particles
     const flowT = (_t / 1000) % 1;
@@ -8974,11 +8993,12 @@ function drawNuclearAssemblyBridge() {
     // nozzleTip (fillY+33≈351) sits ~3px above missile body top (convY-mBodyH=352)
     const nozzleTip = fillY + 33;
     const nDrip = (_t / 320) % 1;
+    const _mBodyH = 26;  // missile body height (matches mBodyH below — hoisted to avoid TDZ error)
     {
         const ndP = nDrip < 0.78 ? nDrip / 0.78 : 0;
         if(ndP > 0) {
             // Goop column from nozzle tip down into missile interior
-            const streamLen = 4 + ndP * (mBodyH - 6);  // reaches deeper as cycle progresses
+            const streamLen = 4 + ndP * (_mBodyH - 6);  // reaches deeper as cycle progresses
             ctx.globalAlpha = 0.92;
             ctx.fillStyle = '#44cc06'; ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 10;
             ctx.fillRect(fillX - 2, nozzleTip, 4, streamLen);
@@ -9000,13 +9020,12 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
-    // Fill station housing label
-    ctx.fillStyle = '#202420';
-    ctx.fillRect(fillX - 42, fillY - 22, 84, 22);
-    ctx.strokeStyle = '#303830'; ctx.lineWidth = 1;
-    ctx.strokeRect(fillX - 42, fillY - 22, 84, 22);
-    ctx.fillStyle = '#888'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('FILL STATION', fillX, fillY - 7);
+    // Fill station indicator light — green when actively filling, dim when idle
+    const fillActive = Math.abs((_t / 320) % 1 - 0.4) < 0.38;
+    ctx.fillStyle = fillActive ? 'rgba(0,255,80,0.9)' : 'rgba(0,80,20,0.5)';
+    ctx.shadowColor = fillActive ? '#00ff50' : 'none'; ctx.shadowBlur = fillActive ? 10 : 0;
+    ctx.beginPath(); ctx.arc(fillX, fillY - 10, 5, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
 
     // ── CONVEYOR BELT ─────────────────────────────────────────────────────────
     const convY = 378;  // belt surface — upright missiles extend 34px above this, well into visible zone
@@ -9124,13 +9143,12 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
-    // Conveyor direction label (sits just above the missiles)
-    ctx.fillStyle = 'rgba(0,0,0,0.82)';
-    ctx.fillRect(convX1 + 4, convY - mBodyH - mNoseH - 24, 160, 20);
-    ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 1;
-    ctx.strokeRect(convX1 + 4, convY - mBodyH - mNoseH - 24, 160, 20);
-    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('WARHEAD CONVEYOR  →', convX1 + 84, convY - mBodyH - mNoseH - 9);
+    // Conveyor direction arrows — three small painted chevrons on the floor beside the belt
+    ctx.fillStyle = 'rgba(180,30,30,0.55)';
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
+    for(let ai = 0; ai < 3; ai++) {
+        ctx.fillText('›', convX1 + 30 + ai * 90, convY + 22);
+    }
 
     // ── CRATE LOADING STATION ─────────────────────────────────────────────────
     const crateBaseX = 508, crateBaseY = 374;  // visible above bridge platform
@@ -9163,6 +9181,7 @@ function drawNuclearAssemblyBridge() {
 
     // Crane picks up missile from conveyor end and drops it into top crate
     {
+        const craneW = 50, craneH = 28;  // crated missile dimensions
         const topCrY = crateBaseY - 30 - 2 * 32;  // y=280, top of uppermost crate
         const craneDropStartY = topCrY - 36;       // missile starts 36px above crate opening
         if(crateLoadT < 0.55) {
@@ -9170,11 +9189,11 @@ function drawNuclearAssemblyBridge() {
             const dropFrac = crateLoadT / 0.55;
             const dY = craneDropStartY + dropFrac * 36;  // descends INTO crate top
             ctx.fillStyle = '#555555';
-            ctx.fillRect(crateBaseX + 4, dY, missileW - 2, missileH - 2);
+            ctx.fillRect(crateBaseX + 4, dY, craneW - 2, craneH - 2);
             ctx.fillStyle = 'rgba(40,210,8,0.85)';
-            ctx.fillRect(crateBaseX + 14, dY + 2, 28, missileH - 6);
+            ctx.fillRect(crateBaseX + 14, dY + 2, 28, craneH - 6);
             ctx.fillStyle = '#cc0000'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('☢', crateBaseX + 28, dY + missileH - 4);
+            ctx.fillText('☢', crateBaseX + 28, dY + craneH - 4);
         } else {
             // Phase 0.55–1.0: crane hook descends empty to pick up next missile
             const hookFrac = (crateLoadT - 0.55) / 0.45;
@@ -13264,6 +13283,75 @@ function drawDetectiveNoteUI() {
         ctx.drawImage(detectiveNoteImg, 0, -level6.noteScrollOffset, imgW, imgH);
         ctx.restore();
 
+        ctx.fillStyle = 'rgba(0,0,0,0.88)';
+        ctx.fillRect(0, viewH, CANVAS_W, instrH);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', CANVAS_W / 2, viewH + 33);
+    } else {
+        // Fallback: render detective's case notes as styled canvas text
+        const instrH = 50;
+        const viewH = CANVAS_H - instrH;
+        const noteLines = [
+            { text: 'CASE FILE — KHAN INVESTIGATIONS', style: 'bold 14px monospace', color: '#c8a830' },
+            { text: '——————————————————————————', style: '11px monospace', color: '#7a6020' },
+            { text: 'SUBJECT: PipeTech Global Corp.', style: 'bold 12px monospace', color: '#d4b040' },
+            { text: '', style: '11px monospace', color: '#c8c8a0' },
+            { text: 'Day 14. They know I\'m here.', style: 'italic 13px monospace', color: '#c8c8a0' },
+            { text: 'Found the lower level assembly bay.', style: '12px monospace', color: '#c8c8a0' },
+            { text: 'This isn\'t a pipe company.', style: '12px monospace', color: '#c8c8a0' },
+            { text: '', style: '11px monospace', color: '#c8c8a0' },
+            { text: 'Warheads. Private label.', style: 'bold 13px monospace', color: '#ff9944' },
+            { text: 'Shipped under "industrial supply" docs.', style: '12px monospace', color: '#c8c8a0' },
+            { text: 'CEO signs every manifest personally.', style: '12px monospace', color: '#c8c8a0' },
+            { text: '', style: '11px monospace', color: '#c8c8a0' },
+            { text: 'Contact inside: R. (RED office, 3rd fl)', style: '12px monospace', color: '#88ccff' },
+            { text: 'She\'s scared. Rightfully so.', style: 'italic 12px monospace', color: '#88ccff' },
+            { text: '', style: '11px monospace', color: '#c8c8a0' },
+            { text: 'If you\'re reading this:', style: 'bold 13px monospace', color: '#ff4444' },
+            { text: 'The black box is real.', style: 'bold 13px monospace', color: '#ff4444' },
+            { text: 'Get it out.', style: 'bold 13px monospace', color: '#ff4444' },
+            { text: '', style: '11px monospace', color: '#c8c8a0' },
+            { text: '— Khan', style: 'italic 14px monospace', color: '#c8a830' },
+        ];
+
+        // Paper background
+        ctx.fillStyle = '#2a2218';
+        ctx.fillRect(80, 30 - level6.noteScrollOffset, CANVAS_W - 160, viewH - 20);
+        ctx.strokeStyle = '#6a5020';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(80, 30 - level6.noteScrollOffset, CANVAS_W - 160, viewH - 20);
+
+        // Blood stain top-right corner
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = '#7a0000';
+        ctx.beginPath(); ctx.arc(CANVAS_W - 130, 60 - level6.noteScrollOffset, 22, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(CANVAS_W - 115, 75 - level6.noteScrollOffset, 14, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // Lined paper rules
+        ctx.strokeStyle = 'rgba(100,80,20,0.2)';
+        ctx.lineWidth = 1;
+        for(let ly = 80; ly < viewH; ly += 22) {
+            ctx.beginPath();
+            ctx.moveTo(100, ly - level6.noteScrollOffset);
+            ctx.lineTo(CANVAS_W - 100, ly - level6.noteScrollOffset);
+            ctx.stroke();
+        }
+
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0, 0, CANVAS_W, viewH); ctx.clip();
+        let ty = 68 - level6.noteScrollOffset;
+        for(const ln of noteLines) {
+            ctx.fillStyle = ln.color;
+            ctx.font = ln.style;
+            ctx.textAlign = 'left';
+            ctx.fillText(ln.text, 108, ty);
+            ty += ln.text === '' ? 10 : 22;
+        }
+        ctx.restore();
+
+        // Instruction bar
         ctx.fillStyle = 'rgba(0,0,0,0.88)';
         ctx.fillRect(0, viewH, CANVAS_W, instrH);
         ctx.fillStyle = '#ffd700';
