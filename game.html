@@ -8953,9 +8953,8 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillText('\u26a0', x, y-3);
                     break;
                 }
+                ctx.globalAlpha = 1;
             }
-            ctx.restore();
-        };
 
         for (var s = 0; s < 8; s++) {
             var ix, iy;
@@ -8966,7 +8965,32 @@ function drawNuclearAssemblyBridge() {
                 ix = SX[7] + eT * 30;  // crate slides into trailer
                 iy = SY[7];
             } else {
-                ix = SX[s]; iy = SY[s];
+                // Truck swap animation
+                const easeSwap = swapProg < 0.5 ? 2 * swapProg * swapProg : 1 - Math.pow(-2 * swapProg + 2, 2) / 2;
+
+                // Departing truck drives off to the right
+                const departX = dockL + easeSwap * 160;
+                drawTruck(departX, 1 - easeSwap * 0.6, 6, 'ARMED');
+                // Exhaust from departing truck
+                if (easeSwap < 0.8) {
+                    ctx.globalAlpha = (1 - easeSwap) * 0.3;
+                    ctx.fillStyle = '#444';
+                    for (let ei = 0; ei < 3; ei++) {
+                        const ex2 = departX + trW + cabW + 4 + ei * 12 + Math.random() * 4;
+                        const ey = trY - 6 - ei * 6 + Math.random() * 4;
+                        ctx.beginPath(); ctx.arc(ex2, ey, 4 + ei * 2, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+                }
+
+                // Replacement truck backing in from the right
+                const arriveX = dockL + 180 - easeSwap * 180;
+                drawTruck(arriveX, 0.4 + easeSwap * 0.6, 0, null);
+                // Backing beep indicator
+                if (Math.floor(_ft / 400) % 2 === 0) {
+                    ctx.fillStyle = '#ff8800'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('BEEP', arriveX + trW/2, trY - 6);
+                }
             }
             drawItem(s, ix, iy);
         }
@@ -9082,33 +9106,46 @@ function drawNuclearAssemblyBridge() {
     ctx.fillStyle = '#888'; ctx.font = '5px monospace';
     ctx.fillText('UNAUTHORIZED FALLS PROHIBITED', 351, railTopY + 50);
 
+    // Left blast door constants (declared before use)
+    const ldX = 18, ldY = 258, ldW = 64, ldH = 138;
+
     // ── LEFT END WALL — supercomputer room exterior, terminates bridge ────────
-    // Covers from canvas-left to the door frame, so there's no bridge beyond the door
+    // Solid bulkhead from ceiling to floor — no bridge visible beyond the door
     {
         const wallR = ldX + ldW + 18;  // right edge of wall (just past door frame)
-        // Wall body — solid bulkhead from above railing down through bridge undercarriage
+
+        // Full-height wall body — ceiling to floor, blocks everything left of door
         ctx.fillStyle = '#111313';
-        ctx.fillRect(-GX, railTopY - 14, wallR + GX, bridgePlatY + 38 - (railTopY - 14));
-        // Horizontal ribbing (structural panels)
+        ctx.fillRect(-GX, CEIL_Y, wallR + GX, FLOOR_Y - CEIL_Y);
+
+        // Horizontal ribbing (structural panels) — full height
         ctx.strokeStyle = '#191c19'; ctx.lineWidth = 1;
-        for (let wy = railTopY; wy < bridgePlatY + 30; wy += 22) {
+        for (let wy = CEIL_Y + 16; wy < FLOOR_Y; wy += 22) {
             ctx.beginPath(); ctx.moveTo(-GX, wy); ctx.lineTo(wallR, wy); ctx.stroke();
         }
         // Vertical panel joints
         ctx.strokeStyle = '#171a17'; ctx.lineWidth = 2;
         for (let wx = -GX + 14; wx < wallR - 4; wx += 18) {
-            ctx.beginPath(); ctx.moveTo(wx, railTopY); ctx.lineTo(wx, bridgePlatY + 30); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(wx, CEIL_Y); ctx.lineTo(wx, FLOOR_Y); ctx.stroke();
         }
+
+        // Bridge-level reinforcement — thicker panel at walkway height
+        ctx.fillStyle = '#131515';
+        ctx.fillRect(-GX, railTopY - 6, wallR + GX, bridgePlatY + 38 - railTopY + 6);
+        ctx.strokeStyle = '#1a1c1a'; ctx.lineWidth = 1;
+        for (let wy2 = railTopY; wy2 < bridgePlatY + 30; wy2 += 18) {
+            ctx.beginPath(); ctx.moveTo(-GX, wy2); ctx.lineTo(wallR, wy2); ctx.stroke();
+        }
+
         // Right edge — flush seam where wall meets open bridge
         ctx.fillStyle = '#0e1010';
-        ctx.fillRect(wallR - 2, railTopY - 14, 4, bridgePlatY + 40 - (railTopY - 14));
+        ctx.fillRect(wallR - 2, CEIL_Y, 4, FLOOR_Y - CEIL_Y);
+
         // Cover railing posts that extend into the wall section
-        ctx.fillStyle = '#111313';
+        ctx.fillStyle = '#131515';
         ctx.fillRect(-GX, railTopY - 6, wallR + GX, 8);
     }
 
-    // Left blast door (entrance from megacomputer room)
-    const ldX = 18, ldY = 258, ldW = 64, ldH = 138;
     drawDeathStarBlastDoor(ldX, ldY, ldW, ldH, 'left', level6.bladeDoorBridgeLeft.openPct, false, true);
 
     // === ARMED AND DANGEROUS CLONING BOSS — drawn after railing so appears in front of fence ===
@@ -9242,29 +9279,166 @@ function drawNuclearAssemblyBridge() {
             ctx.fill();
             ctx.globalAlpha = 1;
 
-            ctx.fillStyle = '#f5f5f5';
-            ctx.fillRect(bx - 18, by - 2, 36, 8);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(bx - 10, by - 8, 16, 10);
-            ctx.fillStyle = '#f0f0f0';
-            ctx.beginPath();
-            ctx.arc(bx + 23, by - 2, 7, Math.PI, 0);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = '#e0e0e0';
-            ctx.fillRect(bx + 14, by - 2, 18, 2);
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx - 2, by - 2);
-            ctx.moveTo(bx - 2, by - 6); ctx.lineTo(bx - 6, by - 2);
-            ctx.moveTo(bx + 2, by - 6); ctx.lineTo(bx + 6, by - 2);
-            ctx.moveTo(bx + 6, by - 6); ctx.lineTo(bx + 2, by - 2);
-            ctx.stroke();
-            ctx.fillStyle = '#cc2222';
-            ctx.fillRect(bx - 6, by, 12, 4);
-            ctx.fillStyle = '#111';
-            ctx.fillRect(bx - 1, by - 1, 3, 6);
+            if (fallProg < 1) {
+                // Falling body — ragdoll tumble
+                // Head
+                ctx.fillStyle = '#f5d5a8';
+                ctx.beginPath(); ctx.arc(0, -12, 8, 0, Math.PI * 2); ctx.fill();
+                // X eyes
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(-4, -14); ctx.lineTo(-1, -11);
+                ctx.moveTo(-1, -14); ctx.lineTo(-4, -11);
+                ctx.moveTo(1, -14); ctx.lineTo(4, -11);
+                ctx.moveTo(4, -14); ctx.lineTo(1, -11);
+                ctx.stroke();
+                // Chef hat flying off
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(-8, -24 - fallProg * 20, 16, 10);
+                // Body
+                ctx.fillStyle = '#cc2222';
+                ctx.fillRect(-10, -4, 20, 24);
+                // Tie
+                ctx.fillStyle = '#111';
+                ctx.fillRect(-2, -4, 4, 18);
+                // Flailing arms
+                const armAngle1 = Math.sin(elapsed * 12) * 0.8;
+                const armAngle2 = Math.sin(elapsed * 12 + 2) * 0.8;
+                ctx.strokeStyle = '#cc2222'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(-10, 2);
+                ctx.lineTo(-10 - Math.cos(armAngle1) * 16, 2 + Math.sin(armAngle1) * 16);
+                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(10, 2);
+                ctx.lineTo(10 + Math.cos(armAngle2) * 16, 2 + Math.sin(armAngle2) * 16);
+                ctx.stroke();
+                // Legs
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(-8, 20, 7, 14);
+                ctx.fillRect(1, 20, 7, 14);
+            }
+            ctx.restore();
+
+            // Post-landing state
+            if (fallProg >= 1) {
+                if (dType === 'acid') {
+                    // Dissolving in acid — sinking, bubbling, screaming
+                    const sinkProg = Math.min(1, (elapsed - fallDur) / 3);
+                    const sinkY = targetY + sinkProg * 60;
+                    ctx.globalAlpha = 1 - sinkProg;
+                    // Body sinking
+                    ctx.fillStyle = '#cc2222';
+                    ctx.fillRect(bx - 8, sinkY - 4, 16, 14 * (1 - sinkProg));
+                    // Head above surface (shrinking)
+                    if (sinkProg < 0.7) {
+                        ctx.fillStyle = '#f5d5a8';
+                        ctx.beginPath(); ctx.arc(bx, sinkY - 8, 6 * (1 - sinkProg), 0, Math.PI * 2); ctx.fill();
+                        // Open mouth screaming
+                        ctx.fillStyle = '#000';
+                        ctx.beginPath(); ctx.arc(bx, sinkY - 5, 3 * (1 - sinkProg), 0, Math.PI); ctx.fill();
+                    }
+                    // Extra acid splash/bubbles at impact point
+                    ctx.fillStyle = '#80ff20';
+                    for (let bi = 0; bi < 5; bi++) {
+                        const bAngle = bi * Math.PI * 2 / 5 + elapsed * 2;
+                        const bDist = 12 + Math.sin(elapsed * 3 + bi) * 6;
+                        ctx.globalAlpha = Math.max(0, (1 - sinkProg) * 0.6);
+                        ctx.beginPath();
+                        ctx.arc(bx + Math.cos(bAngle) * bDist, targetY - 4 + Math.sin(bAngle) * bDist * 0.3,
+                            2 + Math.sin(elapsed * 5 + bi) * 1, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+
+                    // Acid splash text
+                    if (sinkProg < 0.5) {
+                        ctx.fillStyle = '#80ff20'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*SIZZLE*', bx, targetY - 20 - sinkProg * 30);
+                    }
+                } else if (dType === 'syringe') {
+                    // Impaled on syringe needle — stuck, twitching
+                    const twitch = Math.sin(elapsed * 8) * 2;
+                    ctx.save();
+                    ctx.translate(bx, targetY);
+                    // Body draped over syringe
+                    ctx.fillStyle = '#cc2222';
+                    ctx.fillRect(-10 + twitch, -18, 20, 24);
+                    // Head lolling
+                    ctx.fillStyle = '#f5d5a8';
+                    ctx.beginPath(); ctx.arc(-6 + twitch, -24, 7, 0, Math.PI * 2); ctx.fill();
+                    // X eyes
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(-9 + twitch, -26); ctx.lineTo(-6 + twitch, -23);
+                    ctx.moveTo(-6 + twitch, -26); ctx.lineTo(-9 + twitch, -23);
+                    ctx.stroke();
+                    // Legs dangling
+                    ctx.fillStyle = '#2a2a2a';
+                    ctx.fillRect(-8 + twitch, 6, 7, 12 + Math.sin(elapsed * 3) * 3);
+                    ctx.fillRect(2 + twitch, 6, 7, 12 - Math.sin(elapsed * 3) * 3);
+                    // Green goop leaking
+                    ctx.fillStyle = '#40ff20'; ctx.globalAlpha = 0.7;
+                    ctx.beginPath();
+                    ctx.ellipse(twitch, 8, 4, 8 + elapsed * 2, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.restore();
+
+                    if (elapsed - fallDur < 2) {
+                        ctx.fillStyle = '#40ff20'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*SQUELCH*', bx, targetY - 34);
+                    }
+                } else if (dType === 'warhead') {
+                    // Stuffed into missile casing — legs sticking out
+                    const stuffProg = Math.min(1, (elapsed - fallDur) / 1.5);
+                    const mX = bx, mY = targetY;
+                    // Missile casing
+                    ctx.fillStyle = '#4a4a5a'; ctx.fillRect(mX - 7, mY - 28, 14, 28);
+                    ctx.strokeStyle = '#5a5a6a'; ctx.lineWidth = 1; ctx.strokeRect(mX - 7, mY - 28, 14, 28);
+                    // Boss legs kicking out the top
+                    if (stuffProg < 0.8) {
+                        const kick = Math.sin(elapsed * 10) * 4;
+                        ctx.fillStyle = '#2a2a2a';
+                        ctx.fillRect(mX - 6 + kick, mY - 28 - 16 * (1 - stuffProg), 5, 16 * (1 - stuffProg));
+                        ctx.fillRect(mX + 1 - kick, mY - 28 - 14 * (1 - stuffProg), 5, 14 * (1 - stuffProg));
+                        // Shoes
+                        ctx.fillStyle = '#111';
+                        ctx.fillRect(mX - 8 + kick, mY - 28 - 16 * (1 - stuffProg) - 4, 8, 4);
+                        ctx.fillRect(mX - 1 - kick, mY - 28 - 14 * (1 - stuffProg) - 4, 8, 4);
+                    }
+                    // Green goop filling around body
+                    const goopFill = Math.min(1, (elapsed - fallDur) / 2.5);
+                    ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 5;
+                    ctx.fillRect(mX - 5, mY - 2 - goopFill * 20, 10, goopFill * 20);
+                    ctx.shadowBlur = 0;
+                    // Hazard symbol once sealed
+                    if (stuffProg >= 0.8) {
+                        ctx.fillStyle = '#5a5a6a';
+                        ctx.beginPath();
+                        ctx.moveTo(mX - 7, mY - 28); ctx.lineTo(mX, mY - 40);
+                        ctx.lineTo(mX + 7, mY - 28); ctx.closePath(); ctx.fill();
+                        ctx.fillStyle = '#ff4444'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('\u2622', mX, mY - 12);
+                    }
+
+                    if (elapsed - fallDur < 1.5) {
+                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*CRUNCH*', bx, targetY - 46);
+                    }
+                } else {
+                    // Generic fall — splat on factory floor
+                    ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.5;
+                    ctx.beginPath(); ctx.ellipse(bx, targetY, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = '#cc2222';
+                    ctx.fillRect(bx - 12, targetY - 6, 24, 8);
+                    ctx.fillStyle = '#f5d5a8';
+                    ctx.beginPath(); ctx.arc(bx - 10, targetY - 4, 6, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - 13, targetY - 6); ctx.lineTo(bx - 10, targetY - 3);
+                    ctx.moveTo(bx - 10, targetY - 6); ctx.lineTo(bx - 13, targetY - 3);
+                    ctx.stroke();
+                }
+            }
         }
     }
 
@@ -18299,6 +18473,18 @@ if (keys[' '] || keys['action']) {
                     if(Math.abs(bullets[i].x - bcb.x) < 30 && Math.abs(bullets[i].y - bcb.y) < 40) {
                         bcb.alive = false;
                         bcb.deathTime = Date.now();
+                        // Determine death type based on x-position over factory
+                        // Acid pool ~120-210, Syringe ~400-440, Conveyor/warhead ~450-560
+                        if (bcb.x < 230) {
+                            bcb.deathType = 'acid';       // falls into acid pool
+                        } else if (bcb.x >= 380 && bcb.x < 460) {
+                            bcb.deathType = 'syringe';    // impaled on syringe
+                        } else if (bcb.x >= 460 && bcb.x < 580) {
+                            bcb.deathType = 'warhead';    // stuffed into warhead casing
+                        } else {
+                            bcb.deathType = 'fall';       // generic fall to factory floor
+                        }
+                        bcb.fallY = bcb.y;  // starting Y for fall animation
                         bullets.splice(i, 1);
                         score += 3000;
                         // Drop 3 ammo rounds from bridge boss
