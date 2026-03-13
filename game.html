@@ -8724,362 +8724,463 @@ function drawNuclearAssemblyBridge() {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // ── NUCLEAR WARHEAD ASSEMBLY LINE (full redesign) ────────────────────────
-    // Flow: Hopper→Grinder→Acid Pool→Fission Chamber→Pump→Syringe Fill→Seal→Crate→Truck
+    // ── NUCLEAR WARHEAD ASSEMBLY LINE — sequential state machine ───────────
+    // Flow: Goo Tank → Clear Tube → Syringe Fills → Syringe Lowers into
+    //       Missile → Injects Goo → Syringe Raises → Missile Advances →
+    //       3 Missiles into Crate → Crate into Truck → Truck Departs
     // ══════════════════════════════════════════════════════════════════════════
     {
-        const _ft = _t;  // factory time alias
-        const BELT_Y = factFloor - 46;  // 382 — conveyor belt top
-        const CYCLE_MS = 3600;           // one missile every 3.6s
-        const MISSILES_PER_TRUCK = 6;
-        const TRUCK_SWAP_MS = 3200;
-        const phase = (_ft % CYCLE_MS) / CYCLE_MS;  // 0→1 per missile
+        const _ft = _t;
+        const BELT_Y = factFloor - 46;  // 382
 
-        // Full truck cycle: 6 missiles + swap
-        const fullCycleMs = CYCLE_MS * MISSILES_PER_TRUCK + TRUCK_SWAP_MS;
-        const fullPhase = (_ft % fullCycleMs) / fullCycleMs;
-        const missileIdx = Math.floor((_ft % fullCycleMs) / CYCLE_MS);
-        const swapping = missileIdx >= MISSILES_PER_TRUCK;
-        const swapProg = swapping ? ((_ft % fullCycleMs) - CYCLE_MS * MISSILES_PER_TRUCK) / TRUCK_SWAP_MS : 0;
+        // ── TIMING: sequential state machine ─────────────────────────────────
+        const MISSILE_MS = 5400;         // one full missile cycle
+        const MISSILES_PER_CRATE = 3;
+        const CRATE_LOAD_MS = 2400;      // crate slides into truck
+        const TRUCK_SWAP_MS = 3600;      // truck departs, new one arrives
+        const FULL_CYCLE = MISSILE_MS * MISSILES_PER_CRATE + CRATE_LOAD_MS + TRUCK_SWAP_MS;
+
+        const cycleT = _ft % FULL_CYCLE;
+        const missilePhaseBoundary = MISSILE_MS * MISSILES_PER_CRATE;
+        const inMissileCycle = cycleT < missilePhaseBoundary;
+        const missilesDone = inMissileCycle ? Math.floor(cycleT / MISSILE_MS) : MISSILES_PER_CRATE;
+        const mPhase = inMissileCycle ? (cycleT % MISSILE_MS) / MISSILE_MS : 1;
+
+        // Sub-phases within each missile cycle (0→1):
+        // 0.00–0.22  goo flows through tube, syringe fills
+        // 0.22–0.36  syringe lowers into open missile cap
+        // 0.36–0.64  goo transfers from syringe into missile
+        // 0.64–0.76  syringe raises, cap seals
+        // 0.76–1.00  missile slides right on belt toward crate
+
+        const crateLoadProg = (!inMissileCycle && cycleT < missilePhaseBoundary + CRATE_LOAD_MS)
+            ? (cycleT - missilePhaseBoundary) / CRATE_LOAD_MS : 0;
+        const isLoadingCrate = crateLoadProg > 0 && crateLoadProg <= 1;
+        const truckSwapProg = (cycleT >= missilePhaseBoundary + CRATE_LOAD_MS)
+            ? (cycleT - missilePhaseBoundary - CRATE_LOAD_MS) / TRUCK_SWAP_MS : 0;
+        const isSwapping = truckSwapProg > 0;
 
         // Key x-positions
-        const HOPPER_X = 70, ACID_X = 165, FISS_X = 275, PUMP_X = 345;
-        const SYR_X = 420, SEAL_X = 500, CRATE_X = 575, DOCK_X = 648;
-        // Truck dimensions
-        const trW = 56, trH = 44, cabW = 26;
-        const trY = BELT_Y + 8;  // truck bed aligns with belt
-        const dockL = DOCK_X - trW / 2;
+        const TANK_X = 90, SYR_X = 300, CRATE_X = 520, DOCK_X = 640;
+        const mW = 12, mH = 28;
 
-        // ── CONVEYOR BELT ─────────────────────────────────────────────────────
+        // ── CONVEYOR BELT ────────────────────────────────────────────────────
+        const beltLeft = SYR_X - 40, beltRight = DOCK_X + 40;
         ctx.fillStyle = '#0e0e0e';
-        ctx.fillRect(18, BELT_Y, 620, 12);
+        ctx.fillRect(beltLeft, BELT_Y, beltRight - beltLeft, 12);
         ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
-        ctx.strokeRect(18, BELT_Y, 620, 12);
-        // Belt tread marks (moving)
-        const beltOff = (_ft / 380) % 16;
+        ctx.strokeRect(beltLeft, BELT_Y, beltRight - beltLeft, 12);
+        // Tread marks — move only when belt is active
+        const beltMoving = (inMissileCycle && mPhase > 0.76) || isLoadingCrate;
+        const beltOff = beltMoving ? (_ft / 300) % 16 : 0;
         ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
-        for (let bx = 18 + beltOff - 16; bx < 638; bx += 16) {
-            if (bx > 18 && bx < 638) {
+        for (let bx = beltLeft + (beltOff % 16) - 16; bx < beltRight; bx += 16) {
+            if (bx > beltLeft && bx < beltRight) {
                 ctx.beginPath(); ctx.moveTo(bx, BELT_Y); ctx.lineTo(bx, BELT_Y + 12); ctx.stroke();
             }
         }
         // Belt rollers
         ctx.fillStyle = '#181818';
-        for (let rx = 30; rx < 638; rx += 60) {
+        for (let rx = beltLeft + 10; rx < beltRight; rx += 50) {
             ctx.beginPath(); ctx.arc(rx, BELT_Y + 12, 5, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.stroke();
         }
 
-        // ── S1: BIOMATTER HOPPER + GRINDER ────────────────────────────────────
-        // Hopper body (wide top, narrow bottom)
-        ctx.fillStyle = '#2a1a0a';
-        ctx.beginPath();
-        ctx.moveTo(HOPPER_X - 32, 270); ctx.lineTo(HOPPER_X + 32, 270);
-        ctx.lineTo(HOPPER_X + 16, 340); ctx.lineTo(HOPPER_X - 16, 340);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 2; ctx.stroke();
-        // Inner dark
-        ctx.fillStyle = '#1a0f05';
-        ctx.beginPath();
-        ctx.moveTo(HOPPER_X - 26, 274); ctx.lineTo(HOPPER_X + 26, 274);
-        ctx.lineTo(HOPPER_X + 13, 337); ctx.lineTo(HOPPER_X - 13, 337);
-        ctx.closePath(); ctx.fill();
-        // Chunks of organic waste tumbling inside
-        const chunkT = (_ft / 800) % 1;
-        ctx.fillStyle = '#6b2510';
-        for (let ci = 0; ci < 5; ci++) {
-            const cy = 280 + ci * 12 + chunkT * 12;
-            const cx = HOPPER_X + Math.sin(_ft * 0.003 + ci * 2.1) * (14 - ci * 2);
-            if (cy < 336) {
-                ctx.beginPath(); ctx.ellipse(cx, cy, 5 - ci * 0.5, 4 - ci * 0.3, ci * 0.5, 0, Math.PI * 2); ctx.fill();
+        // ── GOO STORAGE TANK ─────────────────────────────────────────────────
+        const tankW = 64, tankH = 96;
+        const tankTop = BELT_Y - tankH - 6;
+        const tankLeft = TANK_X - tankW / 2;
+        // Tank body — riveted industrial
+        ctx.fillStyle = '#1a2a18';
+        ctx.fillRect(tankLeft, tankTop, tankW, tankH);
+        ctx.strokeStyle = '#2a4a28'; ctx.lineWidth = 2;
+        ctx.strokeRect(tankLeft, tankTop, tankW, tankH);
+        // Horizontal rivet bands
+        ctx.strokeStyle = '#2a3a26'; ctx.lineWidth = 1;
+        for (let rb = tankTop + 18; rb < tankTop + tankH; rb += 20) {
+            ctx.beginPath(); ctx.moveTo(tankLeft, rb); ctx.lineTo(tankLeft + tankW, rb); ctx.stroke();
+            // Rivets
+            ctx.fillStyle = '#3a4a36';
+            for (let ri = tankLeft + 8; ri < tankLeft + tankW; ri += 14) {
+                ctx.beginPath(); ctx.arc(ri, rb, 1.5, 0, Math.PI * 2); ctx.fill();
             }
         }
-        // Grinder teeth at bottom
-        ctx.fillStyle = '#555';
-        const grindAngle = (_ft / 200) % (Math.PI * 2);
-        for (let gi = 0; gi < 4; gi++) {
-            const gx = HOPPER_X - 10 + gi * 7;
-            const gy = 338 + Math.sin(grindAngle + gi * 1.2) * 2;
-            ctx.fillRect(gx, gy, 4, 6);
-        }
-        // Output chute to acid
-        ctx.fillStyle = '#1a1208';
-        ctx.fillRect(HOPPER_X - 6, 340, 12, BELT_Y - 340);
-        // Ground biomatter dripping
-        ctx.fillStyle = '#3a2010';
-        const dripY = 340 + ((_ft / 600) % 1) * (BELT_Y - 346);
-        ctx.beginPath(); ctx.ellipse(HOPPER_X, dripY, 3, 4, 0, 0, Math.PI * 2); ctx.fill();
-        // Label
-        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('HOPPER', HOPPER_X, 266);
-
-        // ── S2: ACID DISSOLUTION POOL ─────────────────────────────────────────
-        const acidW = 70, acidH = 52;
-        const acidTop = BELT_Y - acidH;
-        const acidPulse = 0.6 + Math.sin(_ft * 0.002) * 0.25;
-        // Tank body
-        ctx.fillStyle = '#112211';
-        ctx.fillRect(ACID_X - acidW / 2, acidTop, acidW, acidH);
-        ctx.shadowColor = '#80ff00'; ctx.shadowBlur = 16 * acidPulse;
-        ctx.strokeStyle = '#224422'; ctx.lineWidth = 2;
-        ctx.strokeRect(ACID_X - acidW / 2, acidTop, acidW, acidH);
-        ctx.shadowBlur = 0;
-        // Acid liquid
-        ctx.fillStyle = 'rgb(0,' + (60 + Math.floor(acidPulse * 30)) + ',8)';
-        ctx.fillRect(ACID_X - acidW / 2 + 4, acidTop + 4, acidW - 8, acidH - 4);
-        // Surface shimmer
-        ctx.strokeStyle = 'rgba(128,255,32,0.4)'; ctx.lineWidth = 1;
-        for (let si = 0; si < 3; si++) {
-            const sx = ACID_X - 20 + si * 18 + Math.sin(_ft * 0.003 + si) * 4;
-            ctx.beginPath();
-            ctx.moveTo(sx, acidTop + 6); ctx.lineTo(sx + 12, acidTop + 6);
-            ctx.stroke();
-        }
-        // Bubbles rising
-        [{bx: ACID_X - 18, p: 1100, s: 3}, {bx: ACID_X - 6, p: 870, s: 2},
-         {bx: ACID_X + 6, p: 1500, s: 3}, {bx: ACID_X + 18, p: 1020, s: 2}].forEach(function(b) {
-            const bp = (_ft % b.p) / b.p;
-            ctx.globalAlpha = (1 - bp) * 0.65; ctx.strokeStyle = '#80ff40'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(b.bx, BELT_Y - 6 - bp * (acidH - 12), b.s, 0, Math.PI * 2); ctx.stroke();
-        });
-        ctx.globalAlpha = 1;
-        // Radiation symbol
-        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('\u2622', ACID_X, acidTop - 4);
-        // Pipe from hopper into acid
-        ctx.fillStyle = '#1a2a18'; ctx.fillRect(HOPPER_X + 6, acidTop + 10, ACID_X - HOPPER_X - acidW / 2 - 6, 6);
-        // Label
-        ctx.fillStyle = '#88cc44'; ctx.font = 'bold 6px monospace';
-        ctx.fillText('ACID POOL', ACID_X, acidTop - 14);
-
-        // ── S3: FISSION CHAMBER ───────────────────────────────────────────────
-        const fissW = 48, fissH = 80;
-        const fissTop = BELT_Y - fissH;
-        // Airtight cylinder
-        ctx.fillStyle = '#1a2218';
-        ctx.fillRect(FISS_X - fissW / 2, fissTop, fissW, fissH);
-        ctx.strokeStyle = '#2a3a28'; ctx.lineWidth = 2;
-        ctx.strokeRect(FISS_X - fissW / 2, fissTop, fissW, fissH);
         // Dome top
         ctx.fillStyle = '#223322';
-        ctx.beginPath(); ctx.ellipse(FISS_X, fissTop, fissW / 2, 11, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(TANK_X, tankTop, tankW / 2, 13, 0, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1; ctx.stroke();
-        // Pulsing containment rings
-        const rPulse = Math.sin(_ft * 0.0018);
-        [13, 18, 23].forEach(function(r, ri) {
-            ctx.globalAlpha = Math.max(0, 0.44 - ri * 0.13 + rPulse * 0.1);
-            ctx.strokeStyle = '#44ff22'; ctx.lineWidth = 1.5;
-            ctx.shadowColor = '#44ff22'; ctx.shadowBlur = 8;
-            ctx.beginPath(); ctx.ellipse(FISS_X, fissTop, r, r * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
-        });
-        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-        // Glowing green goop inside
-        const goopGlow = 0.5 + Math.sin(_ft * 0.004) * 0.3;
-        ctx.fillStyle = `rgba(80,255,40,${goopGlow * 0.4})`;
-        ctx.fillRect(FISS_X - fissW / 2 + 6, fissTop + 14, fissW - 12, fissH - 18);
-        ctx.shadowColor = '#44ff22'; ctx.shadowBlur = 12;
-        ctx.fillStyle = '#40ff20';
-        ctx.beginPath(); ctx.arc(FISS_X, fissTop + fissH / 2, 8, 0, Math.PI * 2); ctx.fill();
+        // Glowing goo inside tank
+        const gooPulse = 0.55 + Math.sin(_ft * 0.003) * 0.2;
+        ctx.fillStyle = `rgba(40,180,15,${gooPulse * 0.55})`;
+        ctx.fillRect(tankLeft + 4, tankTop + 14, tankW - 8, tankH - 18);
+        ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 14;
+        ctx.fillStyle = `rgba(80,255,40,${gooPulse * 0.35})`;
+        ctx.fillRect(tankLeft + 8, tankTop + 18, tankW - 16, tankH - 26);
         ctx.shadowBlur = 0;
+        // Bubbling surface
+        for (let bi = 0; bi < 5; bi++) {
+            const bp = (_ft % (800 + bi * 170)) / (800 + bi * 170);
+            const bbx = tankLeft + 10 + bi * 11;
+            ctx.globalAlpha = (1 - bp) * 0.6;
+            ctx.strokeStyle = '#80ff40'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(bbx, tankTop + 16 + (1 - bp) * 12, 2 + bp * 1.5, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
         // Radiation symbol
-        ctx.fillStyle = '#88ff44'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('\u2622', FISS_X, BELT_Y - 8);
-        // Pipe from acid to fission chamber
-        ctx.fillStyle = '#1a2a18'; ctx.fillRect(ACID_X + acidW / 2, fissTop + 30, FISS_X - ACID_X - acidW / 2 - fissW / 2, 6);
+        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 15px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u2622', TANK_X, tankTop + tankH / 2 + 5);
+        // Level gauge on left side
+        ctx.fillStyle = '#222'; ctx.fillRect(tankLeft - 10, tankTop + 8, 8, tankH - 12);
+        ctx.strokeStyle = '#334'; ctx.lineWidth = 1; ctx.strokeRect(tankLeft - 10, tankTop + 8, 8, tankH - 12);
+        ctx.fillStyle = '#40ff20';
+        ctx.fillRect(tankLeft - 9, tankTop + 10 + (tankH - 16) * 0.12, 6, (tankH - 16) * 0.88);
         // Label
-        ctx.fillStyle = '#44ff22'; ctx.font = 'bold 6px monospace';
-        ctx.fillText('FISSION', FISS_X, fissTop - 6);
+        ctx.fillStyle = '#80ff20'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('GOO TANK', TANK_X, tankTop - 8);
 
-        // ── S4: PRESSURE PUMP + GOOP TUBE ─────────────────────────────────────
-        // Pump body
-        const pumpTop = BELT_Y - 50;
-        ctx.fillStyle = '#223322'; ctx.fillRect(PUMP_X - 14, pumpTop, 28, 50);
-        ctx.strokeStyle = '#335533'; ctx.lineWidth = 1; ctx.strokeRect(PUMP_X - 14, pumpTop, 28, 50);
-        // Pressure gauge
-        ctx.fillStyle = '#1a2a18'; ctx.beginPath(); ctx.arc(PUMP_X, pumpTop + 12, 9, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#44cc22'; ctx.lineWidth = 1; ctx.stroke();
-        // Gauge needle
-        const needleAngle = -0.8 + Math.sin(_ft * 0.003) * 0.4;
-        ctx.strokeStyle = '#ff4422'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(PUMP_X, pumpTop + 12);
-        ctx.lineTo(PUMP_X + 6 * Math.cos(needleAngle), pumpTop + 12 + 6 * Math.sin(needleAngle));
-        ctx.stroke();
-        // Piston animation
-        const pistonPhase = (_ft / 500) % 1;
-        const pistonY = pumpTop + 22 + Math.sin(pistonPhase * Math.PI * 2) * 6;
-        ctx.fillStyle = '#444'; ctx.fillRect(PUMP_X - 6, pistonY, 12, 8);
-        ctx.fillStyle = '#555'; ctx.fillRect(PUMP_X - 3, pistonY - 4, 6, 4);
-        // Horizontal goop tube from fission to pump
-        ctx.fillStyle = '#1a2a18'; ctx.fillRect(FISS_X + fissW / 2, pumpTop + 24, PUMP_X - FISS_X - fissW / 2 - 14, 8);
-        ctx.fillStyle = '#003300';
-        ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 4;
-        ctx.fillRect(FISS_X + fissW / 2 + 2, pumpTop + 26, PUMP_X - FISS_X - fissW / 2 - 18, 4);
-        ctx.shadowBlur = 0;
-        // Tube from pump to syringe (horizontal then down)
-        ctx.fillStyle = '#1a2a18';
-        ctx.fillRect(PUMP_X + 14, pumpTop + 24, SYR_X - PUMP_X - 14, 8);  // horizontal
-        ctx.fillRect(SYR_X - 4, pumpTop + 24, 8, BELT_Y - pumpTop - 60);  // vertical down
-        ctx.fillStyle = '#003300';
-        ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 4;
-        ctx.fillRect(PUMP_X + 16, pumpTop + 26, SYR_X - PUMP_X - 18, 4);
-        ctx.fillRect(SYR_X - 2, pumpTop + 28, 4, BELT_Y - pumpTop - 64);
-        ctx.shadowBlur = 0;
-        // Goop droplet traveling through tube
-        const goopTravelPhase = (_ft / 1200) % 1;
-        const goopDropX = PUMP_X + 14 + goopTravelPhase * (SYR_X - PUMP_X - 14);
-        ctx.fillStyle = '#80ff20'; ctx.shadowColor = '#80ff20'; ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.arc(Math.min(goopDropX, SYR_X), pumpTop + 28, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0;
-        // Label
-        ctx.fillStyle = '#80ff20'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('PUMP', PUMP_X, pumpTop - 6);
+        // ── CLEAR TUBE (tank to syringe) ─────────────────────────────────────
+        // Horizontal run from tank outlet to above syringe, then vertical drop
+        const tubeStartX = tankLeft + tankW;
+        const tubeHorizY = tankTop + tankH * 0.45;
+        const tubeEndX = SYR_X;
+        const syringeRestTop = BELT_Y - 64;
 
-        // ── S5: SYRINGE + MECHANICAL ARM (fills missiles) ─────────────────────
-        const syringeTop = BELT_Y - 58;
-        // Arm track (overhead rail)
-        ctx.fillStyle = '#333'; ctx.fillRect(SYR_X - 20, syringeTop - 10, 40, 6);
-        // Syringe body
-        const fillPhase = phase; // synchronized to missile cycle
-        const plungerY = syringeTop + 6 + (1 - fillPhase) * 20;
-        // Cylinder
-        ctx.fillStyle = '#445566'; ctx.fillRect(SYR_X - 6, syringeTop, 12, 42);
-        ctx.strokeStyle = '#667788'; ctx.lineWidth = 1; ctx.strokeRect(SYR_X - 6, syringeTop, 12, 42);
-        // Goop level inside (depletes as it fills missile)
-        const goopLevel = 1 - fillPhase;
-        ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 4;
-        ctx.fillRect(SYR_X - 4, syringeTop + 2 + (1 - goopLevel) * 36, 8, goopLevel * 36);
-        ctx.shadowBlur = 0;
-        // Plunger handle
-        ctx.fillStyle = '#666'; ctx.fillRect(SYR_X - 3, plungerY - 4, 6, 4);
-        ctx.fillStyle = '#888'; ctx.fillRect(SYR_X - 8, plungerY - 6, 16, 3);
-        // Needle tip
-        ctx.fillStyle = '#aaa'; ctx.fillRect(SYR_X - 1, syringeTop + 42, 2, 12);
-        // Drip from needle
-        if (fillPhase > 0.1 && fillPhase < 0.9) {
-            ctx.fillStyle = 'rgba(80,255,30,0.8)';
-            const dripP = ((fillPhase - 0.1) / 0.8);
-            ctx.beginPath(); ctx.arc(SYR_X, syringeTop + 54 + dripP * 4, 2, 0, Math.PI * 2); ctx.fill();
+        // Horizontal section
+        ctx.strokeStyle = 'rgba(140,200,140,0.25)'; ctx.lineWidth = 12;
+        ctx.beginPath(); ctx.moveTo(tubeStartX, tubeHorizY); ctx.lineTo(tubeEndX, tubeHorizY); ctx.stroke();
+        ctx.strokeStyle = 'rgba(220,255,220,0.12)'; ctx.lineWidth = 7;
+        ctx.beginPath(); ctx.moveTo(tubeStartX, tubeHorizY); ctx.lineTo(tubeEndX, tubeHorizY); ctx.stroke();
+        // Tube edges (glass look)
+        ctx.strokeStyle = 'rgba(100,170,100,0.45)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(tubeStartX, tubeHorizY - 6); ctx.lineTo(tubeEndX, tubeHorizY - 6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(tubeStartX, tubeHorizY + 6); ctx.lineTo(tubeEndX, tubeHorizY + 6); ctx.stroke();
+        // Tube clamps
+        ctx.fillStyle = '#444';
+        for (let cl = tubeStartX + 30; cl < tubeEndX - 10; cl += 50) {
+            ctx.fillRect(cl - 3, tubeHorizY - 8, 6, 16);
+        }
+
+        // Vertical drop into syringe
+        ctx.strokeStyle = 'rgba(140,200,140,0.25)'; ctx.lineWidth = 10;
+        ctx.beginPath(); ctx.moveTo(tubeEndX, tubeHorizY); ctx.lineTo(tubeEndX, syringeRestTop - 6); ctx.stroke();
+        ctx.strokeStyle = 'rgba(220,255,220,0.12)'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(tubeEndX, tubeHorizY); ctx.lineTo(tubeEndX, syringeRestTop - 6); ctx.stroke();
+        ctx.strokeStyle = 'rgba(100,170,100,0.45)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(tubeEndX - 5, tubeHorizY); ctx.lineTo(tubeEndX - 5, syringeRestTop - 6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(tubeEndX + 5, tubeHorizY); ctx.lineTo(tubeEndX + 5, syringeRestTop - 6); ctx.stroke();
+
+        // Residual goo trace in tube (always faintly visible)
+        ctx.fillStyle = 'rgba(64,255,32,0.08)';
+        ctx.fillRect(tubeStartX + 2, tubeHorizY - 3, tubeEndX - tubeStartX - 4, 6);
+        ctx.fillRect(tubeEndX - 3, tubeHorizY, 6, syringeRestTop - tubeHorizY - 6);
+
+        // Animated goo flow — only during fill sub-phase
+        const isFilling = inMissileCycle && mPhase < 0.22;
+        if (isFilling) {
+            const fillP = mPhase / 0.22;
+            const tubeLen = tubeEndX - tubeStartX;
+            const dropLen = tubeEndX - tubeHorizY + (syringeRestTop - 6 - tubeHorizY);
+            // Leading edge travels through horizontal then vertical tube
+            const totalTubeLen = tubeLen + (syringeRestTop - 6 - tubeHorizY);
+            const leadDist = fillP * totalTubeLen;
+            // Horizontal goo stream
+            const horizEnd = Math.min(leadDist, tubeLen);
+            ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 6;
+            ctx.fillRect(tubeStartX + 2, tubeHorizY - 3, horizEnd, 6);
+            // Vertical goo stream
+            if (leadDist > tubeLen) {
+                const vertLen = leadDist - tubeLen;
+                ctx.fillRect(tubeEndX - 3, tubeHorizY, 6, vertLen);
+            }
+            ctx.shadowBlur = 0;
+            // Leading glob
+            if (leadDist <= tubeLen) {
+                ctx.fillStyle = '#80ff40';
+                ctx.beginPath(); ctx.arc(tubeStartX + horizEnd, tubeHorizY, 4, 0, Math.PI * 2); ctx.fill();
+            } else {
+                const vertPos = tubeHorizY + (leadDist - tubeLen);
+                ctx.fillStyle = '#80ff40';
+                ctx.beginPath(); ctx.arc(tubeEndX, Math.min(vertPos, syringeRestTop - 6), 4, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        // ── SYRINGE STATION — sequential mechanical arm ──────────────────────
+        let syringeFillLevel = 0;  // 0→1 how full the syringe is
+        let syringeYOff = 0;       // pixels lowered toward missile
+        const maxLower = 22;       // max descent into missile opening
+
+        if (inMissileCycle) {
+            if (mPhase < 0.22) {
+                // FILLING: goo enters syringe from tube
+                syringeFillLevel = mPhase / 0.22;
+                syringeYOff = 0;
+            } else if (mPhase < 0.36) {
+                // LOWERING: full syringe descends into open missile
+                syringeFillLevel = 1;
+                syringeYOff = ((mPhase - 0.22) / 0.14) * maxLower;
+            } else if (mPhase < 0.64) {
+                // INJECTING: goo transfers from syringe into missile
+                const injectP = (mPhase - 0.36) / 0.28;
+                syringeFillLevel = 1 - injectP;
+                syringeYOff = maxLower;
+            } else if (mPhase < 0.76) {
+                // RAISING: empty syringe ascends
+                syringeFillLevel = 0;
+                syringeYOff = maxLower * (1 - (mPhase - 0.64) / 0.12);
+            } else {
+                // ADVANCE: syringe idle at top, missile slides away
+                syringeFillLevel = 0;
+                syringeYOff = 0;
+            }
+        }
+
+        // Overhead rail track
+        ctx.fillStyle = '#333'; ctx.fillRect(SYR_X - 24, syringeRestTop - 16, 48, 7);
+        ctx.fillStyle = '#3a3a3a'; ctx.fillRect(SYR_X - 2, syringeRestTop - 16, 4, 10);
+
+        // Syringe body (moves down with yOff)
+        const syrDrawY = syringeRestTop + syringeYOff;
+        const syringeH = 46;
+        // Glass cylinder
+        ctx.fillStyle = 'rgba(200,215,230,0.8)';
+        ctx.fillRect(SYR_X - 8, syrDrawY, 16, syringeH);
+        ctx.strokeStyle = '#8899aa'; ctx.lineWidth = 1.5;
+        ctx.strokeRect(SYR_X - 8, syrDrawY, 16, syringeH);
+        // Graduation marks
+        ctx.strokeStyle = 'rgba(100,120,140,0.35)'; ctx.lineWidth = 0.5;
+        for (let ml = syrDrawY + 5; ml < syrDrawY + syringeH - 2; ml += 6) {
+            ctx.beginPath(); ctx.moveTo(SYR_X - 7, ml); ctx.lineTo(SYR_X - 3, ml); ctx.stroke();
+        }
+        // Goop level inside syringe
+        if (syringeFillLevel > 0.01) {
+            const fillH = syringeFillLevel * (syringeH - 6);
+            ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 6;
+            ctx.fillRect(SYR_X - 6, syrDrawY + syringeH - 3 - fillH, 12, fillH);
+            ctx.shadowBlur = 0;
+        }
+        // Plunger
+        const plungerPos = syrDrawY + 3 + (1 - syringeFillLevel) * (syringeH - 10);
+        ctx.fillStyle = '#555'; ctx.fillRect(SYR_X - 5, plungerPos, 10, 4);
+        ctx.fillStyle = '#777'; ctx.fillRect(SYR_X - 11, plungerPos - 3, 22, 3);
+        // Plunger rod
+        ctx.fillStyle = '#666'; ctx.fillRect(SYR_X - 1, syrDrawY - 24, 2, plungerPos - syrDrawY + 24);
+        // Needle
+        ctx.fillStyle = '#bbb'; ctx.fillRect(SYR_X - 1, syrDrawY + syringeH, 2, 16);
+        ctx.fillStyle = '#ddd'; ctx.fillRect(SYR_X, syrDrawY + syringeH, 1, 16);
+        // Needle tip glow during injection
+        if (inMissileCycle && mPhase >= 0.36 && mPhase < 0.64) {
+            ctx.fillStyle = 'rgba(80,255,30,0.9)';
+            ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 10;
+            ctx.beginPath(); ctx.arc(SYR_X, syrDrawY + syringeH + 16, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        // Drip forming at needle tip when lowered with goo
+        if (inMissileCycle && mPhase >= 0.22 && mPhase < 0.36 && syringeFillLevel > 0.5) {
+            ctx.fillStyle = 'rgba(80,255,30,0.6)';
+            const dSize = 1 + ((mPhase - 0.22) / 0.14) * 2;
+            ctx.beginPath(); ctx.arc(SYR_X, syrDrawY + syringeH + 17, dSize, 0, Math.PI * 2); ctx.fill();
         }
         // Label
-        ctx.fillStyle = '#80ff40'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('SYRINGE', SYR_X, syringeTop - 14);
+        ctx.fillStyle = '#80ff40'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('SYRINGE', SYR_X, syringeRestTop - 22);
 
-        // ── MISSILE CASINGS ON BELT (staggered) ──────────────────────────────
-        // Draw 3 missiles at different stages on the belt
-        const mH = 24, mW = 11;
-        for (let mi = 0; mi < 3; mi++) {
-            const missilePhase = (phase + mi * 0.33) % 1;
-            const mBaseX = SYR_X - 40 + missilePhase * 160;  // moves right along belt
+        // ── MISSILE AT SYRINGE STATION ───────────────────────────────────────
+        // Current missile being processed sits under the syringe
+        if (inMissileCycle && mPhase < 0.76) {
+            const missileX = SYR_X;
             const mBaseY = BELT_Y;
-            if (mBaseX > SYR_X - 40 && mBaseX < SEAL_X + 30) {
-                // Casing
-                ctx.fillStyle = '#4a4a5a';
-                ctx.fillRect(mBaseX - mW / 2, mBaseY - mH, mW, mH);
-                // Nosecone
+            // Casing
+            ctx.fillStyle = '#4a4a5a';
+            ctx.fillRect(missileX - mW / 2, mBaseY - mH, mW, mH);
+            ctx.strokeStyle = '#5a5a6a'; ctx.lineWidth = 1;
+            ctx.strokeRect(missileX - mW / 2, mBaseY - mH, mW, mH);
+            // Fins
+            ctx.fillStyle = '#3a3a4a';
+            ctx.fillRect(missileX - mW / 2 - 3, mBaseY - 7, 3, 7);
+            ctx.fillRect(missileX + mW / 2, mBaseY - 7, 3, 7);
+            // Open cap or sealed
+            if (mPhase < 0.64) {
+                // Open cap — dark interior visible, cap hinged to side
+                ctx.fillStyle = '#1a1a22';
+                ctx.fillRect(missileX - mW / 2 + 2, mBaseY - mH, mW - 4, 5);
+                // Hinged cap piece to the right
+                ctx.fillStyle = '#5a5a6a';
+                const capAngle = mPhase < 0.22 ? 0.8 : (mPhase < 0.36 ? 0.8 - ((mPhase - 0.22) / 0.14) * 0.3 : 0.5);
+                ctx.save();
+                ctx.translate(missileX + mW / 2, mBaseY - mH);
+                ctx.rotate(-capAngle);
+                ctx.fillRect(0, -2, 9, 3);
+                ctx.restore();
+            } else {
+                // Cap sealed — nosecone formed
                 ctx.fillStyle = '#5a5a6a';
                 ctx.beginPath();
-                ctx.moveTo(mBaseX - mW / 2, mBaseY - mH);
-                ctx.lineTo(mBaseX, mBaseY - mH - 9);
-                ctx.lineTo(mBaseX + mW / 2, mBaseY - mH);
+                ctx.moveTo(missileX - mW / 2, mBaseY - mH);
+                ctx.lineTo(missileX, mBaseY - mH - 10);
+                ctx.lineTo(missileX + mW / 2, mBaseY - mH);
                 ctx.closePath(); ctx.fill();
-                // Fill level based on position relative to syringe
-                const distFromSyr = mBaseX - SYR_X;
-                if (distFromSyr > -5 && distFromSyr < 60) {
-                    const fillLevel = Math.min(1, (distFromSyr + 5) / 50);
-                    const fH = Math.floor(fillLevel * (mH - 4));
-                    ctx.fillStyle = '#001800'; ctx.fillRect(mBaseX - mW / 2 + 2, mBaseY - mH + 2, mW - 4, mH - 4);
-                    ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 4;
-                    ctx.fillRect(mBaseX - mW / 2 + 2, mBaseY - 4 - fH, mW - 4, fH);
-                    ctx.shadowBlur = 0;
-                }
-                // Sealed cap (after seal station)
-                if (mBaseX > SEAL_X) {
-                    ctx.fillStyle = '#666'; ctx.fillRect(mBaseX - mW / 2 - 1, mBaseY - mH - 2, mW + 2, 3);
-                }
+            }
+            // Fill level inside missile (rises during injection phase)
+            let missileFill = 0;
+            if (mPhase >= 0.36 && mPhase < 0.64) {
+                missileFill = (mPhase - 0.36) / 0.28;
+            } else if (mPhase >= 0.64) {
+                missileFill = 1;
+            }
+            if (missileFill > 0) {
+                const fH = Math.floor(missileFill * (mH - 6));
+                ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 5;
+                ctx.fillRect(missileX - mW / 2 + 2, mBaseY - 3 - fH, mW - 4, fH);
+                ctx.shadowBlur = 0;
             }
         }
 
-        // ── S6: SEALING ARM ───────────────────────────────────────────────────
-        // Arm descends to crimp/seal the missile top
-        const sealPhase = (phase + 0.5) % 1;  // offset from fill
-        const sealArmY = BELT_Y - mH - 14 + Math.sin(sealPhase * Math.PI) * 10;
-        // Arm post
-        ctx.fillStyle = '#444'; ctx.fillRect(SEAL_X - 3, BELT_Y - mH - 30, 6, 16);
-        // Arm head (crimper)
-        ctx.fillStyle = '#666'; ctx.fillRect(SEAL_X - 8, sealArmY, 16, 8);
-        ctx.fillStyle = '#888'; ctx.fillRect(SEAL_X - 4, sealArmY + 8, 8, 4);
-        // Sparks when sealing
-        if (sealPhase > 0.4 && sealPhase < 0.6) {
-            ctx.fillStyle = '#ffcc00';
-            for (let si = 0; si < 3; si++) {
-                const sparkX = SEAL_X + (Math.random() - 0.5) * 14;
-                const sparkY = sealArmY + 10 + Math.random() * 4;
-                ctx.beginPath(); ctx.arc(sparkX, sparkY, 1.5, 0, Math.PI * 2); ctx.fill();
+        // ── MISSILE ADVANCING (slides from syringe toward crate) ─────────────
+        if (inMissileCycle && mPhase >= 0.76) {
+            const advProg = (mPhase - 0.76) / 0.24;
+            const startX = SYR_X;
+            const targetSlot = SYR_X + (missilesDone) * ((CRATE_X - 40 - SYR_X) / MISSILES_PER_CRATE);
+            const mx = startX + advProg * (targetSlot - startX);
+            // Sealed, filled missile sliding
+            ctx.fillStyle = '#4a4a5a';
+            ctx.fillRect(mx - mW / 2, BELT_Y - mH, mW, mH);
+            ctx.strokeStyle = '#5a5a6a'; ctx.lineWidth = 1;
+            ctx.strokeRect(mx - mW / 2, BELT_Y - mH, mW, mH);
+            // Nosecone
+            ctx.fillStyle = '#5a5a6a';
+            ctx.beginPath();
+            ctx.moveTo(mx - mW / 2, BELT_Y - mH);
+            ctx.lineTo(mx, BELT_Y - mH - 10);
+            ctx.lineTo(mx + mW / 2, BELT_Y - mH);
+            ctx.closePath(); ctx.fill();
+            // Goo inside
+            ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 3;
+            ctx.fillRect(mx - mW / 2 + 2, BELT_Y - mH + 4, mW - 4, mH - 7);
+            ctx.shadowBlur = 0;
+            // Fins
+            ctx.fillStyle = '#3a3a4a';
+            ctx.fillRect(mx - mW / 2 - 3, BELT_Y - 7, 3, 7);
+            ctx.fillRect(mx + mW / 2, BELT_Y - 7, 3, 7);
+        }
+
+        // ── COMPLETED MISSILES WAITING ON BELT ───────────────────────────────
+        for (let di = 0; di < missilesDone; di++) {
+            // Skip drawing if current missile is still advancing (it's drawn above)
+            if (inMissileCycle && mPhase >= 0.76 && di === missilesDone - 1) continue;
+            const spacing = (CRATE_X - 40 - SYR_X) / MISSILES_PER_CRATE;
+            const mx = SYR_X + (di + 1) * spacing;
+            // Sealed, filled missile
+            ctx.fillStyle = '#4a4a5a';
+            ctx.fillRect(mx - mW / 2, BELT_Y - mH, mW, mH);
+            ctx.strokeStyle = '#5a5a6a'; ctx.lineWidth = 1;
+            ctx.strokeRect(mx - mW / 2, BELT_Y - mH, mW, mH);
+            ctx.fillStyle = '#5a5a6a';
+            ctx.beginPath();
+            ctx.moveTo(mx - mW / 2, BELT_Y - mH);
+            ctx.lineTo(mx, BELT_Y - mH - 10);
+            ctx.lineTo(mx + mW / 2, BELT_Y - mH);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 3;
+            ctx.fillRect(mx - mW / 2 + 2, BELT_Y - mH + 4, mW - 4, mH - 7);
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#3a3a4a';
+            ctx.fillRect(mx - mW / 2 - 3, BELT_Y - 7, 3, 7);
+            ctx.fillRect(mx + mW / 2, BELT_Y - 7, 3, 7);
+        }
+
+        // ── CRATE STATION ────────────────────────────────────────────────────
+        const crateW = 48, crateH = 36;
+        const crateBaseY = BELT_Y;
+
+        // During loading phase, crate slides toward truck
+        let crateDrawX = CRATE_X;
+        if (isLoadingCrate) {
+            const easeLoad = crateLoadProg < 0.5 ? 2 * crateLoadProg * crateLoadProg
+                : 1 - Math.pow(-2 * crateLoadProg + 2, 2) / 2;
+            crateDrawX = CRATE_X + easeLoad * (DOCK_X - 50 - CRATE_X);
+        }
+
+        // Draw crate (not during truck swap — it's been loaded)
+        if (!isSwapping) {
+            // Crate body
+            ctx.fillStyle = '#2e2e18';
+            ctx.fillRect(crateDrawX - crateW / 2, crateBaseY - crateH, crateW, crateH);
+            ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1.5;
+            ctx.strokeRect(crateDrawX - crateW / 2, crateBaseY - crateH, crateW, crateH);
+            // Wooden slat lines
+            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
+            for (let sl = crateBaseY - crateH + 10; sl < crateBaseY; sl += 10) {
+                ctx.beginPath(); ctx.moveTo(crateDrawX - crateW / 2, sl);
+                ctx.lineTo(crateDrawX + crateW / 2, sl); ctx.stroke();
+            }
+            // Cross brace
+            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(crateDrawX - crateW / 2, crateBaseY - crateH);
+            ctx.lineTo(crateDrawX + crateW / 2, crateBaseY);
+            ctx.stroke();
+
+            // Mini warheads inside crate (only when all 3 are done)
+            const inCrateCount = (missilesDone >= MISSILES_PER_CRATE || isLoadingCrate) ? MISSILES_PER_CRATE : 0;
+            for (let wi = 0; wi < inCrateCount; wi++) {
+                const wx = crateDrawX - 14 + wi * 14;
+                ctx.fillStyle = '#4a4a5a'; ctx.fillRect(wx - 3, crateBaseY - crateH + 4, 8, crateH - 8);
+                ctx.fillStyle = '#40ff20'; ctx.fillRect(wx - 1, crateBaseY - crateH + 6, 4, crateH - 12);
+            }
+            // CLASSIFIED stamp when full
+            if (inCrateCount >= MISSILES_PER_CRATE) {
+                ctx.fillStyle = '#ff4444'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('CLASSIFIED', crateDrawX, crateBaseY - crateH - 6);
             }
         }
         // Label
-        ctx.fillStyle = '#ccaa44'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('SEAL', SEAL_X, BELT_Y - mH - 34);
+        ctx.fillStyle = '#cccc40'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('CRATING', CRATE_X, BELT_Y - crateH - 18);
 
-        // ── S7: CRATE PACKING ─────────────────────────────────────────────────
-        // Open crate that fills with warheads (6 per crate)
-        const crateW = 42, crateH = 30;
-        const crateTop = BELT_Y - crateH;
-        const filledCount = swapping ? MISSILES_PER_TRUCK : missileIdx;
-        // Crate body
-        ctx.fillStyle = '#2e2e18'; ctx.fillRect(CRATE_X - crateW / 2, crateTop, crateW, crateH);
-        ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1;
-        ctx.strokeRect(CRATE_X - crateW / 2, crateTop, crateW, crateH);
-        // Cross-bracing
-        ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
-        ctx.beginPath(); ctx.moveTo(CRATE_X, crateTop); ctx.lineTo(CRATE_X, BELT_Y); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(CRATE_X - crateW / 2, crateTop + crateH / 2);
-        ctx.lineTo(CRATE_X + crateW / 2, crateTop + crateH / 2); ctx.stroke();
-        // Mini warheads inside crate
-        for (let wi = 0; wi < filledCount && wi < 6; wi++) {
-            const wx = CRATE_X - 14 + (wi % 3) * 12;
-            const wy = crateTop + 4 + Math.floor(wi / 3) * 14;
-            ctx.fillStyle = '#4a4a5a'; ctx.fillRect(wx - 3, wy, 6, 12);
-            ctx.fillStyle = '#40ff20'; ctx.fillRect(wx - 2, wy + 2, 4, 8);
-        }
-        // CLASSIFIED stamp when full
-        if (filledCount >= 6) {
-            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('CLASSIFIED', CRATE_X, crateTop - 4);
-        }
-        // Label
-        ctx.fillStyle = '#cccc40'; ctx.font = 'bold 6px monospace';
-        ctx.fillText('CRATING', CRATE_X, crateTop - 14);
+        // ── COUNTER DISPLAY ──────────────────────────────────────────────────
+        ctx.fillStyle = '#080808';
+        ctx.fillRect(SYR_X + 30, BELT_Y - mH - 48, 66, 20);
+        ctx.strokeStyle = '#334433'; ctx.lineWidth = 1;
+        ctx.strokeRect(SYR_X + 30, BELT_Y - mH - 48, 66, 20);
+        const displayCount = (isLoadingCrate || isSwapping) ? MISSILES_PER_CRATE : missilesDone;
+        ctx.fillStyle = '#40ff20'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(displayCount + '/' + MISSILES_PER_CRATE + ' LOADED', SYR_X + 63, BELT_Y - mH - 34);
 
-        // ── S8: DUAL TRUCK SYSTEM ─────────────────────────────────────────────
-        // Helper to draw a truck at position
-        function drawTruck(tx, opacity, loadCount, label) {
+        // ── TRUCK DOCK ───────────────────────────────────────────────────────
+        const trW = 58, trH = 44, cabW = 26;
+        const trY = BELT_Y + 8;
+        const dockL = DOCK_X - trW / 2;
+
+        function drawTruck(tx, opacity, hasLoad, label) {
             ctx.globalAlpha = opacity;
             // Trailer body
             ctx.fillStyle = '#22222e'; ctx.fillRect(tx, trY - trH, trW, trH);
-            ctx.strokeStyle = '#33334a'; ctx.lineWidth = 1; ctx.strokeRect(tx, trY - trH, trW, trH);
-            // Trailer mouth (left opening)
+            ctx.strokeStyle = '#33334a'; ctx.lineWidth = 1;
+            ctx.strokeRect(tx, trY - trH, trW, trH);
+            // Rear opening (left side)
             ctx.strokeStyle = '#555566'; ctx.lineWidth = 2;
             ctx.strokeRect(tx, trY - trH, 14, trH);
             // Cab
-            ctx.fillStyle = '#3a2828'; ctx.fillRect(tx + trW, trY - trH + 6, cabW, trH - 6);
+            ctx.fillStyle = '#3a2828';
+            ctx.fillRect(tx + trW, trY - trH + 6, cabW, trH - 6);
             ctx.strokeStyle = '#5a4848'; ctx.lineWidth = 1;
             ctx.strokeRect(tx + trW, trY - trH + 6, cabW, trH - 6);
             // Windshield
-            ctx.fillStyle = '#001122'; ctx.fillRect(tx + trW + 10, trY - trH + 10, 12, 14);
+            ctx.fillStyle = '#001122';
+            ctx.fillRect(tx + trW + 10, trY - trH + 10, 12, 14);
             // Wheels
             ctx.fillStyle = '#111';
             [tx + 8, tx + trW - 8, tx + trW + cabW - 6].forEach(function(wx) {
                 ctx.beginPath(); ctx.arc(wx, trY, 6, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.stroke();
             });
-            // Crates loaded
-            if (loadCount > 0) {
+            // Loaded crate
+            if (hasLoad) {
                 ctx.fillStyle = '#2e2e18';
-                for (let li = 0; li < loadCount && li < 6; li++) {
-                    ctx.fillRect(tx + 4 + (li % 3) * 16, trY - trH + 4 + Math.floor(li / 3) * 18, 14, 16);
-                }
+                ctx.fillRect(tx + 16, trY - trH + 4, 32, trH - 8);
+                ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 0.5;
+                ctx.strokeRect(tx + 16, trY - trH + 4, 32, trH - 8);
             }
-            // Label on side
             if (label) {
                 ctx.fillStyle = '#ff4444'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
                 ctx.fillText(label, tx + trW / 2, trY - trH / 2 + 2);
@@ -9087,50 +9188,51 @@ function drawNuclearAssemblyBridge() {
             ctx.globalAlpha = 1;
         }
 
-        if (swapping) {
-            // Truck swap animation: full truck drives off, empty one backs in
-            const easeSwap = swapProg < 0.5 ? 2 * swapProg * swapProg : 1 - Math.pow(-2 * swapProg + 2, 2) / 2;
-
-            // Departing truck drives off to the right
-            const departX = dockL + easeSwap * 160;
-            drawTruck(departX, 1 - easeSwap * 0.6, 6, 'ARMED');
-            // Exhaust from departing truck
-            if (easeSwap < 0.8) {
-                ctx.globalAlpha = (1 - easeSwap) * 0.3;
-                ctx.fillStyle = '#444';
+        if (isSwapping) {
+            const e = truckSwapProg;
+            const ease = e < 0.5 ? 2 * e * e : 1 - Math.pow(-2 * e + 2, 2) / 2;
+            // Departing truck (loaded) drives right
+            const departX = dockL + ease * 200;
+            drawTruck(departX, 1 - ease * 0.6, true, '\u26a0 ARMED');
+            // Exhaust
+            if (ease < 0.8) {
+                ctx.globalAlpha = (1 - ease) * 0.3; ctx.fillStyle = '#444';
                 for (let ei = 0; ei < 3; ei++) {
-                    const ex = departX + trW + cabW + 4 + ei * 12;
-                    const ey = trY - 6 - ei * 6;
-                    ctx.beginPath(); ctx.arc(ex, ey, 4 + ei * 2, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(departX + trW + cabW + 4 + ei * 12, trY - 6 - ei * 6, 4 + ei * 2, 0, Math.PI * 2);
+                    ctx.fill();
                 }
                 ctx.globalAlpha = 1;
             }
-
-            // Replacement truck backing in from right
-            const arriveX = dockL + 180 - easeSwap * 180;
-            drawTruck(arriveX, 0.4 + easeSwap * 0.6, 0, null);
-            // Backing beep indicator
+            // Replacement truck arriving
+            const arriveX = dockL + 220 - ease * 220;
+            drawTruck(arriveX, 0.4 + ease * 0.6, false, null);
+            // Beep indicator
             if (Math.floor(_ft / 400) % 2 === 0) {
-                ctx.fillStyle = '#ff8800'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-                ctx.fillText('BEEP', arriveX + trW / 2, trY - trH - 6);
+                ctx.fillStyle = '#ff8800'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('BEEP', arriveX + trW / 2, trY - trH - 8);
             }
         } else {
-            // Stationary truck being loaded
-            drawTruck(dockL, 1, filledCount, filledCount > 0 ? '\u26a0 ARMED' : null);
-            // Loading indicator
-            ctx.fillStyle = '#00ff88'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('LOADING' + '.'.repeat(Math.floor((_ft / 500) % 4)), dockL + trW / 2, trY - trH - 6);
+            // Stationary truck — waiting or being loaded
+            const truckLoaded = isLoadingCrate && crateLoadProg > 0.85;
+            drawTruck(dockL, 1, truckLoaded, truckLoaded ? '\u26a0 ARMED' : null);
+            // Status label
+            if (isLoadingCrate) {
+                ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('LOADING' + '.'.repeat(Math.floor((_ft / 400) % 4)), dockL + trW / 2, trY - trH - 8);
+            } else if (inMissileCycle) {
+                ctx.fillStyle = '#00ff88'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('WAITING', dockL + trW / 2, trY - trH - 8);
+            }
         }
         // Label
-        ctx.fillStyle = '#ff8844'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('DOCK', DOCK_X, BELT_Y - mH - 34);
+        ctx.fillStyle = '#ff8844'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('TRUCK DOCK', DOCK_X, BELT_Y - mH - 40);
 
-        // ── Station name plates (bottom bar) ──────────────────────────────────
-        [{x: HOPPER_X, t: 'S1'}, {x: ACID_X, t: 'S2'}, {x: FISS_X, t: 'S3'},
-         {x: PUMP_X, t: 'S4'}, {x: SYR_X, t: 'S5'}, {x: SEAL_X, t: 'S6'},
-         {x: CRATE_X, t: 'S7'}, {x: DOCK_X, t: 'S8'}
+        // ── Station name plates ──────────────────────────────────────────────
+        [{x: TANK_X, t: 'TANK'}, {x: SYR_X, t: 'FILL'}, {x: CRATE_X, t: 'CRATE'}, {x: DOCK_X, t: 'DOCK'}
         ].forEach(function(sl) {
-            ctx.fillStyle = 'rgba(8,8,8,0.7)'; ctx.fillRect(sl.x - 10, factFloor - 4, 20, 10);
+            ctx.fillStyle = 'rgba(8,8,8,0.7)'; ctx.fillRect(sl.x - 14, factFloor - 4, 28, 10);
             ctx.fillStyle = '#446644'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
             ctx.fillText(sl.t, sl.x, factFloor + 4);
         });
@@ -9186,15 +9288,18 @@ function drawNuclearAssemblyBridge() {
     const midR = railTopY + (bridgePlatY - railTopY) * 0.48;
     ctx.beginPath(); ctx.moveTo(-GX, midR); ctx.lineTo(CANVAS_W, midR); ctx.stroke();
 
-    // ⚠ Small caution placard on railing
+    // ⚠ Caution placard on railing
     ctx.fillStyle = '#302810';
-    ctx.fillRect(330, railTopY + 2, 60, 18);
+    ctx.fillRect(322, railTopY + 2, 76, 36);
     ctx.strokeStyle = '#cc9900'; ctx.lineWidth = 1;
-    ctx.strokeRect(330, railTopY + 2, 60, 18);
+    ctx.strokeRect(322, railTopY + 2, 76, 36);
     ctx.fillStyle = '#ffd700'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('⚠ CAUTION', 360, railTopY + 10);
+    ctx.fillText('\u26a0 CAUTION', 360, railTopY + 10);
     ctx.fillStyle = '#ccaa44'; ctx.font = '5px monospace';
-    ctx.fillText('RADIOACTIVE', 360, railTopY + 17);
+    ctx.fillText('RADIOACTIVE ZONE BELOW', 360, railTopY + 17);
+    ctx.fillText('THIS BRIDGE \u2014 NO FALLS', 360, railTopY + 24);
+    ctx.font = '4px monospace'; ctx.fillStyle = '#aa8833';
+    ctx.fillText('UNAUTHORIZED FALLS PROHIBITED', 360, railTopY + 32);
 
     // Left blast door constants (declared before use)
     const ldX = 18, ldY = 258, ldW = 64, ldH = 138;
@@ -18581,12 +18686,12 @@ if (keys[' '] || keys['action']) {
                         bcb.alive = false;
                         bcb.deathTime = Date.now();
                         // Determine death type based on x-position over factory
-                        // Acid pool ACID_X=165 (~130-210), Syringe SYR_X=420 (~390-450), Warhead CRATE_X=575 (~460-600)
-                        if (bcb.x >= 130 && bcb.x < 210) {
-                            bcb.deathType = 'acid';       // falls into acid pool
-                        } else if (bcb.x >= 390 && bcb.x < 450) {
+                        // Goo Tank TANK_X=90 (~50-160), Syringe SYR_X=300 (~260-340), Crate CRATE_X=520 (~440-580)
+                        if (bcb.x >= 50 && bcb.x < 160) {
+                            bcb.deathType = 'acid';       // falls into goo tank
+                        } else if (bcb.x >= 260 && bcb.x < 340) {
                             bcb.deathType = 'syringe';    // impaled on syringe needle
-                        } else if (bcb.x >= 460 && bcb.x < 600) {
+                        } else if (bcb.x >= 440 && bcb.x < 580) {
                             bcb.deathType = 'warhead';    // stuffed into warhead casing
                         } else {
                             bcb.deathType = 'fall';       // generic fall to factory floor
