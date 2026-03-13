@@ -795,7 +795,7 @@ function initLevel(lv) {
         level6.cloningDoorUnlocked = false; // concealed door to furnace room
         level6.cloningDoorOpen = 0; // slide animation 0-1
         // Underbelly backroom state
-        level6.mutantPM = { x: 380, y: 350, aggroTimer: 0, shakeIntensity: 0 };
+        level6.mutantPM = { x: 380, y: 350, aggroTimer: 0, shakeIntensity: 0, cageOpen: false, cageLockShot: false, barsDropTime: 0, escaped: false, escapeTime: 0, eating: false, eatTarget: null, eatTime: 0 };
         level6.barrelDrip = { lastDrip: 0, drips: [] };
         level6.underbellyFlicker = 0;
         // Reset destructible items
@@ -824,6 +824,19 @@ function initLevel(lv) {
         level6.ceoDialogueChars = 0;
         level6.ceoDialogueType = 'boss';
         level6.ceoDialogueShown = false;
+        // CEO pursuit system — CEO follows player through level 6 after murder mode
+        level6.ceoPursuing = false;
+        level6.ceoEnteredMurderMode = false;
+        level6.ceoAppearTimer = 0;
+        level6.ceoAppearRoom = null;
+        level6.ceoExitPrompt = false;
+        // Employee lobby 3D printer
+        level6.lobbyPrinterUI = false;
+        level6.lobbyPrinterChoice = 0;
+        level6.lobbyPrinterConfirming = false;
+        level6.lobbyPrinting = false;
+        level6.lobbyPrintProgress = 0;
+        level6.lobbyPrintingHeart = false;
 
         // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
         // This matters when the player skips directly to level 6 without playing level 5
@@ -9289,31 +9302,81 @@ function drawNuclearAssemblyBridge() {
         ctx.font = '16px monospace'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
     }
     // ── end production line
-    // ── BRIDGE WALKWAY (narrow catwalk near top of screen) ─────────────────
-    // Platform floor — grated metal walkway
+    // ── STEEL BRIDGE / CATWALK (drawn over factory) ────────────────────────────
+    const bridgePlatY = 398;  // bridge floor (player at y=380)
+    const railTopY    = 250;  // top of railing — lowered to expose more factory floor
+
+    // ── Main I-beam stringers (two parallel beams supporting the deck) ────────
+    const beamDepth = 32;  // vertical depth of I-beam
+    const beamTop = bridgePlatY + 2;
+    // Left stringer
+    ctx.fillStyle = '#1a1818';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, beamDepth);
+    // I-beam flanges (top and bottom)
+    ctx.fillStyle = '#252222';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, 4);
+    ctx.fillRect(-GX, beamTop + beamDepth - 4, CANVAS_W, 4);
+    // Web (thinner center)
+    ctx.fillStyle = '#1e1b1b';
+    ctx.fillRect(-GX, beamTop + 4, CANVAS_W, beamDepth - 8);
+    // Flange highlight
+    ctx.fillStyle = '#2e2a2a';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, 1);
+    ctx.fillRect(-GX, beamTop + beamDepth - 1, CANVAS_W, 1);
+
+    // ── Diagonal truss bracing under deck (Warren truss pattern) ─────────────
+    ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 3;
+    for(let bx = -GX; bx < CANVAS_W; bx += 44) {
+        // V-pattern truss
+        ctx.beginPath(); ctx.moveTo(bx, beamTop + 4); ctx.lineTo(bx + 22, beamTop + beamDepth - 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx + 44, beamTop + 4); ctx.lineTo(bx + 22, beamTop + beamDepth - 4); ctx.stroke();
+    }
+    // Horizontal truss chord
+    ctx.strokeStyle = '#222020'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-GX, beamTop + beamDepth / 2); ctx.lineTo(CANVAS_W, beamTop + beamDepth / 2); ctx.stroke();
+
+    // ── Vertical support columns from bridge down to factory floor ────────────
+    for(let col = 100; col < 700; col += 150) {
+        // Main column
+        ctx.fillStyle = '#141212';
+        ctx.fillRect(col - 5, beamTop + beamDepth, 10, 40);
+        // Column flanges
+        ctx.fillStyle = '#1a1818';
+        ctx.fillRect(col - 7, beamTop + beamDepth, 3, 40);
+        ctx.fillRect(col + 4, beamTop + beamDepth, 3, 40);
+        // Gusset plate (triangle at connection)
+        ctx.fillStyle = '#222020';
+        ctx.beginPath();
+        ctx.moveTo(col - 12, beamTop + beamDepth);
+        ctx.lineTo(col + 12, beamTop + beamDepth);
+        ctx.lineTo(col, beamTop + beamDepth + 16);
+        ctx.closePath(); ctx.fill();
+        // Bolts
+        ctx.fillStyle = '#333';
+        ctx.beginPath(); ctx.arc(col - 4, beamTop + beamDepth + 6, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(col + 4, beamTop + beamDepth + 6, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ── Platform deck (grated steel) ──────────────────────────────────────────
     ctx.fillStyle = '#1e1c1c';
-    ctx.fillRect(-GX, bridgePlatY - 2, CANVAS_W, 20);
-    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 1;
-    for(let gx = -GX; gx < CANVAS_W; gx += 11) {
-        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 2); ctx.lineTo(gx, bridgePlatY + 18); ctx.stroke();
+    ctx.fillRect(-GX, bridgePlatY - 4, CANVAS_W, 8);
+    // Grate pattern — fine grid
+    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 0.5;
+    for(let gx = -GX; gx < CANVAS_W; gx += 8) {
+        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 4); ctx.lineTo(gx, bridgePlatY + 4); ctx.stroke();
     }
-    for(let gy = bridgePlatY + 5; gy < bridgePlatY + 18; gy += 6) {
-        ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
-    }
+    ctx.beginPath(); ctx.moveTo(-GX, bridgePlatY); ctx.lineTo(CANVAS_W, bridgePlatY); ctx.stroke();
+    // Toe plate (kick plate at edge)
+    ctx.fillStyle = '#252222';
+    ctx.fillRect(-GX, bridgePlatY - 6, CANVAS_W, 3);
+    ctx.fillStyle = '#1a1717';
+    ctx.fillRect(-GX, bridgePlatY + 3, CANVAS_W, 3);
 
-    // Edge warning strip (yellow/black hazard)
-    for(let sw = -GX; sw < CANVAS_W; sw += 20) {
-        ctx.fillStyle = sw % 40 < 20 ? '#403000' : '#201400';
-        ctx.fillRect(sw, bridgePlatY - 3, 20, 4);
+    // ── Edge warning strip (hazard chevrons) ──────────────────────────────────
+    for(let sw = -GX; sw < CANVAS_W; sw += 28) {
+        ctx.fillStyle = sw % 56 < 28 ? '#302800' : '#201400';
+        ctx.fillRect(sw, bridgePlatY - 6, 28, 3);
     }
-
-    // Undercarriage (thin I-beam support)
-    ctx.fillStyle = '#161414';
-    ctx.fillRect(-GX, bridgePlatY + 18, CANVAS_W, 10);
-    ctx.strokeStyle = '#1e1c1c'; ctx.lineWidth = 2;
-    for(let bx = -GX + 20; bx < CANVAS_W; bx += 60) {
-        ctx.beginPath(); ctx.moveTo(bx, bridgePlatY + 18); ctx.lineTo(bx + 20, bridgePlatY + 28); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(bx + 20, bridgePlatY + 18); ctx.lineTo(bx, bridgePlatY + 28); ctx.stroke();
     }
 
     // Railing — waist-height, thin posts, wide spacing
@@ -9321,10 +9384,40 @@ function drawNuclearAssemblyBridge() {
         ctx.fillStyle = '#3a3434';
         ctx.fillRect(px, railTopY, 3, bridgePlatY - railTopY - 2);
     }
-    // Top rail bar
-    ctx.fillStyle = '#3a3434';
-    ctx.fillRect(-GX, railTopY - 1, CANVAS_W, 2);
-    // Mid rail wire
+
+    // Railing posts — steel angle-iron stanchions, skip posts inside gap zones
+    for(let px = -GX + 14; px < CANVAS_W; px += 55) {
+        if(isInGap(px)) continue;
+        // Main post (angle iron profile)
+        ctx.fillStyle = '#2c2828';
+        ctx.fillRect(px, railTopY, 5, bridgePlatY - railTopY - 2);
+        // Highlight edge
+        ctx.fillStyle = '#383030';
+        ctx.fillRect(px, railTopY, 1, bridgePlatY - railTopY - 2);
+        // Flanged base plate bolted to deck
+        ctx.fillStyle = '#333';
+        ctx.fillRect(px - 4, bridgePlatY - 6, 13, 5);
+        // Base bolts
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(px - 1, bridgePlatY - 4, 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(px + 6, bridgePlatY - 4, 1, 0, Math.PI * 2); ctx.fill();
+        // Post cap (ball finial)
+        ctx.fillStyle = '#3a3232';
+        ctx.beginPath(); ctx.arc(px + 2, railTopY - 2, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(px + 1, railTopY - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Top rail bar — with breaks at gaps
+    ctx.fillStyle = '#2a2626';
+    let railX = -GX;
+    for(const g of railGaps) {
+        if(railX < g.left) ctx.fillRect(railX, railTopY - 2, g.left - railX, 3);
+        railX = g.right;
+    }
+    if(railX < CANVAS_W) ctx.fillRect(railX, railTopY - 2, CANVAS_W - railX, 3);
+
+    // Mid rail wire — with breaks at gaps
     ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-GX, railTopY + 15); ctx.lineTo(CANVAS_W, railTopY + 15); ctx.stroke();
 
@@ -9384,10 +9477,10 @@ function drawNuclearAssemblyBridge() {
 
     drawDeathStarBlastDoor(ldX, ldY, ldW, ldH, 'left', level6.bladeDoorBridgeLeft.openPct, false, true);
 
-    // ── BOSS (drawn on bridge, in front of railing) ────────────────────────
-    {
+    // === ARMED AND DANGEROUS CLONING BOSS — drawn after railing so appears in front of fence ===
+    try {
         const bcb = level6.bridgeCloningBoss;
-        if(bcb.alive) {
+        if(bcb && bcb.alive) {
             const bx = bcb.x, by = bcb.y;
             const walkCycle = bcb.paused ? 0 : Math.sin(Date.now() / 150) * 5;
             const bob = bcb.paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
@@ -9714,6 +9807,8 @@ function drawNuclearAssemblyBridge() {
                 }
             }
         }
+    } catch(bossErr) {
+        console.error('Bridge boss render error:', bossErr);
     }
 
     // Draw bridge boss ammo drops
@@ -15686,6 +15781,34 @@ function drawScene() {
                 ctx.restore();
             }
 
+            // CEO office exit prompt — only shown when CEO has entered murder mode
+            if(level6.ceoExitPrompt) {
+                const promptY = 430;
+                ctx.fillStyle = 'rgba(0,0,0,0.82)';
+                ctx.fillRect(240, promptY, 220, 40);
+                ctx.strokeStyle = level6.ceoEnteredMurderMode ? '#ffd700' : '#666';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(240, promptY, 220, 40);
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                if(level6.ceoEnteredMurderMode || ceo.state === 'dead') {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fillText('[ ACTION ] — LEAVE OFFICE', 350, promptY + 16);
+                    ctx.font = '10px Arial';
+                    ctx.fillStyle = '#cc8800';
+                    ctx.fillText(ceo.state === 'dead' ? 'Exit to entryway' : '\u26a0 CEO will pursue you', 350, promptY + 32);
+                }
+            }
+            // Locked exit hint when CEO hasn't entered murder mode yet
+            if(player.y > 420 && Math.abs(player.x - 350) < 120 && !level6.ceoEnteredMurderMode && ceo.state !== 'dead') {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(250, 435, 200, 24);
+                ctx.fillStyle = '#cc4444';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('\ud83d\udd12 Exit locked — CEO controls the door', 350, 452);
+            }
+
             // End screen shake
             if(level6.missileFireTimer > 0) {
                 ctx.restore();
@@ -16311,6 +16434,18 @@ function drawScene() {
         }
     }
     
+    // === PURSUING CEO — drawn in any level 6 room when CEO is chasing player ===
+    if(level === 6 && level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && level6.room !== 'ceoOffice') {
+        drawCEO(ceo.x, ceo.y, ceo.facing);
+        // "CEO" warning label
+        ctx.fillStyle = 'rgba(120,0,0,0.8)';
+        ctx.fillRect(ceo.x - 45, ceo.y - 70, 90, 16);
+        ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
+        ctx.strokeRect(ceo.x - 45, ceo.y - 70, 90, 16);
+        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u26a0 CEO PURSUIT \u26a0', ceo.x, ceo.y - 58);
+    }
+
     for(let mf of muzzleFlashes) {
         const flashX = mf.facing === 'left' ? mf.x - 30 : mf.x + 30;
         ctx.fillStyle = `rgba(255,200,0,${mf.life / 10})`;
@@ -17425,6 +17560,69 @@ function update() {
             }
             } // end CEO AI room guard
 
+            // === CEO PURSUIT SYSTEM — CEO chases player through all level 6 rooms ===
+            if(level6.ceoPursuing && ceo.state === 'hunting' && level6.room !== 'ceoOffice') {
+                // CEO appears at door entrance after 3-second delay
+                const pursuitDelay = 3000;
+                if(level6.ceoAppearRoom !== level6.room) {
+                    // Player changed rooms — reset appearance timer
+                    level6.ceoAppearRoom = level6.room;
+                    level6.ceoAppearTimer = Date.now();
+                    ceo.ceoVisible = false;
+                }
+
+                if(Date.now() - level6.ceoAppearTimer > pursuitDelay) {
+                    if(!ceo.ceoVisible) {
+                        // CEO enters from left/right door depending on room layout
+                        ceo.ceoVisible = true;
+                        // Place CEO at entry point based on room
+                        if(level6.room === 'entryway') {
+                            ceo.x = 350; ceo.y = 340;
+                        } else if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge') {
+                            ceo.x = 80; ceo.y = 380;
+                        } else if(level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'employeeHallway') {
+                            ceo.x = 100; ceo.y = 380;
+                        } else if(level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
+                            ceo.x = 640; ceo.y = 380;
+                        } else {
+                            ceo.x = 100; ceo.y = 380;
+                        }
+                        ceo.facing = player.x > ceo.x ? 'right' : 'left';
+                    }
+
+                    // CEO chases player in 1D rooms (horizontal only)
+                    const dx = player.x - ceo.x;
+                    const pursuitSpeed = 2.5;
+                    if(Math.abs(dx) > 50) {
+                        ceo.x += (dx > 0 ? 1 : -1) * pursuitSpeed;
+                        ceo.facing = dx > 0 ? 'right' : 'left';
+                        ceo.moveTimer++;
+                    } else {
+                        ceo.facing = dx > 0 ? 'right' : 'left';
+                    }
+                    // In 2D rooms (entryway), also move vertically
+                    if(level6.room === 'entryway') {
+                        const dy = player.y - ceo.y;
+                        if(Math.abs(dy) > 30) {
+                            ceo.y += (dy > 0 ? 1 : -1) * pursuitSpeed;
+                        }
+                    }
+
+                    // CEO shoots while pursuing
+                    ceo.shootTimer++;
+                    if(ceo.shootTimer > 90 && Date.now() - ceo.lastShot > 2000) {
+                        const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
+                        bullets.push({
+                            x: ceo.x, y: ceo.y,
+                            vx: Math.cos(angle) * 8,
+                            vy: Math.sin(angle) * 8,
+                            fromCEO: true
+                        });
+                        ceo.lastShot = Date.now();
+                        ceo.shootTimer = 0;
+                    }
+                }
+            }
 
             // NPC exit sequence
             if(level6.npcExitSequence) {
@@ -18236,6 +18434,7 @@ function update() {
                         ceo.state = 'hunting';
                         ceo.walkTarget = null;
                         level6.ceoAngryMode = false;
+                        level6.ceoEnteredMurderMode = true;
                         ceo.shootTimer = 0;
                         ceo.health = 6;
                         // Trigger detective dialogue
@@ -18696,6 +18895,32 @@ if (keys[' '] || keys['action']) {
                         player.facing = 'down';
                     }
                 }
+
+                // CEO office exit — only available after CEO enters murder mode (or is dead)
+                if(player.y > 420 && Math.abs(player.x - 350) < 120) {
+                    if(level6.ceoEnteredMurderMode || ceo.state === 'dead') {
+                        // Show exit prompt
+                        level6.ceoExitPrompt = true;
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false;
+                            keys['action'] = false;
+                            level6.ceoExitPrompt = false;
+                            level6.room = 'entryway';
+                            player.x = 350;
+                            player.y = 400;
+                            // Start CEO pursuit if alive and in hunting mode
+                            if(ceo.state === 'hunting') {
+                                level6.ceoPursuing = true;
+                                level6.ceoAppearTimer = Date.now();
+                                level6.ceoAppearRoom = 'entryway';
+                            }
+                        }
+                    } else {
+                        level6.ceoExitPrompt = false;
+                    }
+                } else {
+                    level6.ceoExitPrompt = false;
+                }
                 }
             }
         
@@ -18818,8 +19043,10 @@ if (keys[' '] || keys['action']) {
                     if(ceo.health <= 0) {
                         ceo.state = 'dead';
                         level6.ceoDefeated = true;
-                    } else if(ceo.state === 'admiring') {
+                        level6.ceoPursuing = false;
+                    } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
                         ceo.state = 'hunting';
+                        level6.ceoEnteredMurderMode = true;
                     }
                     continue;
                 }
