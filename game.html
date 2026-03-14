@@ -841,6 +841,11 @@ function initLevel(lv) {
         level6.newCEOCard = false;
         level6.newCEOTimer = 0;
         level6.newCEOChoice = 0;
+        level6.newCEOPhase = 'celebration'; // 'celebration' -> 'fadeToCard' -> 'slideshow'
+        level6.newCEOSlideIndex = 0;
+        level6.newCEOSlideTimer = 0;
+        level6.newCEONPCEntries = []; // NPC march-in positions
+        level6.newCEOHoistStarted = false;
         level6.missileFireTimer = 0;
         level6.ceoDialogue = false;
         level6.ceoDialogueLine = 0;
@@ -8624,44 +8629,46 @@ function drawLevel6MegacomputerRoom() {
         ctx.restore();
     }
 
-    // Pickup prompts — both hat and pistol become interactable after reading note
+    // Pickup prompt — hat and pistol taken simultaneously as "Detective Kit" after reading note
     const noteRead = level6.pistol.dropped; // reusing dropped flag as "note has been read"
-    if(noteRead && !level6.pistol.pickedUp) {
-        // Pistol glow and prompt
-        ctx.fillStyle = '#ff0';
-        ctx.shadowColor = '#ff0';
-        ctx.shadowBlur = 8;
+    const detectiveKitAvailable = noteRead && (!level6.pistol.pickedUp || !level6.hasDetectiveHat);
+    if(detectiveKitAvailable && !level6.pistol.pickedUp && !level6.hasDetectiveHat) {
+        // Glow around both items
+        const pulseAlpha = 0.5 + Math.sin(Date.now() * 0.004) * 0.3;
+        // Pistol glow
+        ctx.fillStyle = `rgba(255,215,0,${pulseAlpha})`;
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.arc(pistolGroundX, pistolGroundY - 10, 3, 0, Math.PI * 2);
+        ctx.arc(pistolGroundX, pistolGroundY - 8, 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Hat glow
+        ctx.beginPath();
+        ctx.arc(hatX, hatY - 6, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
-        if(Math.abs(player.x - pistolGroundX) < 55 && Math.abs(player.y - pistolGroundY) < 90) {
+        // Connecting line between items (shows they're a set)
+        ctx.strokeStyle = `rgba(255,215,0,${pulseAlpha * 0.3})`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(pistolGroundX, pistolGroundY - 8); ctx.lineTo(hatX, hatY - 6); ctx.stroke();
+        ctx.setLineDash([]);
+        // Single combined prompt — positioned between both items
+        const midX = (pistolGroundX + hatX) / 2;
+        const midY = Math.min(pistolGroundY, hatY) - 40;
+        const inRange = (Math.abs(player.x - midX) < 80 && Math.abs(player.y - (pistolGroundY + hatY) / 2) < 90);
+        if(inRange) {
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            const pistolLabelW = ctx.measureText('[ ACTION ] - TAKE PISTOL').width + 20;
-            const pistolLabelX = Math.max(0, Math.min(pistolGroundX - pistolLabelW / 2, GAME_W - pistolLabelW));
-            ctx.fillStyle = 'rgba(0,0,0,0.82)';
-            ctx.fillRect(pistolLabelX, pistolGroundY - 36, pistolLabelW, 24);
+            const labelText = '[ ACTION ] - BECOME DETECTIVE';
+            const labelW = ctx.measureText(labelText).width + 24;
+            const labelX = Math.max(0, Math.min(midX - labelW / 2, GAME_W - labelW));
+            ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            ctx.fillRect(labelX, midY, labelW, 26);
+            ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1;
+            ctx.strokeRect(labelX, midY, labelW, 26);
             ctx.fillStyle = '#ffd700';
-            ctx.fillText('[ ACTION ] - TAKE PISTOL', pistolLabelX + pistolLabelW / 2, pistolGroundY - 18);
-        }
-    }
-    if(noteRead && !level6.hasDetectiveHat) {
-        // Hat glow and prompt
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(hatX, hatY, 16, 12, -0.2, 0, Math.PI * 2);
-        ctx.stroke();
-        if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 70) {
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            const hatLabelW = ctx.measureText('[ ACTION ] - TAKE HAT').width + 20;
-            const hatLabelX = Math.max(0, Math.min(hatX - hatLabelW / 2, GAME_W - hatLabelW));
-            ctx.fillStyle = 'rgba(0,0,0,0.82)';
-            ctx.fillRect(hatLabelX, hatY - 32, hatLabelW, 24);
-            ctx.fillStyle = '#ffd700';
-            ctx.fillText('[ ACTION ] - TAKE HAT', hatLabelX + hatLabelW / 2, hatY - 14);
+            ctx.fillText(labelText, labelX + labelW / 2, midY + 18);
         }
     }
 
@@ -9355,69 +9362,158 @@ function drawNuclearAssemblyBridge() {
         ctx.fillText('TRUCK DOCK', DOCK_X, BELT_Y - mH - 40);
 
         // ── INDUSTRIAL HAZARD AMBIANCE ─────────────────────────────────────
-        // Steam vents — periodic bursts from floor grates
+        // Steam vents — layered volumetric plumes from floor grates
         const steamVents = [160, 350, 500];
         for (let vi = 0; vi < steamVents.length; vi++) {
             const ventX = steamVents[vi];
-            const ventCycle = (_ft + vi * 2000) % 4000;
-            if (ventCycle < 800) {
-                const burstProg = ventCycle / 800;
-                ctx.globalAlpha = 0.3 * (1 - burstProg);
-                ctx.fillStyle = '#aabbaa';
-                for (let sp = 0; sp < 5; sp++) {
-                    const spY = factFloor - burstProg * (40 + sp * 12);
-                    const spX = ventX + Math.sin(burstProg * 6 + sp * 1.4) * (8 + sp * 3);
-                    ctx.beginPath(); ctx.arc(spX, spY, 3 + sp * 1.5 + burstProg * 4, 0, Math.PI * 2); ctx.fill();
+            const ventCycle = (_ft + vi * 2000) % 5000;
+            // Vent grate (drawn first, steam renders on top)
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(ventX - 10, factFloor - 3, 20, 4);
+            ctx.fillStyle = '#2a2a2a';
+            for (let gl = 0; gl < 5; gl++) ctx.fillRect(ventX - 8 + gl * 4, factFloor - 2, 2, 2);
+            // Grate rim highlight
+            ctx.fillStyle = '#333';
+            ctx.fillRect(ventX - 10, factFloor - 3, 20, 1);
+            if (ventCycle < 1200) {
+                const burstProg = ventCycle / 1200;
+                // Multiple layered plume columns for volumetric look
+                for (let layer = 0; layer < 3; layer++) {
+                    const layerOff = layer * 0.15;
+                    const layerAlpha = (0.25 - layer * 0.06) * (1 - burstProg);
+                    ctx.globalAlpha = layerAlpha;
+                    for (let sp = 0; sp < 8; sp++) {
+                        const rise = burstProg * (60 + sp * 16);
+                        const spY = factFloor - 4 - rise;
+                        const drift = Math.sin(burstProg * 4 + sp * 1.1 + layer * 2) * (6 + sp * 4 + rise * 0.08);
+                        const spX = ventX + drift;
+                        const r = 3 + sp * 2 + burstProg * 6 + layer * 1.5;
+                        // Soft radial gradient per puff
+                        const puffGrad = ctx.createRadialGradient(spX, spY, 0, spX, spY, r);
+                        puffGrad.addColorStop(0, 'rgba(200,210,200,0.6)');
+                        puffGrad.addColorStop(0.5, 'rgba(180,190,180,0.25)');
+                        puffGrad.addColorStop(1, 'rgba(160,170,160,0)');
+                        ctx.fillStyle = puffGrad;
+                        ctx.beginPath(); ctx.arc(spX, spY, r, 0, Math.PI * 2); ctx.fill();
+                    }
                 }
                 ctx.globalAlpha = 1;
             }
-            // Vent grate
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(ventX - 6, factFloor - 2, 12, 3);
-            ctx.fillStyle = '#333';
-            for (let gl = 0; gl < 3; gl++) ctx.fillRect(ventX - 4 + gl * 4, factFloor - 1, 2, 1);
-        }
-
-        // Sparks from syringe station (welding/machinery sparks)
-        const sparkBurst = (_ft % 3200) < 400;
-        if (sparkBurst) {
-            const sparkAge = ((_ft % 3200)) / 400;
-            ctx.fillStyle = '#ffcc44';
-            for (let si = 0; si < 6; si++) {
-                const sa = si * Math.PI * 2 / 6 + sparkAge * 3;
-                const sd = sparkAge * (12 + si * 4);
-                const sx = SYR_X + 8 + Math.cos(sa) * sd;
-                const sy = BELT_Y - 20 + Math.sin(sa) * sd * 0.6;
-                ctx.globalAlpha = Math.max(0, 1 - sparkAge) * 0.8;
-                ctx.fillRect(sx, sy, 2, 2);
+            // Residual wisps (always visible, slow ambient drift)
+            ctx.globalAlpha = 0.06;
+            for (let w = 0; w < 3; w++) {
+                const wispY = factFloor - 20 - w * 14 + Math.sin(_ft * 0.0008 + vi * 3 + w) * 6;
+                const wispX = ventX + Math.sin(_ft * 0.0006 + w * 2.3 + vi) * 10;
+                ctx.fillStyle = '#aabbaa';
+                ctx.beginPath(); ctx.arc(wispX, wispY, 5 + w * 2, 0, Math.PI * 2); ctx.fill();
             }
             ctx.globalAlpha = 1;
         }
 
-        // Rotating warning beacon near truck dock
-        const beaconAngle = _ft * 0.003;
-        const beaconX = DOCK_X + 40, beaconY = BELT_Y - 60;
-        const beaconIntensity = 0.3 + Math.max(0, Math.cos(beaconAngle)) * 0.5;
-        ctx.globalAlpha = beaconIntensity;
-        ctx.fillStyle = '#ff4400';
-        // Beam sweep
-        ctx.beginPath();
-        ctx.moveTo(beaconX, beaconY);
-        ctx.arc(beaconX, beaconY, 30, beaconAngle - 0.3, beaconAngle + 0.3);
-        ctx.closePath(); ctx.fill();
-        ctx.globalAlpha = 1;
-        // Beacon housing
-        ctx.fillStyle = '#333';
-        ctx.fillRect(beaconX - 3, beaconY - 3, 6, 6);
-        ctx.fillStyle = `rgba(255,68,0,${beaconIntensity})`;
-        ctx.beginPath(); ctx.arc(beaconX, beaconY, 3, 0, Math.PI * 2); ctx.fill();
+        // Sparks from syringe station (welding/machinery sparks) — brighter, trailing
+        const sparkBurst = (_ft % 3200) < 600;
+        if (sparkBurst) {
+            const sparkAge = ((_ft % 3200)) / 600;
+            for (let si = 0; si < 10; si++) {
+                const sa = si * Math.PI * 2 / 10 + sparkAge * 4;
+                const sd = sparkAge * (16 + si * 5);
+                const sx = SYR_X + 8 + Math.cos(sa) * sd;
+                const sy = BELT_Y - 20 + Math.sin(sa) * sd * 0.5 + sparkAge * 8; // gravity
+                const sparkAlpha = Math.max(0, 1 - sparkAge * 0.8) * 0.9;
+                ctx.globalAlpha = sparkAlpha;
+                // Hot white-yellow core
+                ctx.fillStyle = '#ffffcc';
+                ctx.fillRect(sx - 1, sy - 1, 2, 2);
+                // Orange trail
+                ctx.fillStyle = '#ffaa22';
+                ctx.fillRect(sx - Math.cos(sa) * 3, sy - Math.sin(sa) * 2, 2, 1);
+            }
+            // Central welding flash
+            ctx.globalAlpha = Math.max(0, 0.4 - sparkAge * 0.6);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#ffffcc'; ctx.shadowBlur = 12;
+            ctx.beginPath(); ctx.arc(SYR_X + 8, BELT_Y - 20, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
 
-        // ── Station name plates ──────────────────────────────────────────────
-        [{x: TANK_X, t: 'TANK'}, {x: SYR_X, t: 'FILL'}, {x: CRATE_X, t: 'CRATE'}, {x: DOCK_X, t: 'DOCK'}
-        ].forEach(function(sl) {
-            ctx.fillStyle = 'rgba(8,8,8,0.7)'; ctx.fillRect(sl.x - 14, factFloor - 4, 28, 10);
-            ctx.fillStyle = '#446644'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
-            ctx.fillText(sl.t, sl.x, factFloor + 4);
+        // Rotating warning beacons — proper industrial strobes at multiple stations
+        const beaconPositions = [
+            {x: DOCK_X + 40, y: BELT_Y - 60, color: '#ff4400', speed: 0.003},
+            {x: TANK_X - 20, y: BELT_Y - 80, color: '#ffaa00', speed: 0.0025},
+            {x: CRATE_X + 30, y: BELT_Y - 55, color: '#ff2200', speed: 0.0035}
+        ];
+        for (const beacon of beaconPositions) {
+            const bAngle = _ft * beacon.speed;
+            const bIntensity = 0.15 + Math.max(0, Math.cos(bAngle)) * 0.65;
+            // Beacon pole/mount
+            ctx.fillStyle = '#222';
+            ctx.fillRect(beacon.x - 2, beacon.y, 4, 16);
+            // Mounting bracket
+            ctx.fillStyle = '#333';
+            ctx.fillRect(beacon.x - 5, beacon.y + 14, 10, 4);
+            // Light housing — cylindrical
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath(); ctx.arc(beacon.x, beacon.y, 6, 0, Math.PI * 2); ctx.fill();
+            // Lens (colored dome)
+            ctx.fillStyle = beacon.color;
+            ctx.globalAlpha = 0.3 + bIntensity * 0.4;
+            ctx.beginPath(); ctx.arc(beacon.x, beacon.y, 5, 0, Math.PI * 2); ctx.fill();
+            // Rotating beam sweep — wider, with radial gradient falloff
+            ctx.globalAlpha = bIntensity * 0.6;
+            const beamGrad = ctx.createRadialGradient(beacon.x, beacon.y, 2, beacon.x, beacon.y, 50);
+            beamGrad.addColorStop(0, beacon.color);
+            beamGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = beamGrad;
+            ctx.beginPath();
+            ctx.moveTo(beacon.x, beacon.y);
+            ctx.arc(beacon.x, beacon.y, 50, bAngle - 0.25, bAngle + 0.25);
+            ctx.closePath(); ctx.fill();
+            // Secondary beam (opposite side, dimmer)
+            ctx.globalAlpha = bIntensity * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(beacon.x, beacon.y);
+            ctx.arc(beacon.x, beacon.y, 35, bAngle + Math.PI - 0.2, bAngle + Math.PI + 0.2);
+            ctx.closePath(); ctx.fill();
+            // Bright center lens flare
+            ctx.globalAlpha = bIntensity;
+            ctx.fillStyle = '#fff';
+            ctx.shadowColor = beacon.color; ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.arc(beacon.x, beacon.y, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+
+        // ── Station name plates — proper riveted metal placards ────────────
+        const stationPlates = [
+            {x: TANK_X, t: 'GOO STORAGE', w: 60},
+            {x: SYR_X, t: 'FILL STATION', w: 62},
+            {x: CRATE_X, t: 'CRATE BAY', w: 52},
+            {x: DOCK_X, t: 'TRUCK DOCK', w: 56}
+        ];
+        stationPlates.forEach(function(sl) {
+            const plateY = factFloor + 2;
+            // Metal plate background
+            ctx.fillStyle = '#1a1a18';
+            ctx.fillRect(sl.x - sl.w/2, plateY, sl.w, 14);
+            // Raised border
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sl.x - sl.w/2, plateY, sl.w, 14);
+            // Inner bevel highlight
+            ctx.fillStyle = '#252520';
+            ctx.fillRect(sl.x - sl.w/2 + 1, plateY + 1, sl.w - 2, 1);
+            // Corner rivets
+            ctx.fillStyle = '#444';
+            ctx.beginPath(); ctx.arc(sl.x - sl.w/2 + 4, plateY + 4, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sl.x + sl.w/2 - 4, plateY + 4, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sl.x - sl.w/2 + 4, plateY + 10, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sl.x + sl.w/2 - 4, plateY + 10, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Stenciled text
+            ctx.fillStyle = '#88aa66';
+            ctx.font = 'bold 7px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(sl.t, sl.x, plateY + 10);
         });
 
         // Reset ctx
@@ -9568,70 +9664,109 @@ function drawNuclearAssemblyBridge() {
         ctx.beginPath(); ctx.moveTo(midRailX, railTopY + 15); ctx.lineTo(CANVAS_W, railTopY + 15); ctx.stroke();
     }
 
-    // ── HAZARD GAP INDICATORS — danger striping and labels at each railing gap ──
+    // ── HAZARD GAP INDICATORS — industrial warning signs with proper formatting ──
     const gapLabels = ['ACID POOL', 'SYRINGE', 'WARHEAD', 'CONVEYOR', 'TRUCK BAY'];
     const gapColors = ['#40ff20', '#40ff20', '#ff6600', '#ffcc00', '#ff4444'];
-    const hazardPulse = 0.6 + Math.sin(_t * 0.005) * 0.35;
+    const hazardPulse = 0.65 + Math.sin(_t * 0.004) * 0.3;
     for (let gi = 0; gi < railGaps.length; gi++) {
         const g = railGaps[gi];
         const gapMid = (g.left + g.right) / 2;
         const gapW = g.right - g.left;
-        // Yellow/black chevron stripes on deck at both gap edges (wider, more visible)
+        // Diagonal hazard chevrons on deck at gap edges — proper 45-degree stripes
         ctx.save();
         for (let side = 0; side < 2; side++) {
-            const edgeX = side === 0 ? g.left - 2 : g.right - 6;
-            ctx.fillStyle = '#cc8800';
-            ctx.fillRect(edgeX, bridgePlatY - 8, 8, 12);
-            ctx.fillStyle = '#000';
-            for (let cy = bridgePlatY - 8; cy < bridgePlatY + 4; cy += 4) {
-                ctx.fillRect(edgeX, cy, 8, 2);
+            const edgeX = side === 0 ? g.left - 4 : g.right - 6;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(edgeX, bridgePlatY - 8, 10, 14);
+            ctx.clip();
+            for (let cy = bridgePlatY - 20; cy < bridgePlatY + 14; cy += 6) {
+                ctx.fillStyle = '#cc8800';
+                ctx.beginPath();
+                ctx.moveTo(edgeX, cy); ctx.lineTo(edgeX + 10, cy - 10);
+                ctx.lineTo(edgeX + 10, cy - 7); ctx.lineTo(edgeX, cy + 3);
+                ctx.closePath(); ctx.fill();
             }
+            ctx.restore();
+            // Thin border
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 0.5;
+            ctx.strokeRect(edgeX, bridgePlatY - 8, 10, 14);
         }
-        // Glow effect underneath gap (hazard illumination from below)
-        ctx.globalAlpha = 0.12 + Math.sin(_t * 0.003 + gi * 1.5) * 0.06;
-        ctx.fillStyle = gapColors[gi];
-        ctx.fillRect(g.left, bridgePlatY - 4, gapW, 16);
+        ctx.restore();
+        // Glow effect underneath gap — softer gradient
+        const gapGlow = ctx.createLinearGradient(g.left, bridgePlatY - 4, g.left, bridgePlatY + 18);
+        gapGlow.addColorStop(0, gapColors[gi]);
+        gapGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 0.08 + Math.sin(_t * 0.003 + gi * 1.5) * 0.04;
+        ctx.fillStyle = gapGlow;
+        ctx.fillRect(g.left, bridgePlatY - 4, gapW, 22);
         ctx.globalAlpha = 1;
-        // Danger label — larger, bolder, with background
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        const lblW = 8 * (gapLabels[gi].length + 2);
-        ctx.fillRect(gapMid - lblW/2, bridgePlatY + 6, lblW, 16);
+        // Warning sign — proper metal placard with hazard triangle
+        const signW = Math.max(gapLabels[gi].length * 7 + 28, 70);
+        const signH = 18;
+        const signX = gapMid - signW / 2;
+        const signY = bridgePlatY + 8;
+        // Metal plate
+        ctx.fillStyle = '#181614';
+        ctx.fillRect(signX, signY, signW, signH);
+        // Top bevel highlight
+        ctx.fillStyle = '#282420';
+        ctx.fillRect(signX, signY, signW, 1);
+        // Border
         ctx.strokeStyle = gapColors[gi]; ctx.lineWidth = 1;
-        ctx.strokeRect(gapMid - lblW/2, bridgePlatY + 6, lblW, 16);
+        ctx.strokeRect(signX, signY, signW, signH);
+        // Hazard triangle icon
+        ctx.fillStyle = gapColors[gi];
         ctx.globalAlpha = hazardPulse;
+        ctx.beginPath();
+        ctx.moveTo(signX + 8, signY + 3); ctx.lineTo(signX + 14, signY + 14);
+        ctx.lineTo(signX + 2, signY + 14); ctx.closePath(); ctx.fill();
+        // Exclamation mark inside triangle
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 6px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('!', signX + 8, signY + 13);
+        // Label text
         ctx.fillStyle = gapColors[gi];
         ctx.font = 'bold 9px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('\u26a0 ' + gapLabels[gi], gapMid, bridgePlatY + 18);
+        ctx.fillText(gapLabels[gi], gapMid + 6, signY + 13);
         ctx.globalAlpha = 1;
-        // Downward arrows (multiple, animated cascade)
-        for (let ai = 0; ai < 3; ai++) {
-            const arrowY = bridgePlatY + 26 + ai * 10 + ((_t / 200 + ai * 3) % 10);
-            ctx.fillStyle = gapColors[gi];
-            ctx.globalAlpha = (0.5 - ai * 0.15) * hazardPulse;
-            ctx.beginPath();
-            ctx.moveTo(gapMid - 5, arrowY);
-            ctx.lineTo(gapMid + 5, arrowY);
-            ctx.lineTo(gapMid, arrowY + 8);
-            ctx.closePath(); ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        ctx.restore();
+        // Corner mounting bolts
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(signX + 3, signY + 3, 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(signX + signW - 3, signY + 3, 1, 0, Math.PI * 2); ctx.fill();
     }
 
-    // ⚠ Caution placard on intact railing section (between acid and syringe gaps)
+    // ⚠ Caution placard — proper OSHA-style sign with rounded corners
     const placardX = 200;
-    ctx.fillStyle = '#302810';
-    ctx.fillRect(placardX - 38, railTopY + 2, 76, 36);
-    ctx.strokeStyle = '#cc9900'; ctx.lineWidth = 1;
-    ctx.strokeRect(placardX - 38, railTopY + 2, 76, 36);
-    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('\u26a0 CAUTION', placardX, railTopY + 10);
-    ctx.fillStyle = '#ccaa44'; ctx.font = '5px monospace';
-    ctx.fillText('RADIOACTIVE ZONE BELOW', placardX, railTopY + 17);
-    ctx.fillText('THIS BRIDGE \u2014 NO FALLS', placardX, railTopY + 24);
-    ctx.font = '4px monospace'; ctx.fillStyle = '#aa8833';
-    ctx.fillText('UNAUTHORIZED FALLS PROHIBITED', placardX, railTopY + 32);
+    const placardW = 86, placardH = 42;
+    const pLeft = placardX - placardW / 2;
+    const pTop = railTopY + 2;
+    // Black background panel
+    ctx.fillStyle = '#1a1608';
+    ctx.fillRect(pLeft, pTop, placardW, placardH);
+    // Yellow border (OSHA caution style)
+    ctx.strokeStyle = '#cc9900'; ctx.lineWidth = 2;
+    ctx.strokeRect(pLeft + 1, pTop + 1, placardW - 2, placardH - 2);
+    // Inner thin border
+    ctx.strokeStyle = '#8a6600'; ctx.lineWidth = 0.5;
+    ctx.strokeRect(pLeft + 3, pTop + 3, placardW - 6, placardH - 6);
+    // Yellow header bar
+    ctx.fillStyle = '#cc9900';
+    ctx.fillRect(pLeft + 4, pTop + 4, placardW - 8, 10);
+    // CAUTION text on header
+    ctx.fillStyle = '#000'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('\u26a0 CAUTION', placardX, pTop + 12);
+    // Body text — properly spaced
+    ctx.fillStyle = '#ccaa44'; ctx.font = '5.5px monospace';
+    ctx.fillText('RADIOACTIVE ZONE BELOW', placardX, pTop + 22);
+    ctx.fillStyle = '#bb9944'; ctx.font = '5px monospace';
+    ctx.fillText('NO PERSONNEL BEYOND RAIL', placardX, pTop + 29);
+    ctx.fillStyle = '#997733'; ctx.font = '4.5px monospace';
+    ctx.fillText('FALLS ARE PROHIBITED', placardX, pTop + 36);
+    // Mounting screws
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(pLeft + 5, pTop + 5, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pLeft + placardW - 5, pTop + 5, 1.5, 0, Math.PI * 2); ctx.fill();
 
     // ── CEILING (above bridge) ───────────────────────────────────────────────
     ctx.fillStyle = '#0a0a0a';
@@ -17431,132 +17566,323 @@ function drawScene() {
             }
         }
 
-        // === NEW CEO — Pipe boss missile victory celebration ===
+        // === NEW CEO — NPC celebration hoist + slideshow ending ===
         if(level6.newCEOCard === 'fading') {
             ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
         if(level6.newCEOCard === true) {
-            ctx.fillStyle = '#1a1520';
-            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-
             const ceoTime = Date.now();
+            const phase = level6.newCEOPhase || 'celebration';
 
-            // Confetti
-            for(let ci = 0; ci < 30; ci++) {
-                const cx2 = (ci * 47 + ceoTime * 0.03) % 700;
-                const cy2 = (ci * 31 + ceoTime * 0.05) % 500;
-                const cRot = ceoTime * 0.002 + ci * 0.5;
-                const confColors = ['#ffd700', '#ff4444', '#44ff44', '#4488ff', '#ff44ff', '#ff8800'];
-                ctx.save();
-                ctx.translate(cx2, cy2);
-                ctx.rotate(cRot);
-                ctx.fillStyle = confColors[ci % confColors.length];
-                ctx.fillRect(-4, -2, 8, 4);
-                ctx.restore();
+            if(phase === 'celebration') {
+                // Dark stage background
+                ctx.fillStyle = '#0a0812';
+                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+                // Floor
+                ctx.fillStyle = '#151218';
+                ctx.fillRect(-GX, 350, CANVAS_W, CANVAS_H);
+                // Floor reflections
+                ctx.globalAlpha = 0.04;
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(200, 350, 300, 60);
+                ctx.globalAlpha = 1;
+
+                // Initialize NPC march-in if not started
+                if(!level6.newCEOHoistStarted) {
+                    level6.newCEOHoistStarted = true;
+                    level6.newCEONPCEntries = [];
+                    // NPCs file in from both sides — 4 color-coded pipe managers
+                    const npcColors = ['#cc2222', '#2244aa', '#22aa44', '#ddaa22'];
+                    const npcTargets = [250, 310, 390, 450]; // final x positions
+                    const npcSides = [-80, 780, -80, 780]; // start from off-screen
+                    for(let i = 0; i < 4; i++) {
+                        level6.newCEONPCEntries.push({
+                            x: npcSides[i], targetX: npcTargets[i],
+                            color: npcColors[i], arrived: false,
+                            startTime: ceoTime + i * 300, // staggered entry
+                            armsUp: false
+                        });
+                    }
+                    level6.newCEOCelebStartTime = ceoTime;
+                }
+
+                const elapsed = ceoTime - level6.newCEOCelebStartTime;
+
+                // Animate NPCs marching in
+                for(let i = 0; i < level6.newCEONPCEntries.length; i++) {
+                    const npc = level6.newCEONPCEntries[i];
+                    const npcElapsed = ceoTime - npc.startTime;
+                    if(npcElapsed < 0) continue; // hasn't started marching yet
+                    // March toward target position
+                    const marchProgress = Math.min(1, npcElapsed / 1200);
+                    const eased = 1 - Math.pow(1 - marchProgress, 3); // ease-out
+                    npc.x = npc.x + (npc.targetX - npc.x) * 0.08;
+                    if(Math.abs(npc.x - npc.targetX) < 2) {
+                        npc.x = npc.targetX;
+                        npc.arrived = true;
+                    }
+                    // Walk cycle (only while moving)
+                    const walking = !npc.arrived;
+                    const walkBob = walking ? Math.abs(Math.sin(ceoTime * 0.008 + i)) * 3 : 0;
+                    const legSwing = walking ? Math.sin(ceoTime * 0.008 + i) * 4 : 0;
+                    const baseY = 290;
+                    // Once all arrived, arms go up
+                    const allArrived = level6.newCEONPCEntries.every(n => n.arrived);
+                    npc.armsUp = allArrived;
+                    const celebBob = npc.armsUp ? Math.sin(ceoTime * 0.004 + i * 0.7) * 3 : 0;
+
+                    // Draw NPC — color-coded jumpsuit
+                    const nx = npc.x, ny = baseY - walkBob + celebBob;
+                    // Legs
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(nx - 6, ny + 26, 5, 18 + legSwing);
+                    ctx.fillRect(nx + 1, ny + 26, 5, 18 - legSwing);
+                    // Boots
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(nx - 7, ny + 42 + Math.max(0, legSwing), 7, 4);
+                    ctx.fillRect(nx, ny + 42 - Math.min(0, legSwing), 7, 4);
+                    // Body
+                    ctx.fillStyle = npc.color;
+                    ctx.fillRect(nx - 10, ny, 20, 28);
+                    // Collar / V-neck
+                    ctx.fillStyle = '#111';
+                    ctx.beginPath();
+                    ctx.moveTo(nx - 4, ny); ctx.lineTo(nx + 4, ny);
+                    ctx.lineTo(nx, ny + 8); ctx.closePath(); ctx.fill();
+                    // Head
+                    ctx.fillStyle = '#f5d5a8';
+                    ctx.beginPath(); ctx.arc(nx, ny - 8, 9, 0, Math.PI * 2); ctx.fill();
+                    // Eyes
+                    ctx.fillStyle = '#333';
+                    ctx.beginPath(); ctx.arc(nx - 3, ny - 9, 1.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(nx + 3, ny - 9, 1.5, 0, Math.PI * 2); ctx.fill();
+                    // Smile
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.arc(nx, ny - 5, 4, 0.2, Math.PI - 0.2); ctx.stroke();
+                    // Arms — raised if celebrating
+                    ctx.strokeStyle = npc.color; ctx.lineWidth = 5;
+                    if(npc.armsUp) {
+                        const armWave = Math.sin(ceoTime * 0.005 + i * 1.2) * 8;
+                        ctx.beginPath(); ctx.moveTo(nx - 10, ny + 8); ctx.lineTo(nx - 18, ny - 20 + armWave); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(nx + 10, ny + 8); ctx.lineTo(nx + 18, ny - 20 - armWave); ctx.stroke();
+                        // Hands
+                        ctx.fillStyle = '#f5d5a8';
+                        ctx.beginPath(); ctx.arc(nx - 18, ny - 20 + armWave, 3, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(nx + 18, ny - 20 - armWave, 3, 0, Math.PI * 2); ctx.fill();
+                    } else {
+                        const swing = walking ? legSwing * 0.8 : 0;
+                        ctx.beginPath(); ctx.moveTo(nx - 10, ny + 8); ctx.lineTo(nx - 14, ny + 22 - swing); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(nx + 10, ny + 8); ctx.lineTo(nx + 14, ny + 22 + swing); ctx.stroke();
+                    }
+                }
+
+                // Player being hoisted — only after all NPCs arrive
+                const allArrived = level6.newCEONPCEntries.every(n => n.arrived);
+                if(allArrived) {
+                    // Player rises up from crowd
+                    const hoistProgress = Math.min(1, (elapsed - 2000) / 1500);
+                    const hoistEased = hoistProgress > 0 ? 1 - Math.pow(1 - Math.max(0, hoistProgress), 2) : 0;
+                    const playerY = 290 - hoistEased * 80;
+                    const celebBob = Math.sin(ceoTime * 0.003) * 4;
+                    const playerDrawY = playerY + celebBob;
+
+                    if(hoistProgress > 0) {
+                        // Red jumpsuit player
+                        ctx.fillStyle = '#cc2222';
+                        ctx.fillRect(345, playerDrawY, 30, 32);
+                        // Tie
+                        ctx.fillStyle = '#111';
+                        ctx.beginPath();
+                        ctx.moveTo(356, playerDrawY); ctx.lineTo(364, playerDrawY);
+                        ctx.lineTo(363, playerDrawY + 20); ctx.lineTo(360, playerDrawY + 24);
+                        ctx.lineTo(357, playerDrawY + 20); ctx.closePath(); ctx.fill();
+                        // Head
+                        ctx.fillStyle = '#f5d5a8';
+                        ctx.beginPath(); ctx.arc(360, playerDrawY - 8, 11, 0, Math.PI * 2); ctx.fill();
+                        // Big triumphant smile
+                        ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.arc(360, playerDrawY - 4, 6, 0.1, Math.PI - 0.1); ctx.stroke();
+                        // Eyes (excited)
+                        ctx.fillStyle = '#333';
+                        ctx.beginPath(); ctx.arc(355, playerDrawY - 10, 2, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(365, playerDrawY - 10, 2, 0, Math.PI * 2); ctx.fill();
+                        // Both arms raised in victory
+                        ctx.strokeStyle = '#cc2222'; ctx.lineWidth = 5;
+                        const fistPump = Math.sin(ceoTime * 0.006) * 6;
+                        ctx.beginPath(); ctx.moveTo(345, playerDrawY + 8); ctx.lineTo(330, playerDrawY - 30 + fistPump); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(375, playerDrawY + 8); ctx.lineTo(390, playerDrawY - 30 - fistPump); ctx.stroke();
+                        // Fists
+                        ctx.fillStyle = '#f5d5a8';
+                        ctx.beginPath(); ctx.arc(330, playerDrawY - 30 + fistPump, 4, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(390, playerDrawY - 30 - fistPump, 4, 0, Math.PI * 2); ctx.fill();
+                    }
+
+                    // Confetti — only after hoisted
+                    if(hoistProgress > 0.3) {
+                        for(let ci = 0; ci < 40; ci++) {
+                            const cx2 = (ci * 47 + ceoTime * 0.04 + ci * 13) % 700;
+                            const cy2 = (ci * 31 + ceoTime * 0.06 + ci * 17) % 400;
+                            const cRot = ceoTime * 0.003 + ci * 0.7;
+                            const confColors = ['#ffd700', '#ff4444', '#44ff44', '#4488ff', '#ff44ff', '#ff8800'];
+                            ctx.save();
+                            ctx.translate(cx2, cy2);
+                            ctx.rotate(cRot);
+                            ctx.globalAlpha = 0.8;
+                            ctx.fillStyle = confColors[ci % confColors.length];
+                            // Mix of rectangles and streamers
+                            if(ci % 3 === 0) {
+                                ctx.fillRect(-5, -1, 10, 2); // streamer
+                            } else {
+                                ctx.fillRect(-3, -3, 6, 6); // square confetti
+                            }
+                            ctx.globalAlpha = 1;
+                            ctx.restore();
+                        }
+                    }
+                }
+
+                // After celebration plays for ~5 seconds, transition to slideshow
+                if(elapsed > 5000 && allArrived) {
+                    // Fade overlay
+                    const fadeProgress = Math.min(1, (elapsed - 5000) / 1500);
+                    ctx.fillStyle = `rgba(0,0,0,${fadeProgress})`;
+                    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+                    if(fadeProgress >= 1) {
+                        level6.newCEOPhase = 'slideshow';
+                        level6.newCEOSlideIndex = 0;
+                        level6.newCEOSlideTimer = 0;
+                        level6.newCEOSlideStartTime = Date.now();
+                    }
+                }
             }
 
-            // NPCs hoisting player on shoulders (center stage)
-            const hoistY = 240;
-            const hoistBob = Math.sin(ceoTime * 0.003) * 4;
+            if(phase === 'slideshow') {
+                ctx.fillStyle = '#0a0812';
+                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-            // Left NPC (pipe manager in blue)
-            ctx.fillStyle = '#2244aa';
-            ctx.fillRect(260, hoistY + 20, 20, 28);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.beginPath(); ctx.arc(270, hoistY + 14, 8, 0, Math.PI * 2); ctx.fill();
-            // Arms raised
-            ctx.strokeStyle = '#2244aa'; ctx.lineWidth = 4;
-            ctx.beginPath(); ctx.moveTo(260, hoistY + 28); ctx.lineTo(290, hoistY - 5); ctx.stroke();
+                // Slideshow of in-game trophy/scene images
+                const slideImages = [trophy3Img, trophy1Img, trophy2Img, ceoPortraitImg, portraitImg];
+                const slideCaptions = [
+                    'CEO with Military Brass',
+                    'Freedom Isn\'t Free',
+                    'CEO at PipeTech Construction',
+                    'The Saturn-Pipe Legacy',
+                    'PipeTech — A New Era'
+                ];
+                const slideElapsed = Date.now() - (level6.newCEOSlideStartTime || Date.now());
+                const SLIDE_DURATION = 3000; // 3 seconds per slide
+                const FADE_DURATION = 600;
+                const totalSlideTime = slideElapsed % (SLIDE_DURATION * slideImages.length);
+                const currentSlide = Math.floor(totalSlideTime / SLIDE_DURATION);
+                const slideProgress = (totalSlideTime % SLIDE_DURATION) / SLIDE_DURATION;
 
-            // Right NPC (pipe manager in blue)
-            ctx.fillStyle = '#2244aa';
-            ctx.fillRect(420, hoistY + 20, 20, 28);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.beginPath(); ctx.arc(430, hoistY + 14, 8, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#2244aa'; ctx.lineWidth = 4;
-            ctx.beginPath(); ctx.moveTo(440, hoistY + 28); ctx.lineTo(410, hoistY - 5); ctx.stroke();
+                // "YOU ARE THE NEW CEO" header
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 32px Arial';
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                ctx.strokeText('You Are The New CEO', 350, 50);
+                ctx.fillText('You Are The New CEO', 350, 50);
 
-            // Center NPC (behind)
-            ctx.fillStyle = '#2266bb';
-            ctx.fillRect(340, hoistY + 24, 20, 24);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.beginPath(); ctx.arc(350, hoistY + 18, 7, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = '16px Arial';
+                ctx.fillText('of PipeTech Industries', 350, 75);
 
-            // Player on top (being hoisted) — red jumpsuit pipe boss
-            const playerDrawY = hoistY - 30 + hoistBob;
-            ctx.fillStyle = '#cc2222';
-            ctx.fillRect(335, playerDrawY, 30, 32);
-            ctx.fillStyle = '#111'; ctx.fillRect(348, playerDrawY, 4, 24);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.beginPath(); ctx.arc(350, playerDrawY - 8, 10, 0, Math.PI * 2); ctx.fill();
-            // Big smile
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(350, playerDrawY - 5, 5, 0.1, Math.PI - 0.1); ctx.stroke();
-            // Eyes
-            ctx.fillStyle = '#333';
-            ctx.beginPath(); ctx.arc(346, playerDrawY - 10, 1.5, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(354, playerDrawY - 10, 1.5, 0, Math.PI * 2); ctx.fill();
-            // Thumb up (right hand)
-            ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(368, playerDrawY - 2, 5, 12);
-            ctx.fillRect(367, playerDrawY - 6, 7, 5);
+                // Image frame — large centered display
+                const frameW = 320, frameH = 220;
+                const frameX = 350 - frameW / 2, frameY = 95;
 
-            // "Congratulations" title
-            ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 36px Arial';
-            ctx.textAlign = 'center';
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
-            ctx.strokeText('Congratulations!', 350, 60);
-            ctx.fillText('Congratulations!', 350, 60);
+                // Ornate golden frame
+                ctx.fillStyle = '#8b6914';
+                ctx.fillRect(frameX - 6, frameY - 6, frameW + 12, frameH + 12);
+                ctx.fillStyle = '#aa8020';
+                ctx.fillRect(frameX - 4, frameY - 4, frameW + 8, frameH + 8);
+                ctx.fillStyle = '#8b6914';
+                ctx.fillRect(frameX - 2, frameY - 2, frameW + 4, frameH + 4);
+                // Inner mat
+                ctx.fillStyle = '#1a1520';
+                ctx.fillRect(frameX, frameY, frameW, frameH);
 
-            // Subtitle
-            ctx.fillStyle = '#f5f2ec';
-            ctx.font = 'bold 18px Arial';
-            ctx.fillText('You are the new CEO of PipeTech.', 350, 90);
+                // Draw current slide image with cross-fade
+                const img = slideImages[currentSlide % slideImages.length];
+                if(img && img.complete && img.naturalWidth > 0) {
+                    // Fade in/out at slide boundaries
+                    let slideAlpha = 1;
+                    if(slideProgress < FADE_DURATION / SLIDE_DURATION) {
+                        slideAlpha = slideProgress / (FADE_DURATION / SLIDE_DURATION);
+                    } else if(slideProgress > 1 - FADE_DURATION / SLIDE_DURATION) {
+                        slideAlpha = (1 - slideProgress) / (FADE_DURATION / SLIDE_DURATION);
+                    }
+                    ctx.globalAlpha = Math.max(0, Math.min(1, slideAlpha));
+                    // Fit image within frame maintaining aspect ratio
+                    const imgAspect = img.naturalWidth / img.naturalHeight;
+                    const frameAspect = frameW / frameH;
+                    let drawW, drawH, drawX, drawY;
+                    if(imgAspect > frameAspect) {
+                        drawW = frameW - 8;
+                        drawH = drawW / imgAspect;
+                        drawX = frameX + 4;
+                        drawY = frameY + (frameH - drawH) / 2;
+                    } else {
+                        drawH = frameH - 8;
+                        drawW = drawH * imgAspect;
+                        drawX = frameX + (frameW - drawW) / 2;
+                        drawY = frameY + 4;
+                    }
+                    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+                    ctx.globalAlpha = 1;
+                }
 
-            // Framed portrait at bottom
-            const frameX = 310, frameY = 330, frameW = 80, frameH = 70;
-            // Frame
-            ctx.fillStyle = '#8b6914';
-            ctx.fillRect(frameX - 4, frameY - 4, frameW + 8, frameH + 8);
-            ctx.fillStyle = '#1a1a2a';
-            ctx.fillRect(frameX, frameY, frameW, frameH);
-            // Mini portrait of player (smile + thumb up)
-            ctx.fillStyle = '#cc2222';
-            ctx.fillRect(frameX + 25, frameY + 20, 30, 32);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.beginPath(); ctx.arc(frameX + 40, frameY + 14, 10, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(frameX + 40, frameY + 17, 4, 0.1, Math.PI - 0.1); ctx.stroke();
-            ctx.fillStyle = '#333';
-            ctx.beginPath(); ctx.arc(frameX + 37, frameY + 12, 1.5, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(frameX + 43, frameY + 12, 1.5, 0, Math.PI * 2); ctx.fill();
-            // Thumb up in portrait
-            ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(frameX + 56, frameY + 22, 4, 10);
-            ctx.fillRect(frameX + 55, frameY + 18, 6, 5);
+                // Caption below frame
+                const caption = slideCaptions[currentSlide % slideCaptions.length];
+                ctx.fillStyle = '#ccaa66';
+                ctx.font = 'italic 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(caption, 350, frameY + frameH + 22);
 
-            // Score + menu
-            if(level6.newCEOTimer >= 30) {
-                ctx.fillStyle = '#ccc';
-                ctx.font = 'bold 20px Arial';
-                ctx.fillText('FINAL SCORE: ' + score, 350, 440);
+                // Slide indicators (dots)
+                for(let di = 0; di < slideImages.length; di++) {
+                    ctx.fillStyle = di === currentSlide ? '#ffd700' : '#444';
+                    ctx.beginPath(); ctx.arc(350 - (slideImages.length - 1) * 8 + di * 16, frameY + frameH + 40, 3, 0, Math.PI * 2); ctx.fill();
+                }
 
-                const btnW = 150, btnH = 34;
-                const btn1X = 350 - btnW - 15, btn2X = 350 + 15;
-                const btnY = 460;
+                // Confetti (subtle)
+                for(let ci = 0; ci < 15; ci++) {
+                    const cx2 = (ci * 47 + ceoTime * 0.02) % 700;
+                    const cy2 = (ci * 31 + ceoTime * 0.03) % 500;
+                    const confColors = ['#ffd700', '#ff4444', '#44ff44', '#4488ff'];
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = confColors[ci % confColors.length];
+                    ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(ceoTime * 0.002 + ci);
+                    ctx.fillRect(-3, -1, 6, 2);
+                    ctx.restore();
+                    ctx.globalAlpha = 1;
+                }
 
-                ctx.fillStyle = level6.newCEOChoice === 0 ? '#ffd700' : '#444';
-                ctx.fillRect(btn1X, btnY, btnW, btnH);
-                ctx.fillStyle = level6.newCEOChoice === 0 ? '#000' : '#999';
-                ctx.font = 'bold 16px Arial';
-                ctx.fillText('TRY AGAIN', btn1X + btnW / 2, btnY + 22);
+                // Score + menu (after delay)
+                if(level6.newCEOTimer >= 30) {
+                    ctx.fillStyle = '#ccc';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('FINAL SCORE: ' + score, 350, 410);
 
-                ctx.fillStyle = level6.newCEOChoice === 1 ? '#ffd700' : '#444';
-                ctx.fillRect(btn2X, btnY, btnW, btnH);
-                ctx.fillStyle = level6.newCEOChoice === 1 ? '#000' : '#999';
-                ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
+                    const btnW = 150, btnH = 34;
+                    const btn1X = 350 - btnW - 15, btn2X = 350 + 15;
+                    const btnY = 435;
+
+                    ctx.fillStyle = level6.newCEOChoice === 0 ? '#ffd700' : '#444';
+                    ctx.fillRect(btn1X, btnY, btnW, btnH);
+                    ctx.fillStyle = level6.newCEOChoice === 0 ? '#000' : '#999';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.fillText('TRY AGAIN', btn1X + btnW / 2, btnY + 22);
+
+                    ctx.fillStyle = level6.newCEOChoice === 1 ? '#ffd700' : '#444';
+                    ctx.fillRect(btn2X, btnY, btnW, btnH);
+                    ctx.fillStyle = level6.newCEOChoice === 1 ? '#000' : '#999';
+                    ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
+                }
             }
         }
 
@@ -19484,24 +19810,29 @@ function update() {
                 return;
             }
             if(level6.newCEOCard === true) {
-                level6.newCEOTimer++;
-                if(level6.newCEOTimer >= 30) {
-                    if(keys['ArrowLeft'] || keys['left']) {
-                        level6.newCEOChoice = 0;
-                        keys['ArrowLeft'] = false; keys['left'] = false;
-                    }
-                    if(keys['ArrowRight'] || keys['right']) {
-                        level6.newCEOChoice = 1;
-                        keys['ArrowRight'] = false; keys['right'] = false;
-                    }
-                    if(keys[' '] || keys['action']) {
-                        keys[' '] = false; keys['action'] = false;
-                        if(level6.newCEOChoice === 0) {
-                            level6.newCEOCard = false;
-                            initLevel(6);
-                            playMusic('level6');
-                        } else {
-                            window.location.href = 'speakeasy.html';
+                // Only enable menu controls during slideshow phase
+                if(level6.newCEOPhase === 'slideshow') {
+                    level6.newCEOTimer++;
+                    if(level6.newCEOTimer >= 30) {
+                        if(keys['ArrowLeft'] || keys['left']) {
+                            level6.newCEOChoice = 0;
+                            keys['ArrowLeft'] = false; keys['left'] = false;
+                        }
+                        if(keys['ArrowRight'] || keys['right']) {
+                            level6.newCEOChoice = 1;
+                            keys['ArrowRight'] = false; keys['right'] = false;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false; keys['action'] = false;
+                            if(level6.newCEOChoice === 0) {
+                                level6.newCEOCard = false;
+                                level6.newCEOPhase = 'celebration';
+                                level6.newCEOHoistStarted = false;
+                                initLevel(6);
+                                playMusic('level6');
+                            } else {
+                                window.location.href = 'speakeasy.html';
+                            }
                         }
                     }
                 }
@@ -19604,25 +19935,20 @@ function update() {
                     keys['action'] = false;
                 }
 
-                // Pistol pickup — available after reading note, grants revolver with 7 bullets
-                {
+                // Detective kit pickup — hat and pistol taken simultaneously after reading note
+                if(level6.pistol.dropped && !level6.pistol.pickedUp && !level6.hasDetectiveHat && !level6.detectiveTransition && !level6.detectiveTitleCard) {
                     const pistolGroundX = detectiveX + 14*s;
                     const pistolGroundY = detectiveY + 8*s;
-                    if(level6.pistol.dropped && !level6.pistol.pickedUp && Math.abs(player.x - pistolGroundX) < 55 && Math.abs(player.y - pistolGroundY) < 90 && (keys[' '] || keys['action'])) {
+                    const hatX = detectiveX - 22*s;
+                    const hatY = detectiveY - 1*s;
+                    const midX = (pistolGroundX + hatX) / 2;
+                    const midY = (pistolGroundY + hatY) / 2;
+                    if(Math.abs(player.x - midX) < 80 && Math.abs(player.y - midY) < 90 && (keys[' '] || keys['action'])) {
+                        // Pick up pistol
                         level6.pistol.pickedUp = true;
                         level6.hasRevolver = true;
                         level6.revolverAmmo = 7;
-                        keys[' '] = false;
-                        keys['action'] = false;
-                    }
-                }
-
-                // Detective hat pickup — available after reading note (independent of pistol)
-                if(level6.pistol.dropped && !level6.hasDetectiveHat && !level6.detectiveTransition && !level6.detectiveTitleCard) {
-                    const hatX = detectiveX - 22*s;
-                    const hatY = detectiveY - 1*s;
-                    if(Math.abs(player.x - hatX) < 50 && Math.abs(player.y - hatY) < 70 && (keys[' '] || keys['action'])) {
-                        // Start dissolve transition
+                        // Start detective hat dissolve transition (which also grants hat)
                         level6.detectiveTransition = true;
                         level6.detectiveTransAlpha = 0;
                         keys[' '] = false;
@@ -20535,6 +20861,8 @@ if (keys[' '] || keys['action']) {
             level6.newCEOCard = 'fading';
             level6.newCEOTimer = 0;
             level6.detectiveTransAlpha = 0;
+            level6.newCEOPhase = 'celebration';
+            level6.newCEOHoistStarted = false;
             playMusic('newceo');
         }
         return;
@@ -21070,6 +21398,8 @@ if (keys[' '] || keys['action']) {
                                     level6.newCEOCard = 'fading';
                                     level6.newCEOTimer = 0;
                                     level6.detectiveTransAlpha = 0;
+                                    level6.newCEOPhase = 'celebration';
+                                    level6.newCEOHoistStarted = false;
                                     playMusic('newceo');
                                 }
                             } else {
