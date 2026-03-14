@@ -795,7 +795,7 @@ function initLevel(lv) {
         level6.cloningDoorUnlocked = false; // concealed door to furnace room
         level6.cloningDoorOpen = 0; // slide animation 0-1
         // Underbelly backroom state
-        level6.mutantPM = { x: 380, y: 350, aggroTimer: 0, shakeIntensity: 0 };
+        level6.mutantPM = { x: 380, y: 350, aggroTimer: 0, shakeIntensity: 0, cageOpen: false, cageLockShot: false, barsDropTime: 0, escaped: false, escapeTime: 0, eating: false, eatTarget: null, eatTime: 0 };
         level6.barrelDrip = { lastDrip: 0, drips: [] };
         level6.underbellyFlicker = 0;
         // Reset destructible items
@@ -824,6 +824,19 @@ function initLevel(lv) {
         level6.ceoDialogueChars = 0;
         level6.ceoDialogueType = 'boss';
         level6.ceoDialogueShown = false;
+        // CEO pursuit system — CEO follows player through level 6 after murder mode
+        level6.ceoPursuing = false;
+        level6.ceoEnteredMurderMode = false;
+        level6.ceoAppearTimer = 0;
+        level6.ceoAppearRoom = null;
+        level6.ceoExitPrompt = false;
+        // Employee lobby 3D printer
+        level6.lobbyPrinterUI = false;
+        level6.lobbyPrinterChoice = 0;
+        level6.lobbyPrinterConfirming = false;
+        level6.lobbyPrinting = false;
+        level6.lobbyPrintProgress = 0;
+        level6.lobbyPrintingHeart = false;
 
         // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
         // This matters when the player skips directly to level 6 without playing level 5
@@ -9289,31 +9302,81 @@ function drawNuclearAssemblyBridge() {
         ctx.font = '16px monospace'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
     }
     // ── end production line
-    // ── BRIDGE WALKWAY (narrow catwalk near top of screen) ─────────────────
-    // Platform floor — grated metal walkway
+    // ── STEEL BRIDGE / CATWALK (drawn over factory) ────────────────────────────
+    const bridgePlatY = 398;  // bridge floor (player at y=380)
+    const railTopY    = 250;  // top of railing — lowered to expose more factory floor
+
+    // ── Main I-beam stringers (two parallel beams supporting the deck) ────────
+    const beamDepth = 32;  // vertical depth of I-beam
+    const beamTop = bridgePlatY + 2;
+    // Left stringer
+    ctx.fillStyle = '#1a1818';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, beamDepth);
+    // I-beam flanges (top and bottom)
+    ctx.fillStyle = '#252222';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, 4);
+    ctx.fillRect(-GX, beamTop + beamDepth - 4, CANVAS_W, 4);
+    // Web (thinner center)
+    ctx.fillStyle = '#1e1b1b';
+    ctx.fillRect(-GX, beamTop + 4, CANVAS_W, beamDepth - 8);
+    // Flange highlight
+    ctx.fillStyle = '#2e2a2a';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, 1);
+    ctx.fillRect(-GX, beamTop + beamDepth - 1, CANVAS_W, 1);
+
+    // ── Diagonal truss bracing under deck (Warren truss pattern) ─────────────
+    ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 3;
+    for(let bx = -GX; bx < CANVAS_W; bx += 44) {
+        // V-pattern truss
+        ctx.beginPath(); ctx.moveTo(bx, beamTop + 4); ctx.lineTo(bx + 22, beamTop + beamDepth - 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx + 44, beamTop + 4); ctx.lineTo(bx + 22, beamTop + beamDepth - 4); ctx.stroke();
+    }
+    // Horizontal truss chord
+    ctx.strokeStyle = '#222020'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-GX, beamTop + beamDepth / 2); ctx.lineTo(CANVAS_W, beamTop + beamDepth / 2); ctx.stroke();
+
+    // ── Vertical support columns from bridge down to factory floor ────────────
+    for(let col = 100; col < 700; col += 150) {
+        // Main column
+        ctx.fillStyle = '#141212';
+        ctx.fillRect(col - 5, beamTop + beamDepth, 10, 40);
+        // Column flanges
+        ctx.fillStyle = '#1a1818';
+        ctx.fillRect(col - 7, beamTop + beamDepth, 3, 40);
+        ctx.fillRect(col + 4, beamTop + beamDepth, 3, 40);
+        // Gusset plate (triangle at connection)
+        ctx.fillStyle = '#222020';
+        ctx.beginPath();
+        ctx.moveTo(col - 12, beamTop + beamDepth);
+        ctx.lineTo(col + 12, beamTop + beamDepth);
+        ctx.lineTo(col, beamTop + beamDepth + 16);
+        ctx.closePath(); ctx.fill();
+        // Bolts
+        ctx.fillStyle = '#333';
+        ctx.beginPath(); ctx.arc(col - 4, beamTop + beamDepth + 6, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(col + 4, beamTop + beamDepth + 6, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ── Platform deck (grated steel) ──────────────────────────────────────────
     ctx.fillStyle = '#1e1c1c';
-    ctx.fillRect(-GX, bridgePlatY - 2, CANVAS_W, 20);
-    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 1;
-    for(let gx = -GX; gx < CANVAS_W; gx += 11) {
-        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 2); ctx.lineTo(gx, bridgePlatY + 18); ctx.stroke();
+    ctx.fillRect(-GX, bridgePlatY - 4, CANVAS_W, 8);
+    // Grate pattern — fine grid
+    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 0.5;
+    for(let gx = -GX; gx < CANVAS_W; gx += 8) {
+        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 4); ctx.lineTo(gx, bridgePlatY + 4); ctx.stroke();
     }
-    for(let gy = bridgePlatY + 5; gy < bridgePlatY + 18; gy += 6) {
-        ctx.beginPath(); ctx.moveTo(-GX, gy); ctx.lineTo(CANVAS_W, gy); ctx.stroke();
-    }
+    ctx.beginPath(); ctx.moveTo(-GX, bridgePlatY); ctx.lineTo(CANVAS_W, bridgePlatY); ctx.stroke();
+    // Toe plate (kick plate at edge)
+    ctx.fillStyle = '#252222';
+    ctx.fillRect(-GX, bridgePlatY - 6, CANVAS_W, 3);
+    ctx.fillStyle = '#1a1717';
+    ctx.fillRect(-GX, bridgePlatY + 3, CANVAS_W, 3);
 
-    // Edge warning strip (yellow/black hazard)
-    for(let sw = -GX; sw < CANVAS_W; sw += 20) {
-        ctx.fillStyle = sw % 40 < 20 ? '#403000' : '#201400';
-        ctx.fillRect(sw, bridgePlatY - 3, 20, 4);
+    // ── Edge warning strip (hazard chevrons) ──────────────────────────────────
+    for(let sw = -GX; sw < CANVAS_W; sw += 28) {
+        ctx.fillStyle = sw % 56 < 28 ? '#302800' : '#201400';
+        ctx.fillRect(sw, bridgePlatY - 6, 28, 3);
     }
-
-    // Undercarriage (thin I-beam support)
-    ctx.fillStyle = '#161414';
-    ctx.fillRect(-GX, bridgePlatY + 18, CANVAS_W, 10);
-    ctx.strokeStyle = '#1e1c1c'; ctx.lineWidth = 2;
-    for(let bx = -GX + 20; bx < CANVAS_W; bx += 60) {
-        ctx.beginPath(); ctx.moveTo(bx, bridgePlatY + 18); ctx.lineTo(bx + 20, bridgePlatY + 28); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(bx + 20, bridgePlatY + 18); ctx.lineTo(bx, bridgePlatY + 28); ctx.stroke();
     }
 
     // Railing — waist-height, thin posts, wide spacing
@@ -9321,10 +9384,40 @@ function drawNuclearAssemblyBridge() {
         ctx.fillStyle = '#3a3434';
         ctx.fillRect(px, railTopY, 3, bridgePlatY - railTopY - 2);
     }
-    // Top rail bar
-    ctx.fillStyle = '#3a3434';
-    ctx.fillRect(-GX, railTopY - 1, CANVAS_W, 2);
-    // Mid rail wire
+
+    // Railing posts — steel angle-iron stanchions, skip posts inside gap zones
+    for(let px = -GX + 14; px < CANVAS_W; px += 55) {
+        if(isInGap(px)) continue;
+        // Main post (angle iron profile)
+        ctx.fillStyle = '#2c2828';
+        ctx.fillRect(px, railTopY, 5, bridgePlatY - railTopY - 2);
+        // Highlight edge
+        ctx.fillStyle = '#383030';
+        ctx.fillRect(px, railTopY, 1, bridgePlatY - railTopY - 2);
+        // Flanged base plate bolted to deck
+        ctx.fillStyle = '#333';
+        ctx.fillRect(px - 4, bridgePlatY - 6, 13, 5);
+        // Base bolts
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(px - 1, bridgePlatY - 4, 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(px + 6, bridgePlatY - 4, 1, 0, Math.PI * 2); ctx.fill();
+        // Post cap (ball finial)
+        ctx.fillStyle = '#3a3232';
+        ctx.beginPath(); ctx.arc(px + 2, railTopY - 2, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(px + 1, railTopY - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Top rail bar — with breaks at gaps
+    ctx.fillStyle = '#2a2626';
+    let railX = -GX;
+    for(const g of railGaps) {
+        if(railX < g.left) ctx.fillRect(railX, railTopY - 2, g.left - railX, 3);
+        railX = g.right;
+    }
+    if(railX < CANVAS_W) ctx.fillRect(railX, railTopY - 2, CANVAS_W - railX, 3);
+
+    // Mid rail wire — with breaks at gaps
     ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-GX, railTopY + 15); ctx.lineTo(CANVAS_W, railTopY + 15); ctx.stroke();
 
@@ -9384,10 +9477,10 @@ function drawNuclearAssemblyBridge() {
 
     drawDeathStarBlastDoor(ldX, ldY, ldW, ldH, 'left', level6.bladeDoorBridgeLeft.openPct, false, true);
 
-    // ── BOSS (drawn on bridge, in front of railing) ────────────────────────
-    {
+    // === ARMED AND DANGEROUS CLONING BOSS — drawn after railing so appears in front of fence ===
+    try {
         const bcb = level6.bridgeCloningBoss;
-        if(bcb.alive) {
+        if(bcb && bcb.alive) {
             const bx = bcb.x, by = bcb.y;
             const walkCycle = bcb.paused ? 0 : Math.sin(Date.now() / 150) * 5;
             const bob = bcb.paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
@@ -9714,6 +9807,164 @@ function drawNuclearAssemblyBridge() {
                 }
             }
         }
+    } catch(bossErr) {
+        console.error('Bridge boss render error:', bossErr);
+    }
+
+    // === CEO BRIDGE DEATH ANIMATION — same hazard deaths as cloning boss ===
+    if(ceo.bridgeDeath && ceo.state === 'dead' && ceo.deathTime) {
+        const elapsed = (Date.now() - ceo.deathTime) / 1000;
+        const dType = ceo.deathType || 'fall';
+        const bridgeRailY = 250;
+        const bridgeFloorY = 392;
+        let targetY;
+        if (dType === 'acid') targetY = 320;
+        else if (dType === 'syringe') targetY = 340;
+        else if (dType === 'warhead') targetY = 354;
+        else if (dType === 'conveyor') targetY = 380;
+        else if (dType === 'truck') targetY = 400;
+        else targetY = 420;
+
+        const toppleDur = 0.8, fallDur = 1.4;
+        const toppleEnd = toppleDur, fallEnd = toppleEnd + fallDur;
+        const cx = ceo.x;
+
+        // Blood splatter on bridge
+        ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.ellipse(cx + 5, bridgeFloorY, 38, 14, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+
+        if(elapsed < toppleEnd) {
+            // Topple over railing
+            const toppleProg = elapsed / toppleDur;
+            const toppleAngle = toppleProg * Math.PI * 0.85;
+            ctx.save();
+            ctx.translate(cx, bridgeRailY + 10);
+            ctx.rotate(toppleAngle);
+            const bodyBaseY = bridgeFloorY - (bridgeRailY + 10);
+            // Suit body
+            ctx.fillStyle = '#2b2b2b';
+            ctx.fillRect(-14, bodyBaseY - 28, 28, 36);
+            // Head
+            ctx.fillStyle = '#c49872';
+            ctx.fillRect(-11, bodyBaseY - 50, 22, 22);
+            // X eyes
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-7, bodyBaseY - 44); ctx.lineTo(-3, bodyBaseY - 40);
+            ctx.moveTo(-3, bodyBaseY - 44); ctx.lineTo(-7, bodyBaseY - 40);
+            ctx.moveTo(3, bodyBaseY - 44); ctx.lineTo(7, bodyBaseY - 40);
+            ctx.moveTo(7, bodyBaseY - 44); ctx.lineTo(3, bodyBaseY - 40);
+            ctx.stroke();
+            // Dark tie
+            ctx.fillStyle = '#8b0000';
+            ctx.fillRect(-3, bodyBaseY - 28, 6, 30);
+            // Legs
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(-10, bodyBaseY + 8, 9, 18);
+            ctx.fillRect(1, bodyBaseY + 8, 9, 18);
+            ctx.restore();
+            // Speech bubble
+            if(toppleProg > 0.2) {
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                const bubX = cx + 30, bubY = bridgeRailY - 10 - toppleProg * 20;
+                ctx.beginPath(); ctx.ellipse(bubX, bubY, 28, 12, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#cc0000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('NOOO!', bubX, bubY + 3);
+            }
+        } else if(elapsed < fallEnd) {
+            // Vertical plummet
+            const fallProg = (elapsed - toppleEnd) / fallDur;
+            const easedFall = fallProg * fallProg * (3 - 2 * fallProg);
+            const startY = bridgeRailY + 30;
+            const fallY = startY + (targetY - startY) * easedFall;
+            const tumbleAngle = fallProg * Math.PI * 3;
+            ctx.save();
+            ctx.translate(cx, fallY);
+            ctx.rotate(tumbleAngle);
+            // Head
+            ctx.fillStyle = '#c49872';
+            ctx.beginPath(); ctx.arc(0, -14, 9, 0, Math.PI * 2); ctx.fill();
+            // X eyes
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-5, -16); ctx.lineTo(-1, -12); ctx.moveTo(-1, -16); ctx.lineTo(-5, -12);
+            ctx.moveTo(2, -16); ctx.lineTo(6, -12); ctx.moveTo(6, -16); ctx.lineTo(2, -12);
+            ctx.stroke();
+            // Suit body
+            ctx.fillStyle = '#2b2b2b';
+            ctx.fillRect(-12, -4, 24, 28);
+            // Tie
+            ctx.fillStyle = '#8b0000';
+            ctx.fillRect(-3, -4, 6, 24);
+            // Arms flailing
+            const a1 = Math.sin(elapsed * 14) * 1.2;
+            const a2 = Math.sin(elapsed * 14 + 2.5) * 1.2;
+            ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.moveTo(-12, 2); ctx.lineTo(-12 - Math.cos(a1) * 20, 2 + Math.sin(a1) * 20); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(12, 2); ctx.lineTo(12 + Math.cos(a2) * 20, 2 + Math.sin(a2) * 20); ctx.stroke();
+            // Legs
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(-10, 24, 8, 16);
+            ctx.fillRect(2, 24, 8, 16);
+            ctx.restore();
+            // Speed lines
+            ctx.strokeStyle = 'rgba(255,100,100,0.3)'; ctx.lineWidth = 1;
+            for(let sl = 0; sl < 4; sl++) {
+                const slx = cx - 20 + sl * 12;
+                ctx.beginPath(); ctx.moveTo(slx, fallY - 30); ctx.lineTo(slx, fallY + 15); ctx.stroke();
+            }
+        } else {
+            // Hazard processing — simplified: just show body at target
+            const procElapsed = elapsed - fallEnd;
+            if(dType === 'acid') {
+                const sinkProg = Math.min(1, procElapsed / 4);
+                ctx.globalAlpha = Math.max(0, 1 - sinkProg * 1.2);
+                ctx.fillStyle = '#2b2b2b';
+                if(sinkProg < 0.6) ctx.fillRect(cx - 10, targetY + sinkProg * 50 - 20 * (1 - sinkProg), 20, 20 * (1 - sinkProg));
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#80ff20';
+                for(let bi = 0; bi < 6; bi++) {
+                    const bPhase = (procElapsed * 2 + bi * 0.7) % 1;
+                    ctx.globalAlpha = (1 - bPhase) * 0.5;
+                    ctx.beginPath(); ctx.arc(cx - 12 + bi * 5, targetY - 8 - bPhase * 16, 2, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+                if(procElapsed < 2) {
+                    ctx.fillStyle = '#80ff20'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*SSSSIZZLE*', cx, targetY - 30);
+                }
+            } else if(dType === 'syringe') {
+                const twitch = Math.sin(procElapsed * 8) * 2;
+                ctx.fillStyle = '#2b2b2b';
+                ctx.fillRect(cx - 12 + twitch, targetY - 20, 24, 28);
+                ctx.fillStyle = `rgba(64,255,32,${Math.min(1, procElapsed / 3) * 0.6})`;
+                ctx.fillRect(cx - 10 + twitch, targetY - 18, 20, 24);
+                if(procElapsed < 1.5) {
+                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*SQUELCH*', cx, targetY - 30);
+                }
+            } else if(dType === 'warhead') {
+                const stuffProg = Math.min(1, procElapsed / 1.5);
+                ctx.fillStyle = '#4a4a5a';
+                ctx.fillRect(cx - 8, targetY - 14, 16, 28);
+                if(stuffProg < 0.8) {
+                    ctx.fillStyle = '#1a1a1a';
+                    ctx.fillRect(cx - 6, targetY - 14 - (1 - stuffProg) * 16, 12, (1 - stuffProg) * 16);
+                }
+            } else {
+                // Generic fall / conveyor / truck
+                if(procElapsed < 3) {
+                    ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.6;
+                    ctx.beginPath(); ctx.ellipse(cx, targetY + 5, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = '#2b2b2b';
+                    ctx.fillRect(cx - 15, targetY - 8, 30, 12);
+                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*SPLAT*', cx, targetY - 24);
+                }
+            }
+        }
     }
 
     // Draw bridge boss ammo drops
@@ -9914,6 +10165,57 @@ function drawLevel6EmployeeLobby() {
     ctx.strokeStyle = '#8a7a2a';
     ctx.lineWidth = 2;
     ctx.strokeRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
+
+    // === 3D PRINTER (right side of elevator) ===
+    const prX = 490, prY = 330, prW = 50, prH = 70;
+    // Printer body
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(prX, prY, prW, prH);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(prX + 2, prY + 2, prW - 4, prH - 4);
+    // Printer lid (glass top)
+    ctx.fillStyle = 'rgba(100,140,180,0.3)';
+    ctx.fillRect(prX + 4, prY + 4, prW - 8, 20);
+    // Status LED
+    const printerBusy = level6.lobbyPrinting;
+    ctx.fillStyle = printerBusy ? '#ffaa00' : '#00ff88';
+    ctx.shadowColor = printerBusy ? '#ffaa00' : '#00ff88';
+    ctx.shadowBlur = 4;
+    ctx.beginPath(); ctx.arc(prX + prW - 8, prY + 8, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // Print bed
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(prX + 6, prY + 28, prW - 12, 30);
+    // Nozzle arm
+    const nozzleX = printerBusy ? prX + 10 + Math.sin(Date.now() / 200) * 15 : prX + prW / 2 - 4;
+    ctx.fillStyle = '#666';
+    ctx.fillRect(prX + 4, prY + 24, prW - 8, 3);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(nozzleX, prY + 22, 8, 8);
+    // Printing progress bar
+    if(printerBusy) {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(prX + 4, prY + prH - 12, prW - 8, 8);
+        ctx.fillStyle = '#00cc66';
+        ctx.fillRect(prX + 4, prY + prH - 12, (prW - 8) * level6.lobbyPrintProgress, 8);
+    }
+    // Printed item preview (when done)
+    if(!printerBusy && (ghostGun.hasGun || level6.lobbyPrintProgress >= 1)) {
+        // Nothing visible — item already taken
+    }
+    // Label
+    ctx.fillStyle = '#888';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('3D PRINTER', prX + prW / 2, prY + prH + 10);
+    // Interaction prompt
+    if(Math.abs(player.x - (prX + prW / 2)) < 60 && !level6.lobbyPrinterUI && !printerBusy) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(prX - 20, prY - 28, prW + 40, 22);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText('[ ACTION ] - PRINT', prX + prW / 2, prY - 12);
+    }
 
     // Direction prompts
     if(player.x > 560) {
@@ -11470,30 +11772,79 @@ function drawLevel6Underbelly() {
     ctx.fillRect(mx - 18, my + 42 + breathe, 16, 6);
     ctx.fillRect(mx + 2, my + 42 + breathe, 16, 6);
 
-    // Cage bars (front, drawn over PM)
-    ctx.strokeStyle = '#777';
-    ctx.lineWidth = 4;
-    for(let bar = 0; bar < 8; bar++) {
-        const barX = cageX + 6 + bar * 13;
-        ctx.beginPath();
-        ctx.moveTo(barX, cageY);
-        ctx.lineTo(barX, cageY + cageH);
-        ctx.stroke();
+    // Cage bars (front, drawn over PM) — animate dropping when lock shot
+    if(!pm.cageOpen) {
+        // Bars still up
+        ctx.strokeStyle = '#777';
+        ctx.lineWidth = 4;
+        for(let bar = 0; bar < 8; bar++) {
+            const barX = cageX + 6 + bar * 13;
+            ctx.beginPath();
+            ctx.moveTo(barX, cageY);
+            ctx.lineTo(barX, cageY + cageH);
+            ctx.stroke();
+        }
+        // Horizontal cage bars
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(cageX, cageY + 20); ctx.lineTo(cageX + cageW, cageY + 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cageX, cageY + cageH - 20); ctx.lineTo(cageX + cageW, cageY + cageH - 20); ctx.stroke();
+    } else if(pm.barsDropTime > 0) {
+        // Bars dropping animation
+        const dropElapsed = (t - pm.barsDropTime) / 1000;
+        const dropProg = Math.min(1, dropElapsed / 0.6);
+        const barDropY = dropProg * (cageH + 20);
+        ctx.strokeStyle = '#777';
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 1 - dropProg * 0.3;
+        for(let bar = 0; bar < 8; bar++) {
+            const barX = cageX + 6 + bar * 13;
+            ctx.beginPath();
+            ctx.moveTo(barX, cageY + barDropY);
+            ctx.lineTo(barX, cageY + cageH + barDropY);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        // Crash impact when bars hit floor
+        if(dropProg > 0.8 && dropProg < 1) {
+            ctx.fillStyle = 'rgba(255,200,0,0.3)';
+            ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('*CLANG*', pmX, cageY + cageH + 30);
+        }
     }
-    // Horizontal cage bars
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(cageX, cageY + 20); ctx.lineTo(cageX + cageW, cageY + 20); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cageX, cageY + cageH - 20); ctx.lineTo(cageX + cageW, cageY + cageH - 20); ctx.stroke();
+
     // Cage top
     ctx.fillStyle = '#555';
     ctx.fillRect(cageX - 3, cageY - 5, cageW + 6, 8);
-    // Padlock on cage
-    ctx.fillStyle = '#b8960e';
-    ctx.fillRect(cageX + cageW / 2 - 5, cageY + cageH - 3, 10, 12);
-    ctx.fillStyle = '#8a7008';
-    ctx.beginPath();
-    ctx.arc(cageX + cageW / 2, cageY + cageH - 3, 6, Math.PI, 0);
-    ctx.stroke();
+
+    // Padlock on cage — shootable
+    if(!pm.cageLockShot) {
+        // Intact padlock
+        ctx.fillStyle = '#b8960e';
+        ctx.fillRect(cageX + cageW / 2 - 5, cageY + cageH - 3, 10, 12);
+        ctx.fillStyle = '#8a7008';
+        ctx.beginPath();
+        ctx.arc(cageX + cageW / 2, cageY + cageH - 3, 6, Math.PI, 0);
+        ctx.stroke();
+        // Crosshair hint when player has gun and is near
+        if(level6.hasRevolver && Math.abs(player.x - pmX) < 150) {
+            const lockCenterX = cageX + cageW / 2;
+            const lockCenterY = cageY + cageH + 3;
+            const pulse = 0.6 + Math.sin(t / 300) * 0.3;
+            ctx.strokeStyle = `rgba(255,80,80,${pulse})`; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(lockCenterX, lockCenterY, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(lockCenterX - 14, lockCenterY); ctx.lineTo(lockCenterX + 14, lockCenterY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(lockCenterX, lockCenterY - 14); ctx.lineTo(lockCenterX, lockCenterY + 14); ctx.stroke();
+        }
+    } else {
+        // Broken lock — shattered pieces on floor
+        ctx.fillStyle = '#6a5a08';
+        ctx.fillRect(cageX + cageW / 2 - 8, cageY + cageH + 8, 6, 4);
+        ctx.fillRect(cageX + cageW / 2 + 2, cageY + cageH + 10, 5, 3);
+        ctx.fillRect(cageX + cageW / 2 - 3, cageY + cageH + 12, 4, 3);
+    }
+
     // "DANGER" sign on cage
     ctx.fillStyle = '#cc0000';
     ctx.fillRect(cageX + cageW + 5, cageY + 30, 40, 18);
@@ -11505,13 +11856,137 @@ function drawLevel6Underbelly() {
     ctx.font = '7px Arial';
     ctx.fillText('DO NOT FEED', cageX + cageW + 25, cageY + 55);
 
-    // PM rage shake — intermittent
-    if(Math.random() < 0.005 && pm.shakeIntensity === 0) {
-        pm.shakeIntensity = 6;
-        pm.aggroTimer = t;
+    // === PM EATING ANIMATION ===
+    if(pm.eating && pm.eatTime > 0) {
+        const eatElapsed = (t - pm.eatTime) / 1000;
+        const eatTarget = pm.eatTarget; // 'ceo' or 'player'
+        if(eatElapsed < 2) {
+            // PM lunges forward, grabs victim
+            const lungeX = pmX + (eatTarget === 'ceo' ? (ceo.x > pmX ? 1 : -1) : (player.x > pmX ? 1 : -1)) * Math.min(30, eatElapsed * 40);
+            ctx.fillStyle = '#cc2222';
+            ctx.fillRect(lungeX - 22, my - 30, 44, 50);
+            ctx.fillStyle = '#c4a882';
+            ctx.fillRect(lungeX - 14, my - 55, 28, 26);
+            // Open mouth wide
+            ctx.fillStyle = '#600';
+            ctx.fillRect(lungeX - 10, my - 38, 20, 12);
+            ctx.fillStyle = '#ddd';
+            for(let tooth = 0; tooth < 6; tooth++) {
+                ctx.fillRect(lungeX - 9 + tooth * 3, my - 38, 2, 3);
+                ctx.fillRect(lungeX - 9 + tooth * 3, my - 29, 2, 3);
+            }
+            // "CHOMP" text
+            if(eatElapsed > 0.5 && eatElapsed < 1.5) {
+                ctx.fillStyle = '#ff0000'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+                ctx.fillText('*CHOMP*', pmX, my - 70);
+            }
+            // Victim disappearing
+            if(eatElapsed > 0.8) {
+                const fade = Math.max(0, 1 - (eatElapsed - 0.8) / 0.8);
+                ctx.globalAlpha = fade;
+                if(eatTarget === 'ceo') {
+                    drawCEO(ceo.x, ceo.y, ceo.facing);
+                }
+                ctx.globalAlpha = 1;
+            }
+        } else if(eatElapsed < 3) {
+            // PM chewing, looking satisfied
+            const chewPhase = Math.sin(eatElapsed * 12) * 2;
+            ctx.fillStyle = '#cc2222';
+            ctx.fillRect(mx - 22, my - 30 + chewPhase, 44, 50);
+            ctx.fillStyle = '#c4a882';
+            ctx.fillRect(mx - 14, my - 55 + chewPhase, 28, 26);
+            // Closed mouth, chewing
+            ctx.fillStyle = '#600';
+            ctx.fillRect(mx - 8, my - 38 + chewPhase, 16, 4 + Math.abs(chewPhase));
+            // Satisfied eyes
+            ctx.fillStyle = '#000';
+            ctx.fillRect(mx - 8, my - 48 + chewPhase, 6, 2);
+            ctx.fillRect(mx + 3, my - 48 + chewPhase, 6, 2);
+            ctx.fillStyle = '#ff0000'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('*munch munch*', pmX, my - 65);
+        }
     }
-    if(pm.shakeIntensity > 0 && t - pm.aggroTimer > 1500) {
-        pm.shakeIntensity = 0;
+
+    // === PM GORILLA ESCAPE ANIMATION ===
+    if(pm.escaped && pm.escapeTime > 0) {
+        const escElapsed = (t - pm.escapeTime) / 1000;
+        if(escElapsed < 4) {
+            // PM runs out like a gorilla — knuckle-dragging sprint
+            const runSpeed = 180; // pixels per second
+            const escDir = pm.escapeDir || 1;
+            const escX = pmX + escDir * escElapsed * runSpeed;
+            const gallop = Math.sin(escElapsed * 16) * 8;
+            const armSwing = Math.sin(escElapsed * 12) * 15;
+
+            // Screen shake
+            if(escElapsed < 3) {
+                const shakeAmt = 3 * (1 - escElapsed / 3);
+                ctx.save();
+                ctx.translate((Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt);
+            }
+
+            // Gorilla-running PM
+            ctx.fillStyle = '#cc2222';
+            // Hunched torso (leaning forward)
+            ctx.save();
+            ctx.translate(escX, my - 10 + gallop);
+            ctx.rotate(escDir * 0.3); // leaning forward
+            ctx.fillRect(-22, -20, 44, 40);
+            // Head (forward, aggressive)
+            ctx.fillStyle = '#c4a882';
+            ctx.fillRect(-12 + escDir * 8, -45, 24, 22);
+            // Angry eyes
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(-6 + escDir * 8, -38, 4, 3);
+            ctx.fillRect(4 + escDir * 8, -38, 4, 3);
+            ctx.restore();
+
+            // Gorilla arms (knuckle drag)
+            ctx.fillStyle = '#cc2222';
+            ctx.fillRect(escX - 30 + armSwing, my - 15, 10, 35);
+            ctx.fillRect(escX + 20 - armSwing, my - 15, 10, 35);
+            // Fists on ground
+            ctx.fillStyle = '#c4a882';
+            ctx.fillRect(escX - 32 + armSwing, my + 18, 12, 8);
+            ctx.fillRect(escX + 18 - armSwing, my + 18, 12, 8);
+            // Legs
+            ctx.fillStyle = '#cc2222';
+            ctx.fillRect(escX - 14, my + 15 + gallop, 12, 20);
+            ctx.fillRect(escX + 2, my + 15 - gallop, 12, 20);
+            // Boots
+            ctx.fillStyle = '#333';
+            ctx.fillRect(escX - 16, my + 33 + gallop, 14, 6);
+            ctx.fillRect(escX + 2, my + 33 - gallop, 14, 6);
+
+            // Floor cracks / dust clouds
+            if(Math.abs(gallop) > 6) {
+                ctx.fillStyle = 'rgba(120,100,80,0.4)';
+                ctx.beginPath();
+                ctx.arc(escX - escDir * 20, my + 42, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // "THOOM THOOM" text
+            if(escElapsed < 2) {
+                ctx.fillStyle = '#ff6600'; ctx.font = 'bold 18px monospace'; ctx.textAlign = 'center';
+                const thoom = Math.floor(escElapsed * 4) % 2 === 0 ? 'THOOM' : 'THOOM THOOM';
+                ctx.fillText(thoom, escX, my - 60);
+            }
+
+            if(escElapsed < 3) ctx.restore(); // end screen shake
+        }
+    }
+
+    // PM rage shake — intermittent (only when cage is closed)
+    if(!pm.cageOpen) {
+        if(Math.random() < 0.005 && pm.shakeIntensity === 0) {
+            pm.shakeIntensity = 6;
+            pm.aggroTimer = t;
+        }
+        if(pm.shakeIntensity > 0 && t - pm.aggroTimer > 1500) {
+            pm.shakeIntensity = 0;
+        }
     }
 
     // === DIRECTION PROMPTS ===
@@ -15686,6 +16161,34 @@ function drawScene() {
                 ctx.restore();
             }
 
+            // CEO office exit prompt — only shown when CEO has entered murder mode
+            if(level6.ceoExitPrompt) {
+                const promptY = 430;
+                ctx.fillStyle = 'rgba(0,0,0,0.82)';
+                ctx.fillRect(240, promptY, 220, 40);
+                ctx.strokeStyle = level6.ceoEnteredMurderMode ? '#ffd700' : '#666';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(240, promptY, 220, 40);
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                if(level6.ceoEnteredMurderMode || ceo.state === 'dead') {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fillText('[ ACTION ] — LEAVE OFFICE', 350, promptY + 16);
+                    ctx.font = '10px Arial';
+                    ctx.fillStyle = '#cc8800';
+                    ctx.fillText(ceo.state === 'dead' ? 'Exit to entryway' : '\u26a0 CEO will pursue you', 350, promptY + 32);
+                }
+            }
+            // Locked exit hint when CEO hasn't entered murder mode yet
+            if(player.y > 420 && Math.abs(player.x - 350) < 120 && !level6.ceoEnteredMurderMode && ceo.state !== 'dead') {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(250, 435, 200, 24);
+                ctx.fillStyle = '#cc4444';
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('\ud83d\udd12 Exit locked — CEO controls the door', 350, 452);
+            }
+
             // End screen shake
             if(level6.missileFireTimer > 0) {
                 ctx.restore();
@@ -15702,6 +16205,63 @@ function drawScene() {
 
         if(level6.elevatorUI) {
             drawElevatorUI();
+        }
+
+        // Employee lobby 3D printer UI
+        if(level6.lobbyPrinterUI) {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            ctx.fillRect(-GX, 340, CANVAS_W, CANVAS_H);
+            if(!level6.lobbyPrinterConfirming) {
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 22px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText('SELECT ITEM:', 30, 375);
+
+                const gunSelected = level6.lobbyPrinterChoice === 0;
+                ctx.strokeStyle = gunSelected ? '#f5f2ec' : '#666';
+                ctx.lineWidth = gunSelected ? 4 : 2;
+                ctx.fillStyle = '#888';
+                ctx.fillRect(30, 390, 140, 70);
+                ctx.strokeRect(30, 390, 140, 70);
+                // Ghost gun icon
+                ctx.fillStyle = '#666';
+                ctx.fillRect(68, 410, 30, 8);
+                ctx.fillStyle = '#555';
+                ctx.fillRect(68, 408, 30, 2);
+                ctx.fillStyle = '#666';
+                ctx.fillRect(70, 418, 8, 16);
+                ctx.fillStyle = '#555';
+                ctx.fillRect(78, 418, 6, 2);
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GHOST GUN', 100, 455);
+
+                const heartSelected = level6.lobbyPrinterChoice === 1;
+                ctx.strokeStyle = heartSelected ? '#f5f2ec' : '#666';
+                ctx.lineWidth = heartSelected ? 4 : 2;
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillRect(190, 390, 140, 70);
+                ctx.strokeRect(190, 390, 140, 70);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('\u2665', 260, 435);
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 18px Arial';
+                ctx.fillText('HEART', 260, 455);
+            } else {
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'center';
+                const itemName = level6.lobbyPrinterChoice === 0 ? 'GHOST GUN' : 'HEART';
+                ctx.fillText('PRINT ' + itemName + '?', 350, 385);
+                ctx.fillStyle = level6.lobbyPrinterChoice === 0 ? '#888' : '#e74c3c';
+                ctx.fillRect(270, 410, 160, 60);
+                ctx.fillStyle = '#2b2b2b';
+                ctx.font = 'bold 20px Arial';
+                ctx.fillText('CONFIRM', 350, 445);
+            }
         }
 
         // Elevator fade-to-black transition (both fade-out and fade-in)
@@ -16311,6 +16871,22 @@ function drawScene() {
         }
     }
     
+    // === PURSUING CEO — drawn in any level 6 room when CEO is chasing player ===
+    if(level === 6 && level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && level6.room !== 'ceoOffice') {
+        drawCEO(ceo.x, ceo.y, ceo.facing);
+        // "CEO" warning label
+        ctx.fillStyle = 'rgba(120,0,0,0.8)';
+        ctx.fillRect(ceo.x - 45, ceo.y - 70, 90, 16);
+        ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
+        ctx.strokeRect(ceo.x - 45, ceo.y - 70, 90, 16);
+        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u26a0 CEO PURSUIT \u26a0', ceo.x, ceo.y - 58);
+    }
+    // Dead pursuing CEO (non-bridge death)
+    if(level === 6 && ceo.state === 'dead' && !ceo.bridgeDeath && level6.room !== 'ceoOffice' && level6.ceoPursuing === false && ceo.ceoVisible) {
+        drawDeadCEO(ceo.x, ceo.y);
+    }
+
     for(let mf of muzzleFlashes) {
         const flashX = mf.facing === 'left' ? mf.x - 30 : mf.x + 30;
         ctx.fillStyle = `rgba(255,200,0,${mf.life / 10})`;
@@ -17425,6 +18001,69 @@ function update() {
             }
             } // end CEO AI room guard
 
+            // === CEO PURSUIT SYSTEM — CEO chases player through all level 6 rooms ===
+            if(level6.ceoPursuing && ceo.state === 'hunting' && level6.room !== 'ceoOffice') {
+                // CEO appears at door entrance after 3-second delay
+                const pursuitDelay = 3000;
+                if(level6.ceoAppearRoom !== level6.room) {
+                    // Player changed rooms — reset appearance timer
+                    level6.ceoAppearRoom = level6.room;
+                    level6.ceoAppearTimer = Date.now();
+                    ceo.ceoVisible = false;
+                }
+
+                if(Date.now() - level6.ceoAppearTimer > pursuitDelay) {
+                    if(!ceo.ceoVisible) {
+                        // CEO enters from left/right door depending on room layout
+                        ceo.ceoVisible = true;
+                        // Place CEO at entry point based on room
+                        if(level6.room === 'entryway') {
+                            ceo.x = 350; ceo.y = 340;
+                        } else if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge') {
+                            ceo.x = 80; ceo.y = 380;
+                        } else if(level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'employeeHallway') {
+                            ceo.x = 100; ceo.y = 380;
+                        } else if(level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
+                            ceo.x = 640; ceo.y = 380;
+                        } else {
+                            ceo.x = 100; ceo.y = 380;
+                        }
+                        ceo.facing = player.x > ceo.x ? 'right' : 'left';
+                    }
+
+                    // CEO chases player in 1D rooms (horizontal only)
+                    const dx = player.x - ceo.x;
+                    const pursuitSpeed = 2.5;
+                    if(Math.abs(dx) > 50) {
+                        ceo.x += (dx > 0 ? 1 : -1) * pursuitSpeed;
+                        ceo.facing = dx > 0 ? 'right' : 'left';
+                        ceo.moveTimer++;
+                    } else {
+                        ceo.facing = dx > 0 ? 'right' : 'left';
+                    }
+                    // In 2D rooms (entryway), also move vertically
+                    if(level6.room === 'entryway') {
+                        const dy = player.y - ceo.y;
+                        if(Math.abs(dy) > 30) {
+                            ceo.y += (dy > 0 ? 1 : -1) * pursuitSpeed;
+                        }
+                    }
+
+                    // CEO shoots while pursuing
+                    ceo.shootTimer++;
+                    if(ceo.shootTimer > 90 && Date.now() - ceo.lastShot > 2000) {
+                        const angle = Math.atan2(player.y - ceo.y, player.x - ceo.x);
+                        bullets.push({
+                            x: ceo.x, y: ceo.y,
+                            vx: Math.cos(angle) * 8,
+                            vy: Math.sin(angle) * 8,
+                            fromCEO: true
+                        });
+                        ceo.lastShot = Date.now();
+                        ceo.shootTimer = 0;
+                    }
+                }
+            }
 
             // NPC exit sequence
             if(level6.npcExitSequence) {
@@ -17985,18 +18624,84 @@ function update() {
             else if(level6.room === 'employeeLobby') {
                 player.y = 380;
 
-                // Elevator interaction on right side
-                if(player.x > 560 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
-                    level6.elevatorUI = true;
-                    level6.elevatorChoice = 0;
-                    keys[' '] = false;
-                    keys['action'] = false;
-                }
-                // Go left to cloning room
-                if(player.x < 40) {
-                    level6.room = 'cloningRoom';
-                    player.x = 640;
-                    player.y = 380;
+                // 3D Printer UI handling
+                if(level6.lobbyPrinterUI) {
+                    if(!level6.lobbyPrinterConfirming) {
+                        if(keys['ArrowLeft'] || keys['left']) {
+                            level6.lobbyPrinterChoice = 0;
+                            keys['ArrowLeft'] = false; keys['left'] = false;
+                        }
+                        if(keys['ArrowRight'] || keys['right']) {
+                            level6.lobbyPrinterChoice = 1;
+                            keys['ArrowRight'] = false; keys['right'] = false;
+                        }
+                        if(keys['Escape']) {
+                            level6.lobbyPrinterUI = false;
+                            keys['Escape'] = false;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            level6.lobbyPrinterConfirming = true;
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    } else {
+                        if(keys['Escape']) {
+                            level6.lobbyPrinterConfirming = false;
+                            keys['Escape'] = false;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            level6.lobbyPrinterUI = false;
+                            level6.lobbyPrinterConfirming = false;
+                            level6.lobbyPrinting = true;
+                            level6.lobbyPrintProgress = 0;
+                            level6.lobbyPrintingHeart = (level6.lobbyPrinterChoice === 1);
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                    // Block other input while in printer UI
+                } else {
+                    // 3D Printer printing progress
+                    if(level6.lobbyPrinting) {
+                        level6.lobbyPrintProgress += 0.02;
+                        if(level6.lobbyPrintProgress >= 1) {
+                            level6.lobbyPrinting = false;
+                            level6.lobbyPrintProgress = 0;
+                            if(level6.lobbyPrintingHeart) {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                                level6.lobbyPrintingHeart = false;
+                            } else {
+                                ghostGun.hasGun = true;
+                                ghostGun.ammo = 1;
+                            }
+                        }
+                    }
+
+                    // Elevator interaction on right side
+                    if(player.x > 560 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
+                        level6.elevatorUI = true;
+                        level6.elevatorChoice = 0;
+                        keys[' '] = false;
+                        keys['action'] = false;
+                    }
+
+                    // 3D Printer interaction (near printer, right side of elevator)
+                    const printerCenterX = 515; // prX + prW/2
+                    if(Math.abs(player.x - printerCenterX) < 60 && !level6.lobbyPrinting && !ghostGun.hasGun && (keys[' '] || keys['action'])) {
+                        // Don't trigger if near elevator
+                        if(player.x <= 560) {
+                            level6.lobbyPrinterUI = true;
+                            level6.lobbyPrinterChoice = 0;
+                            keys[' '] = false;
+                            keys['action'] = false;
+                        }
+                    }
+
+                    // Go left to cloning room
+                    if(player.x < 40) {
+                        level6.room = 'cloningRoom';
+                        player.x = 640;
+                        player.y = 380;
+                    }
                 }
             }
 
@@ -18073,6 +18778,55 @@ function update() {
                             muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
                             player.shootTimer = 20;
                         }
+                    }
+                }
+
+                // === PM CAGE ESCAPE LOGIC ===
+                const pm = level6.mutantPM;
+                if(pm.cageOpen && !pm.eating && !pm.escaped) {
+                    const barsDropped = pm.barsDropTime > 0 && (Date.now() - pm.barsDropTime) > 800;
+                    if(barsDropped) {
+                        // Check if anyone walks in front of cage (within PM reach)
+                        const pmReachX = 80; // reach distance from cage center
+                        const pmCenterX = pm.x;
+
+                        // Check CEO first (pursuing), then player — whichever is in range first
+                        let eatTarget = null;
+                        if(level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && Math.abs(ceo.x - pmCenterX) < pmReachX && Math.abs(ceo.y - pm.y) < 60) {
+                            eatTarget = 'ceo';
+                        } else if(Math.abs(player.x - pmCenterX) < pmReachX && Math.abs(player.y - pm.y) < 60) {
+                            eatTarget = 'player';
+                        }
+
+                        if(eatTarget) {
+                            pm.eating = true;
+                            pm.eatTarget = eatTarget;
+                            pm.eatTime = Date.now();
+                            if(eatTarget === 'ceo') {
+                                // CEO gets eaten — instant death
+                                ceo.state = 'dead';
+                                level6.ceoDefeated = true;
+                                level6.ceoPursuing = false;
+                                score += 5000;
+                            } else {
+                                // Player gets eaten — game over
+                                level6.moneyLives = 0;
+                                updateLives();
+                                state = 'over';
+                                menuChoice = 0;
+                            }
+                        }
+                    }
+                }
+
+                // PM gorilla escape — after eating, PM runs out
+                if(pm.eating && pm.eatTime > 0 && !pm.escaped) {
+                    const eatElapsed = (Date.now() - pm.eatTime) / 1000;
+                    if(eatElapsed > 3) {
+                        pm.escaped = true;
+                        pm.escapeTime = Date.now();
+                        pm.escapeDir = player.x > pm.x ? -1 : 1; // run away from player
+                        pm.eating = false;
                     }
                 }
             }
@@ -18236,6 +18990,7 @@ function update() {
                         ceo.state = 'hunting';
                         ceo.walkTarget = null;
                         level6.ceoAngryMode = false;
+                        level6.ceoEnteredMurderMode = true;
                         ceo.shootTimer = 0;
                         ceo.health = 6;
                         // Trigger detective dialogue
@@ -18696,6 +19451,32 @@ if (keys[' '] || keys['action']) {
                         player.facing = 'down';
                     }
                 }
+
+                // CEO office exit — only available after CEO enters murder mode (or is dead)
+                if(player.y > 420 && Math.abs(player.x - 350) < 120) {
+                    if(level6.ceoEnteredMurderMode || ceo.state === 'dead') {
+                        // Show exit prompt
+                        level6.ceoExitPrompt = true;
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false;
+                            keys['action'] = false;
+                            level6.ceoExitPrompt = false;
+                            level6.room = 'entryway';
+                            player.x = 350;
+                            player.y = 400;
+                            // Start CEO pursuit if alive and in hunting mode
+                            if(ceo.state === 'hunting') {
+                                level6.ceoPursuing = true;
+                                level6.ceoAppearTimer = Date.now();
+                                level6.ceoAppearRoom = 'entryway';
+                            }
+                        }
+                    } else {
+                        level6.ceoExitPrompt = false;
+                    }
+                } else {
+                    level6.ceoExitPrompt = false;
+                }
                 }
             }
         
@@ -18736,6 +19517,21 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
+                // PM cage padlock collision — shoot the lock off
+                if(!bullets[i].fromCEO && level6.room === 'cloningRoom' && level6.mutantPM && !level6.mutantPM.cageLockShot) {
+                    const pm = level6.mutantPM;
+                    const lockX = pm.x, lockY = pm.y + 50; // padlock position (cageY + cageH)
+                    if(Math.abs(bullets[i].x - lockX) < 20 && Math.abs(bullets[i].y - lockY) < 20) {
+                        pm.cageLockShot = true;
+                        pm.cageOpen = true;
+                        pm.barsDropTime = Date.now();
+                        pm.shakeIntensity = 8;
+                        pm.aggroTimer = Date.now();
+                        bullets.splice(i, 1);
+                        score += 500;
+                        continue;
+                    }
+                }
 
                 // Assembly bridge cloning boss collision
                 if(!bullets[i].fromCEO && level6.room === 'nuclearBridge' && level6.bridgeCloningBoss && level6.bridgeCloningBoss.alive) {
@@ -18789,6 +19585,56 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
+                // Pursuing CEO hit — in any room (including bridge hazard deaths)
+                if(!bullets[i].fromCEO && level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && level6.room !== 'ceoOffice') {
+                    if(Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
+                        ceo.health--;
+                        ceo.blinkTimer = 10;
+                        bullets.splice(i, 1);
+                        score += 500;
+
+                        // CEO bridge death — same hazard zone deaths as cloning boss
+                        if(level6.room === 'nuclearBridge' && ceo.health <= 0) {
+                            ceo.state = 'dead';
+                            level6.ceoDefeated = true;
+                            level6.ceoPursuing = false;
+                            // Set up bridge death animation
+                            ceo.bridgeDeath = true;
+                            ceo.deathTime = Date.now();
+                            if (ceo.x >= 60 && ceo.x < 155) {
+                                ceo.deathType = 'acid';
+                            } else if (ceo.x >= 265 && ceo.x < 335) {
+                                ceo.deathType = 'syringe';
+                            } else if (ceo.x >= 370 && ceo.x < 440) {
+                                ceo.deathType = 'warhead';
+                            } else if (ceo.x >= 480 && ceo.x < 560) {
+                                ceo.deathType = 'conveyor';
+                            } else if (ceo.x >= 600 && ceo.x < 670) {
+                                ceo.deathType = 'truck';
+                            } else {
+                                ceo.deathType = 'fall';
+                            }
+                            // Drop cash sacks
+                            for(let s = 0; s < 3; s++) {
+                                level6.cashSacks.push({ x: ceo.x + (s - 1) * 30, y: 385, claimed: false });
+                            }
+                        } else if(ceo.health <= 0) {
+                            // Non-bridge death
+                            ceo.state = 'dead';
+                            level6.ceoDefeated = true;
+                            level6.ceoPursuing = false;
+                            // Drop cash sacks
+                            for(let s = 0; s < 3; s++) {
+                                level6.cashSacks.push({ x: ceo.x + (s - 1) * 30, y: ceo.y + 20, claimed: false });
+                            }
+                        } else if(ceo.state !== 'hunting') {
+                            ceo.state = 'hunting';
+                            level6.ceoEnteredMurderMode = true;
+                        }
+                        continue;
+                    }
+                }
+
                 if(level6.room === 'ceoOffice' && !bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
                     ceo.health--;
                     ceo.blinkTimer = 10;
@@ -18818,8 +19664,10 @@ if (keys[' '] || keys['action']) {
                     if(ceo.health <= 0) {
                         ceo.state = 'dead';
                         level6.ceoDefeated = true;
-                    } else if(ceo.state === 'admiring') {
+                        level6.ceoPursuing = false;
+                    } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
                         ceo.state = 'hunting';
+                        level6.ceoEnteredMurderMode = true;
                     }
                     continue;
                 }
