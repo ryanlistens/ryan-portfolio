@@ -10177,55 +10177,33 @@ function drawLevel6EmployeeLobby() {
     ctx.lineWidth = 2;
     ctx.strokeRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
 
-    // === 3D PRINTER (right side of elevator) ===
-    const prX = 490, prY = 330, prW = 50, prH = 70;
-    // Printer body
-    ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(prX, prY, prW, prH);
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(prX + 2, prY + 2, prW - 4, prH - 4);
-    // Printer lid (glass top)
-    ctx.fillStyle = 'rgba(100,140,180,0.3)';
-    ctx.fillRect(prX + 4, prY + 4, prW - 8, 20);
-    // Status LED
-    const printerBusy = level6.lobbyPrinting;
-    ctx.fillStyle = printerBusy ? '#ffaa00' : '#00ff88';
-    ctx.shadowColor = printerBusy ? '#ffaa00' : '#00ff88';
-    ctx.shadowBlur = 4;
-    ctx.beginPath(); ctx.arc(prX + prW - 8, prY + 8, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    // Print bed
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(prX + 6, prY + 28, prW - 12, 30);
-    // Nozzle arm
-    const nozzleX = printerBusy ? prX + 10 + Math.sin(Date.now() / 200) * 15 : prX + prW / 2 - 4;
-    ctx.fillStyle = '#666';
-    ctx.fillRect(prX + 4, prY + 24, prW - 8, 3);
-    ctx.fillStyle = '#888';
-    ctx.fillRect(nozzleX, prY + 22, 8, 8);
-    // Printing progress bar
-    if(printerBusy) {
+    // === 3D PRINTER on table (between plants and elevator — matches level 4 design) ===
+    const prCenterX = 440, prTableY = 365;
+    drawTableDesk(prCenterX, prTableY, 60);
+    // Temporarily set ghostGun print state for draw3DPrinter animation
+    const savedPrinting = ghostGun.printing, savedProgress = ghostGun.printProgress, savedHeart = ghostGun.printingHeart;
+    if(level6.lobbyPrinting) {
+        ghostGun.printing = true;
+        ghostGun.printProgress = level6.lobbyPrintProgress;
+        ghostGun.printingHeart = level6.lobbyPrintingHeart;
+    }
+    draw3DPrinter(prCenterX, prTableY);
+    ghostGun.printing = savedPrinting; ghostGun.printProgress = savedProgress; ghostGun.printingHeart = savedHeart;
+    // Printing progress bar (lobby-specific overlay)
+    if(level6.lobbyPrinting) {
         ctx.fillStyle = '#333';
-        ctx.fillRect(prX + 4, prY + prH - 12, prW - 8, 8);
+        ctx.fillRect(prCenterX - 21, prTableY + 6, 42, 6);
         ctx.fillStyle = '#00cc66';
-        ctx.fillRect(prX + 4, prY + prH - 12, (prW - 8) * level6.lobbyPrintProgress, 8);
+        ctx.fillRect(prCenterX - 21, prTableY + 6, 42 * level6.lobbyPrintProgress, 6);
     }
-    // Printed item preview (when done)
-    if(!printerBusy && (ghostGun.hasGun || level6.lobbyPrintProgress >= 1)) {
-        // Nothing visible — item already taken
-    }
-    // Label
-    ctx.fillStyle = '#888';
-    ctx.font = 'bold 8px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('3D PRINTER', prX + prW / 2, prY + prH + 10);
     // Interaction prompt
-    if(Math.abs(player.x - (prX + prW / 2)) < 60 && !level6.lobbyPrinterUI && !printerBusy) {
+    if(Math.abs(player.x - prCenterX) < 60 && !level6.lobbyPrinterUI && !level6.lobbyPrinting) {
         ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(prX - 20, prY - 28, prW + 40, 22);
+        ctx.fillRect(prCenterX - 55, prTableY - 52, 110, 22);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 12px Arial';
-        ctx.fillText('[ ACTION ] - PRINT', prX + prW / 2, prY - 12);
+        ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] - PRINT', prCenterX, prTableY - 36);
     }
 
     // Direction prompts
@@ -16227,32 +16205,23 @@ function drawScene() {
                 ctx.restore();
             }
 
-            // CEO office exit prompt — only shown when CEO has entered murder mode
+            // CEO office exit prompt
             if(level6.ceoExitPrompt) {
                 const promptY = 430;
                 ctx.fillStyle = 'rgba(0,0,0,0.82)';
                 ctx.fillRect(240, promptY, 220, 40);
-                ctx.strokeStyle = level6.ceoEnteredMurderMode ? '#ffd700' : '#666';
+                ctx.strokeStyle = '#ffd700';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(240, promptY, 220, 40);
                 ctx.font = 'bold 14px Arial';
                 ctx.textAlign = 'center';
-                if(level6.ceoEnteredMurderMode || ceo.state === 'dead') {
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillText('[ ACTION ] — LEAVE OFFICE', 350, promptY + 16);
-                    ctx.font = '10px Arial';
-                    ctx.fillStyle = '#cc8800';
-                    ctx.fillText(ceo.state === 'dead' ? 'Exit to entryway' : '\u26a0 CEO will pursue you', 350, promptY + 32);
-                }
-            }
-            // Locked exit hint when CEO hasn't entered murder mode yet
-            if(player.y > 420 && Math.abs(player.x - 350) < 120 && !level6.ceoEnteredMurderMode && ceo.state !== 'dead') {
-                ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                ctx.fillRect(250, 435, 200, 24);
-                ctx.fillStyle = '#cc4444';
-                ctx.font = 'bold 11px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('\ud83d\udd12 Exit locked — CEO controls the door', 350, 452);
+                ctx.fillStyle = '#ffd700';
+                ctx.fillText('[ ACTION ] \u2014 LEAVE OFFICE', 350, promptY + 16);
+                ctx.font = '10px Arial';
+                ctx.fillStyle = '#cc8800';
+                const exitHint = ceo.state === 'dead' ? 'Exit to entryway' :
+                    ceo.state === 'hunting' ? '\u26a0 CEO will pursue you' : 'Exit to entryway';
+                ctx.fillText(exitHint, 350, promptY + 32);
             }
 
             // End screen shake
@@ -18751,7 +18720,7 @@ function update() {
                     }
 
                     // 3D Printer interaction (near printer, right side of elevator)
-                    const printerCenterX = 515; // prX + prW/2
+                    const printerCenterX = 440; // prCenterX from drawing code
                     if(Math.abs(player.x - printerCenterX) < 60 && !level6.lobbyPrinting && !ghostGun.hasGun && (keys[' '] || keys['action'])) {
                         // Don't trigger if near elevator
                         if(player.x <= 560) {
@@ -19543,27 +19512,22 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
-                // CEO office exit — only available after CEO enters murder mode (or is dead)
+                // CEO office exit — always available (CEO may pursue if in hunting mode)
                 if(player.y > 420 && Math.abs(player.x - 350) < 120) {
-                    if(level6.ceoEnteredMurderMode || ceo.state === 'dead') {
-                        // Show exit prompt
-                        level6.ceoExitPrompt = true;
-                        if(keys[' '] || keys['action']) {
-                            keys[' '] = false;
-                            keys['action'] = false;
-                            level6.ceoExitPrompt = false;
-                            level6.room = 'entryway';
-                            player.x = 350;
-                            player.y = 400;
-                            // Start CEO pursuit if alive and in hunting mode
-                            if(ceo.state === 'hunting') {
-                                level6.ceoPursuing = true;
-                                level6.ceoAppearTimer = Date.now();
-                                level6.ceoAppearRoom = 'entryway';
-                            }
-                        }
-                    } else {
+                    level6.ceoExitPrompt = true;
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false;
+                        keys['action'] = false;
                         level6.ceoExitPrompt = false;
+                        level6.room = 'entryway';
+                        player.x = 350;
+                        player.y = 400;
+                        // Start CEO pursuit if alive and in hunting mode
+                        if(ceo.state === 'hunting') {
+                            level6.ceoPursuing = true;
+                            level6.ceoAppearTimer = Date.now();
+                            level6.ceoAppearRoom = 'entryway';
+                        }
                     }
                 } else {
                     level6.ceoExitPrompt = false;
