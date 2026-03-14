@@ -16705,6 +16705,35 @@ function drawScene() {
             ctx.shadowBlur = 0;
         }
 
+        // === PURSUING CEO — drawn in any level 6 room when CEO is chasing player ===
+        if(level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && level6.room !== 'ceoOffice') {
+            drawCEO(ceo.x, ceo.y, ceo.facing);
+            // "CEO" warning label
+            ctx.fillStyle = 'rgba(120,0,0,0.8)';
+            ctx.fillRect(ceo.x - 45, ceo.y - 70, 90, 16);
+            ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
+            ctx.strokeRect(ceo.x - 45, ceo.y - 70, 90, 16);
+            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('\u26a0 CEO PURSUIT \u26a0', ceo.x, ceo.y - 58);
+        }
+        // Dead pursuing CEO (non-bridge death)
+        if(ceo.state === 'dead' && !ceo.bridgeDeath && level6.room !== 'ceoOffice' && level6.ceoPursuing === false && ceo.ceoVisible) {
+            drawDeadCEO(ceo.x, ceo.y);
+        }
+
+        // Muzzle flashes
+        for(let mf of muzzleFlashes) {
+            const flashX = mf.facing === 'left' ? mf.x - 30 : mf.x + 30;
+            ctx.fillStyle = `rgba(255,200,0,${mf.life / 10})`;
+            ctx.beginPath();
+            ctx.arc(flashX, mf.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = `rgba(255,255,100,${mf.life / 10})`;
+            ctx.beginPath();
+            ctx.arc(flashX, mf.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         if(fadeAlpha > 0) {
             ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
@@ -18805,6 +18834,24 @@ function update() {
                     actionConsumed = true;
                 }
 
+                // === CAGE KEY UNLOCK (alternative to shooting lock) — checked BEFORE revolver so ACTION isn't consumed ===
+                if(!actionConsumed && level6.cageKey.found && !level6.cageKey.used && !level6.mutantPM.cageLockShot && !level6.mutantPM.cageOpen) {
+                    const pmKeyDist = Math.abs(player.x - level6.mutantPM.x);
+                    if(pmKeyDist < 60 && (keys[' '] || keys['action'])) {
+                        level6.cageKey.used = true;
+                        level6.cageKey.useTime = Date.now();
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        actionConsumed = true;
+                        // 1-second delay before bars drop (gives player time to move)
+                        setTimeout(function() {
+                            level6.mutantPM.cageLockShot = true;
+                            level6.mutantPM.cageOpen = true;
+                            level6.mutantPM.barsDropTime = Date.now();
+                        }, 1000);
+                    }
+                }
+
                 // Fire revolver in cloning room (action key when not near interactables)
                 if(!actionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
                     // Don't fire if near keycard, left door, right exit, or concealed door
@@ -18824,23 +18871,6 @@ function update() {
                             muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
                             player.shootTimer = 20;
                         }
-                    }
-                }
-
-                // === CAGE KEY UNLOCK (alternative to shooting lock) ===
-                if(level6.cageKey.found && !level6.cageKey.used && !level6.mutantPM.cageLockShot && !level6.mutantPM.cageOpen) {
-                    const pmKeyDist = Math.abs(player.x - level6.mutantPM.x);
-                    if(pmKeyDist < 60 && (keys[' '] || keys['action'])) {
-                        level6.cageKey.used = true;
-                        level6.cageKey.useTime = Date.now();
-                        keys[' '] = false;
-                        keys['action'] = false;
-                        // 1-second delay before bars drop (gives player time to move)
-                        setTimeout(function() {
-                            level6.mutantPM.cageLockShot = true;
-                            level6.mutantPM.cageOpen = true;
-                            level6.mutantPM.barsDropTime = Date.now();
-                        }, 1000);
                     }
                 }
 
