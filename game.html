@@ -473,6 +473,9 @@ let keys = {};
 let explosions = [];
 let bullets = [];
 let muzzleFlashes = [];
+function bulletImpact(x, y) {
+    muzzleFlashes.push({ x: x, y: y, life: 4 });
+}
 let bossDoor = { state: 'closed', openPct: 0 };
 
 let boss = {
@@ -964,7 +967,9 @@ function createExplosion(x, y) {
 }
 
 function createMuzzleFlash(x, y, facing) {
-    muzzleFlashes.push({x, y, facing, life: 10});
+    // Offset flash to gun barrel
+    const flashX = facing === 'left' ? x - 30 : x + 30;
+    muzzleFlashes.push({x: flashX, y, life: 10});
 }
 
 function checkPromotion() {
@@ -11733,7 +11738,8 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = 'rgba(15,12,10,0.5)';
     ctx.fillRect(cageX, cageY, cageW, cageH);
 
-    // === THE MUTANT PM (drawn inside cage) ===
+    // === THE MUTANT PM (drawn inside cage — hidden after escape) ===
+    if(!pm.escaped) {
     const mx = pmX + pmShakeX, my = pmY + pmShakeY;
     const breathe = Math.sin(t / 800) * 2;
 
@@ -11814,6 +11820,7 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = '#333';
     ctx.fillRect(mx - 18, my + 42 + breathe, 16, 6);
     ctx.fillRect(mx + 2, my + 42 + breathe, 16, 6);
+    } // end if(!pm.escaped)
 
     // Cage bars (front, drawn over PM) — animate dropping when lock shot
     if(!pm.cageOpen) {
@@ -16736,7 +16743,7 @@ function drawScene() {
 
         // Muzzle flashes
         for(let mf of muzzleFlashes) {
-            const flashX = mf.facing === 'left' ? mf.x - 30 : mf.x + 30;
+            const flashX = mf.x;
             ctx.fillStyle = `rgba(255,200,0,${mf.life / 10})`;
             ctx.beginPath();
             ctx.arc(flashX, mf.y, 8, 0, Math.PI * 2);
@@ -18853,6 +18860,7 @@ function update() {
                         if(Math.abs(b.x - cb.x) < 50 && Math.abs(b.y - cb.y) < 60) {
                             cb.alive = false;
                             cb.deathTime = Date.now();
+                            bulletImpact(b.x, b.y);
                             bullets.splice(i, 1);
                             // Drop keycard
                             level6.keycardOnGround = true;
@@ -18910,7 +18918,7 @@ function update() {
                         if(vx !== 0) {
                             bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
                             level6.revolverAmmo--;
-                            muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                            // muzzle flash created at impact point instead
                             player.shootTimer = 20;
                         }
                     }
@@ -19138,7 +19146,7 @@ function update() {
                         if(vx !== 0) {
                             bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
                             level6.revolverAmmo--;
-                            muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                            // muzzle flash created at impact point instead
                             player.shootTimer = 20;
                         }
                     }
@@ -19712,6 +19720,7 @@ if (keys[' '] || keys['action']) {
                     level6.moneyLives--;
                     level6.damageFlash = 1;
                     updateLives();
+                    bulletImpact(bullets[i].x, bullets[i].y);
                     bullets.splice(i, 1);
                 
                     if(level6.moneyLives <= 0) {
@@ -19727,6 +19736,7 @@ if (keys[' '] || keys['action']) {
                     if(Math.abs(bullets[i].x - cb.x) < 30 && Math.abs(bullets[i].y - cb.y) < 40) {
                         cb.alive = false;
                         cb.deathTime = Date.now();
+                        bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
                         level6.keycardOnGround = true;
                         level6.keycardX = cb.x;
@@ -19748,6 +19758,7 @@ if (keys[' '] || keys['action']) {
                         pm.barsDropTime = Date.now();
                         pm.shakeIntensity = 8;
                         pm.aggroTimer = Date.now();
+                        bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
                         score += 500;
                         continue;
@@ -19776,6 +19787,7 @@ if (keys[' '] || keys['action']) {
                             bcb.deathType = 'fall';       // generic fall to factory floor
                         }
                         bcb.fallY = bcb.y;  // starting Y for fall animation
+                        bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
                         score += 3000;
                         // Drop 3 ammo rounds from bridge boss
@@ -19794,6 +19806,7 @@ if (keys[' '] || keys['action']) {
                     if(Math.abs(bullets[i].x - hallCB.x) < 30 && Math.abs(bullets[i].y - hallCB.y) < 40) {
                         hallCB.alive = false;
                         hallCB.deathTime = Date.now();
+                        bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
                         score += 3000;
                         // Drop 1 ? life + 3 ammo
@@ -19811,6 +19824,7 @@ if (keys[' '] || keys['action']) {
                     if(Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
                         ceo.health--;
                         ceo.blinkTimer = 10;
+                        bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
                         score += 500;
 
@@ -19859,6 +19873,7 @@ if (keys[' '] || keys['action']) {
                 if(level6.room === 'ceoOffice' && !bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
                     ceo.health--;
                     ceo.blinkTimer = 10;
+                    bulletImpact(bullets[i].x, bullets[i].y);
 
                     // Drop cash sacks - behind CEO if at mirror, otherwise in circle pattern
                     let sackX, sackY;
@@ -19900,6 +19915,7 @@ if (keys[' '] || keys['action']) {
                     // Brandy bottle collision (on desk, left side)
                     const bdX = 295, bdY = 200; // deskX-55, deskY-50
                     if(!level6.brandyDestroyed && Math.abs(bx - bdX) < 18 && by > bdY - 5 && by < bdY + 40) {
+                        bulletImpact(bx, by);
                         level6.brandyDestroyed = true;
                         level6.deskCharSize = 0;
                         // Spawn glass shards
@@ -19921,6 +19937,7 @@ if (keys[' '] || keys['action']) {
                     // DECORATIVE MISSILE collision (between portrait and safe on back wall)
                     const missileHitX = 250, missileHitY = 100;
                     if(!level6.missileExploded && Math.abs(bx - missileHitX) < 20 && by > missileHitY - 5 && by < missileHitY + 65) {
+                        bulletImpact(bx, by);
                         level6.missileExploded = true;
                         level6.missileExplosionTime = Date.now();
                         level6.missileFireTimer = 0;
@@ -19992,6 +20009,7 @@ if (keys[' '] || keys['action']) {
 
                     // Mirror collision (left side of room, against back wall)
                     if(!level6.mirrorShattered && bx > 50 && bx < 140 && by > 90 && by < 200) {
+                        bulletImpact(bx, by);
                         if(!level6.mirrorCracked) {
                             level6.mirrorCracked = true;
                             // Small crack shards
@@ -20027,6 +20045,7 @@ if (keys[' '] || keys['action']) {
 
                     // CCTV TV collision (compact TV next to safe)
                     if(!level6.cctv1Destroyed && bx > 437 && bx < 525 && by > 110 && by < 180) {
+                        bulletImpact(bx, by);
                         level6.cctv1Destroyed = true;
                         for(let s = 0; s < 8; s++) {
                             level6.glassShards.push({
