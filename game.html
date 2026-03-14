@@ -267,7 +267,8 @@ const levelMusic = {
     blue: new Audio('music/blue.mp3'),
     yellow: new Audio('music/yellow.mp3'),
     green: new Audio('music/green.mp3'),
-    red: new Audio('music/red.mp3')
+    red: new Audio('music/red.mp3'),
+    newceo: new Audio('music/newceo.mp3')
 };
 
 // Set all music to loop and preload
@@ -834,6 +835,12 @@ function initLevel(lv) {
         level6.youBlewItCard = false;
         level6.youBlewItTimer = 0;
         level6.youBlewItChoice = 0;
+        level6.missileCaseClosedCard = false;
+        level6.missileCaseClosedTimer = 0;
+        level6.missileCaseClosedChoice = 0;
+        level6.newCEOCard = false;
+        level6.newCEOTimer = 0;
+        level6.newCEOChoice = 0;
         level6.missileFireTimer = 0;
         level6.ceoDialogue = false;
         level6.ceoDialogueLine = 0;
@@ -8991,8 +8998,10 @@ function drawNuclearAssemblyBridge() {
         ctx.fillRect(tubeStartX + 2, tubeHorizY - 3, tubeEndX - tubeStartX - 4, 6);
         ctx.fillRect(tubeEndX - 3, tubeHorizY, 6, syringeRestTop - tubeHorizY - 6);
 
-        // Animated goo flow — only during fill sub-phase
-        const isFilling = inMissileCycle && mPhase < 0.22;
+        // Animated goo flow — only during fill sub-phase (suppress when boss died on syringe)
+        const syringeDeath = level6.bridgeCloningBoss && !level6.bridgeCloningBoss.alive && level6.bridgeCloningBoss.deathType === 'syringe';
+        const ceoSyringeDeath = ceo && ceo.bridgeDeath && ceo.deathType === 'syringe';
+        const isFilling = inMissileCycle && mPhase < 0.22 && !syringeDeath && !ceoSyringeDeath;
         if (isFilling) {
             const fillP = mPhase / 0.22;
             const tubeLen = tubeEndX - tubeStartX;
@@ -9345,6 +9354,64 @@ function drawNuclearAssemblyBridge() {
         ctx.fillStyle = '#ff8844'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
         ctx.fillText('TRUCK DOCK', DOCK_X, BELT_Y - mH - 40);
 
+        // ── INDUSTRIAL HAZARD AMBIANCE ─────────────────────────────────────
+        // Steam vents — periodic bursts from floor grates
+        const steamVents = [160, 350, 500];
+        for (let vi = 0; vi < steamVents.length; vi++) {
+            const ventX = steamVents[vi];
+            const ventCycle = (_ft + vi * 2000) % 4000;
+            if (ventCycle < 800) {
+                const burstProg = ventCycle / 800;
+                ctx.globalAlpha = 0.3 * (1 - burstProg);
+                ctx.fillStyle = '#aabbaa';
+                for (let sp = 0; sp < 5; sp++) {
+                    const spY = factFloor - burstProg * (40 + sp * 12);
+                    const spX = ventX + Math.sin(burstProg * 6 + sp * 1.4) * (8 + sp * 3);
+                    ctx.beginPath(); ctx.arc(spX, spY, 3 + sp * 1.5 + burstProg * 4, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            }
+            // Vent grate
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(ventX - 6, factFloor - 2, 12, 3);
+            ctx.fillStyle = '#333';
+            for (let gl = 0; gl < 3; gl++) ctx.fillRect(ventX - 4 + gl * 4, factFloor - 1, 2, 1);
+        }
+
+        // Sparks from syringe station (welding/machinery sparks)
+        const sparkBurst = (_ft % 3200) < 400;
+        if (sparkBurst) {
+            const sparkAge = ((_ft % 3200)) / 400;
+            ctx.fillStyle = '#ffcc44';
+            for (let si = 0; si < 6; si++) {
+                const sa = si * Math.PI * 2 / 6 + sparkAge * 3;
+                const sd = sparkAge * (12 + si * 4);
+                const sx = SYR_X + 8 + Math.cos(sa) * sd;
+                const sy = BELT_Y - 20 + Math.sin(sa) * sd * 0.6;
+                ctx.globalAlpha = Math.max(0, 1 - sparkAge) * 0.8;
+                ctx.fillRect(sx, sy, 2, 2);
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // Rotating warning beacon near truck dock
+        const beaconAngle = _ft * 0.003;
+        const beaconX = DOCK_X + 40, beaconY = BELT_Y - 60;
+        const beaconIntensity = 0.3 + Math.max(0, Math.cos(beaconAngle)) * 0.5;
+        ctx.globalAlpha = beaconIntensity;
+        ctx.fillStyle = '#ff4400';
+        // Beam sweep
+        ctx.beginPath();
+        ctx.moveTo(beaconX, beaconY);
+        ctx.arc(beaconX, beaconY, 30, beaconAngle - 0.3, beaconAngle + 0.3);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+        // Beacon housing
+        ctx.fillStyle = '#333';
+        ctx.fillRect(beaconX - 3, beaconY - 3, 6, 6);
+        ctx.fillStyle = `rgba(255,68,0,${beaconIntensity})`;
+        ctx.beginPath(); ctx.arc(beaconX, beaconY, 3, 0, Math.PI * 2); ctx.fill();
+
         // ── Station name plates ──────────────────────────────────────────────
         [{x: TANK_X, t: 'TANK'}, {x: SYR_X, t: 'FILL'}, {x: CRATE_X, t: 'CRATE'}, {x: DOCK_X, t: 'DOCK'}
         ].forEach(function(sl) {
@@ -9488,9 +9555,69 @@ function drawNuclearAssemblyBridge() {
     }
     if(railX < CANVAS_W) ctx.fillRect(railX, railTopY - 2, CANVAS_W - railX, 3);
 
-    // Mid rail wire — with breaks at gaps
+    // Mid rail wire — with breaks at gaps (skip wire in gap zones)
     ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(-GX, railTopY + 15); ctx.lineTo(CANVAS_W, railTopY + 15); ctx.stroke();
+    let midRailX = -GX;
+    for(const g of railGaps) {
+        if(midRailX < g.left) {
+            ctx.beginPath(); ctx.moveTo(midRailX, railTopY + 15); ctx.lineTo(g.left, railTopY + 15); ctx.stroke();
+        }
+        midRailX = g.right;
+    }
+    if(midRailX < CANVAS_W) {
+        ctx.beginPath(); ctx.moveTo(midRailX, railTopY + 15); ctx.lineTo(CANVAS_W, railTopY + 15); ctx.stroke();
+    }
+
+    // ── HAZARD GAP INDICATORS — danger striping and labels at each railing gap ──
+    const gapLabels = ['ACID POOL', 'SYRINGE', 'WARHEAD', 'CONVEYOR', 'TRUCK BAY'];
+    const gapColors = ['#40ff20', '#40ff20', '#ff6600', '#ffcc00', '#ff4444'];
+    const hazardPulse = 0.6 + Math.sin(_t * 0.005) * 0.35;
+    for (let gi = 0; gi < railGaps.length; gi++) {
+        const g = railGaps[gi];
+        const gapMid = (g.left + g.right) / 2;
+        const gapW = g.right - g.left;
+        // Yellow/black chevron stripes on deck at both gap edges (wider, more visible)
+        ctx.save();
+        for (let side = 0; side < 2; side++) {
+            const edgeX = side === 0 ? g.left - 2 : g.right - 6;
+            ctx.fillStyle = '#cc8800';
+            ctx.fillRect(edgeX, bridgePlatY - 8, 8, 12);
+            ctx.fillStyle = '#000';
+            for (let cy = bridgePlatY - 8; cy < bridgePlatY + 4; cy += 4) {
+                ctx.fillRect(edgeX, cy, 8, 2);
+            }
+        }
+        // Glow effect underneath gap (hazard illumination from below)
+        ctx.globalAlpha = 0.12 + Math.sin(_t * 0.003 + gi * 1.5) * 0.06;
+        ctx.fillStyle = gapColors[gi];
+        ctx.fillRect(g.left, bridgePlatY - 4, gapW, 16);
+        ctx.globalAlpha = 1;
+        // Danger label — larger, bolder, with background
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        const lblW = 8 * (gapLabels[gi].length + 2);
+        ctx.fillRect(gapMid - lblW/2, bridgePlatY + 6, lblW, 16);
+        ctx.strokeStyle = gapColors[gi]; ctx.lineWidth = 1;
+        ctx.strokeRect(gapMid - lblW/2, bridgePlatY + 6, lblW, 16);
+        ctx.globalAlpha = hazardPulse;
+        ctx.fillStyle = gapColors[gi];
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u26a0 ' + gapLabels[gi], gapMid, bridgePlatY + 18);
+        ctx.globalAlpha = 1;
+        // Downward arrows (multiple, animated cascade)
+        for (let ai = 0; ai < 3; ai++) {
+            const arrowY = bridgePlatY + 26 + ai * 10 + ((_t / 200 + ai * 3) % 10);
+            ctx.fillStyle = gapColors[gi];
+            ctx.globalAlpha = (0.5 - ai * 0.15) * hazardPulse;
+            ctx.beginPath();
+            ctx.moveTo(gapMid - 5, arrowY);
+            ctx.lineTo(gapMid + 5, arrowY);
+            ctx.lineTo(gapMid, arrowY + 8);
+            ctx.closePath(); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
 
     // ⚠ Caution placard on intact railing section (between acid and syringe gaps)
     const placardX = 200;
@@ -9801,60 +9928,175 @@ function drawNuclearAssemblyBridge() {
                     ctx.globalAlpha = 1;
 
                 } else if (dType === 'syringe') {
-                    const twitch = Math.sin(impactElapsed * 8) * 3;
+                    // Body impaled on syringe, twitching and inflating with goo
+                    const twitch = Math.sin(impactElapsed * 8) * 3 * Math.max(0, 1 - impactElapsed / 4);
+                    const inflate = Math.min(1, impactElapsed / 3);  // body swells with goo
                     ctx.save();
                     ctx.translate(bx, targetY);
+                    // Body swelling with goo
+                    const bodyW = 20 + inflate * 12;
+                    const bodyH = 24 + inflate * 8;
                     ctx.fillStyle = '#cc2222';
-                    ctx.fillRect(-10 + twitch, -18, 20, 24);
-                    ctx.fillStyle = '#f5d5a8';
-                    ctx.beginPath(); ctx.arc(-6 + twitch, -24, 7, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillRect(-bodyW/2 + twitch, -18, bodyW, bodyH);
+                    // Goo veins showing through suit
+                    if (inflate > 0.3) {
+                        ctx.strokeStyle = `rgba(64,255,32,${inflate * 0.5})`; ctx.lineWidth = 1;
+                        for (let v = 0; v < 4; v++) {
+                            ctx.beginPath();
+                            ctx.moveTo(-6 + v * 4 + twitch, -16);
+                            ctx.lineTo(-8 + v * 4 + twitch + Math.sin(impactElapsed * 3 + v) * 3, bodyH - 20);
+                            ctx.stroke();
+                        }
+                    }
+                    // Head lolling
+                    ctx.fillStyle = inflate > 0.7 ? `rgb(${150 + inflate * 80},${213 - inflate * 120},${168 - inflate * 100})` : '#f5d5a8';
+                    ctx.beginPath(); ctx.arc(-6 + twitch, -24, 7 + inflate * 2, 0, Math.PI * 2); ctx.fill();
+                    // Spiral eyes (dazed)
                     ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                    const eyeSpin = impactElapsed * 4;
                     ctx.beginPath();
-                    ctx.moveTo(-11 + twitch, -28); ctx.lineTo(-8 + twitch, -25);
-                    ctx.moveTo(-8 + twitch, -28); ctx.lineTo(-11 + twitch, -25);
+                    ctx.arc(-9 + twitch + Math.cos(eyeSpin) * 2, -26 + Math.sin(eyeSpin), 2, 0, Math.PI * 1.5);
                     ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(-3 + twitch + Math.cos(eyeSpin + 1) * 2, -26 + Math.sin(eyeSpin + 1), 2, 0, Math.PI * 1.5);
+                    ctx.stroke();
+                    // Tongue hanging out
+                    ctx.fillStyle = '#cc4466';
+                    ctx.fillRect(-6 + twitch, -19, 4, 4 + inflate * 3);
+                    // Legs kicking weakly
                     ctx.fillStyle = '#2a2a2a';
-                    ctx.fillRect(-8 + twitch, 6, 7, 12 + Math.sin(impactElapsed * 3) * 3);
-                    ctx.fillRect(2 + twitch, 6, 7, 12 - Math.sin(impactElapsed * 3) * 3);
+                    const kickL = Math.sin(impactElapsed * 3) * 3 * Math.max(0, 1 - inflate);
+                    const kickR = Math.sin(impactElapsed * 3 + 1.5) * 3 * Math.max(0, 1 - inflate);
+                    ctx.fillRect(-8 + twitch, 6 + kickL, 7, 12);
+                    ctx.fillRect(2 + twitch, 6 + kickR, 7, 12);
+                    // Goo pooling at feet (capped, not growing forever)
+                    const poolSize = Math.min(14, 6 + impactElapsed * 3);
                     ctx.fillStyle = '#40ff20'; ctx.globalAlpha = 0.7;
                     ctx.beginPath();
-                    ctx.ellipse(twitch, 8, 5, 10 + impactElapsed * 3, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.ellipse(twitch, 18, poolSize, poolSize * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    // Goo dripping from body
+                    for (let d = 0; d < 3; d++) {
+                        const dripY = 6 + ((impactElapsed * 40 + d * 30) % 24);
+                        ctx.fillStyle = '#40ff20'; ctx.globalAlpha = 0.5;
+                        ctx.beginPath(); ctx.arc(-6 + d * 6 + twitch, dripY, 1.5, 0, Math.PI * 2); ctx.fill();
+                    }
                     ctx.globalAlpha = 1;
                     ctx.restore();
-                    if (impactElapsed < 2) {
-                        ctx.fillStyle = '#40ff20'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText('*SQUELCH*', bx, targetY - 38);
+                    if (impactElapsed < 1) {
+                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*SQUELCH*', bx, targetY - 42);
+                    } else if (impactElapsed < 2.5) {
+                        ctx.fillStyle = '#40ff20'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*BLORP BLORP*', bx, targetY - 38);
                     }
 
                 } else if (dType === 'warhead') {
-                    const stuffProg = Math.min(1, impactElapsed / 1.5);
-                    const mX = bx, mY = targetY;
-                    ctx.fillStyle = '#4a4a5a'; ctx.fillRect(mX - 9, mY - 36, 18, 36);
-                    ctx.strokeStyle = '#5a5a6a'; ctx.lineWidth = 1; ctx.strokeRect(mX - 9, mY - 36, 18, 36);
-                    if (stuffProg < 0.8) {
-                        const kick = Math.sin(impactElapsed * 10) * 5;
+                    // Body gets stuffed feet-first into missile, legs kicking frantically
+                    // Then cap seals, slides on belt to crate, gets loaded into truck
+                    const stuffDur = 2.0;  // time to stuff body in
+                    const sealDur = 0.5;   // cap sealing
+                    const slideDur = 1.5;  // slide onto belt into crate zone
+                    const crateDur = 1.0;  // dropping into crate
+                    const stuffProg = Math.min(1, impactElapsed / stuffDur);
+                    const sealProg = impactElapsed > stuffDur ? Math.min(1, (impactElapsed - stuffDur) / sealDur) : 0;
+                    const slideProg = impactElapsed > stuffDur + sealDur ? Math.min(1, (impactElapsed - stuffDur - sealDur) / slideDur) : 0;
+                    const crateProg = impactElapsed > stuffDur + sealDur + slideDur ? Math.min(1, (impactElapsed - stuffDur - sealDur - slideDur) / crateDur) : 0;
+
+                    // Missile slides rightward after sealing, then sinks into crate
+                    const slideX = bx + slideProg * (520 - bx);  // toward CRATE_X=520
+                    const crateDropY = crateProg * 24;  // drops down into crate
+                    const mX = slideX, mY = targetY + crateDropY;
+                    const mMW = 18, mMH = 38;  // larger missile — better visual match for stuffed body
+
+                    // Missile casing — bulging slightly from body inside
+                    const bulge = stuffProg > 0.5 ? Math.sin(impactElapsed * 6) * 1.5 * (1 - stuffProg) : 0;
+                    ctx.fillStyle = '#4a4a5a';
+                    ctx.fillRect(mX - mMW/2 - bulge, mY - mMH, mMW + bulge * 2, mMH);
+                    ctx.strokeStyle = '#5a5a6a'; ctx.lineWidth = 1;
+                    ctx.strokeRect(mX - mMW/2 - bulge, mY - mMH, mMW + bulge * 2, mMH);
+                    // Fins (larger)
+                    ctx.fillStyle = '#3a3a4a';
+                    ctx.fillRect(mX - mMW/2 - 5, mY - 9, 5, 9);
+                    ctx.fillRect(mX + mMW/2, mY - 9, 5, 9);
+
+                    // Legs kicking out of top before stuffed in (more frantic)
+                    if (stuffProg < 0.9) {
+                        const kickSpeed = 12 + stuffProg * 8; // kicks get more frantic
+                        const kick = Math.sin(impactElapsed * kickSpeed) * (7 * (1 - stuffProg));
+                        const legStickOut = (1 - stuffProg) * 28;
+                        // Left leg
                         ctx.fillStyle = '#2a2a2a';
-                        ctx.fillRect(mX - 7 + kick, mY - 36 - 18 * (1 - stuffProg), 6, 18 * (1 - stuffProg));
-                        ctx.fillRect(mX + 1 - kick, mY - 36 - 16 * (1 - stuffProg), 6, 16 * (1 - stuffProg));
+                        ctx.fillRect(mX - 6 + kick, mY - mMH - legStickOut, 6, legStickOut);
+                        // Right leg
+                        ctx.fillRect(mX + 1 - kick, mY - mMH - legStickOut * 0.85, 6, legStickOut * 0.85);
+                        // Boots
                         ctx.fillStyle = '#111';
-                        ctx.fillRect(mX - 9 + kick, mY - 36 - 18 * (1 - stuffProg) - 5, 9, 5);
-                        ctx.fillRect(mX - 1 - kick, mY - 36 - 16 * (1 - stuffProg) - 5, 9, 5);
+                        ctx.fillRect(mX - 9 + kick, mY - mMH - legStickOut - 5, 9, 6);
+                        ctx.fillRect(mX - 2 - kick, mY - mMH - legStickOut * 0.85 - 5, 9, 6);
+                        // Muffled screams from inside
+                        if (stuffProg > 0.3 && Math.floor(impactElapsed * 4) % 2 === 0) {
+                            ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                            ctx.fillText('(MUFFLED SCREAMING)', mX, mY - mMH - legStickOut - 14);
+                        }
                     }
-                    const goopFill = Math.min(1, impactElapsed / 2.5);
-                    ctx.fillStyle = '#40ff20'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 6;
-                    ctx.fillRect(mX - 7, mY - 4 - goopFill * 26, 14, goopFill * 26);
-                    ctx.shadowBlur = 0;
-                    if (stuffProg >= 0.8) {
+
+                    // Cap — open while stuffing, seals shut after
+                    if (sealProg < 1) {
+                        // Open cap hinged to side
+                        const capAngle = 0.9 - sealProg * 0.9;
+                        ctx.save();
+                        ctx.translate(mX + mMW/2, mY - mMH);
+                        ctx.rotate(-capAngle);
+                        ctx.fillStyle = '#5a5a6a';
+                        ctx.fillRect(0, -3, 12, 4);
+                        ctx.restore();
+                    } else {
+                        // Sealed nosecone
                         ctx.fillStyle = '#5a5a6a';
                         ctx.beginPath();
-                        ctx.moveTo(mX - 9, mY - 36); ctx.lineTo(mX, mY - 50);
-                        ctx.lineTo(mX + 9, mY - 36); ctx.closePath(); ctx.fill();
-                        ctx.fillStyle = '#ff4444'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText('\u2622', mX, mY - 16);
+                        ctx.moveTo(mX - mMW/2, mY - mMH);
+                        ctx.lineTo(mX, mY - mMH - 14);
+                        ctx.lineTo(mX + mMW/2, mY - mMH);
+                        ctx.closePath(); ctx.fill();
                     }
-                    if (impactElapsed < 1.5) {
-                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText('*CRUNCH*', bx, targetY - 52);
+
+                    // Radiation symbol + CLASSIFIED stamp on sealed missile
+                    if (sealProg >= 1) {
+                        ctx.fillStyle = '#ff4444'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('\u2622', mX, mY - mMH/2);
+                        if (slideProg > 0.8 && crateProg > 0) {
+                            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 7px monospace';
+                            ctx.fillText('CLASSIFIED', mX, mY - mMH - 18);
+                        }
+                    }
+
+                    // Crate outline drawn when missile arrives at crate station
+                    if (slideProg > 0.9 && crateProg > 0) {
+                        const crateW = 48, crateH = 44;
+                        ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1.5;
+                        ctx.strokeRect(520 - crateW/2, targetY - crateH, crateW, crateH);
+                        ctx.fillStyle = '#2e2e18'; ctx.globalAlpha = 0.6;
+                        ctx.fillRect(520 - crateW/2, targetY - crateH, crateW, crateH);
+                        ctx.globalAlpha = 1;
+                    }
+
+                    // Text captions — campier
+                    if (impactElapsed < 1.0) {
+                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*CRUNCH*', bx, targetY - 62);
+                    } else if (impactElapsed < 1.8) {
+                        ctx.fillStyle = '#ff6600'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('IT FITS! SOMEHOW!', bx, targetY - 58);
+                    } else if (impactElapsed < stuffDur + 0.3) {
+                        ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*SEALED* \ud83d\udd12', mX, targetY - 56);
+                    } else if (slideProg > 0 && slideProg < 0.9) {
+                        ctx.fillStyle = '#ccc'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('SPECIAL DELIVERY...', mX, targetY - 54);
+                    } else if (crateProg > 0.3) {
+                        ctx.fillStyle = '#aaa'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('*CRATED FOR EXPORT*', 520, targetY - 56);
                     }
 
                 } else {
@@ -11004,18 +11246,18 @@ function drawL6FurnaceRoom() {
     ctx.arc(bx2 + 8, by2 + 5, 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // === BLOODY FOOTPRINTS leading from boots toward secret door (left wall) ===
+    // === BLOODY FOOTPRINTS leading from boots toward cloning room (right exit) ===
     const fpSteps = [
-        {x: fx + 5, y: 400, rot: -0.3, size: 1},
-        {x: fx - 30, y: 398, rot: -0.2, size: 0.95},
-        {x: fx - 70, y: 400, rot: -0.15, size: 0.9},
-        {x: fx - 115, y: 397, rot: -0.1, size: 0.85},
-        {x: fx - 160, y: 399, rot: -0.1, size: 0.8},
-        {x: fx - 205, y: 398, rot: -0.05, size: 0.75},
-        {x: fx - 245, y: 400, rot: 0, size: 0.7},
-        {x: fx - 280, y: 397, rot: 0, size: 0.65},
-        {x: fx - 310, y: 399, rot: 0, size: 0.55},
-        {x: fx - 340, y: 398, rot: 0, size: 0.45},
+        {x: fx + 55, y: 400, rot: 0.3, size: 1},
+        {x: fx + 90, y: 398, rot: 0.2, size: 0.95},
+        {x: fx + 130, y: 400, rot: 0.15, size: 0.9},
+        {x: fx + 170, y: 397, rot: 0.1, size: 0.85},
+        {x: fx + 210, y: 399, rot: 0.1, size: 0.8},
+        {x: fx + 245, y: 398, rot: 0.05, size: 0.75},
+        {x: fx + 275, y: 400, rot: 0, size: 0.7},
+        {x: fx + 305, y: 397, rot: 0, size: 0.65},
+        {x: fx + 335, y: 399, rot: 0, size: 0.55},
+        {x: fx + 360, y: 398, rot: 0, size: 0.45},
     ];
     for(let fp of fpSteps) {
         ctx.save();
@@ -16669,25 +16911,26 @@ function drawScene() {
                 ctx.textAlign = 'left';
                 ctx.fillText('SELECT ITEM:', 30, 375);
 
-                const gunSelected = level6.lobbyPrinterChoice === 0;
-                ctx.strokeStyle = gunSelected ? '#f5f2ec' : '#666';
+                const gunDisabled = level6.hasGhostGun;
+                const gunSelected = level6.lobbyPrinterChoice === 0 && !gunDisabled;
+                ctx.strokeStyle = gunDisabled ? '#333' : gunSelected ? '#f5f2ec' : '#666';
                 ctx.lineWidth = gunSelected ? 4 : 2;
-                ctx.fillStyle = '#888';
+                ctx.fillStyle = gunDisabled ? '#444' : '#888';
                 ctx.fillRect(30, 390, 140, 70);
                 ctx.strokeRect(30, 390, 140, 70);
                 // Ghost gun icon
-                ctx.fillStyle = '#666';
+                ctx.fillStyle = gunDisabled ? '#555' : '#666';
                 ctx.fillRect(68, 410, 30, 8);
-                ctx.fillStyle = '#555';
+                ctx.fillStyle = gunDisabled ? '#444' : '#555';
                 ctx.fillRect(68, 408, 30, 2);
-                ctx.fillStyle = '#666';
+                ctx.fillStyle = gunDisabled ? '#555' : '#666';
                 ctx.fillRect(70, 418, 8, 16);
-                ctx.fillStyle = '#555';
+                ctx.fillStyle = gunDisabled ? '#444' : '#555';
                 ctx.fillRect(78, 418, 6, 2);
-                ctx.fillStyle = '#f5f2ec';
+                ctx.fillStyle = gunDisabled ? '#666' : '#f5f2ec';
                 ctx.font = 'bold 18px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('GHOST GUN', 100, 455);
+                ctx.fillText(gunDisabled ? 'OWNED' : 'GHOST GUN', 100, 455);
 
                 const heartSelected = level6.lobbyPrinterChoice === 1;
                 ctx.strokeStyle = heartSelected ? '#f5f2ec' : '#666';
@@ -17093,6 +17336,227 @@ function drawScene() {
                 ctx.fillStyle = level6.youBlewItChoice === 1 ? '#000' : '#999';
                 ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
 
+            }
+        }
+
+        // === MISSILE CASE CLOSED — Detective finds black box in rubble ===
+        if(level6.missileCaseClosedCard === 'fading') {
+            ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        if(level6.missileCaseClosedCard === true) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+            // Rubble/debris background
+            const rubbleTime = Date.now();
+            for(let ri = 0; ri < 20; ri++) {
+                const rx = 80 + (ri * 37) % 540;
+                const ry = 320 + Math.sin(ri * 2.7) * 40;
+                const rs = 8 + (ri * 3) % 20;
+                ctx.fillStyle = `rgba(${60 + ri * 3},${50 + ri * 2},${40 + ri},0.6)`;
+                ctx.fillRect(rx, ry, rs, rs * 0.6);
+            }
+
+            // Dust/smoke drifting
+            for(let di = 0; di < 6; di++) {
+                const dx = 100 + di * 100 + Math.sin(rubbleTime * 0.0005 + di) * 30;
+                const dy = 280 + Math.sin(rubbleTime * 0.0003 + di * 2) * 20;
+                ctx.globalAlpha = 0.08 + Math.sin(rubbleTime * 0.001 + di) * 0.03;
+                ctx.fillStyle = '#888';
+                ctx.beginPath(); ctx.arc(dx, dy, 30 + di * 5, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // Glowing black box in center of rubble
+            const bbGlow = 0.5 + Math.sin(rubbleTime * 0.003) * 0.3;
+            ctx.shadowColor = '#ff4444'; ctx.shadowBlur = 20 + bbGlow * 10;
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(330, 340, 40, 30);
+            ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2;
+            ctx.strokeRect(330, 340, 40, 30);
+            ctx.shadowBlur = 0;
+            // Blinking red light on box
+            if(Math.floor(rubbleTime / 500) % 2 === 0) {
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath(); ctx.arc(350, 348, 3, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // "Case Closed." title
+            ctx.fillStyle = '#cc0000';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+            ctx.strokeText('Case Closed.', 350, 80);
+            ctx.fillText('Case Closed.', 350, 80);
+
+            // Subtitle — the missile quote
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'italic 13px Arial';
+            ctx.fillText('The missile blew the case wide open,', 350, 110);
+            ctx.fillText('as well as the CEO, thanks to a mysterious', 350, 130);
+            ctx.fillText('black box found within the rubble.', 350, 150);
+
+            // Fedora silhouette resting on rubble
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.ellipse(350, 390, 30, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.moveTo(328, 390); ctx.lineTo(334, 372); ctx.lineTo(345, 380);
+            ctx.lineTo(355, 380); ctx.lineTo(366, 372); ctx.lineTo(372, 390);
+            ctx.closePath(); ctx.fill();
+
+            // Score + menu
+            if(level6.missileCaseClosedTimer >= 30) {
+                ctx.fillStyle = '#ccc';
+                ctx.font = 'bold 20px Arial';
+                ctx.fillText('FINAL SCORE: ' + score, 350, 440);
+
+                const btnW = 150, btnH = 34;
+                const btn1X = 350 - btnW - 15, btn2X = 350 + 15;
+                const btnY = 460;
+
+                ctx.fillStyle = level6.missileCaseClosedChoice === 0 ? '#ffd700' : '#444';
+                ctx.fillRect(btn1X, btnY, btnW, btnH);
+                ctx.fillStyle = level6.missileCaseClosedChoice === 0 ? '#000' : '#999';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText('TRY AGAIN', btn1X + btnW / 2, btnY + 22);
+
+                ctx.fillStyle = level6.missileCaseClosedChoice === 1 ? '#ffd700' : '#444';
+                ctx.fillRect(btn2X, btnY, btnW, btnH);
+                ctx.fillStyle = level6.missileCaseClosedChoice === 1 ? '#000' : '#999';
+                ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
+            }
+        }
+
+        // === NEW CEO — Pipe boss missile victory celebration ===
+        if(level6.newCEOCard === 'fading') {
+            ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        if(level6.newCEOCard === true) {
+            ctx.fillStyle = '#1a1520';
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+            const ceoTime = Date.now();
+
+            // Confetti
+            for(let ci = 0; ci < 30; ci++) {
+                const cx2 = (ci * 47 + ceoTime * 0.03) % 700;
+                const cy2 = (ci * 31 + ceoTime * 0.05) % 500;
+                const cRot = ceoTime * 0.002 + ci * 0.5;
+                const confColors = ['#ffd700', '#ff4444', '#44ff44', '#4488ff', '#ff44ff', '#ff8800'];
+                ctx.save();
+                ctx.translate(cx2, cy2);
+                ctx.rotate(cRot);
+                ctx.fillStyle = confColors[ci % confColors.length];
+                ctx.fillRect(-4, -2, 8, 4);
+                ctx.restore();
+            }
+
+            // NPCs hoisting player on shoulders (center stage)
+            const hoistY = 240;
+            const hoistBob = Math.sin(ceoTime * 0.003) * 4;
+
+            // Left NPC (pipe manager in blue)
+            ctx.fillStyle = '#2244aa';
+            ctx.fillRect(260, hoistY + 20, 20, 28);
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(270, hoistY + 14, 8, 0, Math.PI * 2); ctx.fill();
+            // Arms raised
+            ctx.strokeStyle = '#2244aa'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(260, hoistY + 28); ctx.lineTo(290, hoistY - 5); ctx.stroke();
+
+            // Right NPC (pipe manager in blue)
+            ctx.fillStyle = '#2244aa';
+            ctx.fillRect(420, hoistY + 20, 20, 28);
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(430, hoistY + 14, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#2244aa'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(440, hoistY + 28); ctx.lineTo(410, hoistY - 5); ctx.stroke();
+
+            // Center NPC (behind)
+            ctx.fillStyle = '#2266bb';
+            ctx.fillRect(340, hoistY + 24, 20, 24);
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(350, hoistY + 18, 7, 0, Math.PI * 2); ctx.fill();
+
+            // Player on top (being hoisted) — red jumpsuit pipe boss
+            const playerDrawY = hoistY - 30 + hoistBob;
+            ctx.fillStyle = '#cc2222';
+            ctx.fillRect(335, playerDrawY, 30, 32);
+            ctx.fillStyle = '#111'; ctx.fillRect(348, playerDrawY, 4, 24);
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(350, playerDrawY - 8, 10, 0, Math.PI * 2); ctx.fill();
+            // Big smile
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(350, playerDrawY - 5, 5, 0.1, Math.PI - 0.1); ctx.stroke();
+            // Eyes
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(346, playerDrawY - 10, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(354, playerDrawY - 10, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Thumb up (right hand)
+            ctx.fillStyle = '#f5d5a8';
+            ctx.fillRect(368, playerDrawY - 2, 5, 12);
+            ctx.fillRect(367, playerDrawY - 6, 7, 5);
+
+            // "Congratulations" title
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 36px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+            ctx.strokeText('Congratulations!', 350, 60);
+            ctx.fillText('Congratulations!', 350, 60);
+
+            // Subtitle
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 18px Arial';
+            ctx.fillText('You are the new CEO of PipeTech.', 350, 90);
+
+            // Framed portrait at bottom
+            const frameX = 310, frameY = 330, frameW = 80, frameH = 70;
+            // Frame
+            ctx.fillStyle = '#8b6914';
+            ctx.fillRect(frameX - 4, frameY - 4, frameW + 8, frameH + 8);
+            ctx.fillStyle = '#1a1a2a';
+            ctx.fillRect(frameX, frameY, frameW, frameH);
+            // Mini portrait of player (smile + thumb up)
+            ctx.fillStyle = '#cc2222';
+            ctx.fillRect(frameX + 25, frameY + 20, 30, 32);
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(frameX + 40, frameY + 14, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(frameX + 40, frameY + 17, 4, 0.1, Math.PI - 0.1); ctx.stroke();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(frameX + 37, frameY + 12, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(frameX + 43, frameY + 12, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Thumb up in portrait
+            ctx.fillStyle = '#f5d5a8';
+            ctx.fillRect(frameX + 56, frameY + 22, 4, 10);
+            ctx.fillRect(frameX + 55, frameY + 18, 6, 5);
+
+            // Score + menu
+            if(level6.newCEOTimer >= 30) {
+                ctx.fillStyle = '#ccc';
+                ctx.font = 'bold 20px Arial';
+                ctx.fillText('FINAL SCORE: ' + score, 350, 440);
+
+                const btnW = 150, btnH = 34;
+                const btn1X = 350 - btnW - 15, btn2X = 350 + 15;
+                const btnY = 460;
+
+                ctx.fillStyle = level6.newCEOChoice === 0 ? '#ffd700' : '#444';
+                ctx.fillRect(btn1X, btnY, btnW, btnH);
+                ctx.fillStyle = level6.newCEOChoice === 0 ? '#000' : '#999';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText('TRY AGAIN', btn1X + btnW / 2, btnY + 22);
+
+                ctx.fillStyle = level6.newCEOChoice === 1 ? '#ffd700' : '#444';
+                ctx.fillRect(btn2X, btnY, btnW, btnH);
+                ctx.fillStyle = level6.newCEOChoice === 1 ? '#000' : '#999';
+                ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 22);
             }
         }
 
@@ -18976,6 +19440,74 @@ function update() {
                 return;
             }
 
+            // Missile Case Closed card (detective + missile kill)
+            if(level6.missileCaseClosedCard === 'fading') {
+                level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.08);
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.missileCaseClosedCard = true;
+                    level6.missileCaseClosedTimer = 0;
+                }
+                return;
+            }
+            if(level6.missileCaseClosedCard === true) {
+                level6.missileCaseClosedTimer++;
+                if(level6.missileCaseClosedTimer >= 30) {
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.missileCaseClosedChoice = 0;
+                        keys['ArrowLeft'] = false; keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.missileCaseClosedChoice = 1;
+                        keys['ArrowRight'] = false; keys['right'] = false;
+                    }
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false; keys['action'] = false;
+                        if(level6.missileCaseClosedChoice === 0) {
+                            level6.missileCaseClosedCard = false;
+                            initLevel(6);
+                            playMusic('level6');
+                        } else {
+                            window.location.href = 'speakeasy.html';
+                        }
+                    }
+                }
+                return;
+            }
+
+            // New CEO card (pipe boss + missile kill)
+            if(level6.newCEOCard === 'fading') {
+                level6.detectiveTransAlpha = Math.min(1, level6.detectiveTransAlpha + 0.08);
+                if(level6.detectiveTransAlpha >= 1) {
+                    level6.newCEOCard = true;
+                    level6.newCEOTimer = 0;
+                }
+                return;
+            }
+            if(level6.newCEOCard === true) {
+                level6.newCEOTimer++;
+                if(level6.newCEOTimer >= 30) {
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.newCEOChoice = 0;
+                        keys['ArrowLeft'] = false; keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.newCEOChoice = 1;
+                        keys['ArrowRight'] = false; keys['right'] = false;
+                    }
+                    if(keys[' '] || keys['action']) {
+                        keys[' '] = false; keys['action'] = false;
+                        if(level6.newCEOChoice === 0) {
+                            level6.newCEOCard = false;
+                            initLevel(6);
+                            playMusic('level6');
+                        } else {
+                            window.location.href = 'speakeasy.html';
+                        }
+                    }
+                }
+                return;
+            }
+
             // Movement for horizontal-only rooms (1D)
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
                 const prevX = player.x;
@@ -19179,7 +19711,7 @@ function update() {
                 if(level6.lobbyPrinterUI) {
                     if(!level6.lobbyPrinterConfirming) {
                         if(keys['ArrowLeft'] || keys['left']) {
-                            level6.lobbyPrinterChoice = 0;
+                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
                             keys['ArrowLeft'] = false; keys['left'] = false;
                         }
                         if(keys['ArrowRight'] || keys['right']) {
@@ -19224,6 +19756,9 @@ function update() {
                                 // 3D-printed ghost gun — single-shot disposable
                                 level6.hasGhostGun = true;
                             }
+                            // Clear action keys after print completes to prevent accidental firing
+                            keys[' '] = false;
+                            keys['action'] = false;
                         }
                     }
 
@@ -19237,18 +19772,19 @@ function update() {
 
                     // 3D Printer interaction (near printer, right side of elevator)
                     const printerCenterX = 440; // prCenterX from drawing code
-                    if(Math.abs(player.x - printerCenterX) < 60 && !level6.lobbyPrinting && !level6.hasGhostGun && (keys[' '] || keys['action'])) {
+                    if(Math.abs(player.x - printerCenterX) < 60 && !level6.lobbyPrinting && (keys[' '] || keys['action'])) {
                         // Don't trigger if near elevator
                         if(player.x <= 560) {
                             level6.lobbyPrinterUI = true;
-                            level6.lobbyPrinterChoice = 0;
+                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
                             keys[' '] = false;
                             keys['action'] = false;
                         }
                     }
 
                     // Fire ghost gun in employee lobby (single-shot, consumed on fire)
-                    if(level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && (keys[' '] || keys['action'])) {
+                    // Don't fire when near 3D printer — printer interaction takes priority
+                    if(level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && Math.abs(player.x - printerCenterX) >= 60 && (keys[' '] || keys['action'])) {
                         keys[' '] = false;
                         keys['action'] = false;
                         let vx = 0;
@@ -19479,14 +20015,13 @@ function update() {
 
                 // Pick up hallway boss drops — check BEFORE gun firing so ACTION collects ammo instead of shooting
                 let hallwayActionConsumed = false;
-                if(level6.hallwayDrops && level6.hallwayDrops.length > 0) {
+                if(level6.hallwayDrops && level6.hallwayDrops.length > 0 && (keys[' '] || keys['action'])) {
+                    let pickedAny = false;
                     for(let drop of level6.hallwayDrops) {
                         if(drop.claimed) continue;
-                        if(Math.abs(player.x - drop.x) < 50 && (keys[' '] || keys['action'])) {
+                        if(Math.abs(player.x - drop.x) < 50) {
                             drop.claimed = true;
-                            keys[' '] = false;
-                            keys['action'] = false;
-                            hallwayActionConsumed = true;
+                            pickedAny = true;
                             if(drop.type === 'ammo') {
                                 level6.revolverAmmo += (drop.amount || 3);
                             } else if(drop.type === 'life') {
@@ -19494,6 +20029,11 @@ function update() {
                                 updateLives();
                             }
                         }
+                    }
+                    if(pickedAny) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        hallwayActionConsumed = true;
                     }
                 }
 
@@ -19980,15 +20520,23 @@ if (keys[' '] || keys['action']) {
     keys[' '] = false;
     keys['action'] = false;
 
-    // 0.5. Black Box Pickup (after missile explosion)
+    // 0.5. Black Box Pickup (after missile explosion — CEO was killed by missile)
     if (level6.blackBoxDropped && !level6.blackBoxPickedUp &&
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
         level6.blackBoxPickedUp = true;
-        // Trigger "You blew it" ending — start music before card fade
-        playMusic('blewit');
-        level6.youBlewItCard = 'fading';
-        level6.youBlewItTimer = 0;
-        level6.detectiveTransAlpha = 0;
+        if(level6.hasDetectiveHat) {
+            // Detective: case closed via black box evidence
+            level6.missileCaseClosedCard = 'fading';
+            level6.missileCaseClosedTimer = 0;
+            level6.detectiveTransAlpha = 0;
+            playMusic('level5');
+        } else {
+            // Pipe boss: you seized the opportunity — new CEO!
+            level6.newCEOCard = 'fading';
+            level6.newCEOTimer = 0;
+            level6.detectiveTransAlpha = 0;
+            playMusic('newceo');
+        }
         return;
     }
 
@@ -20337,11 +20885,10 @@ if (keys[' '] || keys['action']) {
                         bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
                         score += 3000;
-                        // Drop 1 ? life + 3 ammo
+                        // Drop ammo (single pickup, consistent with bridge boss)
                         if(!level6.hallwayDrops) level6.hallwayDrops = [];
                         level6.hallwayDrops.push(
-                            { type: 'life', x: hallCB.x - 20, y: 385, claimed: false },
-                            { type: 'ammo', x: hallCB.x + 20, y: 385, claimed: false, amount: 3 }
+                            { type: 'ammo', x: hallCB.x, y: 385, claimed: false, amount: 3 }
                         );
                         continue;
                     }
@@ -20507,14 +21054,31 @@ if (keys[' '] || keys['action']) {
                             level6.blackBoxY = ceo.y;
                         }
 
-                        // Check if player is within blast radius — triggers "You blew it" card
+                        // Check if player is within blast radius
                         const playerDist = Math.sqrt(Math.pow(player.x - blastCenterX, 2) + Math.pow(player.y - blastCenterY, 2));
                         if(playerDist < blastRadius) {
-                            level6.youBlewItCard = 'fading';
-                            level6.youBlewItTimer = 0;
-                            level6.detectiveTransAlpha = 0;
-                            // Start blewit music via playMusic for proper pending/retry handling
-                            playMusic('blewit');
+                            if(level6.ceoDefeated) {
+                                // CEO died in the blast — this is a win, not a loss
+                                if(level6.hasDetectiveHat) {
+                                    // Detective ending: black box found in rubble
+                                    level6.missileCaseClosedCard = 'fading';
+                                    level6.missileCaseClosedTimer = 0;
+                                    level6.detectiveTransAlpha = 0;
+                                    playMusic('level5');
+                                } else {
+                                    // Pipe boss ending: you're the new CEO!
+                                    level6.newCEOCard = 'fading';
+                                    level6.newCEOTimer = 0;
+                                    level6.detectiveTransAlpha = 0;
+                                    playMusic('newceo');
+                                }
+                            } else {
+                                // Player blew themselves up without killing CEO — actual fail
+                                level6.youBlewItCard = 'fading';
+                                level6.youBlewItTimer = 0;
+                                level6.detectiveTransAlpha = 0;
+                                playMusic('blewit');
+                            }
                         }
 
                         // Screen shake effect
@@ -21168,7 +21732,7 @@ function gameLoop() {
     counter += now - lastTime;
     lastTime = now;
     
-    if(state === 'playing' && !resetting && counter >= 1000 && !(level === 6 && (level6.caseClosedCard || level6.youBlewItCard))) {
+    if(state === 'playing' && !resetting && counter >= 1000 && !(level === 6 && (level6.caseClosedCard || level6.youBlewItCard || level6.missileCaseClosedCard || level6.newCEOCard))) {
         timer--;
         counter = 0;
         document.getElementById('timer').textContent = timer;
