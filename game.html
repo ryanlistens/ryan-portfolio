@@ -19105,6 +19105,86 @@ function update() {
                 if(level6.underbellyFlicker > 0 && Date.now() - level6.underbellyFlicker > 800) {
                     level6.underbellyFlicker = 0;
                 }
+
+                // === CAGE KEY UNLOCK (use key on padlock) ===
+                let underbellyActionConsumed = false;
+                if(!underbellyActionConsumed && level6.cageKey.found && !level6.cageKey.used && !level6.mutantPM.cageLockShot && !level6.mutantPM.cageOpen) {
+                    const pmKeyDist = Math.abs(player.x - level6.mutantPM.x);
+                    if(pmKeyDist < 80 && (keys[' '] || keys['action'])) {
+                        level6.cageKey.used = true;
+                        level6.cageKey.useTime = Date.now();
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        underbellyActionConsumed = true;
+                        // 1-second delay before bars drop (gives player time to move)
+                        setTimeout(function() {
+                            level6.mutantPM.cageLockShot = true;
+                            level6.mutantPM.cageOpen = true;
+                            level6.mutantPM.barsDropTime = Date.now();
+                        }, 1000);
+                    }
+                }
+
+                // Fire revolver in underbelly (action key when not near interactables)
+                if(!underbellyActionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    const nearRightExit = player.x > 620;
+                    if(!nearRightExit) {
+                        keys[' '] = false;
+                        keys['action'] = false;
+                        let vx = 0;
+                        if(player.facing === 'left') vx = -12;
+                        else if(player.facing === 'right') vx = 12;
+                        else vx = player.x < 350 ? 12 : -12;
+                        if(vx !== 0) {
+                            bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                            level6.revolverAmmo--;
+                            muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 3 });
+                            player.shootTimer = 20;
+                        }
+                    }
+                }
+
+                // === PM CAGE ESCAPE LOGIC (underbelly) ===
+                const pm = level6.mutantPM;
+                if(pm.cageOpen && !pm.eating && !pm.escaped) {
+                    const barsDropped = pm.barsDropTime > 0 && (Date.now() - pm.barsDropTime) > 800;
+                    if(barsDropped) {
+                        const pmReachX = 80;
+                        const pmCenterX = pm.x;
+                        let eatTarget = null;
+                        if(level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && Math.abs(ceo.x - pmCenterX) < pmReachX && Math.abs(ceo.y - pm.y) < 60) {
+                            eatTarget = 'ceo';
+                        } else if(Math.abs(player.x - pmCenterX) < pmReachX && Math.abs(player.y - pm.y) < 60) {
+                            eatTarget = 'player';
+                        }
+                        if(eatTarget) {
+                            pm.eating = true;
+                            pm.eatTarget = eatTarget;
+                            pm.eatTime = Date.now();
+                            if(eatTarget === 'ceo') {
+                                ceo.state = 'dead';
+                                level6.ceoDefeated = true;
+                                level6.ceoPursuing = false;
+                                score += 5000;
+                            } else {
+                                level6.moneyLives = 0;
+                                updateLives();
+                                state = 'over';
+                                menuChoice = 0;
+                            }
+                        }
+                    }
+                }
+                // PM gorilla escape — after eating, PM runs out
+                if(pm.eating && pm.eatTime > 0 && !pm.escaped) {
+                    const eatElapsed = (Date.now() - pm.eatTime) / 1000;
+                    if(eatElapsed > 3) {
+                        pm.escaped = true;
+                        pm.escapeTime = Date.now();
+                        pm.escapeDir = player.x > pm.x ? -1 : 1;
+                        pm.eating = false;
+                    }
+                }
             }
 
             else if(level6.room === 'entryway') {
@@ -19657,9 +19737,9 @@ if (keys[' '] || keys['action']) {
                 }
 
                 // PM cage padlock collision — shoot the lock off
-                // Only allow shooting cage lock AFTER cloning boss is dead (prevents accidental release)
-                if(!bullets[i].fromCEO && level6.room === 'cloningRoom' && level6.mutantPM && !level6.mutantPM.cageLockShot
-                    && level6.cloningBoss && !level6.cloningBoss.alive) {
+                // Works in underbelly (where cage is), or in cloningRoom after boss is dead
+                if(!bullets[i].fromCEO && level6.mutantPM && !level6.mutantPM.cageLockShot
+                    && (level6.room === 'underbelly' || (level6.room === 'cloningRoom' && level6.cloningBoss && !level6.cloningBoss.alive))) {
                     const pm = level6.mutantPM;
                     const lockX = pm.x, lockY = pm.y + 40; // padlock at bottom of cage
                     if(Math.abs(bullets[i].x - lockX) < 30 && Math.abs(bullets[i].y - lockY) < 35) {
