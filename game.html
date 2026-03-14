@@ -740,6 +740,7 @@ function initLevel(lv) {
         level6.revolverAmmo = 6;
         level6.cashSacks = [];
         level6.moneyLives = 3;
+        level6.damageFlash = 0; // red flash timer when hit (counts down from 1)
         level6.ceoDefeated = false;
         level6.computerUI = false;
         level6.computerChoice = 0; // 0 = self-destruct, 1 = deliver means
@@ -17149,6 +17150,27 @@ function drawScene() {
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
+    // Level 6 damage flash — red border flash when hit, decays quickly
+    if(level === 6 && level6.damageFlash > 0) {
+        const flashAlpha = level6.damageFlash * 0.45;
+        // Red vignette around edges
+        const vg = ctx.createRadialGradient(350, 240, 120, 350, 240, 400);
+        vg.addColorStop(0, 'rgba(255,0,0,0)');
+        vg.addColorStop(0.7, `rgba(255,0,0,${flashAlpha * 0.3})`);
+        vg.addColorStop(1, `rgba(255,0,0,${flashAlpha})`);
+        ctx.fillStyle = vg;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        // Floating -$ indicator
+        if(level6.damageFlash > 0.6) {
+            ctx.fillStyle = `rgba(255,50,50,${level6.damageFlash})`;
+            ctx.font = 'bold 18px monospace';
+            ctx.textAlign = 'center';
+            const floatY = player.y - 40 - (1 - level6.damageFlash) * 30;
+            ctx.fillText('-$', player.x, floatY);
+        }
+        level6.damageFlash = Math.max(0, level6.damageFlash - 0.04);
+    }
+
     // Draw mute indicator (always on top during gameplay)
     if(state === 'playing') {
         drawMuteIndicator();
@@ -18663,6 +18685,7 @@ function update() {
                     if(level6.radiationTimer >= 120) {
                         if(level6.moneyLives > 0) {
                             level6.moneyLives--;
+                            level6.damageFlash = 1;
                             updateLives();
                         }
                         level6.radiationTimer = 0;
@@ -19607,6 +19630,7 @@ if (keys[' '] || keys['action']) {
             
                 if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
                     level6.moneyLives--;
+                    level6.damageFlash = 1;
                     updateLives();
                     bullets.splice(i, 1);
                 
