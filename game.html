@@ -17127,12 +17127,14 @@ function drawScene() {
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
                     if(npc.isMulletPro) {
-                        // Held above head — same position as drawHeldDoc (y - 70)
-                        drawCashSack(npc.x, npc.y - 70 + bob);
+                        // Raised hands are at y-32 (s=2, hands at y-16*s).
+                        // Sack bottom aligns with hands: sackY+14=y-32 → sackY=y-46
+                        drawCashSack(npc.x, npc.y - 46 + bob);
                     } else {
-                        // PM holds sack at shoulder level
+                        // PM hanging-arm hand is at y+12 (y+6*s). Sack knot at hand level:
+                        // sackY-5=y+12 → sackY=y+17. Draw offset to one side.
                         const sackSide = npc.facing === 'left' ? -1 : 1;
-                        drawCashSack(npc.x + sackSide * 12, npc.y - 20 + bob);
+                        drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
                     }
                 }
                 // Draw extracting animation at safe
@@ -19832,26 +19834,31 @@ function update() {
 
                     } else if(mp.mpPhase === 'going_to_pm') {
                         // Walk to PM[mpTargetPM] waiting position
+                        // Desk occupies x=300-400, y=250-295. Route: side-step clear of desk,
+                        // then down past desk, then across to PM.
                         const targetPM = pms[mp.mpTargetPM];
                         const tX = targetPM ? targetPM.waitX : 350;
-                        const tY = targetPM ? targetPM.waitY - 40 : 395; // Stand just above PM
-                        // Navigate: go down first, then across (clear the desk)
-                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'down';
+                        const tY = targetPM ? targetPM.waitY - 5 : 430;
+                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'side';
                         let tXw = tX, tYw = tY;
-                        if(mp.mpWaypointPhase === 'down') {
-                            tXw = mp.x; tYw = 330;
+                        if(mp.mpWaypointPhase === 'side') {
+                            // Step left of desk (x<300) before going down
+                            tXw = 220; tYw = mp.y;
+                            if(Math.abs(mp.x - 220) < 10) mp.mpWaypointPhase = 'down';
+                        } else if(mp.mpWaypointPhase === 'down') {
+                            tXw = 220; tYw = 330;
                             if(mp.y > 325) mp.mpWaypointPhase = 'across';
                         } else {
                             tXw = tX; tYw = tY;
                         }
                         const dxm = tXw - mp.x, dym = tYw - mp.y;
                         const dm = Math.sqrt(dxm*dxm + dym*dym);
-                        if(dm > 5) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
+                        if(dm > 2) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
                         mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : 'forward';
                         if(dm <= 8 && mp.mpWaypointPhase === 'across') {
                             mp.mpPhase = 'delivering';
                             mp.mpDeliverStart = Date.now();
-                            mp.facing = 'forward';
+                            mp.facing = targetPM && targetPM.x > mp.x ? 'right' : 'left';
                             mp.mpWaypointPhase = null;
                         }
 
@@ -19870,24 +19877,29 @@ function update() {
                         }
 
                     } else if(mp.mpPhase === 'going_to_player') {
-                        // Walk toward player carrying the last sack
-                        const tX = player.x, tY = player.y;
-                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'down';
-                        let tXw = tX, tYw = tY;
-                        if(mp.mpWaypointPhase === 'down') {
-                            tXw = mp.x; tYw = 330;
+                        // Walk toward player carrying the last sack — avoid desk via left side
+                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'side';
+                        let tXw, tYw;
+                        if(mp.mpWaypointPhase === 'side') {
+                            tXw = 220; tYw = mp.y;
+                            if(Math.abs(mp.x - 220) < 10) mp.mpWaypointPhase = 'down';
+                        } else if(mp.mpWaypointPhase === 'down') {
+                            tXw = 220; tYw = 330;
                             if(mp.y > 325) mp.mpWaypointPhase = 'across';
                         } else {
-                            tXw = tX; tYw = tY;
+                            tXw = player.x; tYw = player.y;
                         }
                         const dxm = tXw - mp.x, dym = tYw - mp.y;
                         const dm = Math.sqrt(dxm*dxm + dym*dym);
-                        if(dm > 5) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
+                        if(dm > 2) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
                         mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : 'forward';
-                        if(dm <= 55 && mp.mpWaypointPhase === 'across') {
-                            mp.mpPhase = 'at_player';
-                            mp.facing = player.x > mp.x ? 'right' : 'left';
-                            mp.mpWaypointPhase = null;
+                        if(mp.mpWaypointPhase === 'across') {
+                            const dpx = player.x - mp.x, dpy = player.y - mp.y;
+                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 55) {
+                                mp.mpPhase = 'at_player';
+                                mp.facing = player.x > mp.x ? 'right' : 'left';
+                                mp.mpWaypointPhase = null;
+                            }
                         }
 
                     } else if(mp.mpPhase === 'at_player') {
