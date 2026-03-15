@@ -13169,7 +13169,7 @@ function drawLevel6CEOOffice() {
 
     // Declare position constants at function scope so interaction prompts can reference them
     const safeX = 350;
-    const safeY = 140;
+    const safeY = 115;
     const monX = deskX + 40;
     const monY = deskY - 45;
 
@@ -19530,7 +19530,7 @@ function update() {
             // Helper function to check if CEO position collides with obstacles
             const ceoCollidesWithObstacle = (x, y) => {
                 const deskX = 350, deskY = 250;
-                const safeX = 350, safeY = 140;
+                const safeX = 350, safeY = 115;
                 const mirrorX = 50, mirrorY = 90;
                 const cabinetX = 580, cabinetY = 80;
 
@@ -19771,7 +19771,7 @@ function update() {
             if(level6.npcExitSequence) {
                 level6.npcExitTimer++;
                 const mpSpeed = 2.2;
-                const safeX = 350, safeY = 162; // Stand in front of safe
+                const safeX = 350, safeY = 137; // Stand in front of safe (safeY 115 + ~22px)
                 const pms = level6.exitingNPCs.filter(n => !n.isMulletPro);
                 const mp = level6.exitingNPCs.find(n => n.isMulletPro);
 
@@ -19793,6 +19793,7 @@ function update() {
 
                 // Mullet Pro state machine
                 if(mp) {
+                    const mpPrevX = mp.x, mpPrevY = mp.y;
                     if(mp.mpPhase === 'going_to_safe') {
                         // Walk to safe using left-side waypoint to avoid desk
                         if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'side';
@@ -19917,6 +19918,20 @@ function update() {
                             playMusic('menu');
                             keys[' '] = false;
                             keys['action'] = false;
+                        }
+                    }
+
+                    // Post-movement: desk collision (matches player desk bounds)
+                    const mpDeskX = 350, mpDeskY = 250;
+                    if(mp.x > mpDeskX - 90 && mp.x < mpDeskX + 90 && mp.y > mpDeskY - 60 && mp.y < mpDeskY + 50) {
+                        mp.x = mpPrevX; mp.y = mpPrevY;
+                    }
+
+                    // Post-movement: don't overlap any waiting PM
+                    for(const pm of pms) {
+                        if(Math.abs(mp.x - pm.x) < 20 && Math.abs(mp.y - pm.y) < 22) {
+                            mp.x = mpPrevX; mp.y = mpPrevY;
+                            break;
                         }
                     }
                 }
@@ -21323,8 +21338,8 @@ if (keys[' '] || keys['action']) {
     // 3. Safe Interaction
     // Safe is at Y = 140 (Back Wall). 
     const safeX = 350;
-    const safeY = 140; 
-    
+    const safeY = 115;
+
     // Tightened Y-range (reduced from 90 to 50) so you must walk UP to the wall
     const nearSafe = Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 60;
 
@@ -21440,17 +21455,17 @@ if (keys[' '] || keys['action']) {
                 }
             
                 // Collision with trophy cabinet (against back wall)
-                const cabinetX = 580;
+                const cabinetX = 550; // matches drawn position
                 const cabinetY = 80;
                 if(player.x > cabinetX - 10 && player.x < cabinetX + 150 && player.y < cabinetY + 170) {
                     player.x = prevX;
                     player.y = prevY;
                 }
             
-                // Collision with mirror (against back wall)
+                // Collision with mirror (wall-mounted on back wall — only blocks wall zone)
                 const mirrorX = 50;
                 const mirrorY = 90;
-                if(player.x > mirrorX - 10 && player.x < mirrorX + 100 && player.y < mirrorY + 120) {
+                if(player.x > mirrorX - 10 && player.x < mirrorX + 100 && player.y < 100) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -21466,18 +21481,16 @@ if (keys[' '] || keys['action']) {
                 // Collision with portrait wall (center back, pushed against wall; removed when crater active)
                 const portraitX = 350;
                 const portraitY = 0;
-                // Portrait is 120px wide, 90px tall
-                if(!level6.craterActive && player.x > portraitX - 60 && player.x < portraitX + 60 && player.y < portraitY + 100) {
+                // Portrait is wall-mounted — only blocks the back wall zone, not floor nav space
+                if(!level6.craterActive && player.x > portraitX - 65 && player.x < portraitX + 65 && player.y < 90) {
                     player.x = prevX;
                     player.y = prevY;
                 }
 
-                // Collision with safe (separated from desk, no walkover allowed; removed when crater active)
+                // Collision with safe (physical object on floor against back wall; safeY=115)
                 const safeCollisionX = 350;
-                const safeCollisionY = 100;
-                // Safe is 50px wide, 70px tall - full collision box
                 if(!level6.craterActive && player.x > safeCollisionX - 30 && player.x < safeCollisionX + 30 &&
-                   player.y > safeCollisionY - 10 && player.y < safeCollisionY + 80) {
+                   player.y > 110 && player.y < 180) {
                     player.x = prevX;
                     player.y = prevY;
                 }
