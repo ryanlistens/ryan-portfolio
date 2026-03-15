@@ -13099,8 +13099,75 @@ function drawLevel6CEOOffice() {
     // Black void background
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
-    // Room floor - circular rug
+
+    // === CURVED PIPETECH BACK WALL ===
+    // wallCurveY(x): canvas Y where wall surface meets the floor at each X
+    // Parabolic curve: center (x=350) y=50, edges y=72 — gives a concave office feel
+    const wallCurveY = (wx) => 50 + 22 * Math.pow((wx - 350) / 280, 2);
+
+    // Dark charcoal wall surface (fills top band)
+    ctx.fillStyle = '#0e0e0e';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for(let wx = 0; wx <= 700; wx += 6) { ctx.lineTo(wx, wallCurveY(wx)); }
+    ctx.lineTo(700, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wall surface edge line (defines the room boundary)
+    ctx.strokeStyle = '#252525';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for(let wx = 0; wx <= 700; wx += 4) {
+        if(wx === 0) ctx.moveTo(wx, wallCurveY(wx)); else ctx.lineTo(wx, wallCurveY(wx));
+    }
+    ctx.stroke();
+
+    // PIPETECH individually mounted steel letters with orange LED backlight
+    const ptLetters = 'PIPETECH';
+    const ptLW = 32, ptLGap = 5;
+    const ptTotal = ptLetters.length * (ptLW + ptLGap) - ptLGap;
+    const ptStartX = 350 - ptTotal / 2; // = 201
+    for(let li = 0; li < ptLetters.length; li++) {
+        const lx = ptStartX + li * (ptLW + ptLGap);
+        const cx = lx + ptLW / 2;
+        const curveOff = 5 * Math.pow((cx - 350) / 280, 2);
+        const ly = 5 + curveOff;
+
+        // Orange glow halo
+        ctx.shadowColor = '#ff5500';
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = 'rgba(255,85,0,0.18)';
+        ctx.fillRect(lx - 4, ly - 3, ptLW + 8, 46);
+        ctx.shadowBlur = 0;
+
+        // Steel mounting plate
+        ctx.fillStyle = '#1c1c1c';
+        ctx.fillRect(lx - 2, ly - 2, ptLW + 4, 42);
+
+        // Hot LED top strip
+        ctx.fillStyle = '#ff5500';
+        ctx.fillRect(lx + 1, ly, ptLW - 2, 2);
+        ctx.globalAlpha = 0.45;
+        ctx.fillRect(lx + 1, ly + 2, ptLW - 2, 2);
+        ctx.globalAlpha = 1;
+
+        // Metallic letter (gradient: light top, dark bottom)
+        const lGrad = ctx.createLinearGradient(lx, ly + 4, lx, ly + 38);
+        lGrad.addColorStop(0, '#d4d4d4');
+        lGrad.addColorStop(0.4, '#8a8a8a');
+        lGrad.addColorStop(1, '#505050');
+        ctx.fillStyle = lGrad;
+        ctx.font = 'bold 26px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(ptLetters[li], cx, ly + 36);
+
+        // Corner mounting bolts
+        ctx.fillStyle = '#3a3a3a';
+        for(const [bx, by] of [[lx-1, ly-1],[lx+ptLW+1,ly-1],[lx-1,ly+40],[lx+ptLW+1,ly+40]]) {
+            ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
+    }
     const rugCenterX = 350;
     const rugCenterY = 350;
     
@@ -13141,17 +13208,18 @@ function drawLevel6CEOOffice() {
     ctx.arc(earthX + 12, earthY + 8, 12, 0, Math.PI * 2);
     ctx.fill();
     
-    // Saturn-Pipe-Earth portrait on back wall — between mirror (ends x=140) and missile (starts x=230)
+    // Saturn-Pipe-Earth portrait — large wall fixture between mirror (x≤140) and missile (x≥230)
+    // Centered at x=185, begins at wallCurveY(185)≈58 so it sits on the wall surface
     const portraitX = 185;
-    const portraitY = 15;
+    const portraitY = Math.round(wallCurveY(185)) + 2; // ≈ 58, flush against wall
 
-    // Draw at 80px wide (fits gap cleanly, natural portrait aspect gives ~120px tall)
-    let portraitWidth = 80;
+    // 120px wide — fills the gap and reads as a proper wall fixture
+    let portraitWidth = 120;
     let portraitHeight = 90;
     if(ceoPortraitImg.complete && ceoPortraitImg.naturalWidth > 0) {
         const imgAspect = ceoPortraitImg.naturalWidth / ceoPortraitImg.naturalHeight;
-        portraitWidth = 80;
-        portraitHeight = portraitWidth / imgAspect;
+        portraitWidth = 120;
+        portraitHeight = portraitWidth / imgAspect; // ~180px for portrait-mode image
     }
 
     // Draw photorealistic portrait (no frame - image has frame built in)
@@ -14160,7 +14228,8 @@ function drawLevel6CEOOffice() {
     const cctvT = Date.now();
     const sec = Math.floor(cctvT / 1000) % 60;
     const min = Math.floor(cctvT / 60000) % 60;
-    const tvX = 445, tvY = 118, tvW = 72, tvH = 54;
+    // CCTV TV moved to desk (right-back corner, bottom flush with desk surface y≈225)
+    const tvX = 393, tvY = 171, tvW = 72, tvH = 54;
 
     if(!level6.cctv1Destroyed) {
     // TV housing — compact rectangular set on back wall next to safe
@@ -19505,8 +19574,9 @@ function update() {
                 if(x > mirrorX - 10 && x < mirrorX + 100 && y > mirrorY - 10 && y < mirrorY + 120) return true;
                 // Check trophy collision
                 if(x > cabinetX - 10 && x < cabinetX + 150 && y > cabinetY - 10 && y < cabinetY + 170) return true;
-                // Check back wall
-                if(y < 40) return true;
+                // Curved back wall (torso coord threshold matches wallCurveY - 42)
+                const ceoWallY = 50 + 22 * Math.pow((x - 350) / 280, 2);
+                if(y < ceoWallY - 42) return true;
                 return false;
             };
 
@@ -19743,9 +19813,10 @@ function update() {
                 const pms = level6.exitingNPCs.filter(n => !n.isMulletPro);
                 const mp = level6.exitingNPCs.find(n => n.isMulletPro);
 
-                // PMs: walk to their waiting spot, then stand still
+                // PMs: walk to their waiting spot — object permanence (don't walk through each other)
                 for(let pm of pms) {
                     if(!pm.arrived) {
+                        const pmPrevX = pm.x, pmPrevY = pm.y;
                         const dx = pm.waitX - pm.x, dy = pm.waitY - pm.y;
                         const dist = Math.sqrt(dx*dx + dy*dy);
                         if(dist < 5) {
@@ -19755,6 +19826,13 @@ function update() {
                             pm.x += (dx/dist) * mpSpeed;
                             pm.y += (dy/dist) * mpSpeed;
                             pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
+                            // PM-PM collision: don't overlap arrived PMs
+                            for(let other of pms) {
+                                if(other === pm || !other.arrived) continue;
+                                if(Math.abs(pm.x - other.x) < 24 && Math.abs(pm.y - other.y) < 26) {
+                                    pm.x = pmPrevX; pm.y = pmPrevY; break;
+                                }
+                            }
                         }
                     }
                 }
@@ -19763,11 +19841,15 @@ function update() {
                 if(mp) {
                     const mpPrevX = mp.x, mpPrevY = mp.y;
                     if(mp.mpPhase === 'going_to_safe') {
-                        // Walk to safe using left-side waypoint to avoid desk
-                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'side';
+                        // Route: [up_first if near PMs] → side (x=220) → up (y=180) → across to safe
+                        // up_first escapes PM area (y=435±22) before the main path
+                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = mp.y > 400 ? 'up_first' : 'side';
                         const sideX = 220;
                         let tX, tY;
-                        if(mp.mpWaypointPhase === 'side') {
+                        if(mp.mpWaypointPhase === 'up_first') {
+                            tX = mp.x; tY = 385; // move straight up to clear PM zone
+                            if(mp.y < 390) mp.mpWaypointPhase = 'side';
+                        } else if(mp.mpWaypointPhase === 'side') {
                             tX = sideX; tY = mp.y;
                             if(Math.abs(mp.x - sideX) < 8) mp.mpWaypointPhase = 'up';
                         } else if(mp.mpWaypointPhase === 'up') {
@@ -19840,9 +19922,10 @@ function update() {
                             const targetPM = pms[mp.mpTargetPM];
                             if(targetPM) targetPM.hasSack = true;
                             mp.hasSack = false;
+                            mp.mpLastDelivered = mp.mpTargetPM; // remember who just got the sack
                             mp.mpTargetPM++;
-                            mp.mpWaypointPhase = null; // Reset waypoint for next trip
-                            mp.mpPhase = 'going_to_safe'; // Go back for next sack (or player's sack)
+                            mp.mpWaypointPhase = null;
+                            mp.mpPhase = 'going_to_safe';
                         }
 
                     } else if(mp.mpPhase === 'going_to_player') {
@@ -19893,8 +19976,11 @@ function update() {
                         mp.x = mpPrevX; mp.y = mpPrevY;
                     }
 
-                    // Post-movement: don't overlap any waiting PM
+                    // Post-movement: don't overlap waiting PMs
+                    // Skip target PM (need to reach them) and last-delivered PM (need to escape from them)
                     for(const pm of pms) {
+                        if(mp.mpPhase === 'going_to_pm' && pm === pms[mp.mpTargetPM]) continue;
+                        if(mp.mpPhase === 'going_to_safe' && mp.mpLastDelivered >= 0 && pm === pms[mp.mpLastDelivered]) continue;
                         if(Math.abs(mp.x - pm.x) < 20 && Math.abs(mp.y - pm.y) < 22) {
                             mp.x = mpPrevX; mp.y = mpPrevY;
                             break;
@@ -21215,7 +21301,8 @@ function update() {
                                 {x: 370, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, isMulletPro: false, waitX: pmWaitPositions[3], waitY: 435, arrived: false},
                                 // Mullet Pro — delivery state machine
                                 {x: 350, y: 460, color: null, facing: 'forward', hasSack: false, isMulletPro: true,
-                                 mpPhase: 'going_to_safe', mpTargetPM: 0, mpExtractStart: 0, mpDeliverStart: 0}
+                                 mpPhase: 'going_to_safe', mpTargetPM: 0, mpExtractStart: 0, mpDeliverStart: 0,
+                                 mpLastDelivered: -1}
                             ];
                         }
                         keys[' '] = false;
@@ -21444,9 +21531,9 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
-                // Collision with portrait wall (x=185, between mirror and missile)
-                // Portrait is 80px wide, ~120px tall. Bottom at canvas y=135 → torso y=93
-                if(!level6.craterActive && player.x > 147 && player.x < 223 && player.y < 95) {
+                // Collision with portrait (x=185, 120px wide, ~180px tall starting at y≈58)
+                // Bottom canvas y ≈ 58+180=238 → torso y = 238-42 = 196
+                if(!level6.craterActive && player.x > 125 && player.x < 245 && player.y < 196) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -21465,16 +21552,17 @@ if (keys[' '] || keys['action']) {
                     player.y = prevY;
                 }
 
-                // Collision with CCTV TV (wall-mounted at tvX=445,tvY=118,72x54; right of safe)
-                // CCTV is on the back wall — only block near wall (torso y < 140)
-                if(!level6.cctv1Destroyed && player.x > 435 && player.x < 530 && player.y < 140) {
+                // Collision with wall-mounted monitor (x=410±25, y=75-130 canvas)
+                // monY=75 canvas → bottom at 75+55=130 → torso y = 130-42 = 88
+                if(!level6.craterActive && player.x > 385 && player.x < 435 && player.y < 90) {
                     player.x = prevX;
                     player.y = prevY;
                 }
 
-                // Back wall collision - prevent walking behind/above wall-mounted objects
-                // This creates a barrier along the entire back wall (y < 40)
-                if(player.y < 40) {
+                // Curved back wall collision — parabolic curve matches visual wall surface
+                // wallCurveY(x) = 50 + 22*(x-350)^2/280^2; torso threshold = wallCurveY - 42
+                const wcy = 50 + 22 * Math.pow((player.x - 350) / 280, 2);
+                if(player.y < wcy - 42) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -21814,7 +21902,7 @@ if (keys[' '] || keys['action']) {
                     }
 
                     // CCTV TV collision (compact TV next to safe)
-                    if(!level6.cctv1Destroyed && bx > 437 && bx < 525 && by > 110 && by < 180) {
+                    if(!level6.cctv1Destroyed && bx > 389 && bx < 469 && by > 171 && by < 225) {
                         bulletImpact(bx, by);
                         level6.cctv1Destroyed = true;
                         for(let s = 0; s < 8; s++) {
