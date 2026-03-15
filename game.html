@@ -887,6 +887,9 @@ function initLevel(lv) {
         level6.ceoAppearTimer = 0;
         level6.ceoAppearRoom = null;
         level6.ceoExitPrompt = false;
+        level6.ceoFleedOffice = false;
+        level6.ceoFleeMsg = 0;
+        level6.lastExitEdge = 'left'; // Which edge player last exited from (for CEO entry side)
         // Employee lobby 3D printer
         level6.lobbyPrinterUI = false;
         level6.lobbyPrinterChoice = 0;
@@ -17099,42 +17102,52 @@ function drawScene() {
 
             drawLevel6CEOOffice();
 
-            // Draw CEO Office doorway cloning boss if alive
-
-            if(ceo.state !== 'dead') {
+            // Draw CEO in office only when not pursuing player through other rooms
+            if(ceo.state !== 'dead' && !level6.ceoPursuing) {
                 drawCEO(ceo.x, ceo.y, ceo.facing);
-            } else if(!level6.missileExploded && !ceo.eatenByMutant && !ceo.bridgeDeath) {
+            } else if(!level6.missileExploded && !ceo.eatenByMutant && !ceo.bridgeDeath && !level6.ceoPursuing) {
                 // Draw dead CEO body on ground (only if not pulverized by missile, eaten by mutant, or killed on bridge)
                 drawDeadCEO(ceo.x, ceo.y);
             }
 
+            // "CEO FLED!" banner after office shots
+            if(level6.ceoFleeMsg && Date.now() - level6.ceoFleeMsg < 2500) {
+                const fAlpha = Math.min(1, (2500 - (Date.now() - level6.ceoFleeMsg)) / 600);
+                ctx.globalAlpha = fAlpha;
+                ctx.fillStyle = '#ff2222';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                ctx.strokeText('CEO FLED! PURSUE HIM!', 350, 220);
+                ctx.fillText('CEO FLED! PURSUE HIM!', 350, 220);
+                ctx.globalAlpha = 1;
+            }
+
             for(let npc of level6.exitingNPCs) {
                 if(npc.isMulletPro) {
-                    drawMulletPro(npc.x, npc.y, npc.facing, false);
+                    // Arms raised when carrying sack — same pose as holding a doc
+                    drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack);
                 } else {
                     const tempNPC = {
                         x: npc.x,
                         y: npc.y,
                         color: npc.color,
-                        state: 'happy',
+                        state: npc.hasSack ? 'happy' : 'happy',
                         needsDoc: false
                     };
                     drawNPC(tempNPC);
                 }
-                // Draw cash sack carried in hand at side
+                // Draw cash sack
                 if(npc.hasSack) {
-                    const sackSide = npc.facing === 'left' ? -1 : 1;
-                    const sackCarryX = npc.x + sackSide * 14;
-                    const sackCarryY = npc.y + 2; // At hand level beside body
-                    const bob = Math.sin(Date.now() / 300 + npc.x) * 0.5;
-                    // Arm extended to side holding sack
-                    const armColor = npc.isMulletPro ? '#d4a882' : (npc.color || '#cc8844');
-                    ctx.fillStyle = armColor;
-                    ctx.fillRect(npc.x + sackSide * 8, npc.y - 8, sackSide * 6, 12); // Arm to side
-                    // Hand gripping sack
-                    ctx.fillStyle = npc.isMulletPro ? '#f5c89a' : '#ddb88a';
-                    ctx.fillRect(sackCarryX - 2, sackCarryY - 2 + bob, 5, 4);
-                    drawCashSack(sackCarryX, sackCarryY + bob);
+                    const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
+                    if(npc.isMulletPro) {
+                        // Held above head — same position as drawHeldDoc (y - 70)
+                        drawCashSack(npc.x, npc.y - 70 + bob);
+                    } else {
+                        // PM holds sack at shoulder level
+                        const sackSide = npc.facing === 'left' ? -1 : 1;
+                        drawCashSack(npc.x + sackSide * 12, npc.y - 20 + bob);
+                    }
                 }
                 // Draw extracting animation at safe
                 if(npc.extracting) {
@@ -17228,6 +17241,22 @@ function drawScene() {
                     }
                 }
                 ctx.restore();
+            }
+
+            // Mullet Pro "accept your share" prompt
+            if(level6.npcExitSequence && !level6.endingTriggered) {
+                const mp = level6.exitingNPCs && level6.exitingNPCs.find(n => n.isMulletPro);
+                if(mp && mp.mpPhase === 'at_player') {
+                    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+                    ctx.fillRect(190, 375, 320, 46);
+                    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
+                    ctx.strokeRect(190, 375, 320, 46);
+                    ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fillText('[ ACTION ] — Accept Your Share', 350, 395);
+                    ctx.font = '11px Arial'; ctx.fillStyle = '#ccaa55';
+                    ctx.fillText('The means of production — yours!', 350, 413);
+                }
             }
 
             // CEO office exit prompt
@@ -18172,22 +18201,22 @@ function drawScene() {
 
                 // "YOU ARE THE NEW CEO" header
                 ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 26px Arial';
+                ctx.font = 'bold 34px Arial';
                 ctx.textAlign = 'center';
                 ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
-                ctx.strokeText('You Are The New CEO', 350, 26);
-                ctx.fillText('You Are The New CEO', 350, 26);
+                ctx.strokeText('You Are The New CEO', 350, 36);
+                ctx.fillText('You Are The New CEO', 350, 36);
 
                 ctx.fillStyle = '#f5f2ec';
-                ctx.font = '13px Arial';
-                ctx.fillText('of PipeTech Industries', 350, 44);
+                ctx.font = '16px Arial';
+                ctx.fillText('of PipeTech Industries', 350, 58);
 
                 // Image frame — dynamic sizing to fit each image's actual aspect ratio
                 const img = slideImages[currentSlide % slideImages.length];
 
                 // Determine frame dimensions from image natural size
-                const MAX_W = 460, MAX_H = 270;
-                const frameTopY = 54;
+                const MAX_W = 540, MAX_H = 295;
+                const frameTopY = 70;
                 let frameW, frameH;
                 if(img && img.complete && img.naturalWidth > 0) {
                     const imgAspect = img.naturalWidth / img.naturalHeight;
@@ -18262,22 +18291,22 @@ function drawScene() {
                     ctx.fillStyle = '#ccc';
                     ctx.font = 'bold 18px Arial';
                     ctx.textAlign = 'center';
-                    ctx.fillText('FINAL SCORE: ' + score, 350, 402);
+                    ctx.fillText('FINAL SCORE: ' + score, 350, 428);
 
-                    const btnW = 150, btnH = 32;
+                    const btnW = 150, btnH = 34;
                     const btn1X = 350 - btnW - 15, btn2X = 350 + 15;
-                    const btnY = 422;
+                    const btnY = 450;
 
                     ctx.fillStyle = level6.newCEOChoice === 0 ? '#ffd700' : '#444';
                     ctx.fillRect(btn1X, btnY, btnW, btnH);
                     ctx.fillStyle = level6.newCEOChoice === 0 ? '#000' : '#999';
                     ctx.font = 'bold 15px Arial';
-                    ctx.fillText('TRY AGAIN', btn1X + btnW / 2, btnY + 20);
+                    ctx.fillText('TRY AGAIN', btn1X + btnW / 2, btnY + 21);
 
                     ctx.fillStyle = level6.newCEOChoice === 1 ? '#ffd700' : '#444';
                     ctx.fillRect(btn2X, btnY, btnW, btnH);
                     ctx.fillStyle = level6.newCEOChoice === 1 ? '#000' : '#999';
-                    ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 20);
+                    ctx.fillText('SPEAKEASY', btn2X + btnW / 2, btnY + 21);
                 }
             }
         }
@@ -18540,21 +18569,7 @@ function drawScene() {
         }
     }
     
-    // === PURSUING CEO — drawn in any level 6 room when CEO is chasing player ===
-    if(level === 6 && level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && level6.room !== 'ceoOffice') {
-        drawCEO(ceo.x, ceo.y, ceo.facing);
-        // "CEO" warning label
-        ctx.fillStyle = 'rgba(120,0,0,0.8)';
-        ctx.fillRect(ceo.x - 45, ceo.y - 70, 90, 16);
-        ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
-        ctx.strokeRect(ceo.x - 45, ceo.y - 70, 90, 16);
-        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('\u26a0 CEO PURSUIT \u26a0', ceo.x, ceo.y - 58);
-    }
-    // Dead pursuing CEO (non-bridge death)
-    if(level === 6 && ceo.state === 'dead' && !ceo.bridgeDeath && level6.room !== 'ceoOffice' && level6.ceoPursuing === false && ceo.deathRoom === level6.room) {
-        drawDeadCEO(ceo.x, ceo.y);
-    }
+    // (CEO pursuit rendering is handled in the per-room draw block above)
 
     for(let mf of muzzleFlashes) {
         const flashX = mf.facing === 'left' ? mf.x - 30 : mf.x + 30;
@@ -19712,20 +19727,20 @@ function update() {
 
                 if(Date.now() - level6.ceoAppearTimer > pursuitDelay) {
                     if(!ceo.ceoVisible) {
-                        // CEO enters from doorway/edge — starts off-screen or at door
+                        // CEO enters from the same door the player came through
                         ceo.ceoVisible = true;
+                        const exitEdge = level6.lastExitEdge || 'left';
                         if(level6.room === 'entryway') {
-                            ceo.x = 350; ceo.y = 460; // Enter from bottom (office door)
+                            // CEO always comes from the office door below
+                            ceo.x = 350; ceo.y = 480;
                         } else if(level6.room === 'nuclearBridge') {
-                            ceo.x = -20; ceo.y = 140; // Enter from left edge
-                        } else if(level6.room === 'pipeRoom' || level6.room === 'megacomputer') {
-                            ceo.x = -20; ceo.y = 380; // Enter from left
-                        } else if(level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'employeeHallway') {
-                            ceo.x = -20; ceo.y = 380;
-                        } else if(level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
-                            ceo.x = 720; ceo.y = 380; // Enter from right
+                            ceo.y = 140;
+                            ceo.x = exitEdge === 'right' ? -20 : 720;
                         } else {
-                            ceo.x = -20; ceo.y = 380;
+                            // All horizontal rooms: CEO enters from the same edge player entered from
+                            const roomFloorY = level6.room === 'nuclearBridge' ? 140 : 380;
+                            ceo.y = roomFloorY;
+                            ceo.x = exitEdge === 'right' ? -20 : 720;
                         }
                         ceo.facing = player.x > ceo.x ? 'right' : 'left';
                         ceo.shootTimer = 0; // Don't shoot immediately on entry
@@ -19764,183 +19779,144 @@ function update() {
                 }
             }
 
-            // NPC exit sequence
+            // NPC exit sequence — Mullet Pro delivers cash to each PM, then brings the last sack to player
             if(level6.npcExitSequence) {
                 level6.npcExitTimer++;
+                const mpSpeed = 2.2;
+                const safeX = 350, safeY = 162; // Stand in front of safe
+                const pms = level6.exitingNPCs.filter(n => !n.isMulletPro);
+                const mp = level6.exitingNPCs.find(n => n.isMulletPro);
 
-                // Safe position — NPCs walk here to grab sacks (gap between safe bottom y=180 and desk top y=190)
-                const safeTargetX = 350;
-                const safeTargetY = 184; // Stand in gap between safe (ends y<180) and desk (starts y>190)
-
-                for(let npc of level6.exitingNPCs) {
-                    if(!npc.hasSack && !npc.extracting && !npc.exiting) {
-                        // Phase 1: Walk around desk to the safe using waypoints
-                        let nearestSack = null;
-                        for(let sack of level6.cashSacks) {
-                            if(!sack.claimed && !sack.reserved) { nearestSack = sack; break; }
-                        }
-
-                        if(nearestSack) {
-                            // Reserve this sack so other NPCs don't target it
-                            if(!npc.reservedSack) {
-                                nearestSack.reserved = true;
-                                npc.reservedSack = nearestSack;
-                            }
-
-                            const speed = 2;
-                            const npcIndex = level6.exitingNPCs.indexOf(npc);
-                            const offsetX = (npcIndex - 2) * 12; // Spread NPCs at safe
-
-                            // Desk bounds: x:260-440, y:190-300
-                            // NPCs start at bottom (y~460), safe is at top (y~230)
-                            // Waypoint navigation: go to side of desk, then up past it, then to safe
-                            if(!npc.waypoint) {
-                                // Assign side to go around desk (alternate left/right)
-                                const goLeft = npcIndex % 2 === 0;
-                                npc.waypoint = goLeft ? 'left' : 'right';
-                                npc.waypointPhase = 'side'; // 'side' -> 'up' -> 'across' -> 'safe'
-                            }
-
-                            const sideX = npc.waypoint === 'left' ? 230 : 470;
-                            const clearY = 183; // Just above desk collision zone (desk starts at y>190)
-                            const belowSafeY = 184; // In gap between safe (y<180) and desk (y>190)
-                            const finalX = safeTargetX + offsetX;
-                            const finalY = safeTargetY;
-
-                            // Determine current target based on phase
-                            let targetX, targetY;
-                            if(npc.waypointPhase === 'side') {
-                                // Walk to side of desk
-                                targetX = sideX;
-                                targetY = npc.y; // Stay at current y
-                                if(Math.abs(npc.x - sideX) < 10) {
-                                    npc.waypointPhase = 'up';
-                                }
-                            } else if(npc.waypointPhase === 'up') {
-                                // Walk up past desk (stay at side to avoid safe collision)
-                                targetX = sideX;
-                                targetY = clearY;
-                                if(npc.y < clearY + 10) {
-                                    npc.waypointPhase = 'across';
-                                }
-                            } else if(npc.waypointPhase === 'across') {
-                                // Walk horizontally to safe x while staying below safe collision zone
-                                targetX = finalX;
-                                targetY = belowSafeY;
-                                if(Math.abs(npc.x - finalX) < 10 && npc.y > belowSafeY - 10) {
-                                    npc.waypointPhase = 'safe';
-                                }
-                            } else {
-                                // Walk to safe from below (approach vertically, already at correct x)
-                                targetX = finalX;
-                                targetY = finalY;
-                            }
-
-                            const adjDx = targetX - npc.x;
-                            const adjDy = targetY - npc.y;
-                            const adjDist = Math.sqrt(adjDx * adjDx + adjDy * adjDy);
-
-                            if(npc.waypointPhase === 'safe' && adjDist <= 15) {
-                                // Arrived at safe — start extracting animation
-                                npc.extracting = true;
-                                npc.extractStart = Date.now();
-                                npc.facing = 'forward'; // Face the safe (wall)
-                            } else if(adjDist > 2) {
-                                const newX = npc.x + (adjDx / adjDist) * speed;
-                                const newY = npc.y + (adjDy / adjDist) * speed;
-                                if(!ceoCollidesWithObstacle(newX, newY)) {
-                                    npc.x = newX;
-                                    npc.y = newY;
-                                } else if(!ceoCollidesWithObstacle(newX, npc.y)) {
-                                    npc.x = newX;
-                                } else if(!ceoCollidesWithObstacle(npc.x, newY)) {
-                                    npc.y = newY;
-                                }
-                                npc.facing = Math.abs(adjDx) > Math.abs(adjDy)
-                                    ? (adjDx > 0 ? 'right' : 'left') : 'forward';
-                            }
-                        }
-                    } else if(npc.extracting && !npc.hasSack) {
-                        // Phase 2: Extract sack from safe (animation)
-                        const extractElapsed = Date.now() - npc.extractStart;
-                        if(extractElapsed > 800) {
-                            // Done extracting — grab the sack
-                            npc.hasSack = true;
-                            npc.extracting = false;
-                            if(npc.reservedSack) {
-                                npc.reservedSack.claimed = true;
-                                npc.reservedSack.extracted = true;
-                            }
-                            npc.stuckTimer = 0;
-                            npc.lastDist = Infinity;
-                        }
-                    } else if(npc.hasSack && !npc.exiting) {
-                        // Phase 3: Carry sack in hand — walk around desk to exit
-                        const exitY = 460;
-                        const speed = 2;
-
-                        // Use waypoints to navigate around desk on exit
-                        if(!npc.exitPhase) {
-                            npc.exitPhase = 'side'; // 'side' -> 'down' -> 'done'
-                        }
-
-                        const sideX = npc.waypoint === 'left' ? 230 : 470;
-
-                        let targetX, targetY;
-                        if(npc.exitPhase === 'side') {
-                            // Walk to side of desk (reuse same side as approach)
-                            targetX = sideX;
-                            targetY = npc.y;
-                            if(Math.abs(npc.x - sideX) < 10 || npc.y > 310) {
-                                npc.exitPhase = 'down';
-                            }
-                        } else if(npc.exitPhase === 'down') {
-                            // Walk down to exit
-                            targetX = npc.x;
-                            targetY = exitY;
+                // PMs: walk to their waiting spot, then stand still
+                for(let pm of pms) {
+                    if(!pm.arrived) {
+                        const dx = pm.waitX - pm.x, dy = pm.waitY - pm.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        if(dist < 5) {
+                            pm.arrived = true;
+                            pm.facing = 'forward';
                         } else {
-                            targetX = npc.x;
-                            targetY = exitY;
-                        }
-
-                        const adjDx = targetX - npc.x;
-                        const adjDy = targetY - npc.y;
-                        const adjDist = Math.sqrt(adjDx * adjDx + adjDy * adjDy);
-
-                        if(adjDist > 5) {
-                            const newX = npc.x + (adjDx / adjDist) * speed;
-                            const newY = npc.y + (adjDy / adjDist) * speed;
-                            if(!ceoCollidesWithObstacle(newX, newY)) {
-                                npc.x = newX;
-                                npc.y = newY;
-                            } else if(!ceoCollidesWithObstacle(newX, npc.y)) {
-                                npc.x = newX;
-                            } else if(!ceoCollidesWithObstacle(npc.x, newY)) {
-                                npc.y = newY;
-                            }
-                            npc.facing = Math.abs(adjDx) > Math.abs(adjDy)
-                                ? (adjDx > 0 ? 'right' : 'left') : 'forward';
-                        } else if(npc.exitPhase === 'down' && Math.abs(npc.y - exitY) < 10) {
-                            npc.exiting = true;
-                        } else {
-                            npc.exiting = true;
+                            pm.x += (dx/dist) * mpSpeed;
+                            pm.y += (dy/dist) * mpSpeed;
+                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                         }
                     }
                 }
-            
-                const allExited = level6.exitingNPCs.every(npc => npc.exiting);
-                if(allExited && level6.npcExitTimer > 180) {
-                    const unclaimedSack = level6.cashSacks.find(s => !s.claimed && !s.reserved);
-                    if(unclaimedSack && !level6.endingTriggered) {
-                        if(Math.abs(player.x - unclaimedSack.x) < 50 && Math.abs(player.y - unclaimedSack.y) < 60) {
-                            if(keys[' '] || keys['action']) {
-                                level6.endingTriggered = true;
-                                state = 'victory';
-                                menuChoice = 0;
-                                playMusic('menu'); // Play menu music on victory
-                                keys[' '] = false;
-                                keys['action'] = false;
+
+                // Mullet Pro state machine
+                if(mp) {
+                    if(mp.mpPhase === 'going_to_safe') {
+                        // Walk to safe using left-side waypoint to avoid desk
+                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'side';
+                        const sideX = 220;
+                        let tX, tY;
+                        if(mp.mpWaypointPhase === 'side') {
+                            tX = sideX; tY = mp.y;
+                            if(Math.abs(mp.x - sideX) < 8) mp.mpWaypointPhase = 'up';
+                        } else if(mp.mpWaypointPhase === 'up') {
+                            tX = sideX; tY = 180;
+                            if(mp.y < 185) mp.mpWaypointPhase = 'across';
+                        } else {
+                            tX = safeX; tY = safeY;
+                            if(Math.abs(mp.x - safeX) < 12 && Math.abs(mp.y - safeY) < 12) {
+                                mp.mpPhase = 'extracting';
+                                mp.mpExtractStart = Date.now();
+                                mp.facing = 'forward';
+                                mp.mpWaypointPhase = null;
                             }
+                        }
+                        const dxm = tX - mp.x, dym = tY - mp.y;
+                        const dm = Math.sqrt(dxm*dxm + dym*dym);
+                        if(dm > 2) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
+                        mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : (dym < 0 ? 'forward' : 'forward');
+
+                    } else if(mp.mpPhase === 'extracting') {
+                        // Brief pause at safe — grab sack
+                        if(Date.now() - mp.mpExtractStart > 700) {
+                            mp.hasSack = true;
+                            // Mark one sack claimed
+                            const sack = level6.cashSacks.find(s => !s.claimed);
+                            if(sack) sack.claimed = true;
+                            if(mp.mpTargetPM < 4) {
+                                mp.mpPhase = 'going_to_pm';
+                            } else {
+                                mp.mpPhase = 'going_to_player';
+                            }
+                        }
+
+                    } else if(mp.mpPhase === 'going_to_pm') {
+                        // Walk to PM[mpTargetPM] waiting position
+                        const targetPM = pms[mp.mpTargetPM];
+                        const tX = targetPM ? targetPM.waitX : 350;
+                        const tY = targetPM ? targetPM.waitY - 40 : 395; // Stand just above PM
+                        // Navigate: go down first, then across (clear the desk)
+                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'down';
+                        let tXw = tX, tYw = tY;
+                        if(mp.mpWaypointPhase === 'down') {
+                            tXw = mp.x; tYw = 330;
+                            if(mp.y > 325) mp.mpWaypointPhase = 'across';
+                        } else {
+                            tXw = tX; tYw = tY;
+                        }
+                        const dxm = tXw - mp.x, dym = tYw - mp.y;
+                        const dm = Math.sqrt(dxm*dxm + dym*dym);
+                        if(dm > 5) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
+                        mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : 'forward';
+                        if(dm <= 8 && mp.mpWaypointPhase === 'across') {
+                            mp.mpPhase = 'delivering';
+                            mp.mpDeliverStart = Date.now();
+                            mp.facing = 'forward';
+                            mp.mpWaypointPhase = null;
+                        }
+
+                    } else if(mp.mpPhase === 'delivering') {
+                        // Short pause — hand sack to PM
+                        if(Date.now() - mp.mpDeliverStart > 600) {
+                            const targetPM = pms[mp.mpTargetPM];
+                            if(targetPM) targetPM.hasSack = true;
+                            mp.hasSack = false;
+                            mp.mpTargetPM++;
+                            if(mp.mpTargetPM < 4) {
+                                mp.mpPhase = 'going_to_safe'; // Go back for next sack
+                            } else {
+                                mp.mpPhase = 'going_to_safe'; // Go back for player's sack
+                            }
+                        }
+
+                    } else if(mp.mpPhase === 'going_to_player') {
+                        // Walk toward player carrying the last sack
+                        const tX = player.x, tY = player.y;
+                        if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'down';
+                        let tXw = tX, tYw = tY;
+                        if(mp.mpWaypointPhase === 'down') {
+                            tXw = mp.x; tYw = 330;
+                            if(mp.y > 325) mp.mpWaypointPhase = 'across';
+                        } else {
+                            tXw = tX; tYw = tY;
+                        }
+                        const dxm = tXw - mp.x, dym = tYw - mp.y;
+                        const dm = Math.sqrt(dxm*dxm + dym*dym);
+                        if(dm > 5) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
+                        mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : 'forward';
+                        if(dm <= 55 && mp.mpWaypointPhase === 'across') {
+                            mp.mpPhase = 'at_player';
+                            mp.facing = player.x > mp.x ? 'right' : 'left';
+                            mp.mpWaypointPhase = null;
+                        }
+
+                    } else if(mp.mpPhase === 'at_player') {
+                        // Follow player slowly, face them, prompt to accept
+                        mp.facing = player.x > mp.x ? 'right' : 'left';
+                        const dxm = player.x - mp.x, dym = player.y - mp.y;
+                        const dm = Math.sqrt(dxm*dxm + dym*dym);
+                        if(dm > 60) { mp.x += (dxm/dm)*1.5; mp.y += (dym/dm)*1.5; }
+                        if(!level6.endingTriggered && (keys[' '] || keys['action'])) {
+                            level6.endingTriggered = true;
+                            state = 'victory';
+                            menuChoice = 0;
+                            playMusic('menu');
+                            keys[' '] = false;
+                            keys['action'] = false;
                         }
                     }
                 }
@@ -20303,6 +20279,7 @@ function update() {
                     level6.room = 'underbellyHallway';
                     player.x = 640;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                 }
 
                 if(player.x < 130 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
@@ -20326,12 +20303,14 @@ function update() {
                     level6.room = 'megacomputer';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
                 // Action button entry when standing near open door
                 if(level6.supercomputerUnlocked && player.x > 580 && level6.bladeDoor.openPct > 0.5 && (keys[' '] || keys['action'])) {
                     level6.room = 'megacomputer';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -20344,6 +20323,7 @@ function update() {
                     level6.room = 'pipeRoom';
                     player.x = 640;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                 }
 
                 // Right exit — bridge overlook
@@ -20351,6 +20331,7 @@ function update() {
                     level6.room = 'nuclearBridge';
                     player.x = 100;
                     player.y = 140;
+                    level6.lastExitEdge = 'right';
                 }
 
                 // Detective note interaction - aligned with actual note position
@@ -21232,26 +21213,28 @@ function update() {
                             state = 'theend';
                             menuChoice = 0;
                         } else {
-                            // Deliver means of production - leads to "You Win!"
+                            // Deliver means of production — Mullet Pro distributes cash to each PM, then player
                             level6.computerCompleted = true;
                             level6.computerUI = false;
                             level6.npcExitSequence = true;
 
-                            // Clear any existing sacks and spawn fresh ones at the safe
-                            // 5 for NPCs + 1 for the player (victory sack)
+                            // 5 sacks total: 4 for PMs + 1 for player
                             level6.cashSacks = [];
-                            for(let si = 0; si < 6; si++) {
-                                // NPC sacks (si 0-4) near safe at y=150; player sack (si=5) at y=185 in accessible gap between safe bottom (y=180) and desk top (y=190)
-                                const sackY = si < 5 ? 150 : 185;
-                                level6.cashSacks.push({ x: 350 + (si - 2.5) * 18, y: sackY, claimed: false, reserved: false, extracted: false });
+                            for(let si = 0; si < 5; si++) {
+                                level6.cashSacks.push({ x: 350 + (si - 2) * 16, y: 155, claimed: false });
                             }
 
+                            // PMs wait at spread positions at bottom of office
+                            // Mullet Pro handles all delivery
+                            const pmWaitPositions = [170, 270, 430, 530];
                             level6.exitingNPCs = [
-                                {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, extracting: false, extractStart: 0, reservedSack: null, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
-                                {x: 370, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, extracting: false, extractStart: 0, reservedSack: null, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
-                                {x: 330, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, extracting: false, extractStart: 0, reservedSack: null, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
-                                {x: 390, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, extracting: false, extractStart: 0, reservedSack: null, exiting: false, isMulletPro: false, stuckTimer: 0, lastDist: Infinity},
-                                {x: 410, y: 460, color: null, facing: 'forward', hasSack: false, extracting: false, extractStart: 0, reservedSack: null, exiting: false, isMulletPro: true, stuckTimer: 0, lastDist: Infinity}
+                                {x: 350, y: 460, color: COLORS[0], facing: 'forward', hasSack: false, isMulletPro: false, waitX: pmWaitPositions[0], waitY: 435, arrived: false},
+                                {x: 360, y: 460, color: COLORS[1], facing: 'forward', hasSack: false, isMulletPro: false, waitX: pmWaitPositions[1], waitY: 435, arrived: false},
+                                {x: 340, y: 460, color: COLORS[2], facing: 'forward', hasSack: false, isMulletPro: false, waitX: pmWaitPositions[2], waitY: 435, arrived: false},
+                                {x: 370, y: 460, color: COLORS[3], facing: 'forward', hasSack: false, isMulletPro: false, waitX: pmWaitPositions[3], waitY: 435, arrived: false},
+                                // Mullet Pro — delivery state machine
+                                {x: 350, y: 460, color: null, facing: 'forward', hasSack: false, isMulletPro: true,
+                                 mpPhase: 'going_to_safe', mpTargetPM: 0, mpExtractStart: 0, mpDeliverStart: 0}
                             ];
                         }
                         keys[' '] = false;
@@ -21267,9 +21250,10 @@ function update() {
                     keys['action'] = false;
                     level6.ceoExitPrompt = false;
                     level6.room = 'entryway';
+                    level6.lastExitEdge = 'bottom';
                     player.x = 350;
                     player.y = 400;
-                    if(ceo.state === 'hunting') {
+                    if(ceo.state === 'hunting' || level6.ceoPursuing) {
                         level6.ceoPursuing = true;
                         level6.ceoAppearTimer = Date.now();
                         level6.ceoAppearRoom = 'entryway';
@@ -21391,23 +21375,21 @@ if (keys[' '] || keys['action']) {
             });
             level6.revolverAmmo--;
 
-            // Bullet collision with CEO
+            // Bullet collision with CEO (in-office: 6 hits make CEO flee, not die)
             if (ceo.state !== 'dead' && Math.abs(bullets[bullets.length - 1].x - ceo.x) < 50 && Math.abs(bullets[bullets.length - 1].y - ceo.y) < 50) {
                 ceo.health--;
                 ceo.blinkTimer = 10;
 
                 if (ceo.health <= 0) {
-                    ceo.state = 'dead';
-                    ceo.deathRoom = level6.room;
-                    level6.ceoDefeated = true;
-                    // Unlock safe — door will animate open revealing cash inside
-                    if(!level6.safeUnlocked) {
-                        level6.safeUnlocked = true;
-                        // Spawn cash sacks inside safe (not extracted yet — visible as miniSacks)
-                        for(let si = 0; si < 6; si++) {
-                            level6.cashSacks.push({ x: 350, y: 200, claimed: false, reserved: false, extracted: false });
-                        }
-                    }
+                    // CEO flees the office — must be finished off in another room
+                    ceo.health = 3; // Remaining health for outside chase
+                    ceo.ceoVisible = false;
+                    level6.ceoPursuing = true;
+                    level6.ceoAppearTimer = Date.now() + 1500; // 1.5s head-start before CEO appears
+                    level6.ceoAppearRoom = null; // Will be set on first appear
+                    level6.ceoFleedOffice = true;
+                    // Show a brief flee message
+                    level6.ceoFleeMsg = Date.now();
                 } else if (ceo.state === 'admiring' || ceo.state === 'offering') {
                     ceo.state = 'hunting';
                 }
@@ -21669,6 +21651,7 @@ if (keys[' '] || keys['action']) {
                             ceo.state = 'dead';
                             level6.ceoDefeated = true;
                             level6.ceoPursuing = false;
+                            level6.safeUnlocked = true; // Unlock safe now CEO is down
                             // Set up bridge death animation
                             ceo.bridgeDeath = true;
                             ceo.deathTime = Date.now();
@@ -21685,20 +21668,13 @@ if (keys[' '] || keys['action']) {
                             } else {
                                 ceo.deathType = 'fall';
                             }
-                            // Drop cash sacks at safe in CEO office
-                            for(let s = 0; s < 3; s++) {
-                                level6.cashSacks.push({ x: 350 + (s - 1) * 18, y: 200 + s * 8, claimed: false, reserved: false, extracted: false });
-                            }
                         } else if(ceo.health <= 0) {
-                            // Non-bridge death
+                            // Non-bridge death outside office
                             ceo.state = 'dead';
                             ceo.deathRoom = level6.room;
                             level6.ceoDefeated = true;
                             level6.ceoPursuing = false;
-                            // Drop cash sacks at safe in CEO office
-                            for(let s = 0; s < 3; s++) {
-                                level6.cashSacks.push({ x: 350 + (s - 1) * 18, y: 200 + s * 8, claimed: false, reserved: false, extracted: false });
-                            }
+                            level6.safeUnlocked = true; // Unlock safe now CEO is down
                         } else if(ceo.state !== 'hunting') {
                             ceo.state = 'hunting';
                             level6.ceoEnteredMurderMode = true;
@@ -21707,23 +21683,21 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
-                if(level6.room === 'ceoOffice' && !bullets[i].fromCEO && ceo.state !== 'dead' && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
+                if(level6.room === 'ceoOffice' && !bullets[i].fromCEO && ceo.state !== 'dead' && !level6.ceoPursuing && Math.abs(bullets[i].x - ceo.x) < 40 && Math.abs(bullets[i].y - ceo.y) < 40) {
                     ceo.health--;
                     ceo.blinkTimer = 10;
                     bulletImpact(bullets[i].x, bullets[i].y);
-
                     bullets.splice(i, 1);
 
                     if(ceo.health <= 0) {
-                        ceo.state = 'dead';
-                        ceo.deathRoom = level6.room;
-                        level6.ceoDefeated = true;
-                        level6.ceoPursuing = false;
-                        // Unlock safe and spawn cash sacks
-                        level6.safeUnlocked = true;
-                        for(let s = 0; s < 6; s++) {
-                            level6.cashSacks.push({ x: 350 + (s - 2.5) * 18, y: 200 + Math.floor(s / 3) * 20, claimed: false, reserved: false, extracted: false });
-                        }
+                        // CEO flees — same as immediate-fire handler
+                        ceo.health = 3;
+                        ceo.ceoVisible = false;
+                        level6.ceoPursuing = true;
+                        level6.ceoAppearTimer = Date.now() + 1500;
+                        level6.ceoAppearRoom = null;
+                        level6.ceoFleedOffice = true;
+                        level6.ceoFleeMsg = Date.now();
                     } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
                         ceo.state = 'hunting';
                         level6.ceoEnteredMurderMode = true;
