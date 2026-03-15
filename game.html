@@ -18048,7 +18048,8 @@ function drawScene() {
 
                     // Draw using proper game character functions
                     if(npc.isMulletPro) {
-                        drawMulletPro(npc.x, ny, npc.facing, false);
+                        // holding=true uses the existing raised-arm carrying pose
+                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived);
                     } else {
                         const tempNPC = {
                             x: npc.x, y: ny,
@@ -18057,21 +18058,25 @@ function drawScene() {
                             needsDoc: false
                         };
                         drawNPC(tempNPC);
-                    }
 
-                    // NPCs raise arms to hoist the player (new CEO) once all arrived
-                    // Arms extend upward at the sides of the body, hands above head
-                    if(allArrived && npc.arrived) {
-                        const bob = Math.sin(ceoTime / 300 + npc.x) * 2;
-                        const armColor = npc.isMulletPro ? '#800020' : (npc.color ? npc.color.hex || npc.color : '#cc8844');
-                        ctx.fillStyle = armColor;
-                        // Arms raised overhead to hoist the player (hands reach up to hoistY≈260, npcs at baseY=310)
-                        ctx.fillRect(npc.x - 20, ny - 60 + bob, 5, 42); // Left arm reaching up
-                        ctx.fillRect(npc.x + 15, ny - 60 + bob, 5, 42); // Right arm reaching up
-                        // Hands at top of raised arms (at ~y=250 to meet hoisted player's feet)
-                        ctx.fillStyle = npc.isMulletPro ? '#f5c89a' : '#ddb88a';
-                        ctx.beginPath(); ctx.arc(npc.x - 18, ny - 62 + bob, 4, 0, Math.PI * 2); ctx.fill(); // Left hand
-                        ctx.beginPath(); ctx.arc(npc.x + 18, ny - 62 + bob, 4, 0, Math.PI * 2); ctx.fill(); // Right hand
+                        // When hoisting: overwrite drawNPC's hanging arms with raised arms
+                        // (drawNPC uses s=2; shoulder is at ny - 3*s = ny-6)
+                        if(allArrived) {
+                            const s = 2;
+                            const hob = Math.sin(ceoTime / 300 + npc.x) * 2;
+                            const shirtHex = npc.color ? (npc.color.hex || npc.color) : '#cc8844';
+                            // Cover the hanging arms drawNPC drew
+                            ctx.fillStyle = shirtHex;
+                            ctx.fillRect(npc.x - 8*s, ny - 3*s, 2*s, 7*s); // erase left hang
+                            ctx.fillRect(npc.x + 6*s, ny - 3*s, 2*s, 7*s); // erase right hang
+                            // Raised arms — same geometry as drawMulletPro holding pose
+                            ctx.fillRect(npc.x - 9*s, ny - 14*s + hob, 2*s, 11*s); // left up
+                            ctx.fillRect(npc.x + 7*s, ny - 14*s + hob, 2*s, 11*s); // right up
+                            // Hands at top
+                            ctx.fillStyle = '#ddb88a';
+                            ctx.fillRect(npc.x - 9*s, ny - 16*s + hob, 2*s, 2*s);
+                            ctx.fillRect(npc.x + 7*s, ny - 16*s + hob, 2*s, 2*s);
+                        }
                     }
                 }
 
@@ -18143,7 +18148,7 @@ function drawScene() {
 
                 // Slideshow of .jpg and .png source pictures from /images
                 const slideImages = [
-                    trophy1Img, trophy2Img, ceoPortraitImg, portraitImg,
+                    trophy1Img, trophy2Img, pipeRingsImg, portraitImg,
                     foundingFatherImg, labSafetyImg, ceoArmsImg,
                     pipeTechFloorImg, pipeTechFamilyImg
                 ];
@@ -18177,25 +18182,44 @@ function drawScene() {
                 ctx.font = '16px Arial';
                 ctx.fillText('of PipeTech Industries', 350, 68);
 
-                // Image frame — full-width display properly sized for all aspect ratios
-                const frameW = 440, frameH = 280;
-                const frameX = 350 - frameW / 2, frameY = 82;
+                // Image frame — dynamic sizing to fit each image's actual aspect ratio
+                const img = slideImages[currentSlide % slideImages.length];
 
-                // Ornate golden frame — thicker border
+                // Determine frame dimensions from image natural size
+                const MAX_W = 460, MAX_H = 330;
+                const frameTopY = 82;
+                let frameW, frameH;
+                if(img && img.complete && img.naturalWidth > 0) {
+                    const imgAspect = img.naturalWidth / img.naturalHeight;
+                    if(imgAspect >= 1) {
+                        // Landscape or square — constrain width first
+                        frameW = MAX_W;
+                        frameH = Math.round(MAX_W / imgAspect);
+                        if(frameH > MAX_H) { frameH = MAX_H; frameW = Math.round(MAX_H * imgAspect); }
+                    } else {
+                        // Portrait — constrain height first
+                        frameH = MAX_H;
+                        frameW = Math.round(MAX_H * imgAspect);
+                        if(frameW > MAX_W) { frameW = MAX_W; frameH = Math.round(MAX_W / imgAspect); }
+                    }
+                } else {
+                    frameW = MAX_W; frameH = MAX_H;
+                }
+                const frameX = 350 - frameW / 2;
+                const frameY = frameTopY;
+
+                // Ornate golden frame — sized to image dimensions
                 ctx.fillStyle = '#8b6914';
                 ctx.fillRect(frameX - 8, frameY - 8, frameW + 16, frameH + 16);
                 ctx.fillStyle = '#aa8020';
                 ctx.fillRect(frameX - 5, frameY - 5, frameW + 10, frameH + 10);
                 ctx.fillStyle = '#8b6914';
                 ctx.fillRect(frameX - 3, frameY - 3, frameW + 6, frameH + 6);
-                // Inner mat
                 ctx.fillStyle = '#1a1520';
                 ctx.fillRect(frameX, frameY, frameW, frameH);
 
-                // Draw current slide image with cross-fade — cover fill to use full frame
-                const img = slideImages[currentSlide % slideImages.length];
+                // Draw current slide image with cross-fade — fills frame exactly
                 if(img && img.complete && img.naturalWidth > 0) {
-                    // Fade in/out at slide boundaries
                     let slideAlpha = 1;
                     if(slideProgress < FADE_DURATION / SLIDE_DURATION) {
                         slideAlpha = slideProgress / (FADE_DURATION / SLIDE_DURATION);
@@ -18203,24 +18227,7 @@ function drawScene() {
                         slideAlpha = (1 - slideProgress) / (FADE_DURATION / SLIDE_DURATION);
                     }
                     ctx.globalAlpha = Math.max(0, Math.min(1, slideAlpha));
-                    // Contain-fill: fit entire image in frame without cropping
-                    const imgAspect = img.naturalWidth / img.naturalHeight;
-                    const frameAspect = frameW / frameH;
-                    let drawW, drawH, drawX, drawY;
-                    if(imgAspect > frameAspect) {
-                        // Image wider than frame — fit to width, letterbox top/bottom
-                        drawW = frameW;
-                        drawH = frameW / imgAspect;
-                        drawX = frameX;
-                        drawY = frameY + (frameH - drawH) / 2;
-                    } else {
-                        // Image taller than frame — fit to height, pillarbox left/right
-                        drawH = frameH;
-                        drawW = frameH * imgAspect;
-                        drawX = frameX + (frameW - drawW) / 2;
-                        drawY = frameY;
-                    }
-                    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+                    ctx.drawImage(img, frameX, frameY, frameW, frameH);
                     ctx.globalAlpha = 1;
                 }
 
