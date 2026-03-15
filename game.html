@@ -8932,8 +8932,8 @@ function drawNuclearAssemblyBridge() {
             ? (cycleT - missilePhaseBoundary - CRATE_LOAD_MS) / TRUCK_SWAP_MS : 0;
         const isSwapping = truckSwapProg > 0;
 
-        // Key x-positions
-        const TANK_X = 90, SYR_X = 300, CRATE_X = 520, DOCK_X = 640;
+        // Key x-positions (TANK_X moved to 135 so it clears the left wall at x=100)
+        const TANK_X = 135, SYR_X = 300, CRATE_X = 520, DOCK_X = 640;
         const mW = 12, mH = 28;
 
         // ── CONVEYOR BELT ────────────────────────────────────────────────────
@@ -9010,6 +9010,65 @@ function drawNuclearAssemblyBridge() {
         // Label
         ctx.fillStyle = '#80ff20'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
         ctx.fillText('GOO TANK', TANK_X, tankTop - 8);
+
+        // ── RADIOACTIVE ACID POOL — glowing floor-level pool under tank ────────
+        {
+            const poolX = TANK_X + 6, poolY = factFloor - 2;
+            const poolRx = 42, poolRy = 10;
+            // Glow halo
+            const poolGlow = ctx.createRadialGradient(poolX, poolY, 6, poolX, poolY, poolRx + 24);
+            poolGlow.addColorStop(0, 'rgba(100,255,40,0.5)');
+            poolGlow.addColorStop(0.4, 'rgba(50,200,15,0.22)');
+            poolGlow.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = poolGlow;
+            ctx.shadowColor = '#50ff20'; ctx.shadowBlur = 20;
+            ctx.beginPath(); ctx.ellipse(poolX, poolY, poolRx + 24, poolRy + 14, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            // Pool surface
+            const poolSurf = ctx.createRadialGradient(poolX, poolY - 2, 3, poolX, poolY, poolRx);
+            poolSurf.addColorStop(0, 'rgba(180,255,80,0.95)');
+            poolSurf.addColorStop(0.3, 'rgba(80,230,22,0.85)');
+            poolSurf.addColorStop(0.75, 'rgba(28,150,8,0.62)');
+            poolSurf.addColorStop(1, 'rgba(0,50,0,0.35)');
+            ctx.fillStyle = poolSurf;
+            ctx.shadowColor = '#80ff40'; ctx.shadowBlur = 12;
+            ctx.beginPath(); ctx.ellipse(poolX, poolY, poolRx, poolRy, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            // Containment rim
+            ctx.strokeStyle = '#1a4010'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(poolX, poolY, poolRx + 2, poolRy + 2, 0, 0, Math.PI * 2); ctx.stroke();
+            // Ripple rings
+            for(let pb = 0; pb < 3; pb++) {
+                const pbProg = ((_ft + pb * 760) % 1520) / 1520;
+                const pbX = poolX + (pb % 2 === 0 ? -10 : 10);
+                ctx.strokeStyle = `rgba(150,255,70,${(1-pbProg)*0.5})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.ellipse(pbX, poolY - 1, 3 + pbProg * 16, 1 + pbProg * 5, 0, 0, Math.PI * 2); ctx.stroke();
+            }
+            // Animated drip from tank base
+            const dripX = TANK_X + 8;
+            const dripY1 = tankTop + tankH + 2;
+            const dripY2 = poolY - poolRy - 2;
+            ctx.strokeStyle = 'rgba(50,190,15,0.25)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(dripX, dripY1); ctx.lineTo(dripX, dripY2); ctx.stroke();
+            const dripProg = (_ft % 1100) / 1100;
+            const dropY = dripY1 + dripProg * (dripY2 - dripY1 - 4);
+            ctx.globalAlpha = 0.8 - Math.abs(dripProg - 0.5) * 0.8;
+            ctx.fillStyle = '#60ff30'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 5;
+            ctx.beginPath(); ctx.arc(dripX, dropY, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+            // Rising radioactive bubbles
+            for(let rb = 0; rb < 5; rb++) {
+                const rba = (_ft * 0.0004 + rb * 1.1) % (Math.PI * 2);
+                const bubY = poolY - 2 - Math.abs(Math.sin(rba)) * 22;
+                const bubX = poolX + Math.cos(rba * 2.5 + rb) * (poolRx * 0.5);
+                ctx.globalAlpha = 0.38 - Math.abs(Math.sin(rba)) * 0.22;
+                ctx.fillStyle = '#80ff40'; ctx.shadowColor = '#40ff20'; ctx.shadowBlur = 5;
+                ctx.beginPath(); ctx.arc(bubX, bubY, 2 + Math.sin(rba + rb) * 0.7, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            ctx.globalAlpha = 1;
+        }
 
         // ── CLEAR TUBE (tank to syringe) ─────────────────────────────────────
         // Horizontal run from tank outlet to above syringe, then vertical drop
@@ -17660,6 +17719,111 @@ function drawScene() {
 
             const rubbleTime = Date.now();
 
+            // === Background mushroom cloud (faded, behind all other elements) ===
+            ctx.globalAlpha = 0.45;
+            {
+                const cloudTime = rubbleTime;
+                const capPulse = Math.sin(cloudTime / 400) * 3;
+
+                // Ambient ground glow
+                const ambGlow = ctx.createRadialGradient(350, 450, 10, 350, 450, 280);
+                ambGlow.addColorStop(0, 'rgba(255,120,20,0.3)');
+                ambGlow.addColorStop(0.4, 'rgba(180,50,0,0.12)');
+                ambGlow.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = ambGlow;
+                ctx.fillRect(70, 260, 560, 220);
+
+                // Scorched ground
+                ctx.fillStyle = 'rgba(20,5,0,0.7)';
+                ctx.beginPath(); ctx.ellipse(350, 435, 170, 28, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Fire ring at base
+                for(let fr = 0; fr < 10; fr++) {
+                    const fAngle = (fr / 10) * Math.PI * 2;
+                    const fR = 90 + Math.sin(cloudTime / 120 + fr * 1.3) * 16;
+                    const fx = 350 + Math.cos(fAngle) * fR;
+                    const fy = 432 + Math.sin(fAngle) * 14;
+                    const fH = 7 + Math.sin(cloudTime / 80 + fr * 2) * 4;
+                    const fG = Math.floor(70 + Math.sin(cloudTime / 100 + fr) * 35);
+                    ctx.fillStyle = `rgba(255,${fG},0,${0.35 + Math.sin(cloudTime / 90 + fr) * 0.15})`;
+                    ctx.beginPath();
+                    ctx.moveTo(fx - 3, fy); ctx.quadraticCurveTo(fx, fy - fH, fx + 3, fy); ctx.fill();
+                }
+
+                // Stem — outer dark smoke column
+                const stemGrad1 = ctx.createLinearGradient(350, 420, 350, 190);
+                stemGrad1.addColorStop(0, 'rgba(80,40,15,0.85)');
+                stemGrad1.addColorStop(0.5, 'rgba(100,55,25,0.7)');
+                stemGrad1.addColorStop(1, 'rgba(90,50,25,0.55)');
+                ctx.fillStyle = stemGrad1;
+                ctx.beginPath();
+                ctx.moveTo(308, 420); ctx.bezierCurveTo(298, 360, 293, 300, 288, 240);
+                ctx.lineTo(283, 215); ctx.lineTo(417, 215);
+                ctx.lineTo(412, 240); ctx.bezierCurveTo(407, 300, 402, 360, 392, 420);
+                ctx.closePath(); ctx.fill();
+
+                // Stem inner fire core
+                const stemGrad2 = ctx.createLinearGradient(350, 410, 350, 205);
+                stemGrad2.addColorStop(0, 'rgba(255,140,30,0.55)');
+                stemGrad2.addColorStop(0.5, 'rgba(255,100,10,0.4)');
+                stemGrad2.addColorStop(1, 'rgba(255,200,80,0.25)');
+                ctx.fillStyle = stemGrad2;
+                ctx.beginPath();
+                ctx.moveTo(328, 415); ctx.bezierCurveTo(322, 360, 320, 300, 313, 232);
+                ctx.lineTo(387, 232); ctx.bezierCurveTo(380, 300, 378, 360, 372, 415);
+                ctx.closePath(); ctx.fill();
+
+                // Skirt
+                const skirtGrad = ctx.createRadialGradient(350, 410, 15, 350, 410, 120);
+                skirtGrad.addColorStop(0, 'rgba(120,60,20,0.65)');
+                skirtGrad.addColorStop(0.5, 'rgba(80,40,10,0.35)');
+                skirtGrad.addColorStop(1, 'rgba(40,20,5,0)');
+                ctx.fillStyle = skirtGrad;
+                ctx.beginPath(); ctx.ellipse(350, 410, 120, 32, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Cap — outer debris
+                ctx.fillStyle = 'rgba(50,25,10,0.6)';
+                ctx.beginPath(); ctx.ellipse(350, 192, 138 + capPulse, 68, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Cap mid-layer
+                const capGrad1 = ctx.createRadialGradient(350, 187, 8, 350, 192, 120);
+                capGrad1.addColorStop(0, 'rgba(255,190,70,0.5)');
+                capGrad1.addColorStop(0.3, 'rgba(220,120,25,0.45)');
+                capGrad1.addColorStop(0.7, 'rgba(160,70,15,0.38)');
+                capGrad1.addColorStop(1, 'rgba(60,30,10,0.25)');
+                ctx.fillStyle = capGrad1;
+                ctx.beginPath(); ctx.ellipse(350, 190, 118 + capPulse, 58, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Cap cauliflower bumps
+                for(let cb = 0; cb < 14; cb++) {
+                    const cAngle = (cb / 14) * Math.PI * 2;
+                    const cPhase = Math.sin(cloudTime / 350 + cb * 1.2);
+                    const cR = 13 + cPhase * 4;
+                    const cx = 350 + Math.cos(cAngle) * (118 + capPulse);
+                    const cy = 192 + Math.sin(cAngle) * 52;
+                    ctx.fillStyle = `rgba(${125 + Math.floor(cPhase * 28)},${55 + Math.floor(cPhase * 12)},${18 + Math.floor(cPhase * 8)},${0.38 + cPhase * 0.08})`;
+                    ctx.beginPath(); ctx.arc(cx, cy, cR, 0, Math.PI * 2); ctx.fill();
+                }
+
+                // Cap hot center glow
+                const capGrad2 = ctx.createRadialGradient(350, 185, 4, 350, 190, 72);
+                capGrad2.addColorStop(0, 'rgba(255,255,170,0.5)');
+                capGrad2.addColorStop(0.4, 'rgba(255,190,50,0.38)');
+                capGrad2.addColorStop(1, 'rgba(200,80,10,0)');
+                ctx.fillStyle = capGrad2;
+                ctx.beginPath(); ctx.ellipse(350, 187, 72 + capPulse * 0.4, 36, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Toroidal ring
+                ctx.strokeStyle = 'rgba(170,85,28,0.3)';
+                ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.ellipse(350, 218, 96 + capPulse * 0.5, 18, 0, 0, Math.PI * 2); ctx.stroke();
+
+                // Secondary cap
+                ctx.fillStyle = `rgba(65,38,18,${0.28 + Math.sin(cloudTime / 500) * 0.04})`;
+                ctx.beginPath(); ctx.ellipse(350, 148, 50 + capPulse * 0.3, 23, 0, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
             // Smoky atmospheric haze at top
             for(let hi = 0; hi < 4; hi++) {
                 const hazeX = 100 + hi * 150 + Math.sin(rubbleTime * 0.0004 + hi * 1.5) * 40;
@@ -17876,16 +18040,16 @@ function drawScene() {
                     // NPCs raise arms to hoist the player (new CEO) once all arrived
                     // Arms extend upward at the sides of the body, hands above head
                     if(allArrived && npc.arrived) {
-                        const bob = Math.sin(ceoTime / 300 + npc.x) * 1;
+                        const bob = Math.sin(ceoTime / 300 + npc.x) * 2;
                         const armColor = npc.isMulletPro ? '#800020' : (npc.color ? npc.color.hex || npc.color : '#cc8844');
                         ctx.fillStyle = armColor;
-                        // Arms at sides, reaching up (outside body, not overlapping head)
-                        ctx.fillRect(npc.x - 18, ny - 40 + bob, 4, 30); // Left arm raised at side
-                        ctx.fillRect(npc.x + 14, ny - 40 + bob, 4, 30); // Right arm raised at side
-                        // Hands at top of raised arms
+                        // Arms raised overhead to hoist the player (hands reach up to hoistY≈260, npcs at baseY=310)
+                        ctx.fillRect(npc.x - 20, ny - 60 + bob, 5, 42); // Left arm reaching up
+                        ctx.fillRect(npc.x + 15, ny - 60 + bob, 5, 42); // Right arm reaching up
+                        // Hands at top of raised arms (at ~y=250 to meet hoisted player's feet)
                         ctx.fillStyle = npc.isMulletPro ? '#f5c89a' : '#ddb88a';
-                        ctx.fillRect(npc.x - 19, ny - 44 + bob, 6, 5); // Left hand
-                        ctx.fillRect(npc.x + 13, ny - 44 + bob, 6, 5); // Right hand
+                        ctx.beginPath(); ctx.arc(npc.x - 18, ny - 62 + bob, 4, 0, Math.PI * 2); ctx.fill(); // Left hand
+                        ctx.beginPath(); ctx.arc(npc.x + 18, ny - 62 + bob, 4, 0, Math.PI * 2); ctx.fill(); // Right hand
                     }
                 }
 
@@ -19567,9 +19731,9 @@ function update() {
             if(level6.npcExitSequence) {
                 level6.npcExitTimer++;
 
-                // Safe position — NPCs walk here to grab sacks (just outside safe collision box)
+                // Safe position — NPCs walk here to grab sacks (gap between safe bottom y=180 and desk top y=190)
                 const safeTargetX = 350;
-                const safeTargetY = 230; // Stand in front of safe (safe collision ends at y=220)
+                const safeTargetY = 184; // Stand in gap between safe (ends y<180) and desk (starts y>190)
 
                 for(let npc of level6.exitingNPCs) {
                     if(!npc.hasSack && !npc.extracting && !npc.exiting) {
@@ -19601,8 +19765,8 @@ function update() {
                             }
 
                             const sideX = npc.waypoint === 'left' ? 230 : 470;
-                            const clearY = 180; // Above desk collision zone
-                            const belowSafeY = 225; // Below safe collision zone (safe ends at y=220)
+                            const clearY = 183; // Just above desk collision zone (desk starts at y>190)
+                            const belowSafeY = 184; // In gap between safe (y<180) and desk (y>190)
                             const finalX = safeTargetX + offsetX;
                             const finalY = safeTargetY;
 
@@ -21040,7 +21204,9 @@ function update() {
                             // 5 for NPCs + 1 for the player (victory sack)
                             level6.cashSacks = [];
                             for(let si = 0; si < 6; si++) {
-                                level6.cashSacks.push({ x: 350 + (si - 2.5) * 18, y: 200 + Math.floor(si / 3) * 20, claimed: false, reserved: false, extracted: false });
+                                // NPC sacks (si 0-4) near safe at y=150; player sack (si=5) at y=185 in accessible gap between safe bottom (y=180) and desk top (y=190)
+                                const sackY = si < 5 ? 150 : 185;
+                                level6.cashSacks.push({ x: 350 + (si - 2.5) * 18, y: sackY, claimed: false, reserved: false, extracted: false });
                             }
 
                             level6.exitingNPCs = [
