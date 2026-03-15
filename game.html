@@ -8677,14 +8677,12 @@ function drawLevel6MegacomputerRoom() {
         if(inRange) {
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'center';
-            const labelText = 'action:  take hat and gun';
-            const labelW = ctx.measureText(labelText).width + 24;
+            const labelText = '[ ACTION ] - TAKE HAT AND GUN';
+            const labelW = ctx.measureText(labelText).width + 20;
             const labelX = Math.max(0, Math.min(midX - labelW / 2, GAME_W - labelW));
-            ctx.fillStyle = 'rgba(0,0,0,0.85)';
-            ctx.fillRect(labelX, midY, labelW, 26);
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-            ctx.strokeRect(labelX, midY, labelW, 26);
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(labelX, midY, labelW, 24);
+            ctx.fillStyle = '#ffd700';
             ctx.fillText(labelText, labelX + labelW / 2, midY + 18);
         }
     }
@@ -8937,9 +8935,10 @@ function drawNuclearAssemblyBridge() {
         ctx.fillRect(beltLeft, BELT_Y, beltRight - beltLeft, 12);
         ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
         ctx.strokeRect(beltLeft, BELT_Y, beltRight - beltLeft, 12);
-        // Tread marks — move only when belt is active
-        const beltMoving = (inMissileCycle && mPhase > 0.76) || isLoadingCrate;
-        const beltOff = beltMoving ? (_ft / 300) % 16 : 0;
+        // Tread marks — continuous slow motion with faster speed when actively moving
+        const beltActive = (inMissileCycle && mPhase > 0.76) || isLoadingCrate;
+        const beltSpeed = beltActive ? 300 : 2000; // faster when active, slow idle crawl
+        const beltOff = (_ft / beltSpeed) % 16;
         ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
         for (let bx = beltLeft + (beltOff % 16) - 16; bx < beltRight; bx += 16) {
             if (bx > beltLeft && bx < beltRight) {
@@ -9228,28 +9227,33 @@ function drawNuclearAssemblyBridge() {
             ctx.fillRect(mx + mW / 2, BELT_Y - 7 + vy, 3, 7);
         }
 
-        // ── MISSILE ADVANCING (eased slide from syringe toward slot) ────────
+        // ── MISSILE ADVANCING (smooth slide from syringe toward slot) ────────
         if (inMissileCycle && mPhase >= 0.76) {
             const rawProg = (mPhase - 0.76) / 0.24;
-            // Ease-out cubic — starts fast, decelerates into slot
-            const advEase = 1 - Math.pow(1 - rawProg, 3);
+            // Ease-in-out — smooth acceleration and deceleration on belt
+            const advEase = rawProg < 0.5
+                ? 2 * rawProg * rawProg
+                : 1 - Math.pow(-2 * rawProg + 2, 2) / 2;
             const spacing = (CRATE_X - 40 - SYR_X) / MISSILES_PER_CRATE;
             const startX = SYR_X;
             const targetSlot = SYR_X + (missilesDone + 1) * spacing;
             const mx = startX + advEase * (targetSlot - startX);
-            // Slight belt vibration while moving
-            const moveVibe = Math.sin(_ft * 0.08) * 0.5 * (1 - rawProg);
+            // Subtle belt vibration while sliding — diminishes as it settles
+            const moveVibe = Math.sin(_ft * 0.05) * 0.4 * (1 - rawProg);
             drawMissileAt(mx, moveVibe);
         }
 
         // ── COMPLETED MISSILES WAITING ON BELT ───────────────────────────────
-        for (let di = 0; di < missilesDone; di++) {
-            if (inMissileCycle && mPhase >= 0.76 && di === missilesDone - 1) continue;
-            const spacing = (CRATE_X - 40 - SYR_X) / MISSILES_PER_CRATE;
-            const mx = SYR_X + (di + 1) * spacing;
-            // Subtle idle vibration from machinery — each missile slightly offset in phase
-            const idleVibe = Math.sin(_ft * 0.03 + di * 1.7) * 0.3;
-            drawMissileAt(mx, idleVibe);
+        // Only draw belt missiles during active missile cycle (not during crate load/truck swap
+        // when they are shown as mini warheads inside the crate instead)
+        if (inMissileCycle) {
+            for (let di = 0; di < missilesDone; di++) {
+                const spacing = (CRATE_X - 40 - SYR_X) / MISSILES_PER_CRATE;
+                const mx = SYR_X + (di + 1) * spacing;
+                // Subtle idle vibration from machinery — each missile slightly offset in phase
+                const idleVibe = Math.sin(_ft * 0.03 + di * 1.7) * 0.3;
+                drawMissileAt(mx, idleVibe);
+            }
         }
 
         // ── CRATE STATION ────────────────────────────────────────────────────
@@ -16892,8 +16896,8 @@ function drawScene() {
 
             if(ceo.state !== 'dead') {
                 drawCEO(ceo.x, ceo.y, ceo.facing);
-            } else if(!level6.missileExploded && !ceo.eatenByMutant) {
-                // Draw dead CEO body on ground (only if not pulverized by missile or eaten by mutant)
+            } else if(!level6.missileExploded && !ceo.eatenByMutant && !ceo.bridgeDeath) {
+                // Draw dead CEO body on ground (only if not pulverized by missile, eaten by mutant, or killed on bridge)
                 drawDeadCEO(ceo.x, ceo.y);
             }
 
@@ -16910,22 +16914,20 @@ function drawScene() {
                     };
                     drawNPC(tempNPC);
                 }
-                // Draw cash sack carried over head in raised hands (like document holding)
+                // Draw cash sack carried in hand at side
                 if(npc.hasSack) {
-                    const sackOverX = npc.x;
-                    const sackOverY = npc.y - 38; // At hand level above head
-                    // Slight bob while walking
-                    const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    // Arms raised holding sack — connected to shoulders
+                    const sackSide = npc.facing === 'left' ? -1 : 1;
+                    const sackCarryX = npc.x + sackSide * 14;
+                    const sackCarryY = npc.y + 2; // At hand level beside body
+                    const bob = Math.sin(Date.now() / 300 + npc.x) * 0.5;
+                    // Arm extended to side holding sack
                     const armColor = npc.isMulletPro ? '#d4a882' : (npc.color || '#cc8844');
                     ctx.fillStyle = armColor;
-                    ctx.fillRect(npc.x - 7, npc.y - 35 + bob, 4, 14); // Left arm up
-                    ctx.fillRect(npc.x + 3, npc.y - 35 + bob, 4, 14); // Right arm up
-                    // Hands gripping sack
+                    ctx.fillRect(npc.x + sackSide * 8, npc.y - 8, sackSide * 6, 12); // Arm to side
+                    // Hand gripping sack
                     ctx.fillStyle = npc.isMulletPro ? '#f5c89a' : '#ddb88a';
-                    ctx.fillRect(npc.x - 8, npc.y - 38 + bob, 5, 4); // Left hand
-                    ctx.fillRect(npc.x + 3, npc.y - 38 + bob, 5, 4); // Right hand
-                    drawCashSack(sackOverX, sackOverY + bob);
+                    ctx.fillRect(sackCarryX - 2, sackCarryY - 2 + bob, 5, 4);
+                    drawCashSack(sackCarryX, sackCarryY + bob);
                 }
                 // Draw extracting animation at safe
                 if(npc.extracting) {
@@ -17695,24 +17697,30 @@ function drawScene() {
                         drawNPC(tempNPC);
                     }
 
-                    // Draw cash sack over head once all arrived (same as victory ending)
+                    // NPCs raise arms to hoist the player (new CEO) once all arrived
                     if(allArrived && npc.arrived) {
-                        const sackOverX = npc.x;
-                        const sackOverY = ny - 38;
                         const bob = Math.sin(ceoTime / 300 + npc.x) * 1;
                         const armColor = npc.isMulletPro ? '#800020' : (npc.color ? npc.color.hex || npc.color : '#cc8844');
                         ctx.fillStyle = armColor;
-                        ctx.fillRect(npc.x - 7, ny - 35 + bob, 4, 14);
-                        ctx.fillRect(npc.x + 3, ny - 35 + bob, 4, 14);
+                        ctx.fillRect(npc.x - 7, ny - 35 + bob, 4, 14); // Left arm raised
+                        ctx.fillRect(npc.x + 3, ny - 35 + bob, 4, 14); // Right arm raised
                         ctx.fillStyle = npc.isMulletPro ? '#f5c89a' : '#ddb88a';
-                        ctx.fillRect(npc.x - 8, ny - 38 + bob, 5, 4);
-                        ctx.fillRect(npc.x + 3, ny - 38 + bob, 5, 4);
-                        if(typeof drawCashSack === 'function') drawCashSack(sackOverX, sackOverY + bob);
+                        ctx.fillRect(npc.x - 8, ny - 38 + bob, 5, 4); // Left hand
+                        ctx.fillRect(npc.x + 3, ny - 38 + bob, 5, 4); // Right hand
                     }
                 }
 
                 // Confetti after all NPCs arrive
                 const allArrived = level6.newCEONPCEntries.every(n => n.arrived);
+
+                // Draw player (new CEO) hoisted above NPCs once all arrived
+                if(allArrived) {
+                    const hoistBob = Math.sin(ceoTime * 0.003) * 3;
+                    const hoistX = 350; // Center above the group
+                    const hoistY = 260 + hoistBob; // Above NPC heads
+                    drawBaldManager(hoistX, hoistY, 'forward', false, false);
+                }
+
                 if(allArrived) {
                     for(let ci = 0; ci < 40; ci++) {
                         const cx2 = (ci * 47 + ceoTime * 0.04 + ci * 13) % 700;
@@ -19323,41 +19331,40 @@ function update() {
 
                 if(Date.now() - level6.ceoAppearTimer > pursuitDelay) {
                     if(!ceo.ceoVisible) {
-                        // CEO enters from left/right door depending on room layout
+                        // CEO enters from doorway/edge — starts off-screen or at door
                         ceo.ceoVisible = true;
-                        // Place CEO at entry point based on room
                         if(level6.room === 'entryway') {
-                            ceo.x = 350; ceo.y = 340;
+                            ceo.x = 350; ceo.y = 460; // Enter from bottom (office door)
                         } else if(level6.room === 'nuclearBridge') {
-                            ceo.x = 80; ceo.y = 140;
+                            ceo.x = -20; ceo.y = 140; // Enter from left edge
                         } else if(level6.room === 'pipeRoom' || level6.room === 'megacomputer') {
-                            ceo.x = 80; ceo.y = 380;
+                            ceo.x = -20; ceo.y = 380; // Enter from left
                         } else if(level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'employeeHallway') {
-                            ceo.x = 100; ceo.y = 380;
+                            ceo.x = -20; ceo.y = 380;
                         } else if(level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
-                            ceo.x = 640; ceo.y = 380;
+                            ceo.x = 720; ceo.y = 380; // Enter from right
                         } else {
-                            ceo.x = 100; ceo.y = 380;
+                            ceo.x = -20; ceo.y = 380;
                         }
                         ceo.facing = player.x > ceo.x ? 'right' : 'left';
+                        ceo.shootTimer = 0; // Don't shoot immediately on entry
                     }
 
-                    // CEO chases player in 1D rooms (horizontal only)
+                    // CEO chases player — smooth pursuit with acceleration
                     const dx = player.x - ceo.x;
+                    const dy = player.y - ceo.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
                     const pursuitSpeed = 2.5;
-                    if(Math.abs(dx) > 50) {
-                        ceo.x += (dx > 0 ? 1 : -1) * pursuitSpeed;
+                    if(dist > 50) {
+                        ceo.x += (dx / dist) * pursuitSpeed;
                         ceo.facing = dx > 0 ? 'right' : 'left';
                         ceo.moveTimer++;
+                        // Also move vertically in rooms with 2D movement
+                        if(level6.room === 'entryway' && Math.abs(dy) > 30) {
+                            ceo.y += (dy / dist) * pursuitSpeed;
+                        }
                     } else {
                         ceo.facing = dx > 0 ? 'right' : 'left';
-                    }
-                    // In 2D rooms (entryway), also move vertically
-                    if(level6.room === 'entryway') {
-                        const dy = player.y - ceo.y;
-                        if(Math.abs(dy) > 30) {
-                            ceo.y += (dy > 0 ? 1 : -1) * pursuitSpeed;
-                        }
                     }
 
                     // CEO shoots while pursuing
@@ -19386,7 +19393,7 @@ function update() {
 
                 for(let npc of level6.exitingNPCs) {
                     if(!npc.hasSack && !npc.extracting && !npc.exiting) {
-                        // Phase 1: Walk to the safe
+                        // Phase 1: Walk around desk to the safe using waypoints
                         let nearestSack = null;
                         for(let sack of level6.cashSacks) {
                             if(!sack.claimed && !sack.reserved) { nearestSack = sack; break; }
@@ -19399,60 +19406,69 @@ function update() {
                                 npc.reservedSack = nearestSack;
                             }
 
-                            const dx = safeTargetX - npc.x;
-                            const dy = safeTargetY - npc.y;
-                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const speed = 2;
+                            const npcIndex = level6.exitingNPCs.indexOf(npc);
+                            const offsetX = (npcIndex - 2) * 12; // Spread NPCs at safe
 
-                            // Stuck detection
-                            if(dist >= npc.lastDist - 0.5) {
-                                npc.stuckTimer++;
-                            } else {
-                                npc.stuckTimer = 0;
+                            // Desk bounds: x:260-440, y:190-300
+                            // NPCs start at bottom (y~460), safe is at top (y~230)
+                            // Waypoint navigation: go to side of desk, then up past it, then to safe
+                            if(!npc.waypoint) {
+                                // Assign side to go around desk (alternate left/right)
+                                const goLeft = npcIndex % 2 === 0;
+                                npc.waypoint = goLeft ? 'left' : 'right';
+                                npc.waypointPhase = 'side'; // 'side' -> 'up' -> 'safe'
                             }
-                            npc.lastDist = dist;
 
-                            if(npc.stuckTimer > 180) {
-                                // Force extract if stuck too long
-                                npc.extracting = true;
-                                npc.extractStart = Date.now();
-                                npc.stuckTimer = 0;
-                                npc.lastDist = Infinity;
-                            } else if(dist > 15) {
-                                const speed = 2;
-                                // Stagger NPC positions slightly so they don't overlap at safe
-                                const npcIndex = level6.exitingNPCs.indexOf(npc);
-                                const offsetX = (npcIndex - 2) * 12; // Spread NPCs out at safe
-                                const targetX = safeTargetX + offsetX;
-                                const adjDx = targetX - npc.x;
-                                const adjDy = safeTargetY - npc.y;
-                                const adjDist = Math.sqrt(adjDx * adjDx + adjDy * adjDy);
-                                const newX = npc.x + (adjDx / adjDist) * speed;
-                                const newY = npc.y + (adjDy / adjDist) * speed;
-                                // Navigate around desk and other obstacles
-                                if(!ceoCollidesWithObstacle(newX, newY)) {
-                                    npc.x = newX;
-                                    npc.y = newY;
-                                } else {
-                                    if(!ceoCollidesWithObstacle(newX, npc.y)) {
-                                        npc.x = newX;
-                                    } else if(!ceoCollidesWithObstacle(npc.x, newY)) {
-                                        npc.y = newY;
-                                    } else {
-                                        const perpX = npc.x + (adjDy > 0 ? speed : -speed);
-                                        const perpY = npc.y + (adjDx > 0 ? -speed : speed);
-                                        if(!ceoCollidesWithObstacle(perpX, npc.y)) {
-                                            npc.x = perpX;
-                                        } else if(!ceoCollidesWithObstacle(npc.x, perpY)) {
-                                            npc.y = perpY;
-                                        }
-                                    }
+                            const sideX = npc.waypoint === 'left' ? 230 : 470;
+                            const clearY = 180; // Above desk collision zone
+                            const finalX = safeTargetX + offsetX;
+                            const finalY = safeTargetY;
+
+                            // Determine current target based on phase
+                            let targetX, targetY;
+                            if(npc.waypointPhase === 'side') {
+                                // Walk to side of desk
+                                targetX = sideX;
+                                targetY = npc.y; // Stay at current y
+                                if(Math.abs(npc.x - sideX) < 10) {
+                                    npc.waypointPhase = 'up';
                                 }
-                                npc.facing = adjDx > 0 ? 'right' : adjDx < 0 ? 'left' : 'forward';
+                            } else if(npc.waypointPhase === 'up') {
+                                // Walk up past desk
+                                targetX = sideX;
+                                targetY = clearY;
+                                if(npc.y < clearY + 10) {
+                                    npc.waypointPhase = 'safe';
+                                }
                             } else {
+                                // Walk to safe
+                                targetX = finalX;
+                                targetY = finalY;
+                            }
+
+                            const adjDx = targetX - npc.x;
+                            const adjDy = targetY - npc.y;
+                            const adjDist = Math.sqrt(adjDx * adjDx + adjDy * adjDy);
+
+                            if(npc.waypointPhase === 'safe' && adjDist <= 15) {
                                 // Arrived at safe — start extracting animation
                                 npc.extracting = true;
                                 npc.extractStart = Date.now();
                                 npc.facing = 'forward'; // Face the safe (wall)
+                            } else if(adjDist > 2) {
+                                const newX = npc.x + (adjDx / adjDist) * speed;
+                                const newY = npc.y + (adjDy / adjDist) * speed;
+                                if(!ceoCollidesWithObstacle(newX, newY)) {
+                                    npc.x = newX;
+                                    npc.y = newY;
+                                } else if(!ceoCollidesWithObstacle(newX, npc.y)) {
+                                    npc.x = newX;
+                                } else if(!ceoCollidesWithObstacle(npc.x, newY)) {
+                                    npc.y = newY;
+                                }
+                                npc.facing = Math.abs(adjDx) > Math.abs(adjDy)
+                                    ? (adjDx > 0 ? 'right' : 'left') : 'forward';
                             }
                         }
                     } else if(npc.extracting && !npc.hasSack) {
@@ -19470,34 +19486,53 @@ function update() {
                             npc.lastDist = Infinity;
                         }
                     } else if(npc.hasSack && !npc.exiting) {
-                        // Phase 3: Carry sack over head to exit
+                        // Phase 3: Carry sack in hand — walk around desk to exit
                         const exitY = 460;
-                        const dy = exitY - npc.y;
+                        const speed = 2;
 
-                        const exitDist = Math.abs(dy);
-                        if(exitDist >= npc.lastDist - 0.5) {
-                            npc.stuckTimer++;
-                        } else {
-                            npc.stuckTimer = 0;
+                        // Use waypoints to navigate around desk on exit
+                        if(!npc.exitPhase) {
+                            npc.exitPhase = 'side'; // 'side' -> 'down' -> 'done'
                         }
-                        npc.lastDist = exitDist;
 
-                        if(npc.stuckTimer > 120) {
-                            npc.exiting = true;
-                            npc.stuckTimer = 0;
-                        } else if(Math.abs(dy) > 5) {
-                            const newY = npc.y + (dy > 0 ? 2 : -2);
-                            if(!ceoCollidesWithObstacle(npc.x, newY)) {
-                                npc.y = newY;
-                            } else {
-                                const sideDir = npc.x < 350 ? -2 : 2;
-                                if(!ceoCollidesWithObstacle(npc.x + sideDir, npc.y)) {
-                                    npc.x += sideDir;
-                                } else {
-                                    npc.x -= sideDir;
-                                }
+                        const sideX = npc.waypoint === 'left' ? 230 : 470;
+
+                        let targetX, targetY;
+                        if(npc.exitPhase === 'side') {
+                            // Walk to side of desk (reuse same side as approach)
+                            targetX = sideX;
+                            targetY = npc.y;
+                            if(Math.abs(npc.x - sideX) < 10 || npc.y > 310) {
+                                npc.exitPhase = 'down';
                             }
-                            npc.facing = 'forward';
+                        } else if(npc.exitPhase === 'down') {
+                            // Walk down to exit
+                            targetX = npc.x;
+                            targetY = exitY;
+                        } else {
+                            targetX = npc.x;
+                            targetY = exitY;
+                        }
+
+                        const adjDx = targetX - npc.x;
+                        const adjDy = targetY - npc.y;
+                        const adjDist = Math.sqrt(adjDx * adjDx + adjDy * adjDy);
+
+                        if(adjDist > 5) {
+                            const newX = npc.x + (adjDx / adjDist) * speed;
+                            const newY = npc.y + (adjDy / adjDist) * speed;
+                            if(!ceoCollidesWithObstacle(newX, newY)) {
+                                npc.x = newX;
+                                npc.y = newY;
+                            } else if(!ceoCollidesWithObstacle(newX, npc.y)) {
+                                npc.x = newX;
+                            } else if(!ceoCollidesWithObstacle(npc.x, newY)) {
+                                npc.y = newY;
+                            }
+                            npc.facing = Math.abs(adjDx) > Math.abs(adjDy)
+                                ? (adjDx > 0 ? 'right' : 'left') : 'forward';
+                        } else if(npc.exitPhase === 'down' && Math.abs(npc.y - exitY) < 10) {
+                            npc.exiting = true;
                         } else {
                             npc.exiting = true;
                         }
