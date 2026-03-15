@@ -13141,8 +13141,8 @@ function drawLevel6CEOOffice() {
     ctx.arc(earthX + 12, earthY + 8, 12, 0, Math.PI * 2);
     ctx.fill();
     
-    // Saturn-Pipe-Earth portrait on back wall
-    const portraitX = 350;
+    // Saturn-Pipe-Earth portrait on back wall — left of safe, between mirror and missile
+    const portraitX = 200;
     const portraitY = 15;
 
     // Draw at natural aspect ratio — safe renders on top of lower portion (floor safe in front of wall painting)
@@ -21284,7 +21284,8 @@ if (keys[' '] || keys['action']) {
     keys['action'] = false;
 
     // 0.5. Black Box Pickup (after missile explosion — CEO was killed by missile)
-    if (level6.blackBoxDropped && !level6.blackBoxPickedUp &&
+    // Don't allow pickup if player blew themselves up too
+    if (level6.blackBoxDropped && !level6.blackBoxPickedUp && !level6.youBlewItCard &&
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
         level6.blackBoxPickedUp = true;
         if(level6.hasDetectiveHat) {
@@ -21331,11 +21332,11 @@ if (keys[' '] || keys['action']) {
     const monX = 390;
     const monY = 205;
 
-    // We strictly check player.y > 180 to ensure they are at the DESK, not the wall
+    // Monitor interaction: player must be near desk (y > 160 torso, i.e. feet > 202)
     if (level6.ceoDefeated && !level6.computerUI && !level6.hasDetectiveHat && !level6.craterActive &&
         Math.abs(player.x - monX) < 50 &&
         Math.abs(player.y - monY) < 60 &&
-        player.y > 180) { // Added strict Y check
+        player.y > 160) {
             level6.computerUI = true;
             return; // Stop checking other interactions
     }
@@ -21345,8 +21346,8 @@ if (keys[' '] || keys['action']) {
     const safeX = 350;
     const safeY = 115;
 
-    // Player stops at safe collision bottom y=175; |175-115|=60 < 80 ✓
-    const nearSafe = Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 80;
+    // Player stops at safe collision bottom y=175; safe is at wall, player must be north of desk
+    const nearSafe = Math.abs(player.x - safeX) < 70 && Math.abs(player.y - safeY) < 80 && player.y < 180;
 
     if (!level6.safeUnlocked && nearSafe && !level6.craterActive) {
         level6.safeUI = true;
@@ -21483,11 +21484,12 @@ if (keys[' '] || keys['action']) {
                     }
                 }
 
-                // Collision with portrait wall (center back; removed when crater active)
-                const portraitX = 350;
+                // Collision with portrait wall (left of safe; removed when crater active)
+                const portraitX = 200;
                 const portraitY = 15;
-                // Portrait is 120×90px drawn at y=15; collision stops player walking into back wall
-                if(!level6.craterActive && player.x > portraitX - 65 && player.x < portraitX + 65 && player.y < portraitY + 95) {
+                // Portrait is 120px wide, ~180px tall (natural aspect). Block entire portrait area.
+                // Portrait bottom at ~y=195 canvas → torso coord = 195-42 = 153
+                if(!level6.craterActive && player.x > portraitX - 65 && player.x < portraitX + 65 && player.y < 155) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -21506,8 +21508,9 @@ if (keys[' '] || keys['action']) {
                     player.y = prevY;
                 }
 
-                // Collision with CCTV TV (wall-mounted, right of safe; removed when destroyed)
-                if(!level6.cctv1Destroyed && player.x > 435 && player.x < 530 && player.y < 185) {
+                // Collision with CCTV TV (wall-mounted at tvX=445,tvY=118,72x54; right of safe)
+                // CCTV is on the back wall — only block near wall (torso y < 140)
+                if(!level6.cctv1Destroyed && player.x > 435 && player.x < 530 && player.y < 140) {
                     player.x = prevX;
                     player.y = prevY;
                 }
@@ -21777,7 +21780,7 @@ if (keys[' '] || keys['action']) {
                         // Safe is at 350,160 — within radius
                         // Mirror is at 95,265 center — within radius
                         // CCTV TV is at 481,145 — outside main radius but destroyed by concussion
-                        // Portrait is at 350,45 — within radius
+                        // Portrait is at 200,15 — within radius
                         // Trophy cabinet at 580,270 — outside radius
                         level6.brandyDestroyed = true;
                         level6.mirrorShattered = true;
@@ -21803,30 +21806,12 @@ if (keys[' '] || keys['action']) {
                         // Check if player is within blast radius
                         const playerDist = Math.sqrt(Math.pow(player.x - blastCenterX, 2) + Math.pow(player.y - blastCenterY, 2));
                         if(playerDist < blastRadius) {
-                            if(level6.ceoDefeated) {
-                                // CEO died in the blast — this is a win, not a loss
-                                if(level6.hasDetectiveHat) {
-                                    // Detective ending: black box found in rubble
-                                    level6.missileCaseClosedCard = 'fading';
-                                    level6.missileCaseClosedTimer = 0;
-                                    level6.detectiveTransAlpha = 0;
-                                    playMusic('level5');
-                                } else {
-                                    // Pipe boss ending: you're the new CEO!
-                                    level6.newCEOCard = 'fading';
-                                    level6.newCEOTimer = 0;
-                                    level6.detectiveTransAlpha = 0;
-                                    level6.newCEOPhase = 'celebration';
-                                    level6.newCEOHoistStarted = false;
-                                    playMusic('newceo');
-                                }
-                            } else {
-                                // Player blew themselves up without killing CEO — actual fail
-                                level6.youBlewItCard = 'fading';
-                                level6.youBlewItTimer = 0;
-                                level6.detectiveTransAlpha = 0;
-                                playMusic('blewit');
-                            }
+                            // Player is in blast — always a self-kill "you blew it" scenario
+                            // Even if CEO also died, the player killed themselves too
+                            level6.youBlewItCard = 'fading';
+                            level6.youBlewItTimer = 0;
+                            level6.detectiveTransAlpha = 0;
+                            playMusic('blewit');
                         }
 
                         // Screen shake effect
