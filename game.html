@@ -9803,43 +9803,15 @@ function drawNuclearAssemblyBridge() {
         ctx.fillStyle = gapGlow;
         ctx.fillRect(g.left, bridgePlatY - 4, gapW, 22);
         ctx.globalAlpha = 1;
-        // Warning sign — metal placard with hazard triangle (mobile-readable, clamped to visible area)
-        const signW = Math.min(Math.max(gapLabels[gi].length * 10 + 40, 100), gapW + 30);
-        const signH = 32;
-        const rawSignX = gapMid - signW / 2;
-        const signX = Math.max(-GX + 2, Math.min(rawSignX, CANVAS_W - signW - 2));
-        const signY = bridgePlatY + 8;
-        // Metal plate
-        ctx.fillStyle = '#181614';
-        ctx.fillRect(signX, signY, signW, signH);
-        // Top bevel highlight
-        ctx.fillStyle = '#282420';
-        ctx.fillRect(signX, signY, signW, 1);
-        // Border
-        ctx.strokeStyle = gapColors[gi]; ctx.lineWidth = 1.5;
-        ctx.strokeRect(signX, signY, signW, signH);
-        // Hazard triangle icon — left side of sign
-        const triCenterX = signX + 16;
+        // Gap label — simple stencil text on deck, no sign panel
+        ctx.save();
+        ctx.globalAlpha = hazardPulse * 0.9;
         ctx.fillStyle = gapColors[gi];
-        ctx.globalAlpha = hazardPulse;
-        ctx.beginPath();
-        ctx.moveTo(triCenterX, signY + 4); ctx.lineTo(triCenterX + 10, signY + 24);
-        ctx.lineTo(triCenterX - 10, signY + 24); ctx.closePath(); ctx.fill();
-        // Exclamation mark inside triangle
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('!', triCenterX, signY + 23);
-        // Label text — centered in remaining space after triangle, larger font
-        const textAreaLeft = signX + 32;
-        const textAreaCenter = textAreaLeft + (signW - 32) / 2;
-        ctx.fillStyle = gapColors[gi];
-        ctx.font = 'bold 14px monospace';
-        ctx.fillText(gapLabels[gi], textAreaCenter, signY + 22);
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(gapLabels[gi], gapMid - GX, bridgePlatY + 26);
         ctx.globalAlpha = 1;
-        // Corner mounting bolts
-        ctx.fillStyle = '#444';
-        ctx.beginPath(); ctx.arc(signX + 4, signY + 4, 1.5, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(signX + signW - 4, signY + 4, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
     }
 
     // ── CEILING (above bridge) ───────────────────────────────────────────────
@@ -18997,9 +18969,9 @@ function update() {
         }
 
         if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
-            // Stop 18px before NPC to avoid overlap while still reading as a clear delivery
-            if(Math.abs(level5.mulletPro.x - (level5.mulletPro.walkTarget.x - 18)) > 5) {
-                const direction = level5.mulletPro.x < (level5.mulletPro.walkTarget.x - 18) ? 1 : -1;
+            // Stop 8px before NPC — close enough for clear delivery, minimal overlap
+            if(Math.abs(level5.mulletPro.x - (level5.mulletPro.walkTarget.x - 8)) > 5) {
+                const direction = level5.mulletPro.x < (level5.mulletPro.walkTarget.x - 8) ? 1 : -1;
                 level5.mulletPro.x += direction * 4;
                 level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
             } else {
@@ -19518,8 +19490,8 @@ function update() {
                     }
                 }
                 if(level5.mulletPro.state === 'walkingToNPC' && level5.mulletPro.walkTarget) {
-                    if(Math.abs(level5.mulletPro.x - (level5.mulletPro.walkTarget.x - 18)) > 5) {
-                        const direction = level5.mulletPro.x < (level5.mulletPro.walkTarget.x - 18) ? 1 : -1;
+                    if(Math.abs(level5.mulletPro.x - (level5.mulletPro.walkTarget.x - 8)) > 5) {
+                        const direction = level5.mulletPro.x < (level5.mulletPro.walkTarget.x - 8) ? 1 : -1;
                         level5.mulletPro.x += direction * 4;
                         level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
                     } else {
@@ -19847,7 +19819,7 @@ function update() {
             // NPC exit sequence — Mullet Pro delivers cash to each PM, then brings the last sack to player
             if(level6.npcExitSequence) {
                 level6.npcExitTimer++;
-                const mpSpeed = 2.2;
+                const mpSpeed = 2.8;
                 const safeX = 350, safeY = 162; // Stand in front of safe
                 const pms = level6.exitingNPCs.filter(n => !n.isMulletPro);
                 const mp = level6.exitingNPCs.find(n => n.isMulletPro);
@@ -20468,6 +20440,7 @@ function update() {
                     level6.room = 'megacomputer';
                     player.x = 640;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                 }
                 // Right wall — dead end (bridge terminates)
                 if(player.x > 660) player.x = 660;
@@ -20617,6 +20590,7 @@ function update() {
                         level6.room = 'cloningRoom';
                         player.x = 640;
                         player.y = 380;
+                        level6.lastExitEdge = 'left';
                     }
                 }
             }
@@ -20629,6 +20603,7 @@ function update() {
                     level6.room = 'employeeLobby';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
 
                 // Concealed door to furnace room (left side) — keycard reader interaction
@@ -20642,6 +20617,7 @@ function update() {
                     level6.room = 'l6Furnace';
                     player.x = 620;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                 }
 
                 // Shoot cloning boss — ALWAYS check bullet collision (independent of action key)
@@ -20802,6 +20778,7 @@ function update() {
                     level6.room = 'employeeHallway';
                     player.x = 620;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -20811,6 +20788,7 @@ function update() {
                     level6.room = 'cloningRoom';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
 
                 // Pick up cage key from discarded suit
@@ -20886,6 +20864,7 @@ function update() {
                     level6.room = 'employeePipeRoom';
                     player.x = 620;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                 }
 
                 // Right — back to l6 furnace room (auto)
@@ -20893,6 +20872,7 @@ function update() {
                     level6.room = 'l6Furnace';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
             }
 
@@ -20905,6 +20885,7 @@ function update() {
                     level6.room = 'employeeHallway';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
 
                 // Dead end on left — employee level pipe room is the far-left room
@@ -20920,6 +20901,7 @@ function update() {
                     level6.room = 'underbelly';
                     player.x = 640;
                     player.y = 380;
+                    level6.lastExitEdge = 'left';
                 }
 
                 // Right — back to smartware level
@@ -20927,6 +20909,7 @@ function update() {
                     level6.room = 'pipeRoom';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
             }
 
@@ -20939,6 +20922,7 @@ function update() {
                     level6.room = 'underbellyHallway';
                     player.x = 80;
                     player.y = 380;
+                    level6.lastExitEdge = 'right';
                 }
 
                 // Dead end on left
