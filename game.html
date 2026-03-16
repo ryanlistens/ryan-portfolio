@@ -601,6 +601,9 @@ let level6 = {
     },
     // Wrench gun — boomerang weapon printed by pipe room 3D printer
     hasWrenchGun: false,
+    wrenchUses: 0,        // breaks after 3 uses
+    pistolHolstered: false, // detective: pistol moves to holster when wrench is primary
+    wrenchShatter: { active: false, timer: 0, pieces: [] },
     wrenchBolts: [],
     pipeRoomPrinterUI: false,
     pipeRoomPrinterConfirming: false,
@@ -933,6 +936,9 @@ function initLevel(lv) {
         level6.lobbyPrintingHeart = false;
         // Pipe room auto-wrench printer
         level6.hasWrenchGun = false;
+        level6.wrenchUses = 0;
+        level6.pistolHolstered = false;
+        level6.wrenchShatter = { active: false, timer: 0, pieces: [] };
         level6.wrenchBolts = [];
         level6.pipeRoomPrinterUI = false;
         level6.pipeRoomPrinterConfirming = false;
@@ -17845,10 +17851,20 @@ function drawScene() {
         // === AUTO-WRENCH overlay — drawn in all rooms ===
         if(level6.hasWrenchGun) {
             drawWrenchGun(player.x, player.y, player.facing);
+            // Uses counter (e.g. "WRENCH 2/3")
+            const usesLeft = 3 - level6.wrenchUses;
+            ctx.fillStyle = usesLeft <= 1 ? '#ff8844' : '#aaaaaa';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('WRENCH ' + usesLeft + '/3', player.x, player.y - 44);
         }
         // Wrench bolts (boomerang projectiles)
         for(const wb of level6.wrenchBolts) {
             drawWrenchProjectile(wb.x, wb.y - 25, wb.rotation);
+        }
+        // Wrench shatter pieces when it breaks
+        if(level6.wrenchShatter && level6.wrenchShatter.active) {
+            drawWrenchShatter(level6.wrenchShatter.pieces);
         }
 
         // === PURSUING CEO — drawn before UI overlays so it doesn't eclipse them ===
@@ -17967,7 +17983,7 @@ function drawScene() {
                 ctx.fillText('AUTO-WRENCH', 100, 455);
                 ctx.font = 'bold 10px Arial';
                 ctx.fillStyle = '#ff8844';
-                ctx.fillText('∞ ammo • boomerang', 100, 467);
+                ctx.fillText('3 uses • boomerang', 100, 467);
             } else {
                 ctx.fillStyle = '#f5f2ec';
                 ctx.font = 'bold 28px Arial';
@@ -20976,6 +20992,11 @@ function update() {
                         level6.pipeRoomPrinting = false;
                         level6.pipeRoomPrintProgress = 0;
                         level6.hasWrenchGun = true;
+                        level6.wrenchUses = 0;
+                        // Detective: move pistol to holster so wrench is primary
+                        if(level6.hasDetectiveHat && level6.hasRevolver) {
+                            level6.pistolHolstered = true;
+                        }
                         keys[' '] = false; keys['action'] = false;
                     }
                 } else {
@@ -23022,7 +23043,8 @@ if (keys[' '] || keys['action']) {
                 const nearPrinter = level6.room === 'pipeRoom' && Math.abs(player.x - 163) < 55;
                 if(!nearPrinter && (keys[' '] || keys['action'])) {
                     // Check if any other action key use consumed this frame (ghost gun, etc.) - only fire if no gun
-                    const hasOtherWeapon = (level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun;
+                    // Pistol in holster (detective backup) does not block wrench fire
+                    const hasOtherWeapon = (!level6.pistolHolstered && level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun;
                     if(!hasOtherWeapon) {
                         keys[' '] = false; keys['action'] = false;
                         const vx = player.facing === 'left' ? -9 : player.facing === 'right' ? 9 : (player.x < 350 ? 9 : -9);
@@ -23203,10 +23225,39 @@ if (keys[' '] || keys['action']) {
                     // Return to player origin — remove when close
                     if(Math.abs(wb.x - wb.originX) < 20) {
                         level6.wrenchBolts.splice(i, 1);
-                        // Unlimited ammo — auto-wrench stays
+                        level6.wrenchUses++;
+                        if(level6.wrenchUses >= 3) {
+                            // Wrench breaks after 3 uses — shatter animation
+                            level6.hasWrenchGun = false;
+                            // If pistol was holstered, return it as primary weapon
+                            if(level6.pistolHolstered) {
+                                level6.pistolHolstered = false;
+                            }
+                            // Shatter pieces fly out at player position
+                            level6.wrenchShatter = { active: true, timer: 40, pieces: [] };
+                            for(let s = 0; s < 8; s++) {
+                                const ang = (s / 8) * Math.PI * 2;
+                                level6.wrenchShatter.pieces.push({
+                                    x: player.x, y: player.y - 25,
+                                    vx: Math.cos(ang) * (2 + Math.random() * 2),
+                                    vy: Math.sin(ang) * (2 + Math.random() * 2) - 1,
+                                    life: 30 + Math.floor(Math.random() * 10)
+                                });
+                            }
+                        }
                         continue;
                     }
                 }
+            }
+
+            // Auto-wrench shatter update (level 6)
+            if(level6.wrenchShatter && level6.wrenchShatter.active) {
+                level6.wrenchShatter.timer--;
+                for(const p of level6.wrenchShatter.pieces) {
+                    p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--;
+                }
+                level6.wrenchShatter.pieces = level6.wrenchShatter.pieces.filter(p => p.life > 0);
+                if(level6.wrenchShatter.timer <= 0) level6.wrenchShatter.active = false;
             }
 
             // Muzzle flash & impact spark cleanup (must run inside level 6 block before return)
