@@ -597,12 +597,34 @@ let level6 = {
         triggered: false,
         skeletons: [],
         drops: []
-    }
+    },
+    // Wrench gun — boomerang weapon printed by pipe room 3D printer
+    hasWrenchGun: false,
+    wrenchBolts: [],
+    pipeRoomPrinterUI: false,
+    pipeRoomPrinterConfirming: false,
+    pipeRoomPrinting: false,
+    pipeRoomPrintProgress: 0
 };
 
 let ghostGun = {
     hasGun: false,
     ammo: 0,
+    printing: false,
+    printProgress: 0,
+    printingHeart: false
+};
+
+// Pipe wrench — level 4 melee weapon printed by 3D printer (replaces ghost gun in lvl 4)
+let pipeWrench = {
+    hasWrench: false,
+    killCount: 0,
+    swinging: false,
+    swingTimer: 0,
+    swingFacing: 'right',
+    shattering: false,
+    shatterTimer: 0,
+    shatterPieces: [],
     printing: false,
     printProgress: 0,
     printingHeart: false
@@ -901,13 +923,20 @@ function initLevel(lv) {
         level6.ceoAppearRoom = null;
         level6.ceoExitPrompt = false;
         level6.lastExitEdge = 'left'; // Which edge player last exited from (for CEO entry side)
-        // Employee lobby 3D printer
+        // Cloning room 3D printer (moved from employee lobby)
         level6.lobbyPrinterUI = false;
         level6.lobbyPrinterChoice = 0;
         level6.lobbyPrinterConfirming = false;
         level6.lobbyPrinting = false;
         level6.lobbyPrintProgress = 0;
         level6.lobbyPrintingHeart = false;
+        // Pipe room wrench gun printer
+        level6.hasWrenchGun = false;
+        level6.wrenchBolts = [];
+        level6.pipeRoomPrinterUI = false;
+        level6.pipeRoomPrinterConfirming = false;
+        level6.pipeRoomPrinting = false;
+        level6.pipeRoomPrintProgress = 0;
 
         // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
         // This matters when the player skips directly to level 6 without playing level 5
@@ -974,6 +1003,7 @@ function startGame() {
     cardTimer = 0;
     boss.bossKills = 0;
     ghostGun = {hasGun: false, ammo: 0, printing: false, printProgress: 0, printingHeart: false};
+    pipeWrench = {hasWrench: false, killCount: 0, swinging: false, swingTimer: 0, swingFacing: 'right', shattering: false, shatterTimer: 0, shatterPieces: [], printing: false, printProgress: 0, printingHeart: false};
     skipPressCount = 0;
     initLevel(1);
     updateLives();
@@ -3510,14 +3540,29 @@ function draw3DPrinter(x, y) {
     ctx.lineWidth = 2;
     ctx.strokeRect(x - 16, y - 26, 32, 28);
     
-    if(ghostGun.printing) {
-        const progress = ghostGun.printProgress;
-        if(ghostGun.printingHeart) {
+    const isPrinting = ghostGun.printing || pipeWrench.printing;
+    if(isPrinting) {
+        const progress = ghostGun.printing ? ghostGun.printProgress : pipeWrench.printProgress;
+        const isHeart = ghostGun.printing ? ghostGun.printingHeart : pipeWrench.printingHeart;
+        if(isHeart) {
             const heartSize = 20 * progress;
             ctx.fillStyle = `rgba(231,76,60,${progress})`;
             ctx.font = `bold ${heartSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.fillText('♥', x, y);
+        } else if(pipeWrench.printing) {
+            // Pipe wrench materialising
+            const ws = 14 * progress;
+            ctx.fillStyle = `rgba(120,120,120,${progress})`;
+            // Handle
+            ctx.fillRect(x - ws * 0.8, y, ws * 1.6, ws * 0.3);
+            // Head (open-end wrench jaw)
+            ctx.fillRect(x - ws * 0.8, y - ws * 0.55, ws * 0.55, ws * 0.6);
+            ctx.fillRect(x - ws * 0.8, y - ws * 0.55, ws * 0.2, ws * 0.3);
+            ctx.fillRect(x - ws * 0.25, y - ws * 0.55, ws * 0.2, ws * 0.3);
+            ctx.strokeStyle = `rgba(80,80,80,${progress})`;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x - ws * 0.8, y - ws * 0.55, ws * 0.55, ws * 0.6);
         } else {
             // Gun with handle pointing up, barrel pointing left (proper orientation)
             const gunSize = 15 * progress;
@@ -3705,6 +3750,127 @@ function drawGhostGun(x, y, facing) {
         ctx.fillStyle = '#777';
         ctx.fillRect(gunX - 2, holsterY - 11, 4, 2);
     }
+}
+
+// Draw the pipe wrench held by player (melee weapon, level 4)
+function drawPipeWrench(x, y, facing) {
+    const sleeveColor = '#800020';
+    const skinColor = '#f5c89a';
+    const wrenchColor = '#7a7a7a';
+    const wrenchShine = '#aaaaaa';
+
+    // Swing animation angle: swings down (0→π/2) in facing direction
+    let swingAngle = 0;
+    if(pipeWrench.swinging && pipeWrench.swingTimer > 0) {
+        const t = 1 - (pipeWrench.swingTimer / 22);
+        swingAngle = Math.sin(t * Math.PI) * (Math.PI * 0.7);
+    }
+
+    const dir = (facing === 'left') ? -1 : 1;
+    const armX = x + dir * 9;
+
+    ctx.save();
+    ctx.translate(armX, y - 4);
+    ctx.rotate(dir * swingAngle);
+
+    // Arm sleeve
+    ctx.fillStyle = sleeveColor;
+    ctx.fillRect(-4, -2, 8, 14);
+    // Hand
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-3, 10, 7, 6);
+
+    // Wrench (pointing up-ish, handle down)
+    // Handle
+    ctx.fillStyle = wrenchColor;
+    ctx.fillRect(-3, -18, 6, 28);
+    // Head (open-end jaws)
+    ctx.fillStyle = wrenchColor;
+    ctx.fillRect(-8, -28, 16, 12);
+    // Jaw gap
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-5, -26, 5, 8);
+    ctx.fillRect(0, -26, 5, 8);
+    // Shine
+    ctx.fillStyle = wrenchShine;
+    ctx.fillRect(-2, -22, 2, 14);
+
+    ctx.restore();
+}
+
+// Draw a spinning wrench projectile (boomerang bolt)
+function drawWrenchProjectile(x, y, rotation) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    // Handle
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(-12, -3, 24, 5);
+    // Head
+    ctx.fillRect(-12, -8, 10, 13);
+    // Jaw gap
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-10, -6, 4, 8);
+    ctx.fillRect(-6, -6, 4, 8);
+    // Shine
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(-10, -2, 2, 8);
+    ctx.restore();
+}
+
+// Draw wrench shatter pieces
+function drawWrenchShatter(pieces) {
+    for(const p of pieces) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.life / 30);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = '#7a7a7a';
+        ctx.fillRect(-p.size, -2, p.size * 2, 4);
+        ctx.restore();
+    }
+}
+
+// Draw wrench gun held by player (level 6)
+function drawWrenchGun(x, y, facing) {
+    const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 || level6.wrenchBolts.length > 0;
+    if(!isActive) return;
+    const skinColor = '#f5c89a';
+    const sleeveColor = '#800020';
+    const dir = (facing === 'left') ? -1 : 1;
+    const shoulderX = x + dir * 9;
+
+    // Sleeve
+    ctx.fillStyle = sleeveColor;
+    if(facing === 'left') {
+        ctx.fillRect(x - 20, y - 4, 12, 7);
+        ctx.fillRect(x - 32, y - 6, 14, 6);
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x - 33, y - 6, 7, 8);
+    } else {
+        ctx.fillRect(x + 8, y - 4, 12, 7);
+        ctx.fillRect(x + 18, y - 6, 14, 6);
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x + 26, y - 6, 7, 8);
+    }
+    // Wrench (gun-barrel style, pointing in direction)
+    const wx = (facing === 'left') ? x - 34 : x + 28;
+    ctx.fillStyle = '#7a7a7a';
+    if(facing === 'left') {
+        ctx.fillRect(wx - 10, y - 8, 18, 5);
+        ctx.fillRect(wx - 10, y - 13, 8, 12);
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(wx - 9, y - 12, 3, 7);
+        ctx.fillRect(wx - 6, y - 12, 3, 7);
+    } else {
+        ctx.fillRect(wx - 8, y - 8, 18, 5);
+        ctx.fillRect(wx + 2, y - 13, 8, 12);
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(wx + 3, y - 12, 3, 7);
+        ctx.fillRect(wx + 6, y - 12, 3, 7);
+    }
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(facing === 'left' ? wx - 9 : wx - 7, y - 6, 2, 4);
 }
 
 function drawRevolver(x, y, facing) {
@@ -7886,6 +8052,46 @@ function drawLevel6PipeRoom() {
         ctx.fillText('\u2190 HALLWAY', 65, 364);
     }
 
+    // === WRENCH GUN 3D PRINTER — left of hallway, between elevator and server room ===
+    {
+        const prX = 163, prY = 365;
+        drawTableDesk(prX, prY, 55);
+        // Temporarily override ghostGun printing state for draw3DPrinter animation
+        const _sp = ghostGun.printing, _sg = ghostGun.printProgress, _sh = ghostGun.printingHeart;
+        const _swp = pipeWrench.printing, _swg = pipeWrench.printProgress, _swh = pipeWrench.printingHeart;
+        if(level6.pipeRoomPrinting) {
+            pipeWrench.printing = true;
+            pipeWrench.printProgress = level6.pipeRoomPrintProgress;
+            pipeWrench.printingHeart = false;
+        }
+        draw3DPrinter(prX, prY);
+        ghostGun.printing = _sp; ghostGun.printProgress = _sg; ghostGun.printingHeart = _sh;
+        pipeWrench.printing = _swp; pipeWrench.printProgress = _swg; pipeWrench.printingHeart = _swh;
+        // Override label to say "WRENCH GUN"
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(prX - 28, prY + 12, 56, 9);
+        ctx.fillStyle = '#f5f2ec';
+        ctx.font = 'bold 6px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('WRENCH GUN', prX, prY + 19);
+        // Print progress bar
+        if(level6.pipeRoomPrinting) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(prX - 21, prY + 6, 42, 6);
+            ctx.fillStyle = '#ff8844';
+            ctx.fillRect(prX - 21, prY + 6, 42 * level6.pipeRoomPrintProgress, 6);
+        }
+        // Interaction prompt
+        if(Math.abs(player.x - prX) < 55 && !level6.pipeRoomPrinterUI && !level6.pipeRoomPrinting) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(prX - 58, prY - 52, 116, 22);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - PRINT', prX, prY - 36);
+        }
+    }
+
     if(player.x > 620 && !level6.supercomputerUnlocked) {
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
@@ -11066,34 +11272,7 @@ function drawLevel6EmployeeLobby() {
     ctx.lineWidth = 2;
     ctx.strokeRect(elvX - 2, elvY - 2, elvW + 4, elvH + 4);
 
-    // === 3D PRINTER on table (between plants and elevator — matches level 4 design) ===
-    const prCenterX = 440, prTableY = 365;
-    drawTableDesk(prCenterX, prTableY, 60);
-    // Temporarily set ghostGun print state for draw3DPrinter animation
-    const savedPrinting = ghostGun.printing, savedProgress = ghostGun.printProgress, savedHeart = ghostGun.printingHeart;
-    if(level6.lobbyPrinting) {
-        ghostGun.printing = true;
-        ghostGun.printProgress = level6.lobbyPrintProgress;
-        ghostGun.printingHeart = level6.lobbyPrintingHeart;
-    }
-    draw3DPrinter(prCenterX, prTableY);
-    ghostGun.printing = savedPrinting; ghostGun.printProgress = savedProgress; ghostGun.printingHeart = savedHeart;
-    // Printing progress bar (lobby-specific overlay)
-    if(level6.lobbyPrinting) {
-        ctx.fillStyle = '#333';
-        ctx.fillRect(prCenterX - 21, prTableY + 6, 42, 6);
-        ctx.fillStyle = '#00cc66';
-        ctx.fillRect(prCenterX - 21, prTableY + 6, 42 * level6.lobbyPrintProgress, 6);
-    }
-    // Interaction prompt
-    if(Math.abs(player.x - prCenterX) < 60 && !level6.lobbyPrinterUI && !level6.lobbyPrinting) {
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(prCenterX - 55, prTableY - 52, 110, 22);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] - PRINT', prCenterX, prTableY - 36);
-    }
+    // (3D printer moved to cloning room)
 
     // Direction prompts
     if(player.x > 560) {
@@ -11641,6 +11820,34 @@ function drawLevel6CloningRoom() {
             ctx.fillRect(kx - 100, ky - 28, 200, 24);
             ctx.fillStyle = '#ffd700';
             ctx.fillText('[ ACTION ] - TAKE KEYCARD', kx, ky - 10);
+        }
+    }
+
+    // === 3D PRINTER — right side of cloning room (moved from employee lobby) ===
+    {
+        const prX = 540, prY = 365;
+        drawTableDesk(prX, prY, 60);
+        const savedPrinting = ghostGun.printing, savedProgress = ghostGun.printProgress, savedHeart = ghostGun.printingHeart;
+        if(level6.lobbyPrinting) {
+            ghostGun.printing = true;
+            ghostGun.printProgress = level6.lobbyPrintProgress;
+            ghostGun.printingHeart = level6.lobbyPrintingHeart;
+        }
+        draw3DPrinter(prX, prY);
+        ghostGun.printing = savedPrinting; ghostGun.printProgress = savedProgress; ghostGun.printingHeart = savedHeart;
+        if(level6.lobbyPrinting) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(prX - 21, prY + 6, 42, 6);
+            ctx.fillStyle = '#00cc66';
+            ctx.fillRect(prX - 21, prY + 6, 42 * level6.lobbyPrintProgress, 6);
+        }
+        if(Math.abs(player.x - prX) < 60 && !level6.lobbyPrinterUI && !level6.lobbyPrinting) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(prX - 55, prY - 52, 110, 22);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - PRINT', prX, prY - 36);
         }
     }
 
@@ -17622,6 +17829,15 @@ function drawScene() {
             }
         }
 
+        // === WRENCH GUN overlay — drawn in all rooms ===
+        if(level6.hasWrenchGun) {
+            drawWrenchGun(player.x, player.y, player.facing);
+        }
+        // Wrench bolts (boomerang projectiles)
+        for(const wb of level6.wrenchBolts) {
+            drawWrenchProjectile(wb.x, wb.y - 25, wb.rotation);
+        }
+
         // === PURSUING CEO — drawn before UI overlays so it doesn't eclipse them ===
         if(level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && level6.room !== 'ceoOffice') {
             drawCEO(ceo.x, ceo.y, ceo.facing);
@@ -17701,6 +17917,50 @@ function drawScene() {
                 const itemName = level6.lobbyPrinterChoice === 0 ? 'GHOST GUN' : 'HEART';
                 ctx.fillText('PRINT ' + itemName + '?', 350, 385);
                 ctx.fillStyle = level6.lobbyPrinterChoice === 0 ? '#888' : '#e74c3c';
+                ctx.fillRect(270, 410, 160, 60);
+                ctx.fillStyle = '#2b2b2b';
+                ctx.font = 'bold 20px Arial';
+                ctx.fillText('CONFIRM', 350, 445);
+            }
+        }
+
+        // Pipe room wrench gun printer UI
+        if(level6.pipeRoomPrinterUI) {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            ctx.fillRect(-GX, 340, CANVAS_W, CANVAS_H);
+            if(!level6.pipeRoomPrinterConfirming) {
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 22px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText('SELECT ITEM:', 30, 375);
+                const wrGunSel = true;
+                ctx.strokeStyle = '#f5f2ec';
+                ctx.lineWidth = 4;
+                ctx.fillStyle = '#555';
+                ctx.fillRect(30, 390, 140, 70);
+                ctx.strokeRect(30, 390, 140, 70);
+                // Wrench gun icon
+                ctx.fillStyle = '#888';
+                ctx.fillRect(55, 405, 30, 7);
+                ctx.fillRect(55, 395, 14, 18);
+                ctx.fillStyle = '#2a2a2a';
+                ctx.fillRect(57, 397, 4, 10);
+                ctx.fillRect(62, 397, 4, 10);
+                ctx.fillStyle = '#aaa';
+                ctx.fillRect(57, 403, 2, 8);
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('WRENCH GUN', 100, 455);
+                ctx.font = 'bold 10px Arial';
+                ctx.fillStyle = '#ff8844';
+                ctx.fillText('∞ ammo • boomerang', 100, 467);
+            } else {
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('PRINT WRENCH GUN?', 350, 385);
+                ctx.fillStyle = '#555';
                 ctx.fillRect(270, 410, 160, 60);
                 ctx.fillStyle = '#2b2b2b';
                 ctx.font = 'bold 20px Arial';
@@ -18800,6 +19060,22 @@ function drawScene() {
         // Table-desk under 3D printer (legs reach ground level)
         drawTableDesk(printer3d.x, printer3d.y, 60);
         draw3DPrinter(printer3d.x, printer3d.y);
+        // Print progress bar
+        if(pipeWrench.printing) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(printer3d.x - 21, printer3d.y + 6, 42, 6);
+            ctx.fillStyle = pipeWrench.printingHeart ? '#e74c3c' : '#888';
+            ctx.fillRect(printer3d.x - 21, printer3d.y + 6, 42 * pipeWrench.printProgress, 6);
+        }
+        // Interaction prompt when player is near printer
+        if(Math.abs(player.x - printer3d.x) < 60 && !pipeWrench.hasWrench && !pipeWrench.printing && !ui.gunUI) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(printer3d.x - 55, printer3d.y - 52, 110, 22);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - PRINT', printer3d.x, printer3d.y - 36);
+        }
     }
 
     // Water cooler — between 3D printer area (x=50) and doc printer (x=180)
@@ -18948,6 +19224,22 @@ function drawScene() {
         drawAmmoCounter(player.x, player.y, ghostGun.ammo);
     }
 
+    // Pipe wrench (level 4 melee)
+    if(level === 4 && pipeWrench.hasWrench) {
+        drawPipeWrench(player.x, player.y, player.facing);
+        // Wrench durability counter
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(player.x - 20, player.y - 55, 40, 16);
+        ctx.fillStyle = pipeWrench.killCount >= 1 ? '#ff8844' : '#aaaaaa';
+        ctx.font = 'bold 11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('WRENCH ' + (2 - pipeWrench.killCount) + '/2', player.x, player.y - 44);
+    }
+    // Wrench shatter particles (level 4)
+    if(level === 4 && pipeWrench.shattering) {
+        drawWrenchShatter(pipeWrench.shatterPieces);
+    }
+
     // Level skip cheat hints — only reveal counter after 5 presses (keep secret during normal play)
     if(level === 1 && skipPressCount > 5) {
         const bluePM = npcs.find(n => n.color.name === 'BLUE');
@@ -19013,62 +19305,61 @@ function drawScene() {
     if(ui.gunUI) {
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.fillRect(-GX, 340, CANVAS_W, CANVAS_H);
-        
+
         if(!ui.confirming) {
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
             ctx.fillText('SELECT ITEM:', 30, 375);
-            
-            const gunSelected = ui.gunChoice === 0;
-            ctx.strokeStyle = gunSelected ? '#f5f2ec' : '#666';
-            ctx.lineWidth = gunSelected ? 4 : 2;
-            ctx.fillStyle = '#888';
+
+            const wrenchSelected = ui.gunChoice === 0;
+            ctx.strokeStyle = wrenchSelected ? '#f5f2ec' : '#666';
+            ctx.lineWidth = wrenchSelected ? 4 : 2;
+            ctx.fillStyle = '#555';
             ctx.fillRect(30, 390, 140, 70);
             ctx.strokeRect(30, 390, 140, 70);
-            
-            // Ghost gun with handle down and barrel right
-            ctx.fillStyle = '#666';
-            // Barrel pointing right
-            ctx.fillRect(68, 410, 30, 8);
-            // Slide/top
-            ctx.fillStyle = '#555';
-            ctx.fillRect(68, 408, 30, 2);
-            // Handle pointing down
-            ctx.fillStyle = '#666';
-            ctx.fillRect(70, 418, 8, 16);
-            // Trigger guard and trigger
-            ctx.fillStyle = '#555';
-            ctx.fillRect(78, 418, 6, 2);
-            
+
+            // Pipe wrench icon
+            ctx.fillStyle = '#888';
+            ctx.fillRect(55, 405, 30, 7);    // handle
+            ctx.fillRect(55, 395, 14, 18);    // head
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(57, 397, 4, 10);     // jaw gap 1
+            ctx.fillRect(62, 397, 4, 10);     // jaw gap 2
+            ctx.fillStyle = '#aaa';
+            ctx.fillRect(57, 403, 2, 8);      // shine
+
             ctx.fillStyle = '#f5f2ec';
-            ctx.font = 'bold 18px Arial';
+            ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('GHOST GUN', 100, 455);
-            
+            ctx.fillText('PIPE WRENCH', 100, 455);
+            ctx.font = 'bold 10px Arial';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText('2 kills • breaks', 100, 467);
+
             const heartSelected = ui.gunChoice === 1;
             ctx.strokeStyle = heartSelected ? '#f5f2ec' : '#666';
             ctx.lineWidth = heartSelected ? 4 : 2;
             ctx.fillStyle = '#e74c3c';
             ctx.fillRect(190, 390, 140, 70);
             ctx.strokeRect(190, 390, 140, 70);
-            
+
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 48px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('♥', 260, 435);
-            
+
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 18px Arial';
             ctx.fillText('HEART', 260, 455);
-            
+
         } else {
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 28px Arial';
             ctx.textAlign = 'center';
-            const itemName = ui.gunChoice === 0 ? 'GHOST GUN' : 'HEART';
+            const itemName = ui.gunChoice === 0 ? 'PIPE WRENCH' : 'HEART';
             ctx.fillText('PRINT ' + itemName + '?', 350, 385);
-            ctx.fillStyle = ui.gunChoice === 0 ? '#888' : '#e74c3c';
+            ctx.fillStyle = ui.gunChoice === 0 ? '#555' : '#e74c3c';
             ctx.fillRect(270, 410, 160, 60);
             ctx.fillStyle = '#2b2b2b';
             ctx.font = 'bold 20px Arial';
@@ -20635,6 +20926,40 @@ function update() {
             if(level6.room === 'pipeRoom') {
                 player.y = 380;
 
+                // === Wrench gun 3D printer (left side of pipe room) ===
+                const pipeRoomPrinterX = 163;
+                if(level6.pipeRoomPrinterUI) {
+                    if(!level6.pipeRoomPrinterConfirming) {
+                        if(keys['Escape']) { level6.pipeRoomPrinterUI = false; keys['Escape'] = false; }
+                        if(keys[' '] || keys['action']) {
+                            level6.pipeRoomPrinterConfirming = true;
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    } else {
+                        if(keys['Escape']) { level6.pipeRoomPrinterConfirming = false; keys['Escape'] = false; }
+                        if(keys[' '] || keys['action']) {
+                            level6.pipeRoomPrinterUI = false;
+                            level6.pipeRoomPrinterConfirming = false;
+                            level6.pipeRoomPrinting = true;
+                            level6.pipeRoomPrintProgress = 0;
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                } else if(level6.pipeRoomPrinting) {
+                    level6.pipeRoomPrintProgress += 0.02;
+                    if(level6.pipeRoomPrintProgress >= 1) {
+                        level6.pipeRoomPrinting = false;
+                        level6.pipeRoomPrintProgress = 0;
+                        level6.hasWrenchGun = true;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                } else {
+                    if(Math.abs(player.x - pipeRoomPrinterX) < 55 && !level6.pipeRoomPrinting && (keys[' '] || keys['action'])) {
+                        level6.pipeRoomPrinterUI = true;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+
                 // Left — to underbelly hallway (auto)
                 if(player.x < 40) {
                     level6.room = 'underbellyHallway';
@@ -20951,21 +21276,10 @@ function update() {
                         keys['action'] = false;
                     }
 
-                    // 3D Printer interaction (near printer, right side of elevator)
-                    const printerCenterX = 440; // prCenterX from drawing code
-                    if(Math.abs(player.x - printerCenterX) < 60 && !level6.lobbyPrinting && (keys[' '] || keys['action'])) {
-                        // Don't trigger if near elevator
-                        if(player.x <= 560) {
-                            level6.lobbyPrinterUI = true;
-                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
-                            keys[' '] = false;
-                            keys['action'] = false;
-                        }
-                    }
+                    // 3D Printer moved to cloning room — no printer in lobby
 
                     // Fire ghost gun in employee lobby (single-shot, consumed on fire)
-                    // Don't fire when near 3D printer — printer interaction takes priority
-                    if(level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && Math.abs(player.x - printerCenterX) >= 60 && (keys[' '] || keys['action'])) {
+                    if(level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && (keys[' '] || keys['action'])) {
                         keys[' '] = false;
                         keys['action'] = false;
                         let vx = 0;
@@ -20993,8 +21307,62 @@ function update() {
             else if(level6.room === 'cloningRoom') {
                 player.y = 380;
 
+                // === Cloning room 3D printer (moved from employee lobby) ===
+                const cloningPrinterX = 540;
+                if(level6.lobbyPrinterUI) {
+                    if(!level6.lobbyPrinterConfirming) {
+                        if(keys['ArrowLeft'] || keys['left']) {
+                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
+                            keys['ArrowLeft'] = false; keys['left'] = false;
+                        }
+                        if(keys['ArrowRight'] || keys['right']) {
+                            level6.lobbyPrinterChoice = 1;
+                            keys['ArrowRight'] = false; keys['right'] = false;
+                        }
+                        if(keys['Escape']) { level6.lobbyPrinterUI = false; keys['Escape'] = false; }
+                        if(keys[' '] || keys['action']) {
+                            level6.lobbyPrinterConfirming = true;
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    } else {
+                        if(keys['Escape']) { level6.lobbyPrinterConfirming = false; keys['Escape'] = false; }
+                        if(keys[' '] || keys['action']) {
+                            level6.lobbyPrinterUI = false;
+                            level6.lobbyPrinterConfirming = false;
+                            level6.lobbyPrinting = true;
+                            level6.lobbyPrintProgress = 0;
+                            level6.lobbyPrintingHeart = (level6.lobbyPrinterChoice === 1);
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                } else {
+                    if(level6.lobbyPrinting) {
+                        level6.lobbyPrintProgress += 0.02;
+                        if(level6.lobbyPrintProgress >= 1) {
+                            level6.lobbyPrinting = false;
+                            level6.lobbyPrintProgress = 0;
+                            if(level6.lobbyPrintingHeart) {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                                level6.lobbyPrintingHeart = false;
+                            } else {
+                                level6.hasGhostGun = true;
+                            }
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                    // Printer interaction
+                    if(Math.abs(player.x - cloningPrinterX) < 60 && !level6.lobbyPrinting && (keys[' '] || keys['action'])) {
+                        if(player.x <= 620) {
+                            level6.lobbyPrinterUI = true;
+                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                }
+
                 // Go right to employee lobby
-                if(player.x > 660) {
+                if(!level6.lobbyPrinterUI && player.x > 660) {
                     level6.room = 'employeeLobby';
                     player.x = 80;
                     player.y = 380;
@@ -22623,6 +22991,145 @@ if (keys[' '] || keys['action']) {
                 }
             }
 
+            // === WRENCH GUN — fire and boomerang update (all rooms) ===
+            if(level6.hasWrenchGun && !level6.pipeRoomPrinterUI && !level6.pipeRoomPrinting && level6.wrenchBolts.length === 0) {
+                // Only fire when action pressed and NOT near pipe room printer
+                const nearPrinter = level6.room === 'pipeRoom' && Math.abs(player.x - 163) < 55;
+                if(!nearPrinter && (keys[' '] || keys['action'])) {
+                    // Check if any other action key use consumed this frame (ghost gun, etc.) - only fire if no gun
+                    const hasOtherWeapon = (level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun;
+                    if(!hasOtherWeapon) {
+                        keys[' '] = false; keys['action'] = false;
+                        const vx = player.facing === 'left' ? -9 : player.facing === 'right' ? 9 : (player.x < 350 ? 9 : -9);
+                        level6.wrenchBolts.push({
+                            x: player.x, y: player.y,
+                            originX: player.x, originY: player.y,
+                            vx: vx,
+                            going: true,
+                            rotation: 0,
+                            hitCEO: false,
+                            ceoHitX: null
+                        });
+                        player.shootTimer = 10;
+                    }
+                }
+            }
+
+            // Update wrench bolts (boomerang physics + hit detection)
+            for(let i = level6.wrenchBolts.length - 1; i >= 0; i--) {
+                const wb = level6.wrenchBolts[i];
+                wb.rotation += 0.35;
+                wb.x += wb.vx;
+
+                if(wb.going) {
+                    // Travel until hitting a wall or max distance
+                    const maxDist = 340;
+                    if(Math.abs(wb.x - wb.originX) > maxDist || wb.x < 10 || wb.x > 690) {
+                        wb.going = false;
+                        wb.vx = -wb.vx; // Reverse
+                    }
+
+                    // Hit CEO on outgoing (ceoOffice room)
+                    if(level6.room === 'ceoOffice' && !wb.hitCEO && ceo.state !== 'dead' && !level6.ceoPursuing) {
+                        if(Math.abs(wb.x - ceo.x) < 40 && Math.abs(wb.y - ceo.y) < 50) {
+                            wb.hitCEO = true;
+                            wb.ceoHitX = ceo.x;
+                            ceo.health--;
+                            bulletImpact(wb.x, ceo.y);
+                            if(ceo.health <= 0) {
+                                ceo.state = 'dead';
+                                ceo.deathRoom = 'ceoOffice';
+                                createExplosion(ceo.x, ceo.y);
+                                score += 5000;
+                            }
+                            wb.going = false;
+                            wb.vx = -Math.abs(wb.vx) * Math.sign(wb.originX - wb.x) || -wb.vx;
+                            wb.vx = wb.x > wb.originX ? -9 : 9;
+                        }
+                    }
+
+                    // Hit pursuing CEO in any room
+                    if(level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && !wb.hitCEO) {
+                        if(Math.abs(wb.x - ceo.x) < 40 && Math.abs(wb.y - ceo.y) < 50) {
+                            wb.hitCEO = true;
+                            wb.ceoHitX = ceo.x;
+                            ceo.health--;
+                            bulletImpact(wb.x, ceo.y);
+                            if(ceo.health <= 0) {
+                                ceo.state = 'dead';
+                                ceo.deathRoom = level6.room;
+                                createExplosion(ceo.x, ceo.y);
+                                score += 5000;
+                            }
+                            wb.going = false;
+                            wb.vx = wb.x > wb.originX ? -9 : 9;
+                        }
+                    }
+
+                    // Hit skeleton hordes on outgoing
+                    const hordeRef = (level6.room === 'pipeRoom') ? level6.skeletonHorde : (level6.room === 'underbellyHallway' ? level6.skeletonHorde2 : null);
+                    if(hordeRef && hordeRef.triggered) {
+                        for(const sk of hordeRef.skeletons) {
+                            if(!sk.alive || sk.spawnDelay > 0) continue;
+                            if(Math.abs(wb.x - sk.x) < 30 && Math.abs(wb.y - sk.y) < 40) {
+                                sk.alive = false;
+                                for(let d = 0; d < 8; d++) {
+                                    const ang = Math.random() * Math.PI * 2;
+                                    const spd = 1.5 + Math.random() * 2;
+                                    sk.dustParticles.push({ x: sk.x, y: sk.y - 20, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 20 });
+                                }
+                                hordeRef.drops.push({ x: sk.x, y: 385, claimed: false, amount: 1 });
+                                score += 100;
+                            }
+                        }
+                    }
+
+                } else {
+                    // Returning — auto-collect drops in path
+                    const allDropSources = [
+                        ...(level6.skeletonHorde ? level6.skeletonHorde.drops : []),
+                        ...(level6.skeletonHorde2 ? level6.skeletonHorde2.drops : []),
+                        ...(level6.bridgeDrops || [])
+                    ];
+                    for(const drop of allDropSources) {
+                        if(drop.claimed) continue;
+                        if(Math.abs(wb.x - drop.x) < 40) {
+                            drop.claimed = true;
+                            if(drop.type === 'ammo' || drop.amount > 0) {
+                                level6.revolverAmmo += (drop.amount || 1);
+                            } else if(drop.type === 'life') {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                            }
+                        }
+                    }
+
+                    // Hit CEO second time on return
+                    if(wb.hitCEO && ceo.state !== 'dead') {
+                        if(level6.room === 'ceoOffice' || (level6.ceoPursuing && ceo.ceoVisible)) {
+                            if(Math.abs(wb.x - ceo.x) < 45) {
+                                wb.hitCEO = false; // Reset so it doesn't keep hitting
+                                ceo.health--;
+                                bulletImpact(wb.x, ceo.y);
+                                if(ceo.health <= 0) {
+                                    ceo.state = 'dead';
+                                    ceo.deathRoom = level6.room === 'ceoOffice' ? 'ceoOffice' : level6.room;
+                                    createExplosion(ceo.x, ceo.y);
+                                    score += 5000;
+                                }
+                            }
+                        }
+                    }
+
+                    // Return to player origin — remove when close
+                    if(Math.abs(wb.x - wb.originX) < 20) {
+                        level6.wrenchBolts.splice(i, 1);
+                        // Unlimited ammo — wrench gun stays
+                        continue;
+                    }
+                }
+            }
+
             // Muzzle flash & impact spark cleanup (must run inside level 6 block before return)
             for(let i = muzzleFlashes.length - 1; i >= 0; i--) {
                 muzzleFlashes[i].life--;
@@ -22733,6 +23240,48 @@ if (keys[' '] || keys['action']) {
         }
     }
 
+    // Level 4 pipe wrench printing progress
+    if(pipeWrench.printing) {
+        pipeWrench.printProgress += 0.02;
+        if(pipeWrench.printProgress >= 1) {
+            pipeWrench.printing = false;
+            pipeWrench.printProgress = 0;
+            if(pipeWrench.printingHeart) {
+                lives = Math.min(3, lives + 1);
+                updateLives();
+                pipeWrench.printingHeart = false;
+            } else {
+                pipeWrench.hasWrench = true;
+                pipeWrench.killCount = 0;
+            }
+        }
+    }
+
+    // Level 4 pipe wrench swing timer
+    if(pipeWrench.swinging && pipeWrench.swingTimer > 0) {
+        pipeWrench.swingTimer--;
+        if(pipeWrench.swingTimer <= 0) {
+            pipeWrench.swinging = false;
+        }
+    }
+
+    // Level 4 wrench shatter animation
+    if(pipeWrench.shattering) {
+        pipeWrench.shatterTimer--;
+        for(let p of pipeWrench.shatterPieces) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.4;
+            p.rot += p.rotSpeed;
+            p.life--;
+        }
+        pipeWrench.shatterPieces = pipeWrench.shatterPieces.filter(p => p.life > 0);
+        if(pipeWrench.shatterTimer <= 0) {
+            pipeWrench.shattering = false;
+            pipeWrench.shatterPieces = [];
+        }
+    }
+
     for(let i = explosions.length - 1; i >= 0; i--) {
         let exp = explosions[i];
         exp.radius += 3;
@@ -22825,7 +23374,53 @@ if (keys[' '] || keys['action']) {
 
         const atComputer = Math.abs(player.x - computer.x) < 60;
         const at3DPrinter = level === 4 && Math.abs(player.x - printer3d.x) < 60;
-        
+
+        // Level 4: pipe wrench melee swing
+        if(level === 4 && pipeWrench.hasWrench && !pipeWrench.swinging && !ui.show && !ui.gunUI) {
+            pipeWrench.swinging = true;
+            pipeWrench.swingTimer = 22;
+            pipeWrench.swingFacing = player.facing;
+            // Check boss hit
+            if(boss.active && !boss.angry) {
+                const swingDir = player.facing === 'left' ? -1 : player.facing === 'right' ? 1 : 0;
+                const relX = boss.x - player.x;
+                const inRange = Math.abs(relX) < 80 && (swingDir === 0 || Math.sign(relX) === swingDir || Math.abs(relX) < 30);
+                if(inRange) {
+                    boss.active = false;
+                    boss.needsColor = null;
+                    boss.walking = false;
+                    boss.angry = false;
+                    boss.bossKills++;
+                    score += 500 * level;
+                    createExplosion(boss.x, boss.y);
+                    // No life gain for wrench kills
+                    pipeWrench.killCount++;
+                    if(pipeWrench.killCount >= 2) {
+                        // Wrench breaks — shatter animation
+                        pipeWrench.hasWrench = false;
+                        pipeWrench.shattering = true;
+                        pipeWrench.shatterTimer = 40;
+                        pipeWrench.shatterPieces = [];
+                        for(let s = 0; s < 8; s++) {
+                            const ang = (s / 8) * Math.PI * 2;
+                            const spd = 2 + Math.random() * 3;
+                            pipeWrench.shatterPieces.push({
+                                x: player.x, y: player.y - 20,
+                                vx: Math.cos(ang) * spd,
+                                vy: Math.sin(ang) * spd - 2,
+                                rot: Math.random() * Math.PI * 2,
+                                rotSpeed: (Math.random() - 0.5) * 0.4,
+                                size: 4 + Math.random() * 4,
+                                life: 30
+                            });
+                        }
+                    }
+                    checkPromotion();
+                }
+            }
+            return;
+        }
+
         if(ghostGun.hasGun && ghostGun.ammo > 0 && !ui.show && !ui.gunUI) {
             const direction = player.facing === 'left' ? -1 : player.facing === 'right' ? 1 : 0;
             if(direction !== 0) {
@@ -22837,8 +23432,8 @@ if (keys[' '] || keys['action']) {
             }
             return;
         }
-        
-        if(at3DPrinter && !player.holding && !ui.show && !ui.gunUI && !ghostGun.hasGun && !ghostGun.printing) {
+
+        if(at3DPrinter && !player.holding && !ui.show && !ui.gunUI && !pipeWrench.hasWrench && !pipeWrench.printing) {
             ui.gunUI = true;
             return;
         }
@@ -22869,9 +23464,10 @@ if (keys[' '] || keys['action']) {
         if(ui.gunUI && ui.confirming) {
             ui.gunUI = false;
             ui.confirming = false;
-            ghostGun.printing = true;
-            ghostGun.printProgress = 0;
-            ghostGun.printingHeart = (ui.gunChoice === 1);
+            // Level 4: use pipeWrench state (wrench replaces ghost gun)
+            pipeWrench.printing = true;
+            pipeWrench.printProgress = 0;
+            pipeWrench.printingHeart = (ui.gunChoice === 1);
             ui.gunChoice = 0;
             return;
         }
