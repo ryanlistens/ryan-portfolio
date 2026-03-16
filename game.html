@@ -585,7 +585,13 @@ let level6 = {
     ceoDialogueLine: 0,
     ceoDialogueChars: 0,
     ceoDialogueType: 'boss', // 'boss' or 'detective'
-    ceoDialogueShown: false
+    ceoDialogueShown: false,
+    // Skeleton horde — spawns from underbellyHallway after entering detective mode
+    skeletonHorde: {
+        triggered: false,
+        skeletons: [],
+        drops: []
+    }
 };
 
 let ghostGun = {
@@ -16981,6 +16987,105 @@ function drawScene() {
         if(level6.room === 'pipeRoom') {
             drawLevel6PipeRoom();
 
+            // Draw skeleton horde
+            if (level6.skeletonHorde && level6.skeletonHorde.triggered) {
+                const sh = level6.skeletonHorde;
+                const now = Date.now();
+                for (const sk of sh.skeletons) {
+                    // Draw dust particles (alive or dead)
+                    for (const dp of sk.dustParticles) {
+                        const a = dp.life / 25;
+                        ctx.fillStyle = `rgba(220,210,185,${a})`;
+                        ctx.beginPath();
+                        ctx.arc(dp.x, dp.y, 3 + (1 - a) * 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    if (!sk.alive || sk.spawnDelay > 0) continue;
+                    const sx = sk.x, sy = sk.y;
+                    const walkCycle = Math.sin(now / 110 + sk.x * 0.05);
+                    const legSwing = walkCycle * 7;
+                    const armSwing = -walkCycle * 6;
+                    const BONE = '#d8d4c0';
+                    const DARK = '#9a9480';
+                    // Shadow
+                    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                    ctx.beginPath();
+                    ctx.ellipse(sx, sy + 1, 12, 4, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Legs
+                    ctx.strokeStyle = BONE; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                    // Left leg
+                    ctx.beginPath(); ctx.moveTo(sx - 3, sy - 10); ctx.lineTo(sx - 5 + legSwing, sy); ctx.lineTo(sx - 4 + legSwing, sy + 14); ctx.stroke();
+                    // Right leg
+                    ctx.beginPath(); ctx.moveTo(sx + 3, sy - 10); ctx.lineTo(sx + 5 - legSwing, sy); ctx.lineTo(sx + 4 - legSwing, sy + 14); ctx.stroke();
+                    // Feet
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(sx - 6 + legSwing, sy + 14); ctx.lineTo(sx + 2 + legSwing, sy + 14); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(sx - 2 - legSwing, sy + 14); ctx.lineTo(sx + 6 - legSwing, sy + 14); ctx.stroke();
+                    // Pelvis
+                    ctx.fillStyle = BONE;
+                    ctx.fillRect(sx - 7, sy - 12, 14, 5);
+                    // Spine
+                    ctx.strokeStyle = BONE; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(sx, sy - 12); ctx.lineTo(sx, sy - 34); ctx.stroke();
+                    // Ribcage
+                    ctx.strokeStyle = BONE; ctx.lineWidth = 2;
+                    for (let r = 0; r < 3; r++) {
+                        const ry = sy - 28 + r * 5;
+                        ctx.beginPath(); ctx.moveTo(sx, ry); ctx.bezierCurveTo(sx - 14, ry - 2, sx - 14, ry + 3, sx, ry + 2); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(sx, ry); ctx.bezierCurveTo(sx + 14, ry - 2, sx + 14, ry + 3, sx, ry + 2); ctx.stroke();
+                    }
+                    // Arms (reaching forward — facing right)
+                    ctx.strokeStyle = BONE; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(sx - 6, sy - 30); ctx.lineTo(sx - 14 + armSwing, sy - 22 + armSwing * 0.5); ctx.lineTo(sx - 8 + armSwing, sy - 12); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(sx + 6, sy - 30); ctx.lineTo(sx + 18 - armSwing, sy - 20 - armSwing * 0.5); ctx.lineTo(sx + 12 - armSwing, sy - 10); ctx.stroke();
+                    // Skull
+                    ctx.fillStyle = BONE;
+                    ctx.beginPath(); ctx.arc(sx, sy - 42, 9, 0, Math.PI * 2); ctx.fill();
+                    // Jaw
+                    ctx.fillStyle = BONE;
+                    ctx.beginPath(); ctx.moveTo(sx - 6, sy - 37); ctx.lineTo(sx + 6, sy - 37); ctx.lineTo(sx + 5, sy - 32); ctx.lineTo(sx - 5, sy - 32); ctx.closePath(); ctx.fill();
+                    // Eye sockets
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath(); ctx.arc(sx - 4, sy - 44, 3, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(sx + 4, sy - 44, 3, 0, Math.PI * 2); ctx.fill();
+                    // Nose cavity
+                    ctx.fillStyle = DARK;
+                    ctx.beginPath(); ctx.moveTo(sx - 2, sy - 40); ctx.lineTo(sx + 2, sy - 40); ctx.lineTo(sx, sy - 37); ctx.closePath(); ctx.fill();
+                    // Teeth marks
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(sx - 4, sy - 34, 2, 3); ctx.fillRect(sx - 1, sy - 34, 2, 3); ctx.fillRect(sx + 2, sy - 34, 2, 3);
+                }
+                // Draw ammo drops (single bullet icon)
+                for (const drop of sh.drops) {
+                    if (drop.claimed) continue;
+                    const bob = Math.sin(now / 280) * 3;
+                    const dx = drop.x, dy = drop.y;
+                    // Bullet casing
+                    ctx.fillStyle = '#d4af37';
+                    ctx.fillRect(dx - 2, dy - 10 + bob, 5, 9);
+                    ctx.fillStyle = '#aa8822';
+                    ctx.fillRect(dx - 2, dy - 2 + bob, 5, 3);
+                    // Bullet tip
+                    ctx.fillStyle = '#c0c0c0';
+                    ctx.beginPath(); ctx.moveTo(dx - 2, dy - 10 + bob); ctx.lineTo(dx + 3, dy - 10 + bob); ctx.lineTo(dx + 0.5, dy - 15 + bob); ctx.closePath(); ctx.fill();
+                    // "x1" label
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
+                    ctx.fillText('x1', dx + 1, dy + 7 + bob);
+                    // Pickup prompt
+                    if (Math.abs(player.x - dx) < 40) {
+                        ctx.font = 'bold 12px Arial';
+                        const pw = ctx.measureText('[ ACTION ] - TAKE AMMO').width + 16;
+                        const px = Math.max(0, Math.min(dx - pw / 2, 700 - pw));
+                        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+                        ctx.fillRect(px, dy - 30, pw, 19);
+                        ctx.fillStyle = '#ffd700';
+                        ctx.fillText('[ ACTION ] - TAKE AMMO', dx + 1, dy - 17);
+                    }
+                }
+            }
+
             // Draw player in pipe room
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
@@ -20003,7 +20108,7 @@ function update() {
                         }
 
                     } else if(mp.mpPhase === 'going_to_pm') {
-                        // Walk to PM[mpTargetPM] — same nav pattern as going_to_player
+                        // Walk to PM[mpTargetPM] — route above PM row then drop down to avoid walking through other PMs
                         const targetPM = pms[mp.mpTargetPM];
                         const tX = targetPM ? targetPM.x : 350;
                         const tY = targetPM ? targetPM.y : 430;
@@ -20016,15 +20121,20 @@ function update() {
                         } else if(mp.mpWaypointPhase === 'down') {
                             tXw = 220; tYw = 330;
                             if(mp.y > 325) mp.mpWaypointPhase = 'across';
+                        } else if(mp.mpWaypointPhase === 'across') {
+                            // Move horizontally above PM row to line up with target PM
+                            tXw = tX; tYw = 330;
+                            if(Math.abs(mp.x - tX) < 10) mp.mpWaypointPhase = 'descend';
                         } else {
+                            // Descend straight down to PM — no crossing other PMs
                             tXw = tX; tYw = tY;
                         }
                         const dxm = tXw - mp.x, dym = tYw - mp.y;
                         const dm = Math.sqrt(dxm*dxm + dym*dym);
                         if(dm > 2) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
                         mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : 'forward';
-                        if(mp.mpWaypointPhase === 'across') {
-                            // Check distance to PM directly — same pattern as going_to_player
+                        if(mp.mpWaypointPhase === 'descend') {
+                            // Check distance to PM directly
                             const dpx = targetPM ? targetPM.x - mp.x : tX - mp.x;
                             const dpy = targetPM ? targetPM.y - mp.y : tY - mp.y;
                             if(Math.sqrt(dpx*dpx + dpy*dpy) <= 40) {
@@ -20487,6 +20597,87 @@ function update() {
                     level6.lastExitEdge = 'right';
                     keys[' '] = false;
                     keys['action'] = false;
+                }
+
+                // === SKELETON HORDE — spawns from underbelly hallway after entering detective mode ===
+                if (level6.hasDetectiveHat && !level6.skeletonHorde.triggered) {
+                    level6.skeletonHorde.triggered = true;
+                    for (let i = 0; i < 6; i++) {
+                        level6.skeletonHorde.skeletons.push({
+                            x: -30 - i * 22,
+                            y: 380,
+                            alive: true,
+                            speed: 1.5 + Math.random() * 0.7,
+                            spawnDelay: i * 38,
+                            dustParticles: []
+                        });
+                    }
+                }
+                // Update skeleton horde — movement, contact damage, particle decay
+                if (level6.skeletonHorde.triggered) {
+                    const sh = level6.skeletonHorde;
+                    for (let sk of sh.skeletons) {
+                        // Decay dust particles
+                        for (let dp of sk.dustParticles) {
+                            dp.x += dp.vx;
+                            dp.y += dp.vy;
+                            dp.vy += 0.12;
+                            dp.life--;
+                        }
+                        sk.dustParticles = sk.dustParticles.filter(dp => dp.life > 0);
+                        if (!sk.alive) continue;
+                        if (sk.spawnDelay > 0) { sk.spawnDelay--; continue; }
+                        sk.x += sk.speed;
+                        // Contact damage — skeleton lunges into player
+                        if (sk.alive && Math.abs(sk.x - player.x) < 26) {
+                            sk.alive = false;
+                            for (let d = 0; d < 10; d++) {
+                                const ang = Math.random() * Math.PI * 2;
+                                const spd = 1.5 + Math.random() * 2.5;
+                                sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 22 });
+                            }
+                            level6.moneyLives--;
+                            level6.damageFlash = 1;
+                            updateLives();
+                            if (level6.moneyLives <= 0) { state = 'over'; menuChoice = 0; }
+                        }
+                        // Skeleton escaped off-screen right
+                        if (sk.x > 750) sk.alive = false;
+                    }
+                    // Skeleton ammo drop pickup (walk over + action)
+                    let skeletonPickup = false;
+                    for (let drop of sh.drops) {
+                        if (drop.claimed) continue;
+                        if (Math.abs(player.x - drop.x) < 40 && (keys[' '] || keys['action'])) {
+                            drop.claimed = true;
+                            level6.revolverAmmo += 1;
+                            skeletonPickup = true;
+                        }
+                    }
+                    if (skeletonPickup) { keys[' '] = false; keys['action'] = false; }
+                }
+                // Shoot in pipeRoom (ghost gun or revolver) — only when not at elevator/keypad/megacomputer
+                if (!level6.elevatorUI && !level6.keypadUI && player.x > 100 && player.x < 610) {
+                    if (level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && (keys[' '] || keys['action'])) {
+                        keys[' '] = false; keys['action'] = false;
+                        const vx = player.facing === 'left' ? -12 : player.facing === 'right' ? 12 : player.x < 350 ? 12 : -12;
+                        if (vx !== 0) {
+                            bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                            level6.hasGhostGun = false;
+                            muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 6, facing: vx > 0 ? 'right' : 'left' });
+                            player.shootTimer = 20;
+                        }
+                    }
+                    if (level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                        keys[' '] = false; keys['action'] = false;
+                        const vx = player.facing === 'left' ? -12 : player.facing === 'right' ? 12 : player.x < 350 ? 12 : -12;
+                        if (vx !== 0) {
+                            bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                            level6.revolverAmmo--;
+                            muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 6, facing: vx > 0 ? 'right' : 'left' });
+                            player.shootTimer = 20;
+                        }
+                    }
                 }
             }
 
@@ -21817,6 +22008,30 @@ if (keys[' '] || keys['action']) {
                         );
                         continue;
                     }
+                }
+
+                // Skeleton horde bullet collision (pipeRoom — one-shot kill, drops 1 ammo)
+                if (!bullets[i].fromCEO && level6.room === 'pipeRoom' && level6.skeletonHorde && level6.skeletonHorde.triggered) {
+                    let skHit = false;
+                    for (let sk of level6.skeletonHorde.skeletons) {
+                        if (!sk.alive || sk.spawnDelay > 0) continue;
+                        if (Math.abs(bullets[i].x - sk.x) < 22 && Math.abs(bullets[i].y - (sk.y - 25)) < 32) {
+                            sk.alive = false;
+                            // Bone-dust burst particles
+                            for (let d = 0; d < 12; d++) {
+                                const ang = Math.random() * Math.PI * 2;
+                                const spd = 1.8 + Math.random() * 3;
+                                sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1.5, life: 25 });
+                            }
+                            bulletImpact(bullets[i].x, bullets[i].y);
+                            // Drop 1 ammo bullet at skeleton's position
+                            level6.skeletonHorde.drops.push({ x: sk.x, y: 385, claimed: false, amount: 1 });
+                            score += 100;
+                            skHit = true;
+                            break;
+                        }
+                    }
+                    if (skHit) { bullets.splice(i, 1); continue; }
                 }
 
                 // Pursuing CEO hit — in any room (including bridge hazard deaths)
