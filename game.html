@@ -10698,17 +10698,137 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillStyle = '#ccc'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
                     ctx.fillText('SPECIAL DELIVERY...', mSX, targetY - 52);
                 }
-            } else {
-                if(procElapsed >= 3.5) return;  // cleared
-                // Generic fall / conveyor / truck
-                if(procElapsed < 3.5) {
-                    ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.6;
-                    ctx.beginPath(); ctx.ellipse(cx, targetY + 5, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
-                    ctx.globalAlpha = 1;
+            } else if(dType === 'conveyor') {
+                if(procElapsed >= 4.1) return;  // cleared
+                // CEO lands on belt, slides right, goes under truck tire
+                const slideDur = 2.8, runOverDur = 1.2;
+                const slideProg = Math.min(1, procElapsed / slideDur);
+                const easeSlide = slideProg < 0.3 ? (slideProg / 0.3) * 0.3 : 0.3 + (slideProg - 0.3) / 0.7 * 0.7;
+                const truckTireX = 615;
+                const slideX = cx + easeSlide * (truckTireX - cx);
+                const beltVibe = Math.sin(procElapsed * 16) * 1.5 * (1 - slideProg);
+                const runProg = procElapsed > slideDur ? Math.min(1, (procElapsed - slideDur) / runOverDur) : 0;
+                // Blood trail on belt
+                ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.4;
+                ctx.fillRect(cx, targetY - 2, Math.min(slideX, truckTireX + 8) - cx, 4);
+                ctx.globalAlpha = 1;
+                if(slideProg < 1.0 && runProg === 0) {
+                    // Suit sliding face-down on belt
                     ctx.fillStyle = '#2b2b2b';
-                    ctx.fillRect(cx - 15, targetY - 8, 30, 12);
+                    ctx.fillRect(slideX - 16, targetY - 10 + beltVibe, 32, 14);
+                    ctx.fillStyle = '#c49872';
+                    ctx.beginPath(); ctx.arc(slideX - 12, targetY - 6 + beltVibe, 7, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(slideX - 15, targetY - 8 + beltVibe); ctx.lineTo(slideX - 12, targetY - 5 + beltVibe);
+                    ctx.moveTo(slideX - 12, targetY - 8 + beltVibe); ctx.lineTo(slideX - 15, targetY - 5 + beltVibe);
+                    ctx.stroke();
+                    const legD = Math.sin(procElapsed * 7) * 3;
+                    ctx.fillStyle = '#1a1a1a';
+                    ctx.fillRect(slideX + 12, targetY - 8 + legD, 6, 13);
+                    ctx.fillRect(slideX + 18, targetY - 6 - legD, 6, 11);
+                } else if(runProg > 0) {
+                    // Truck tire rolls over CEO
+                    const flatProg = Math.min(1, runProg / 0.5);
+                    const tireX = truckTireX;
+                    ctx.fillStyle = '#881111';
+                    ctx.fillRect(tireX - 22, targetY - 2, 44, 5 - flatProg * 3);
+                    ctx.fillStyle = '#111';
+                    ctx.beginPath(); ctx.arc(tireX, targetY + 4, 9, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.stroke();
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                    const treadA = procElapsed * 14;
+                    for(let ti = 0; ti < 6; ti++) {
+                        const ta = treadA + ti * Math.PI / 3;
+                        ctx.beginPath();
+                        ctx.moveTo(tireX + Math.cos(ta) * 5, targetY + 4 + Math.sin(ta) * 5);
+                        ctx.lineTo(tireX + Math.cos(ta) * 9, targetY + 4 + Math.sin(ta) * 9);
+                        ctx.stroke();
+                    }
+                    ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.5 + flatProg * 0.3;
+                    ctx.beginPath(); ctx.ellipse(tireX, targetY + 4, 18 + flatProg * 12, 4 + flatProg * 2, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+                if(procElapsed < 0.7) {
+                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*THUD*', cx, targetY - 28);
+                } else if(slideProg < 1 && slideProg > 0.05) {
+                    ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*BELT DRAG*', slideX, targetY - 24);
+                } else if(runProg > 0.3 && runProg < 0.9) {
+                    ctx.fillStyle = '#ff8800'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*CRUNCH*', truckTireX, targetY - 28);
+                }
+            } else if(dType === 'truck') {
+                if(procElapsed >= 3.5) return;  // cleared
+                // CEO lands near truck, gets backed over
+                const runOverDur = 2.5;
+                const runProg = Math.min(1, procElapsed / runOverDur);
+                ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.5 + runProg * 0.2;
+                ctx.beginPath(); ctx.ellipse(cx, targetY + 5, 20 + runProg * 24, 8 + runProg * 6, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.globalAlpha = 1;
+                if(runProg < 0.4) {
+                    // Body lying on ground
+                    ctx.fillStyle = '#2b2b2b';
+                    ctx.fillRect(cx - 14, targetY - 8, 28, 12);
+                    ctx.fillStyle = '#c49872';
+                    ctx.beginPath(); ctx.arc(cx - 10, targetY - 5, 7, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(cx - 13, targetY - 7); ctx.lineTo(cx - 10, targetY - 3);
+                    ctx.moveTo(cx - 10, targetY - 7); ctx.lineTo(cx - 13, targetY - 3);
+                    ctx.stroke();
+                } else {
+                    // Truck wheel rolling over
+                    const flatProg = Math.min(1, (runProg - 0.4) / 0.3);
+                    const truckWheelX = cx + 30 - flatProg * 60;
+                    ctx.fillStyle = '#991111';
+                    ctx.fillRect(cx - 18, targetY - 3, 36, 6 - flatProg * 3);
+                    ctx.fillStyle = '#111';
+                    ctx.beginPath(); ctx.arc(truckWheelX, targetY + 2, 8, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.stroke();
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                    const treadAngle = procElapsed * 12;
+                    for(let ti = 0; ti < 6; ti++) {
+                        const ta = treadAngle + ti * Math.PI / 3;
+                        ctx.beginPath();
+                        ctx.moveTo(truckWheelX + Math.cos(ta) * 5, targetY + 2 + Math.sin(ta) * 5);
+                        ctx.lineTo(truckWheelX + Math.cos(ta) * 8, targetY + 2 + Math.sin(ta) * 8);
+                        ctx.stroke();
+                    }
+                }
+                if(procElapsed < 0.8) {
+                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*CRASH*', cx, targetY - 30);
+                } else if(runProg > 0.3 && runProg < 0.8) {
+                    ctx.fillStyle = '#ff8800'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*CRUNCH*', cx, targetY - 26);
+                    if(Math.floor(procElapsed * 3) % 2 === 0) {
+                        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace';
+                        ctx.fillText('BEEP BEEP', cx + 40, targetY - 40);
+                    }
+                } else if(runProg > 0.8) {
+                    ctx.fillStyle = '#aaa'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('*ROADKILL*', cx, targetY - 22);
+                }
+            } else {
+                if(procElapsed >= 3.0) return;  // cleared
+                // Generic fall — splat on factory floor
+                ctx.fillStyle = '#6b0000'; ctx.globalAlpha = 0.6;
+                ctx.beginPath(); ctx.ellipse(cx, targetY, 36, 12, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#2b2b2b';
+                ctx.fillRect(cx - 14, targetY - 8, 28, 10);
+                ctx.fillStyle = '#c49872';
+                ctx.beginPath(); ctx.arc(cx - 12, targetY - 5, 7, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx - 15, targetY - 7); ctx.lineTo(cx - 12, targetY - 3);
+                ctx.moveTo(cx - 12, targetY - 7); ctx.lineTo(cx - 15, targetY - 3);
+                ctx.stroke();
+                if(procElapsed < 1) {
                     ctx.fillStyle = '#ff4444'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-                    ctx.fillText('*SPLAT*', cx, targetY - 24);
+                    ctx.fillText('*SPLAT*', cx, targetY - 30);
                 }
             }
         }
@@ -19432,6 +19552,7 @@ function update() {
                         level6.room = 'cloningRoom';
                         player.x = 80;
                         player.y = 380;
+                        level6.lastExitEdge = 'right'; // entered from right (furnace room door)
                     }
                 }
         
@@ -19882,12 +20003,10 @@ function update() {
                         }
 
                     } else if(mp.mpPhase === 'going_to_pm') {
-                        // Walk to PM[mpTargetPM] waiting position
-                        // Desk occupies x=300-400, y=250-295. Route: side-step clear of desk,
-                        // then down past desk, then across to PM.
+                        // Walk to PM[mpTargetPM] — same nav pattern as going_to_player
                         const targetPM = pms[mp.mpTargetPM];
-                        const tX = targetPM ? targetPM.waitX : 350;
-                        const tY = targetPM ? targetPM.waitY - 5 : 430;
+                        const tX = targetPM ? targetPM.x : 350;
+                        const tY = targetPM ? targetPM.y : 430;
                         if(!mp.mpWaypointPhase) mp.mpWaypointPhase = 'side';
                         let tXw = tX, tYw = tY;
                         if(mp.mpWaypointPhase === 'side') {
@@ -19904,11 +20023,16 @@ function update() {
                         const dm = Math.sqrt(dxm*dxm + dym*dym);
                         if(dm > 2) { mp.x += (dxm/dm)*mpSpeed; mp.y += (dym/dm)*mpSpeed; }
                         mp.facing = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 'right' : 'left') : 'forward';
-                        if(dm <= 8 && mp.mpWaypointPhase === 'across') {
-                            mp.mpPhase = 'delivering';
-                            mp.mpDeliverStart = Date.now();
-                            mp.facing = targetPM && targetPM.x > mp.x ? 'right' : 'left';
-                            mp.mpWaypointPhase = null;
+                        if(mp.mpWaypointPhase === 'across') {
+                            // Check distance to PM directly — same pattern as going_to_player
+                            const dpx = targetPM ? targetPM.x - mp.x : tX - mp.x;
+                            const dpy = targetPM ? targetPM.y - mp.y : tY - mp.y;
+                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 40) {
+                                mp.mpPhase = 'delivering';
+                                mp.mpDeliverStart = Date.now();
+                                mp.facing = targetPM && targetPM.x > mp.x ? 'right' : 'left';
+                                mp.mpWaypointPhase = null;
+                            }
                         }
 
                     } else if(mp.mpPhase === 'delivering') {
@@ -20063,16 +20187,19 @@ function update() {
                         level6.room = 'entryway';
                         player.x = 350;
                         player.y = 400;
+                        level6.lastExitEdge = 'right'; // elevator is on right side of entryway
                     } else if (target === 1) {
                         // Smartware Level → pipe room
                         level6.room = 'pipeRoom';
                         player.x = 80;
                         player.y = 380;
+                        level6.lastExitEdge = 'left'; // elevator is on left side of pipe room
                     } else if (target === 0) {
                         // Employee Level → employee lobby
                         level6.room = 'employeeLobby';
                         player.x = 580;
                         player.y = 380;
+                        level6.lastExitEdge = 'right'; // elevator is on right side of employee lobby
                     }
                     level6.elevatorTarget = null;
                     // Fade back in
