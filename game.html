@@ -21321,6 +21321,37 @@ function update() {
                         });
                     }
                 }
+                // Fire ghost gun in underbelly hallway (single-shot, consumed on fire)
+                if(level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && (keys[' '] || keys['action'])) {
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    let vx = 0;
+                    if(player.facing === 'left') vx = -12;
+                    else if(player.facing === 'right') vx = 12;
+                    else vx = player.x < 350 ? 12 : -12;
+                    if(vx !== 0) {
+                        bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                        level6.hasGhostGun = false;
+                        muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 6, facing: vx > 0 ? 'right' : 'left' });
+                        player.shootTimer = 20;
+                    }
+                }
+                // Fire revolver in underbelly hallway
+                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    keys[' '] = false;
+                    keys['action'] = false;
+                    let vx = 0;
+                    if(player.facing === 'left') vx = -12;
+                    else if(player.facing === 'right') vx = 12;
+                    else vx = player.x < 350 ? 12 : -12;
+                    if(vx !== 0) {
+                        bullets.push({ x: player.x, y: player.y - 25, vx: vx, vy: 0, fromCEO: false });
+                        level6.revolverAmmo--;
+                        muzzleFlashes.push({ x: player.x + (vx > 0 ? 12 : -12), y: player.y - 25, life: 6, facing: vx > 0 ? 'right' : 'left' });
+                        player.shootTimer = 20;
+                    }
+                }
+
                 // Update skeleton horde 2 — movement right (from underbelly), contact damage
                 if (level6.skeletonHorde2.triggered) {
                     const sh2 = level6.skeletonHorde2;
@@ -22150,6 +22181,27 @@ if (keys[' '] || keys['action']) {
                         }
                     }
                     if (skHit) { bullets.splice(i, 1); continue; }
+                }
+
+                // Skeleton horde 2 bullet collision (underbellyHallway)
+                if (!bullets[i].fromCEO && level6.room === 'underbellyHallway' && level6.skeletonHorde2 && level6.skeletonHorde2.triggered) {
+                    let skHit2 = false;
+                    for (let sk of level6.skeletonHorde2.skeletons) {
+                        if (!sk.alive || sk.spawnDelay > 0) continue;
+                        if (Math.abs(bullets[i].x - sk.x) < 22 && Math.abs(bullets[i].y - (sk.y - 25)) < 32) {
+                            sk.alive = false;
+                            for (let d = 0; d < 12; d++) {
+                                const ang = Math.random() * Math.PI * 2;
+                                const spd = 1.8 + Math.random() * 3;
+                                sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1.5, life: 25 });
+                            }
+                            bulletImpact(bullets[i].x, bullets[i].y);
+                            score += 100;
+                            skHit2 = true;
+                            break;
+                        }
+                    }
+                    if (skHit2) { bullets.splice(i, 1); continue; }
                 }
 
                 // Pursuing CEO hit — in any room (including bridge hazard deaths)
