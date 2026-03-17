@@ -893,6 +893,7 @@ function initLevel(lv) {
         level6.redPMDialogueLine = 0;
         level6.redPMDialogueChars = 0;
         level6.redPMDialogueShown = false; // reset each visit so dialogue triggers again if not completed flag
+        level6.redPMDialogueReady = false; // must release keys before dialogue accepts input
         level6.redPMAccepted = false; // set true after dialogue completes
         // Employee floor completion flag — both bosses killed + both keys collected
         level6.employeeFloorComplete = false; // set to true once all conditions met
@@ -22160,12 +22161,16 @@ function update() {
                         level6.redPMDialogueLine = 0;
                         level6.redPMDialogueChars = 0;
                         level6.redPMDialogueShown = true;
-                        // Clear any held action keys from elevator transition
-                        keys[' '] = false;
-                        keys['action'] = false;
+                        level6.redPMDialogueReady = false; // must release keys first
+                    }
+                    // Wait for player to release action key before accepting input
+                    if(level6.redPMDialogue && !level6.redPMDialogueReady) {
+                        if(!(keys[' '] || keys['action'])) {
+                            level6.redPMDialogueReady = true;
+                        }
                     }
                     // Advance typewriter animation
-                    if(level6.redPMDialogue) {
+                    if(level6.redPMDialogue && level6.redPMDialogueReady) {
                         const redDlgLines = ["What is this place?", "Can I follow you?"];
                         const currentRedLine = redDlgLines[level6.redPMDialogueLine] || '';
                         if(level6.redPMDialogueChars < currentRedLine.length) {
@@ -24002,6 +24007,127 @@ if (keys[' '] || keys['action']) {
                                 ceo.state = 'hunting';
                                 level6.ceoEnteredMurderMode = true;
                             }
+                            wb.going = false;
+                            { const dx=wb.originX-wb.x, dy=wb.originY-wb.y, dn=Math.sqrt(dx*dx+dy*dy)||1; wb.vx=dx/dn*9; wb.vy=dy/dn*9; }
+                        }
+                    }
+
+                    // Wrench destroys CEO office interactables (brandy, mirror, CCTV, missile)
+                    if(level6.room === 'ceoOffice' && wb.going) {
+                        // Brandy bottle
+                        const bdX = 295, bdY = 200;
+                        if(!level6.brandyDestroyed && Math.abs(wb.x - bdX) < 18 && wb.y > bdY - 5 && wb.y < bdY + 40) {
+                            level6.brandyDestroyed = true;
+                            level6.deskCharSize = 0;
+                            bulletImpact(wb.x, wb.y);
+                            for(let s = 0; s < 10; s++) {
+                                const angle = (s / 10) * Math.PI * 2;
+                                level6.glassShards.push({
+                                    x: bdX, y: bdY + 18,
+                                    vx: Math.cos(angle) * (2 + Math.random() * 4),
+                                    vy: Math.sin(angle) * (2 + Math.random() * 3) - 3,
+                                    size: 2 + Math.random() * 3,
+                                    life: 70,
+                                    color: Math.random() > 0.4 ? 'rgba(200,220,255,0.7)' : 'rgba(160,90,30,0.6)'
+                                });
+                            }
+                        }
+                        // Mirror (two-stage: crack then shatter)
+                        if(!level6.mirrorShattered && wb.x > 50 && wb.x < 140 && wb.y > 90 && wb.y < 200) {
+                            bulletImpact(wb.x, wb.y);
+                            if(!level6.mirrorCracked) {
+                                level6.mirrorCracked = true;
+                                for(let s = 0; s < 5; s++) {
+                                    level6.glassShards.push({
+                                        x: 95, y: 145,
+                                        vx: (Math.random() - 0.5) * 3,
+                                        vy: Math.random() * 2 + 1,
+                                        size: 1 + Math.random() * 2,
+                                        life: 40,
+                                        color: 'rgba(200,200,200,0.5)'
+                                    });
+                                }
+                            } else {
+                                level6.mirrorShattered = true;
+                                for(let s = 0; s < 16; s++) {
+                                    const angle = Math.random() * Math.PI;
+                                    level6.glassShards.push({
+                                        x: 95 + (Math.random() - 0.5) * 40,
+                                        y: 145 + (Math.random() - 0.5) * 50,
+                                        vx: Math.cos(angle) * (1 + Math.random() * 5),
+                                        vy: Math.sin(angle) * 2 + Math.random() * 4,
+                                        size: 2 + Math.random() * 5,
+                                        life: 90,
+                                        color: `rgba(${180 + Math.floor(Math.random()*40)},${180 + Math.floor(Math.random()*40)},${180 + Math.floor(Math.random()*40)},0.6)`
+                                    });
+                                }
+                            }
+                        }
+                        // CCTV TV
+                        if(!level6.cctv1Destroyed && wb.x > 437 && wb.x < 525 && wb.y > 110 && wb.y < 180) {
+                            bulletImpact(wb.x, wb.y);
+                            level6.cctv1Destroyed = true;
+                            for(let s = 0; s < 8; s++) {
+                                level6.glassShards.push({
+                                    x: 481, y: 145,
+                                    vx: (Math.random() - 0.5) * 5,
+                                    vy: Math.random() * 3 + 1,
+                                    size: 1 + Math.random() * 2.5,
+                                    life: 55,
+                                    color: 'rgba(140,140,140,0.5)'
+                                });
+                            }
+                        }
+                        // Decorative missile
+                        const missileHitX = 250, missileHitY = 100;
+                        if(!level6.missileExploded && Math.abs(wb.x - missileHitX) < 20 && wb.y > missileHitY - 5 && wb.y < missileHitY + 65) {
+                            level6.missileExploded = true;
+                            level6.missileExplosionTime = Date.now();
+                            level6.missileFireTimer = 0;
+                            bulletImpact(wb.x, wb.y);
+                            const blastCenterX = missileHitX, blastCenterY = missileHitY + 30;
+                            const blastRadius = 200;
+                            for(let s = 0; s < 40; s++) {
+                                const angle = (s / 40) * Math.PI * 2;
+                                const speed = 3 + Math.random() * 8;
+                                level6.craterParticles.push({
+                                    x: blastCenterX, y: blastCenterY,
+                                    vx: Math.cos(angle) * speed,
+                                    vy: Math.sin(angle) * speed - 2,
+                                    size: 3 + Math.random() * 6,
+                                    life: 80 + Math.random() * 40,
+                                    color: Math.random() > 0.5 ?
+                                        `rgba(255,${Math.floor(100 + Math.random()*100)},0,0.9)` :
+                                        `rgba(${Math.floor(80 + Math.random()*40)},${Math.floor(80 + Math.random()*40)},${Math.floor(80 + Math.random()*40)},0.8)`
+                                });
+                            }
+                            level6.brandyDestroyed = true;
+                            level6.mirrorShattered = true;
+                            level6.mirrorCracked = true;
+                            level6.cctv1Destroyed = true;
+                            level6.cctv2Destroyed = true;
+                            level6.craterActive = true;
+                            const ceoDist = Math.sqrt(Math.pow(ceo.x - blastCenterX, 2) + Math.pow(ceo.y - blastCenterY, 2));
+                            if(ceoDist < blastRadius && ceo.state !== 'dead') {
+                                ceo.state = 'dead';
+                                ceo.deathRoom = level6.room;
+                                ceo.health = 0;
+                                level6.ceoDefeated = true;
+                                level6.safeUnlocked = true;
+                                level6.blackBoxDropped = true;
+                                level6.blackBoxX = ceo.x;
+                                level6.blackBoxY = ceo.y;
+                            }
+                            const playerDist = Math.sqrt(Math.pow(player.x - blastCenterX, 2) + Math.pow(player.y - blastCenterY, 2));
+                            if(playerDist < blastRadius) {
+                                level6.youBlewItCard = 'fading';
+                                level6.youBlewItTimer = 0;
+                                level6.detectiveTransAlpha = 0;
+                                playMusic('blewit');
+                            }
+                            level6.missileFireTimer = 30;
+                            score += 5000;
+                            // Force wrench to return after hitting missile
                             wb.going = false;
                             { const dx=wb.originX-wb.x, dy=wb.originY-wb.y, dn=Math.sqrt(dx*dx+dy*dy)||1; wb.vx=dx/dn*9; wb.vy=dy/dn*9; }
                         }
