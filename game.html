@@ -5791,9 +5791,34 @@ function drawLevel6EmployeePipeRoom() {
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
 
-    // Tool cabinet and water cooler
-    drawToolCabinet(65, 400);
-    drawWaterCooler(110, 400);
+    // 3D Printer (replaces tool cabinet) and water cooler
+    {
+        const prX = 65, prY = 365;
+        drawTableDesk(prX, prY, 60);
+        const savedPrinting = ghostGun.printing, savedProgress = ghostGun.printProgress, savedHeart = ghostGun.printingHeart;
+        if(level6.lobbyPrinting) {
+            ghostGun.printing = true;
+            ghostGun.printProgress = level6.lobbyPrintProgress;
+            ghostGun.printingHeart = level6.lobbyPrintingHeart;
+        }
+        draw3DPrinter(prX, prY);
+        ghostGun.printing = savedPrinting; ghostGun.printProgress = savedProgress; ghostGun.printingHeart = savedHeart;
+        if(level6.lobbyPrinting) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(prX - 21, prY + 6, 42, 6);
+            ctx.fillStyle = '#00cc66';
+            ctx.fillRect(prX - 21, prY + 6, 42 * level6.lobbyPrintProgress, 6);
+        }
+        if(Math.abs(player.x - prX) < 60 && !level6.lobbyPrinterUI && !level6.lobbyPrinting) {
+            ctx.fillStyle = 'rgba(0,0,0,0.82)';
+            ctx.fillRect(prX - 55, prY - 52, 110, 22);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - PRINT', prX, prY - 36);
+        }
+    }
+    drawWaterCooler(130, 400);
 
     // Marker board — Level 6 schematic
     drawMarkerBoard(150, 240, 6);
@@ -11417,29 +11442,53 @@ function drawLevel6CloningRoom() {
             ctx.fillText(tank.label, tx + sW/2, ty + sH + 14);
         }
 
-        // === 2. FEED PIPES — from each slurpee tank down to fertilizer tank ===
+        // === 2. FEED HOSES — flexible grooved infusion hoses from slurpee tanks to fertilizer ===
         const fertY = 115; // top of fertilizer tank
         for(let pi = 0; pi < 4; pi++) {
             const px = slurpTanks[pi].x + sW/2;
+            const hoseTop = sY + sH + 4;
+            // Each hose curves slightly outward then back in (flexible droop)
+            const droopX = px + (pi < 2 ? -8 - pi * 4 : 8 + (pi - 2) * 4);
+            const midY = hoseTop + (fertY - hoseTop) * 0.5;
+
+            // Grooved hose body — thick with corrugation texture
             ctx.strokeStyle = vatColors[pi];
-            ctx.lineWidth = 7;
+            ctx.lineWidth = 9;
             ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(px, sY + sH + 4); // bottom of slurpee tank bracket
-            ctx.lineTo(px, fertY); // top of fertilizer tank
+            ctx.moveTo(px, hoseTop);
+            ctx.bezierCurveTo(px, hoseTop + 8, droopX, midY - 6, droopX, midY);
+            ctx.bezierCurveTo(droopX, midY + 6, px, fertY - 8, px, fertY);
             ctx.stroke();
-            // Pipe highlight
-            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            // Corrugation grooves (darker ridges along the hose)
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.lineWidth = 9;
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath();
+            ctx.moveTo(px, hoseTop);
+            ctx.bezierCurveTo(px, hoseTop + 8, droopX, midY - 6, droopX, midY);
+            ctx.bezierCurveTo(droopX, midY + 6, px, fertY - 8, px, fertY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Specular highlight along hose center
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(px - 2, sY + sH + 4);
-            ctx.lineTo(px - 2, fertY);
+            ctx.moveTo(px - 1, hoseTop);
+            ctx.bezierCurveTo(px - 1, hoseTop + 8, droopX - 1, midY - 6, droopX - 1, midY);
+            ctx.bezierCurveTo(droopX - 1, midY + 6, px - 1, fertY - 8, px - 1, fertY);
             ctx.stroke();
-            // Drip animation — colored liquid dripping down pipe
-            const dripPhase = ((inkT * 0.001 + pi * 0.7) % 1);
-            const dripY = sY + sH + 4 + dripPhase * (fertY - sY - sH - 4);
-            ctx.fillStyle = vatColors[pi]; ctx.globalAlpha = 0.7;
-            ctx.beginPath(); ctx.ellipse(px, dripY, 3, 5, 0, 0, Math.PI*2); ctx.fill();
+            // Hose clamps at connection points
+            ctx.fillStyle = '#888';
+            ctx.fillRect(px - 6, hoseTop - 1, 12, 4);
+            ctx.fillRect(px - 6, fertY - 2, 12, 4);
+            // Drip animation — colored liquid dripping inside hose
+            const dripPhase = ((inkT * 0.0008 + pi * 0.7) % 1);
+            const dripT = dripPhase;
+            const dripBx = px + (droopX - px) * Math.sin(dripT * Math.PI) * 0.6;
+            const dripBy = hoseTop + dripT * (fertY - hoseTop);
+            ctx.fillStyle = vatColors[pi]; ctx.globalAlpha = 0.6;
+            ctx.beginPath(); ctx.ellipse(dripBx, dripBy, 3, 5, 0, 0, Math.PI*2); ctx.fill();
             ctx.globalAlpha = 1;
         }
     }
@@ -11515,42 +11564,66 @@ function drawLevel6CloningRoom() {
         ctx.fillText('NUTRIENT SUBSTRATE', fertX + fertW/2, fertY - 5);
     }
 
-    // === 4. CONVERGENCE PIPES — from fertilizer tank down to contact manifold ===
+    // === 4. CONVERGENCE HOSES — flexible grooved delivery tubes from fertilizer to contact manifold ===
     {
-        const manifoldX = 245, manifoldY = 205;
+        const manifoldX = 245, manifoldY = 208;
         const fertBot = 175; // bottom of fertilizer + shelf
 
-        // 4 pipes from fertilizer bottom converging to single contact point
-        const pipeStartXs = [130, 200, 290, 360];
-        for(let pi = 0; pi < 4; pi++) {
-            ctx.strokeStyle = '#888';
-            ctx.lineWidth = 6;
+        // Helper: draw a grooved industrial hose between two points via bezier
+        function drawGroovedHose(x1, y1, cx1, cy1, cx2, cy2, x2, y2, color, width) {
+            // Hose body
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
             ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(pipeStartXs[pi], fertBot);
-            ctx.quadraticCurveTo(pipeStartXs[pi], manifoldY - 5, manifoldX, manifoldY);
+            ctx.moveTo(x1, y1);
+            ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
             ctx.stroke();
-            // Pipe highlight
-            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            // Corrugation grooves
+            ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+            ctx.lineWidth = width;
+            ctx.setLineDash([2, 3]);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Specular highlight
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(pipeStartXs[pi] - 1, fertBot);
-            ctx.quadraticCurveTo(pipeStartXs[pi] - 1, manifoldY - 6, manifoldX, manifoldY - 1);
+            ctx.moveTo(x1 - 1, y1);
+            ctx.bezierCurveTo(cx1 - 1, cy1, cx2 - 1, cy2, x2 - 1, y2);
             ctx.stroke();
         }
 
-        // === CONTACT MANIFOLD — steel gasket junction where everything connects ===
+        // 4 hoses from fertilizer bottom droop down then curve into manifold
+        const hoseStartXs = [130, 200, 290, 360];
+        for(let pi = 0; pi < 4; pi++) {
+            const sx = hoseStartXs[pi];
+            const droopY = fertBot + 14 + Math.abs(sx - manifoldX) * 0.06;
+            drawGroovedHose(
+                sx, fertBot,
+                sx, droopY + 4,
+                manifoldX + (sx - manifoldX) * 0.3, manifoldY - 8,
+                manifoldX, manifoldY,
+                '#777', 8
+            );
+            // Hose clamps at endpoints
+            ctx.fillStyle = '#999';
+            ctx.fillRect(sx - 5, fertBot - 2, 10, 4);
+        }
+
+        // === CONTACT MANIFOLD — steel gasket junction ===
         ctx.fillStyle = '#999';
         ctx.beginPath(); ctx.arc(manifoldX, manifoldY, 16, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#777';
         ctx.beginPath(); ctx.arc(manifoldX, manifoldY, 12, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#555';
         ctx.beginPath(); ctx.arc(manifoldX, manifoldY, 7, 0, Math.PI*2); ctx.fill();
-        // Pulsing core — active flow indicator
         const flowPulse = 0.3 + Math.sin(t / 400) * 0.2;
         ctx.fillStyle = `rgba(235,225,200,${flowPulse})`;
         ctx.beginPath(); ctx.arc(manifoldX, manifoldY, 5, 0, Math.PI*2); ctx.fill();
-        // Bolts around gasket
         for(let b = 0; b < 6; b++) {
             const angle = (b / 6) * Math.PI * 2;
             const bx = manifoldX + Math.cos(angle) * 11;
@@ -11562,28 +11635,52 @@ function drawLevel6CloningRoom() {
         }
     }
 
-    // === 5. FETAL TANKS — connected at contact manifold, wall-mounted ===
+    // === 5. FETAL TANKS — connected at contact manifold via flexible color-coded infusion hoses ===
     {
-        const manifoldX = 245, manifoldY = 205;
-        const fetalTankXs = [100, 190, 280, 370];
-        const ftW = 48, ftH = 115, ftY = 225;
+        const manifoldX = 245, manifoldY = 208;
+        const fetalTankXs = [90, 185, 280, 375];
+        const ftW = 50, ftH = 110, ftY = 240;
 
-        // Pipes from manifold down to each fetal tank
-        for(let fi = 0; fi < 4; fi++) {
-            const ftCx = fetalTankXs[fi] + ftW/2;
-            ctx.strokeStyle = vatColors[fi];
-            ctx.lineWidth = 6;
+        // Helper: draw a grooved industrial hose between two points via bezier
+        function drawGroovedHose2(x1, y1, cx1, cy1, cx2, cy2, x2, y2, color, width) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
             ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(manifoldX, manifoldY + 16);
-            ctx.quadraticCurveTo(manifoldX, ftY - 10, ftCx, ftY - 5);
+            ctx.moveTo(x1, y1);
+            ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
             ctx.stroke();
-            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+            ctx.lineWidth = width;
+            ctx.setLineDash([2, 3]);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = 'rgba(255,255,255,0.14)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(manifoldX, manifoldY + 16);
-            ctx.quadraticCurveTo(manifoldX, ftY - 11, ftCx, ftY - 6);
+            ctx.moveTo(x1 - 1, y1);
+            ctx.bezierCurveTo(cx1 - 1, cy1, cx2 - 1, cy2, x2 - 1, y2);
             ctx.stroke();
+        }
+
+        // Color-coded infusion hoses from manifold drooping down to each fetal tank
+        for(let fi = 0; fi < 4; fi++) {
+            const ftCx = fetalTankXs[fi] + ftW/2;
+            const droopX = manifoldX + (ftCx - manifoldX) * 0.4;
+            const droopY = manifoldY + 20 + Math.abs(ftCx - manifoldX) * 0.08;
+            drawGroovedHose2(
+                manifoldX, manifoldY + 16,
+                manifoldX, droopY,
+                droopX, ftY - 15,
+                ftCx, ftY - 3,
+                vatColors[fi], 7
+            );
+            // Hose clamp at tank connection
+            ctx.fillStyle = '#999';
+            ctx.fillRect(ftCx - 5, ftY - 5, 10, 4);
         }
 
         for(let vi = 0; vi < 4; vi++) {
@@ -11614,14 +11711,13 @@ function drawLevel6CloningRoom() {
             // Viewing window
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.fillRect(vx + 6, vy + 15, ftW - 12, ftH - 30);
-            // Colored genetic ooze
             const oozeAlpha = 0.5 + Math.sin(t / 1000 + vi * 1.5) * 0.15;
             ctx.fillStyle = vatColors[vi]; ctx.globalAlpha = oozeAlpha;
             ctx.fillRect(vx + 7, vy + 16, ftW - 14, ftH - 32);
             ctx.globalAlpha = 1;
 
             // Floating fetal PM silhouette — bobbing
-            const fetalBobY = vy + 40 + Math.sin(t / 800 + vi * 2) * 10;
+            const fetalBobY = vy + 38 + Math.sin(t / 800 + vi * 2) * 10;
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.beginPath(); ctx.arc(vx + ftW/2, fetalBobY, 6, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(vx + ftW/2, fetalBobY + 10, 8, 0, Math.PI); ctx.fill();
@@ -11637,34 +11733,55 @@ function drawLevel6CloningRoom() {
             }
         }
 
-        // === DRYER VENT TUBES — from fetal tanks to centrifuge ===
-        const centX = 480, centY = 295;
+        // === CORRUGATED DELIVERY TUBES — from fetal tanks to centrifuge (flexible aluminum hoses) ===
+        const centX = 490, centY = 305;
         for(let vi = 0; vi < 4; vi++) {
             const ftCx = fetalTankXs[vi] + ftW/2;
-            const tubeEndX = centX - 30 + vi * 15;
-            ctx.strokeStyle = '#aaa'; ctx.lineWidth = 7;
-            ctx.setLineDash([5, 3]);
+            const ftBot = ftY + ftH;
+            const tubeEndX = centX - 25 + vi * 14;
+            // Each tube droops naturally under gravity before curving to centrifuge
+            const sagY = ftBot + 20 + vi * 6;
+            const sagX = ftCx + (centX - ftCx) * 0.3;
+
+            // Corrugated aluminum tube body
+            ctx.strokeStyle = '#aaa';
+            ctx.lineWidth = 8;
+            ctx.lineCap = 'round';
+            ctx.setLineDash([4, 3]); // corrugated look
             ctx.beginPath();
-            ctx.moveTo(ftCx, ftY + ftH);
-            ctx.quadraticCurveTo(ftCx, centY + 15, tubeEndX, centY);
+            ctx.moveTo(ftCx, ftBot);
+            ctx.bezierCurveTo(ftCx, sagY, sagX, sagY + 5, tubeEndX, centY);
             ctx.stroke();
             ctx.setLineDash([]);
-            ctx.strokeStyle = '#777'; ctx.lineWidth = 2;
+            // Shadow/depth on tube
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(ftCx + 2, ftY + ftH);
-            ctx.quadraticCurveTo(ftCx + 2, centY + 17, tubeEndX + 2, centY + 2);
+            ctx.moveTo(ftCx + 3, ftBot);
+            ctx.bezierCurveTo(ftCx + 3, sagY + 2, sagX + 2, sagY + 7, tubeEndX + 2, centY + 2);
             ctx.stroke();
+            // Highlight on tube
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(ftCx - 2, ftBot);
+            ctx.bezierCurveTo(ftCx - 2, sagY - 1, sagX - 1, sagY + 3, tubeEndX - 1, centY - 1);
+            ctx.stroke();
+            // Hose clamps
+            ctx.fillStyle = '#ccc';
+            ctx.fillRect(ftCx - 5, ftBot - 1, 10, 4);
+            ctx.fillRect(tubeEndX - 5, centY - 2, 10, 4);
         }
 
-        // === 6. EASTER EGG CENTRIFUGE — wall-mounted, processes fetal output into eggs ===
-        const centR = 45;
+        // === 6. EASTER EGG CENTRIFUGE — wall-mounted ===
+        const centR = 48;
         const rotation = (t / 2000) % (Math.PI * 2);
 
         // Wall mounting plate
         ctx.fillStyle = '#3a3a3a';
         ctx.fillRect(centX - centR - 15, centY - centR - 15, (centR + 15) * 2, 8);
 
-        // Housing — steel drum
+        // Housing
         ctx.fillStyle = '#444';
         ctx.beginPath(); ctx.arc(centX, centY, centR + 8, 0, Math.PI*2); ctx.fill();
         ctx.strokeStyle = '#666'; ctx.lineWidth = 3;
@@ -11711,7 +11828,7 @@ function drawLevel6CloningRoom() {
     // === 7. CONVEYOR BELT — from centrifuge down to floor, going right into hatchery tunnel ===
     {
         const beltT = Date.now();
-        const centX = 480, centY = 295, centR = 45;
+        const centX = 490, centY = 305, centR = 48;
 
         // Egg chute from centrifuge down to belt
         const chuteX = centX, chuteTop = centY + centR + 8, chuteBotY = 378;
@@ -12093,116 +12210,93 @@ function drawLevel6CloningRoom() {
         }
     }
 
-    // === 3D PRINTER — left-center of floor (clear of wall-mounted pipeline above) ===
-    {
-        const prX = 540, prY = 365;
-        drawTableDesk(prX, prY, 60);
-        const savedPrinting = ghostGun.printing, savedProgress = ghostGun.printProgress, savedHeart = ghostGun.printingHeart;
-        if(level6.lobbyPrinting) {
-            ghostGun.printing = true;
-            ghostGun.printProgress = level6.lobbyPrintProgress;
-            ghostGun.printingHeart = level6.lobbyPrintingHeart;
-        }
-        draw3DPrinter(prX, prY);
-        ghostGun.printing = savedPrinting; ghostGun.printProgress = savedProgress; ghostGun.printingHeart = savedHeart;
-        if(level6.lobbyPrinting) {
-            ctx.fillStyle = '#333';
-            ctx.fillRect(prX - 21, prY + 6, 42, 6);
-            ctx.fillStyle = '#00cc66';
-            ctx.fillRect(prX - 21, prY + 6, 42 * level6.lobbyPrintProgress, 6);
-        }
-        if(Math.abs(player.x - prX) < 60 && !level6.lobbyPrinterUI && !level6.lobbyPrinting) {
-            ctx.fillStyle = 'rgba(0,0,0,0.82)';
-            ctx.fillRect(prX - 55, prY - 52, 110, 22);
-            ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('[ ACTION ] - PRINT', prX, prY - 36);
-        }
-    }
+    // (3D Printer moved to Employee Pipe Room)
 
     // (Slurpee tanks, fertilizer, fetal tanks, centrifuge, and conveyor are all drawn above as wall-mounted pipeline)
 
-    // === FRESHLY HATCHED RED PM CLONE — standing next to cloning boss ===
+    // === FRESHLY HATCHED RED PM CLONE — canonical PM sprite style, dazed from hatching ===
     {
-        const cloneX = 430, cloneY = 375; // Next to cloning boss (boss at ~350)
+        const x = 430, y = 375;
+        const s = 2;
         const clt = Date.now();
-        const cloneWobble = Math.sin(clt / 600) * 2; // dazed wobble
+        const wobble = Math.sin(clt / 600) * 1.5;
 
         // Wet sheen aura (just emerged from vat)
-        ctx.fillStyle = 'rgba(255,50,50,0.08)';
-        ctx.beginPath(); ctx.arc(cloneX, cloneY - 20, 28, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,50,50,0.1)';
+        ctx.beginPath(); ctx.arc(x, y - 15, 30, 0, Math.PI * 2); ctx.fill();
 
-        // Simple red PM clone — hooded jumpsuit, dazed from hatching
-        const cx = cloneX, cy = cloneY;
-        const s2 = 2;
+        // Dripping vat ooze (falls from body)
+        for(let d = 0; d < 3; d++) {
+            const oozePct = ((clt * 0.0003 + d * 0.33) % 1);
+            ctx.fillStyle = `rgba(255,60,60,${0.5 - oozePct * 0.45})`;
+            const dx = x - 6 + d * 6;
+            ctx.beginPath();
+            ctx.ellipse(dx, y + 2 + oozePct * 30, 2, 6 * oozePct, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
-        // Red hooded jumpsuit hood (same style as regular PM) — slightly askew from hatching
         ctx.save();
-        ctx.translate(cx + cloneWobble * 0.5, 0);
+        ctx.translate(wobble * 0.5, 0);
+
+        // Hood (wraps around head, connects to torso) — exact PM style
         ctx.fillStyle = '#cc2222';
         ctx.beginPath();
-        ctx.moveTo(cx - 6*s2, cy - 5*s2);
-        ctx.lineTo(cx - 6*s2, cy - 12*s2);
-        ctx.lineTo(cx - 5*s2, cy - 14*s2);
-        ctx.quadraticCurveTo(cx, cy - 17*s2, cx + 5*s2, cy - 14*s2);
-        ctx.lineTo(cx + 6*s2, cy - 12*s2);
-        ctx.lineTo(cx + 6*s2, cy - 5*s2);
+        ctx.moveTo(x - 6*s, y - 5*s);
+        ctx.lineTo(x - 6*s, y - 12*s);
+        ctx.lineTo(x - 5*s, y - 14*s);
+        ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
+        ctx.lineTo(x + 6*s, y - 12*s);
+        ctx.lineTo(x + 6*s, y - 5*s);
         ctx.closePath();
         ctx.fill();
         // Hood seam
         ctx.strokeStyle = '#aa1a1a'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(cx, cy - 16*s2); ctx.lineTo(cx, cy - 5*s2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y - 16*s); ctx.lineTo(x, y - 5*s); ctx.stroke();
+
+        // Face opening (skin-colored inset) — exact PM style
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+
+        // Dazed eyes — spiral/dizzy instead of normal dots
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+        // Left eye spiral
+        ctx.beginPath(); ctx.arc(x - 3*s, y - 10*s, 3, 0, Math.PI * 1.5); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x - 3*s, y - 10*s, 1.5, Math.PI, Math.PI * 2.5); ctx.stroke();
+        // Right eye spiral
+        ctx.beginPath(); ctx.arc(x + 3*s, y - 10*s, 3, 0, Math.PI * 1.5); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x + 3*s, y - 10*s, 1.5, Math.PI, Math.PI * 2.5); ctx.stroke();
+        // Mouth — slack O shape (dazed)
+        ctx.fillStyle = '#8B4513';
+        ctx.beginPath(); ctx.ellipse(x, y - 7*s, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Torso — red jumpsuit with wet sheen
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+        // Wet sheen highlight
+        ctx.fillStyle = 'rgba(255,150,150,0.15)';
+        ctx.fillRect(x - 4*s, y - 4*s, 4*s, 8*s);
+
+        // Arms — static pose like normal PM
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+        ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
+
+        // Legs — jumpsuit color
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+        ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+
+        // White shoes — matching PM style
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+        ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+
         ctx.restore();
 
-        // Face opening (skin-colored inset inside hood)
-        ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(cx - 4*s2, cy - 13*s2, 8*s2, 8*s2);
-
-        // Eyes — dazed (spiral/dizzy)
-        ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
-        for(const [ex2, ey2] of [[-3*s2, cy - 11*s2],[2*s2, cy - 11*s2]]) {
-            ctx.beginPath(); ctx.arc(cx + ex2, ey2, 3, 0, Math.PI * 2); ctx.stroke();
-            ctx.beginPath(); ctx.arc(cx + ex2, ey2, 1, 0, Math.PI * 2); ctx.stroke();
-        }
-        // Mouth — slack, dazed
-        ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(cx, cy - 7*s2, 3, 0.4, Math.PI - 0.4); ctx.stroke();
-
-        // Red jumpsuit torso — slightly wet/glistening
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 11*s2);
-        ctx.fillStyle = 'rgba(255,120,120,0.18)'; // wet sheen highlight
-        ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 5);
-
-        // Arms slightly raised (just climbed out of vat)
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - 8*s2, cy - 3*s2 + cloneWobble, 2*s2, 7*s2);
-        ctx.fillRect(cx + 6*s2, cy - 3*s2 - cloneWobble, 2*s2, 7*s2);
-        ctx.fillStyle = '#f5d5a8'; // hands
-        ctx.fillRect(cx - 8*s2, cy + 3*s2 + cloneWobble, 2*s2, 2*s2);
-        ctx.fillRect(cx + 6*s2, cy + 3*s2 - cloneWobble, 2*s2, 2*s2);
-
-        // Legs — red jumpsuit color
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - 5*s2, cy + 6*s2, 4*s2, 7*s2);
-        ctx.fillRect(cx + s2, cy + 6*s2, 4*s2, 7*s2);
-        // White boots — matching standard PM
-        ctx.fillStyle = '#f0f0f0';
-        ctx.fillRect(cx - 5*s2, cy + 13*s2, 4*s2, 3*s2);
-        ctx.fillRect(cx + s2, cy + 13*s2, 4*s2, 3*s2);
-
-        // "CLONE" badge label
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(cx - 22, cy - 72, 44, 14);
+        // "CLONE #1" badge label above
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x - 22, y - 72, 44, 14);
         ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('CLONE #1', cx, cy - 62);
-
-        // Dripping vat ooze
-        const oozePct = ((clt * 0.0004) % 1);
-        ctx.fillStyle = `rgba(255,80,80,${0.5 - oozePct * 0.4})`;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy - 8 + oozePct * 40, 4, 12 * oozePct, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillText('CLONE #1', x, y - 62);
     }
 
     // Direction prompts
@@ -21866,62 +21960,10 @@ function update() {
             else if(level6.room === 'cloningRoom') {
                 player.y = 380;
 
-                // === Cloning room 3D printer (moved from employee lobby) ===
-                const cloningPrinterX = 540;
-                if(level6.lobbyPrinterUI) {
-                    if(!level6.lobbyPrinterConfirming) {
-                        if(keys['ArrowLeft'] || keys['left']) {
-                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
-                            keys['ArrowLeft'] = false; keys['left'] = false;
-                        }
-                        if(keys['ArrowRight'] || keys['right']) {
-                            level6.lobbyPrinterChoice = 1;
-                            keys['ArrowRight'] = false; keys['right'] = false;
-                        }
-                        if(keys['Escape']) { level6.lobbyPrinterUI = false; keys['Escape'] = false; }
-                        if(keys[' '] || keys['action']) {
-                            level6.lobbyPrinterConfirming = true;
-                            keys[' '] = false; keys['action'] = false;
-                        }
-                    } else {
-                        if(keys['Escape']) { level6.lobbyPrinterConfirming = false; keys['Escape'] = false; }
-                        if(keys[' '] || keys['action']) {
-                            level6.lobbyPrinterUI = false;
-                            level6.lobbyPrinterConfirming = false;
-                            level6.lobbyPrinting = true;
-                            level6.lobbyPrintProgress = 0;
-                            level6.lobbyPrintingHeart = (level6.lobbyPrinterChoice === 1);
-                            keys[' '] = false; keys['action'] = false;
-                        }
-                    }
-                } else {
-                    if(level6.lobbyPrinting) {
-                        level6.lobbyPrintProgress += 0.02;
-                        if(level6.lobbyPrintProgress >= 1) {
-                            level6.lobbyPrinting = false;
-                            level6.lobbyPrintProgress = 0;
-                            if(level6.lobbyPrintingHeart) {
-                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
-                                updateLives();
-                                level6.lobbyPrintingHeart = false;
-                            } else {
-                                level6.hasGhostGun = true;
-                            }
-                            keys[' '] = false; keys['action'] = false;
-                        }
-                    }
-                    // Printer interaction
-                    if(Math.abs(player.x - cloningPrinterX) < 60 && !level6.lobbyPrinting && (keys[' '] || keys['action'])) {
-                        if(player.x <= 620) {
-                            level6.lobbyPrinterUI = true;
-                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
-                            keys[' '] = false; keys['action'] = false;
-                        }
-                    }
-                }
+                // (3D Printer moved to Employee Pipe Room)
 
                 // Go right to employee lobby
-                if(!level6.lobbyPrinterUI && player.x > 660) {
+                if(player.x > 660) {
                     level6.room = 'employeeLobby';
                     player.x = 80;
                     player.y = 380;
@@ -22202,8 +22244,60 @@ function update() {
             else if(level6.room === 'employeePipeRoom') {
                 player.y = 380;
 
+                // === 3D Printer interaction (moved here from cloning room) ===
+                const pipeRoomPrinterX = 65;
+                if(level6.lobbyPrinterUI) {
+                    if(!level6.lobbyPrinterConfirming) {
+                        if(keys['ArrowLeft'] || keys['left']) {
+                            level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
+                            keys['ArrowLeft'] = false; keys['left'] = false;
+                        }
+                        if(keys['ArrowRight'] || keys['right']) {
+                            level6.lobbyPrinterChoice = 1;
+                            keys['ArrowRight'] = false; keys['right'] = false;
+                        }
+                        if(keys['Escape']) { level6.lobbyPrinterUI = false; keys['Escape'] = false; }
+                        if(keys[' '] || keys['action']) {
+                            level6.lobbyPrinterConfirming = true;
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    } else {
+                        if(keys['Escape']) { level6.lobbyPrinterConfirming = false; keys['Escape'] = false; }
+                        if(keys[' '] || keys['action']) {
+                            level6.lobbyPrinterUI = false;
+                            level6.lobbyPrinterConfirming = false;
+                            level6.lobbyPrinting = true;
+                            level6.lobbyPrintProgress = 0;
+                            level6.lobbyPrintingHeart = (level6.lobbyPrinterChoice === 1);
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                } else {
+                    if(level6.lobbyPrinting) {
+                        level6.lobbyPrintProgress += 0.02;
+                        if(level6.lobbyPrintProgress >= 1) {
+                            level6.lobbyPrinting = false;
+                            level6.lobbyPrintProgress = 0;
+                            if(level6.lobbyPrintingHeart) {
+                                level6.moneyLives = Math.min(3, level6.moneyLives + 1);
+                                updateLives();
+                                level6.lobbyPrintingHeart = false;
+                            } else {
+                                level6.hasGhostGun = true;
+                            }
+                            keys[' '] = false; keys['action'] = false;
+                        }
+                    }
+                    // Printer interaction trigger
+                    if(Math.abs(player.x - pipeRoomPrinterX) < 60 && !level6.lobbyPrinting && (keys[' '] || keys['action'])) {
+                        level6.lobbyPrinterUI = true;
+                        level6.lobbyPrinterChoice = level6.hasGhostGun ? 1 : 0;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+
                 // Right — back to Employee hallway (auto)
-                if(player.x > 660) {
+                if(!level6.lobbyPrinterUI && player.x > 660) {
                     level6.room = 'employeeHallway';
                     player.x = 80;
                     player.y = 380;
