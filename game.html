@@ -5572,6 +5572,7 @@ function drawMarkerBoard(x, y, boardLv) {
 
 // SECTION 9: Level 5 Scene Drawing Functions (Part 1)
 function drawLevel5PipeRoom() {
+    const pipeRoomT = Date.now();
     // Industrial painted concrete slab brick wall — medium warm grey
     ctx.fillStyle = '#9a9590';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
@@ -6021,6 +6022,25 @@ function drawLevel6EmployeePipeRoom() {
     drawIndustrialFan(420, 32, 70);
     drawCCTVCamera(640, 185, false);
 
+    // Atmospheric: condensation drips from ceiling pipes
+    for(let d = 0; d < 5; d++) {
+        const dripSeed = d * 173.7;
+        const dripX = 100 + (dripSeed % 500);
+        const dripPhase = ((pipeRoomT * 0.0003 + dripSeed * 0.01) % 1);
+        if(dripPhase < 0.3) {
+            const dy = 40 + dripPhase / 0.3 * 360;
+            ctx.fillStyle = `rgba(140,160,180,${0.15 * (1 - dripPhase / 0.3)})`;
+            ctx.beginPath(); ctx.ellipse(dripX, dy, 1.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // Subtle industrial haze at floor level
+    const hazeGrad = ctx.createLinearGradient(0, 350, 0, 420);
+    hazeGrad.addColorStop(0, 'rgba(180,170,160,0)');
+    hazeGrad.addColorStop(1, 'rgba(180,170,160,0.06)');
+    ctx.fillStyle = hazeGrad;
+    ctx.fillRect(-GX, 350, CANVAS_W, 70);
+
     // Right edge door prompt
     if(player.x >= 600) {
         ctx.font = 'bold 16px Arial';
@@ -6033,7 +6053,12 @@ function drawLevel6EmployeePipeRoom() {
 }
 
 function drawLevel5Hallway() {
-    ctx.fillStyle = '#d4c8b0';
+    // Warm beige hallway with subtle warm lighting
+    const hallGrad = ctx.createLinearGradient(0, -GY, 0, 500);
+    hallGrad.addColorStop(0, '#d8ccb4');
+    hallGrad.addColorStop(0.5, '#d4c8b0');
+    hallGrad.addColorStop(1, '#cec0a8');
+    ctx.fillStyle = hallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#a89b85';
@@ -6283,18 +6308,35 @@ function drawLevel5Hallway() {
 
 // SECTION 10: Level 5 Scene Drawing Functions (Part 2)
 function drawLevel5FurnaceRoom() {
-    ctx.fillStyle = '#2b2520';
+    const furnaceT = Date.now();
+    // Dark room with warm ambient from furnace
+    const roomGrad = ctx.createRadialGradient(350, 300, 50, 350, 300, 400);
+    roomGrad.addColorStop(0, '#3a2d25');
+    roomGrad.addColorStop(1, '#2b2520');
+    ctx.fillStyle = roomGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
+
     ctx.fillStyle = '#1a1815';
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
-    
+
     for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#0a0a08';
             ctx.lineWidth = 1;
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
+    }
+
+    // Ember particles floating up from furnace area
+    for(let e = 0; e < 8; e++) {
+        const seed = e * 89.3;
+        const emberPhase = ((furnaceT * 0.0005 + seed * 0.1) % 1);
+        const ex = 300 + Math.sin(seed + furnaceT * 0.001) * 80 + (seed % 100);
+        const ey = 380 - emberPhase * 350;
+        const eAlpha = 0.4 * (1 - emberPhase) * (emberPhase > 0.1 ? 1 : emberPhase / 0.1);
+        const eSize = 1 + Math.sin(seed) * 0.5;
+        ctx.fillStyle = `rgba(255,${120 + Math.floor(seed % 80)},30,${eAlpha})`;
+        ctx.beginPath(); ctx.arc(ex, ey, eSize, 0, Math.PI * 2); ctx.fill();
     }
     
     const furnace = level5.furnaceRoom.furnace;
@@ -6758,15 +6800,27 @@ function drawRecliningBoss(fx, fy) {
 function drawOfficeRoom(officeName) {
     const office = level5.hallway.offices.find(o => o.name === officeName);
     const color = office.color;
-    
-    ctx.fillStyle = '#d4c8b0';
+
+    // Warm beige walls with subtle depth
+    const offWallGrad = ctx.createLinearGradient(0, -GY, 0, 300);
+    offWallGrad.addColorStop(0, '#d8ccb4');
+    offWallGrad.addColorStop(0.5, '#d4c8b0');
+    offWallGrad.addColorStop(1, '#cec0a8');
+    ctx.fillStyle = offWallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, 300 + GY);
-    
+
     // Color-coded carpet — prominent tint matching office manager color
     ctx.fillStyle = color.hex;
     ctx.globalAlpha = 0.55;
     ctx.fillRect(-GX, 300, CANVAS_W, CANVAS_H);
     ctx.globalAlpha = 1;
+
+    // Desk lamp warm light pool
+    const deskLampGlow = ctx.createRadialGradient(450, 280, 10, 450, 300, 120);
+    deskLampGlow.addColorStop(0, 'rgba(255,240,200,0.08)');
+    deskLampGlow.addColorStop(1, 'rgba(255,240,200,0)');
+    ctx.fillStyle = deskLampGlow;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = color.hex;
@@ -8251,8 +8305,16 @@ function drawLevel6PipeRoom() {
 }
 
 function drawLevel6MegacomputerRoom() {
-    // Dark room background
+    const megaT = Date.now();
+    // Dark room with subtle cool blue ambient from screens
     ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    // Blue screen glow bleeding onto walls
+    const screenGlow = ctx.createRadialGradient(350, 200, 30, 350, 250, 350);
+    screenGlow.addColorStop(0, 'rgba(30,60,120,0.08)');
+    screenGlow.addColorStop(0.6, 'rgba(20,40,80,0.04)');
+    screenGlow.addColorStop(1, 'rgba(10,20,40,0)');
+    ctx.fillStyle = screenGlow;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // ---- HYDRONIC PUMPING SYSTEM — "Heart of all industry" ----
@@ -11232,11 +11294,15 @@ function drawNuclearAssemblyBridge() {
 }
 
 function drawLevel6EmployeeLobby() {
-    // Dark industrial lobby — same aesthetic as Level 6 pipe room
-    ctx.fillStyle = '#3a3a3a';
+    // Dark industrial lobby — sterile corporate atmosphere
+    const lobbyGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    lobbyGrad.addColorStop(0, '#404040');
+    lobbyGrad.addColorStop(0.5, '#3a3a3a');
+    lobbyGrad.addColorStop(1, '#353535');
+    ctx.fillStyle = lobbyGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Floor tiles
+    // Polished floor tiles with subtle reflections
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     for(let i = -4; i < 24; i++) {
@@ -11246,6 +11312,9 @@ function drawLevel6EmployeeLobby() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
+    // Floor sheen — polished corporate floor
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(-GX, 400, CANVAS_W, 15);
 
     // Four bold colored stripe bands — above PipeTech sign, nursery/delivery room motif
     const lobbyLineY = 8;
@@ -13353,8 +13422,12 @@ function drawLevel6Underbelly() {
     const baseDim = flicker > 0 ? 0.3 + Math.random() * 0.4 : 1;
     const dimFactor = baseDim;
 
-    // Dark grimy concrete walls
-    ctx.fillStyle = `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`;
+    // Dark grimy concrete walls with oppressive gradient
+    const underGrad = ctx.createLinearGradient(0, -GY, 0, 500);
+    underGrad.addColorStop(0, `rgb(${Math.floor(30 * dimFactor)},${Math.floor(25 * dimFactor)},${Math.floor(22 * dimFactor)})`);
+    underGrad.addColorStop(0.5, `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`);
+    underGrad.addColorStop(1, `rgb(${Math.floor(25 * dimFactor)},${Math.floor(20 * dimFactor)},${Math.floor(18 * dimFactor)})`);
+    ctx.fillStyle = underGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // Water stain streaks on walls
@@ -14285,10 +14358,20 @@ function drawLevel6Underbelly() {
 }
 
 function drawLevel6Entryway() {
-    ctx.fillStyle = '#8b0000';
+    // Deep red corporate power room with warm gradient
+    const entryGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    entryGrad.addColorStop(0, '#7a0000');
+    entryGrad.addColorStop(0.3, '#8b0000');
+    entryGrad.addColorStop(0.7, '#8b0000');
+    entryGrad.addColorStop(1, '#750000');
+    ctx.fillStyle = entryGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    ctx.fillStyle = '#660000';
+    // Rich dark floor
+    const floorGrad = ctx.createLinearGradient(0, 400, 0, 500);
+    floorGrad.addColorStop(0, '#6a0000');
+    floorGrad.addColorStop(1, '#580000');
+    ctx.fillStyle = floorGrad;
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
 
     for(let i = -4; i < 24; i++) {
@@ -14391,19 +14474,39 @@ function drawLevel6Entryway() {
 }
 
 function drawLevel6CEOOffice() {
-    // Black void background
+    const ceoT = Date.now();
+    // Black void background with subtle warm ambient
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
-    // Room floor - circular rug
+    // Warm ambient light pooling from center
+    const ambientGlow = ctx.createRadialGradient(350, 200, 20, 350, 250, 380);
+    ambientGlow.addColorStop(0, 'rgba(60,40,20,0.15)');
+    ambientGlow.addColorStop(0.5, 'rgba(40,25,10,0.08)');
+    ambientGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ambientGlow;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Room floor - circular rug with richer texture
     const rugCenterX = 350;
     const rugCenterY = 350;
-    
+
+    // Rug shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(rugCenterX, rugCenterY + 5, 305, 145, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Outer rug border
     ctx.fillStyle = '#2b1810';
     ctx.beginPath();
     ctx.ellipse(rugCenterX, rugCenterY, 300, 140, 0, 0, Math.PI * 2);
     ctx.fill();
-    
+    // Rug fringe detail
+    ctx.strokeStyle = '#3a2010';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(rugCenterX, rugCenterY, 298, 138, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
     ctx.fillStyle = '#3a2416';
     ctx.beginPath();
     ctx.ellipse(rugCenterX, rugCenterY, 280, 120, 0, 0, Math.PI * 2);
