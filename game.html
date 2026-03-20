@@ -840,6 +840,7 @@ function initLevel(lv) {
         level6.supercomputerUnlocked = false;
         level6.keypadResult = null;
         level6.keypadResultTime = 0;
+        level6.keypadShowHint = false;
         level6.elevatorUI = false;
         level6.elevatorChoice = 0;
         level6.elevatorDoorOpen = 0;
@@ -16168,10 +16169,40 @@ function drawSafeUI() {
         ctx.fillText(COLORS[i].name, btnX + 40, btnY + 32);
     }
 
-    ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 16px Arial';
+    // ESC and ? buttons below color grid
+    const safeBtnY = 420;
+    const safeBtnW = 80;
+    // ESC button
+    const safeEscSel = level6.selectedButton === 4;
+    ctx.fillStyle = safeEscSel ? '#ff4444' : '#2a2a2a';
+    ctx.fillRect(250, safeBtnY, safeBtnW, 32);
+    ctx.strokeStyle = safeEscSel ? '#f5f2ec' : '#444';
+    ctx.lineWidth = safeEscSel ? 4 : 1;
+    ctx.strokeRect(250, safeBtnY, safeBtnW, 32);
+    ctx.fillStyle = safeEscSel ? '#fff' : '#ff6666';
+    ctx.font = 'bold 15px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('USE ◄►▲▼ TO SELECT, ACTION TO ENTER', 350, 440);
+    ctx.fillText('ESC', 290, safeBtnY + 22);
+
+    // ? hint button
+    const safeHintSel = level6.selectedButton === 5;
+    ctx.fillStyle = safeHintSel ? '#ffaa00' : '#2a2a2a';
+    ctx.fillRect(350, safeBtnY, safeBtnW, 32);
+    ctx.strokeStyle = safeHintSel ? '#f5f2ec' : '#444';
+    ctx.lineWidth = safeHintSel ? 4 : 1;
+    ctx.strokeRect(350, safeBtnY, safeBtnW, 32);
+    ctx.fillStyle = safeHintSel ? '#000' : '#ffaa00';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('?', 390, safeBtnY + 23);
+
+    // Hint text
+    if(level6.safeShowHint) {
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('HINT: Check the pipe room colors', 350, safeBtnY + 50);
+    }
 
     if(level6.codeInput.length === 4) {
         const correct = level6.codeInput.every((color, i) => color === SAFE_CODE[i]);
@@ -16310,11 +16341,57 @@ function drawKeypadUI() {
         ctx.fillText((i + 1).toString(), bx + btnW / 2, by + 34);
     }
 
-    // Instructions
-    ctx.fillStyle = '#888';
+    // ESC and ? buttons below the grid
+    const escBtnY = gridY + 2 * (btnH + gap) + 10;
+    // ESC button
+    const escSelected = level6.keypadSelected === 6;
+    ctx.fillStyle = escSelected ? '#ff4444' : '#2a2a2a';
+    ctx.fillRect(gridX, escBtnY, btnW, 36);
+    ctx.strokeStyle = escSelected ? '#fff' : '#444';
+    ctx.lineWidth = escSelected ? 3 : 1;
+    ctx.strokeRect(gridX, escBtnY, btnW, 36);
+    ctx.fillStyle = escSelected ? '#fff' : '#ff6666';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ESC', gridX + btnW / 2, escBtnY + 24);
+
+    // ? hint button
+    const hintSelected = level6.keypadSelected === 7;
+    ctx.fillStyle = hintSelected ? '#ffaa00' : '#2a2a2a';
+    ctx.fillRect(gridX + btnW + gap, escBtnY, btnW, 36);
+    ctx.strokeStyle = hintSelected ? '#fff' : '#444';
+    ctx.lineWidth = hintSelected ? 3 : 1;
+    ctx.strokeRect(gridX + btnW + gap, escBtnY, btnW, 36);
+    ctx.fillStyle = hintSelected ? '#000' : '#ffaa00';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('?', gridX + btnW + gap + btnW / 2, escBtnY + 25);
+
+    // CLEAR button (right side)
+    const clrSelected = level6.keypadSelected === 8;
+    ctx.fillStyle = clrSelected ? '#00ccff' : '#2a2a2a';
+    ctx.fillRect(gridX + 2 * (btnW + gap), escBtnY, btnW, 36);
+    ctx.strokeStyle = clrSelected ? '#fff' : '#444';
+    ctx.lineWidth = clrSelected ? 3 : 1;
+    ctx.strokeRect(gridX + 2 * (btnW + gap), escBtnY, btnW, 36);
+    ctx.fillStyle = clrSelected ? '#000' : '#00ccff';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('◄►▲▼ SELECT   ACTION ENTER   DOWN CLEAR', 350, gridY + 2 * (btnH + gap) + 30);
+    ctx.fillText('CLR', gridX + 2 * (btnW + gap) + btnW / 2, escBtnY + 24);
+
+    // Hint text (shown when ? is selected or was pressed)
+    if(level6.keypadShowHint) {
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('HINT: There are 4 pipes', 350, escBtnY + 56);
+    }
+
+    // Instructions
+    ctx.fillStyle = '#888';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('◄►▲▼ SELECT   ACTION ENTER', 350, escBtnY + (level6.keypadShowHint ? 72 : 56));
 }
 
 function drawComputerUI() {
@@ -21459,33 +21536,68 @@ function update() {
 
             // Keypad UI input handling
             if(level6.keypadUI) {
+                // Escape key exits keypad
+                if(keys['Escape']) {
+                    keys['Escape'] = false;
+                    level6.keypadUI = false;
+                    level6.keypadInput = [];
+                    level6.keypadResult = null;
+                    level6.keypadShowHint = false;
+                    return;
+                }
                 if(keys['ArrowLeft'] || keys['left']) {
-                    const col = level6.keypadSelected % 3;
-                    if(col > 0) level6.keypadSelected--;
+                    // Bottom row: 6=ESC, 7=?, 8=CLR
+                    if(level6.keypadSelected >= 6) {
+                        if(level6.keypadSelected > 6) level6.keypadSelected--;
+                    } else {
+                        const col = level6.keypadSelected % 3;
+                        if(col > 0) level6.keypadSelected--;
+                    }
                     keys['ArrowLeft'] = false; keys['left'] = false;
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    const col = level6.keypadSelected % 3;
-                    if(col < 2) level6.keypadSelected++;
+                    if(level6.keypadSelected >= 6) {
+                        if(level6.keypadSelected < 8) level6.keypadSelected++;
+                    } else {
+                        const col = level6.keypadSelected % 3;
+                        if(col < 2) level6.keypadSelected++;
+                    }
                     keys['ArrowRight'] = false; keys['right'] = false;
                 }
                 if(keys['ArrowUp'] || keys['up']) {
-                    if(level6.keypadSelected >= 3) level6.keypadSelected -= 3;
+                    if(level6.keypadSelected >= 6) {
+                        // Up from bottom row → go to number row 2 (same column)
+                        level6.keypadSelected = 3 + (level6.keypadSelected - 6);
+                    } else if(level6.keypadSelected >= 3) {
+                        level6.keypadSelected -= 3;
+                    }
                     keys['ArrowUp'] = false; keys['up'] = false;
                 }
                 if(keys['ArrowDown'] || keys['down']) {
                     if(level6.keypadSelected < 3) {
-                        if(level6.keypadSelected + 3 < 6) level6.keypadSelected += 3;
-                    } else {
-                        // Down from bottom row = clear last digit
-                        if(level6.keypadInput.length > 0) level6.keypadInput.pop();
-                        level6.keypadResult = null;
+                        level6.keypadSelected += 3;
+                    } else if(level6.keypadSelected < 6) {
+                        // Down from number row 2 → go to bottom row (same column)
+                        level6.keypadSelected = 6 + (level6.keypadSelected - 3);
                     }
                     keys['ArrowDown'] = false; keys['down'] = false;
                 }
                 if(keys[' '] || keys['action']) {
                     keys[' '] = false; keys['action'] = false;
-                    if(level6.keypadInput.length < 4) {
+                    if(level6.keypadSelected === 6) {
+                        // ESC button — close keypad
+                        level6.keypadUI = false;
+                        level6.keypadInput = [];
+                        level6.keypadResult = null;
+                        level6.keypadShowHint = false;
+                    } else if(level6.keypadSelected === 7) {
+                        // ? button — toggle hint
+                        level6.keypadShowHint = !level6.keypadShowHint;
+                    } else if(level6.keypadSelected === 8) {
+                        // CLR button — clear input
+                        if(level6.keypadInput.length > 0) level6.keypadInput.pop();
+                        level6.keypadResult = null;
+                    } else if(level6.keypadInput.length < 4) {
                         level6.keypadInput.push(level6.keypadSelected + 1);
                         if(level6.keypadInput.length === 4) {
                             const code = level6.keypadInput.join('');
@@ -21495,6 +21607,7 @@ function update() {
                                 setTimeout(() => {
                                     level6.supercomputerUnlocked = true;
                                     level6.keypadUI = false;
+                                    level6.keypadShowHint = false;
                                 }, 800);
                             } else {
                                 level6.keypadResult = false;
@@ -22957,36 +23070,53 @@ function update() {
                     }
 
                     // Code entry mode
+                    // Escape key exits safe
+                    if(keys['Escape']) {
+                        keys['Escape'] = false;
+                        level6.safeUI = false;
+                        level6.codeInput = [];
+                        level6.selectedButton = 0;
+                        level6.safeShowHint = false;
+                        return;
+                    }
                     if(keys['ArrowLeft'] || keys['left']) {
-                        const row = Math.floor(level6.selectedButton / 2);
-                        const col = level6.selectedButton % 2;
-                        if(col > 0) {
-                            level6.selectedButton--;
+                        // Bottom row: 4=ESC, 5=?
+                        if(level6.selectedButton >= 4) {
+                            if(level6.selectedButton > 4) level6.selectedButton--;
+                        } else {
+                            const col = level6.selectedButton % 2;
+                            if(col > 0) level6.selectedButton--;
                         }
                         keys['ArrowLeft'] = false;
                         keys['left'] = false;
                     }
                     if(keys['ArrowRight'] || keys['right']) {
-                        const row = Math.floor(level6.selectedButton / 2);
-                        const col = level6.selectedButton % 2;
-                        if(col < 1) {
-                            level6.selectedButton++;
+                        if(level6.selectedButton >= 4) {
+                            if(level6.selectedButton < 5) level6.selectedButton++;
+                        } else {
+                            const col = level6.selectedButton % 2;
+                            if(col < 1) level6.selectedButton++;
                         }
                         keys['ArrowRight'] = false;
                         keys['right'] = false;
                     }
                     if(keys['ArrowUp'] || keys['up']) {
-                        const row = Math.floor(level6.selectedButton / 2);
-                        if(row > 0) {
-                            level6.selectedButton -= 2;
+                        if(level6.selectedButton >= 4) {
+                            // Up from bottom row → color row 2 (same column)
+                            level6.selectedButton = 2 + (level6.selectedButton - 4);
+                        } else {
+                            const row = Math.floor(level6.selectedButton / 2);
+                            if(row > 0) level6.selectedButton -= 2;
                         }
                         keys['ArrowUp'] = false;
                         keys['up'] = false;
                     }
                     if(keys['ArrowDown'] || keys['down']) {
-                        const row = Math.floor(level6.selectedButton / 2);
-                        if(row < 1) {
+                        if(level6.selectedButton < 2) {
                             level6.selectedButton += 2;
+                        } else if(level6.selectedButton < 4) {
+                            // Down from color row 2 → bottom row
+                            level6.selectedButton = 4 + (level6.selectedButton - 2);
                         }
                         keys['ArrowDown'] = false;
                         keys['down'] = false;
@@ -22995,7 +23125,16 @@ function update() {
                         keys[' '] = false;
                         keys['action'] = false;
 
-                        if(level6.codeInput.length < 4) {
+                        if(level6.selectedButton === 4) {
+                            // ESC button — close safe
+                            level6.safeUI = false;
+                            level6.codeInput = [];
+                            level6.selectedButton = 0;
+                            level6.safeShowHint = false;
+                        } else if(level6.selectedButton === 5) {
+                            // ? button — toggle hint
+                            level6.safeShowHint = !level6.safeShowHint;
+                        } else if(level6.codeInput.length < 4) {
                             const selectedColor = COLORS[level6.selectedButton].name;
                             level6.codeInput.push(selectedColor);
 
