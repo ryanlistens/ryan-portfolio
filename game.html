@@ -505,8 +505,109 @@ function bulletImpact(x, y) {
         const speed = 2 + Math.random() * 3;
         impactSparks.push({ x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 6 + Math.floor(Math.random() * 4) });
     }
+    triggerScreenShake(2);
+    emitParticles(x, y, 'spark', 4);
 }
 let bossDoor = { state: 'closed', openPct: 0 };
+
+// ── Reusable particle system ──
+let ambientParticles = [];
+const PARTICLE_TYPES = {
+    dust:  { color: [180,170,150], sizeMin: 1, sizeMax: 3, speedMin: 0.1, speedMax: 0.4, lifeMin: 80, lifeMax: 200, gravity: -0.01, fadeIn: 0.15 },
+    spark: { color: [255,200,60],  sizeMin: 1, sizeMax: 2.5, speedMin: 1.5, speedMax: 4, lifeMin: 15, lifeMax: 35, gravity: 0.12, fadeIn: 0 },
+    steam: { color: [200,210,220], sizeMin: 3, sizeMax: 8, speedMin: 0.2, speedMax: 0.6, lifeMin: 60, lifeMax: 140, gravity: -0.03, fadeIn: 0.2 },
+    ember: { color: [255,100,20],  sizeMin: 1, sizeMax: 2, speedMin: 0.5, speedMax: 2, lifeMin: 30, lifeMax: 70, gravity: -0.06, fadeIn: 0 }
+};
+
+function emitParticles(x, y, type, count, opts) {
+    const pt = PARTICLE_TYPES[type];
+    if(!pt) return;
+    const spread = (opts && opts.spread) || Math.PI * 2;
+    const baseAngle = (opts && opts.angle != null) ? opts.angle : -Math.PI / 2;
+    for(let i = 0; i < count; i++) {
+        const angle = baseAngle + (Math.random() - 0.5) * spread;
+        const speed = pt.speedMin + Math.random() * (pt.speedMax - pt.speedMin);
+        const life = pt.lifeMin + Math.floor(Math.random() * (pt.lifeMax - pt.lifeMin));
+        ambientParticles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: pt.sizeMin + Math.random() * (pt.sizeMax - pt.sizeMin),
+            life, maxLife: life,
+            gravity: pt.gravity,
+            fadeIn: pt.fadeIn,
+            r: pt.color[0] + Math.floor((Math.random() - 0.5) * 30),
+            g: pt.color[1] + Math.floor((Math.random() - 0.5) * 30),
+            b: pt.color[2] + Math.floor((Math.random() - 0.5) * 30),
+            type
+        });
+    }
+}
+
+function updateParticles() {
+    for(let i = ambientParticles.length - 1; i >= 0; i--) {
+        const p = ambientParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.life--;
+        if(p.type === 'ember') { p.vx *= 0.98; p.vy *= 0.98; }
+        if(p.life <= 0) ambientParticles.splice(i, 1);
+    }
+}
+
+function drawParticles() {
+    for(const p of ambientParticles) {
+        const prog = 1 - p.life / p.maxLife;
+        let alpha;
+        if(p.fadeIn > 0 && prog < p.fadeIn) alpha = prog / p.fadeIn;
+        else alpha = p.life / p.maxLife;
+        alpha = Math.min(1, alpha * 0.8);
+        ctx.globalAlpha = alpha;
+        if(p.type === 'spark' || p.type === 'ember') {
+            ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            // glow
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2); ctx.fill();
+        } else {
+            ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    ctx.globalAlpha = 1;
+}
+
+// ── Global screen shake system ──
+let screenShake = { intensity: 0, decay: 0.88, dx: 0, dy: 0 };
+
+function triggerScreenShake(intensity) {
+    screenShake.intensity = Math.max(screenShake.intensity, intensity);
+}
+
+function updateScreenShake() {
+    if(screenShake.intensity > 0.2) {
+        screenShake.dx = (Math.random() - 0.5) * screenShake.intensity;
+        screenShake.dy = (Math.random() - 0.5) * screenShake.intensity;
+        screenShake.intensity *= screenShake.decay;
+    } else {
+        screenShake.intensity = 0;
+        screenShake.dx = 0;
+        screenShake.dy = 0;
+    }
+}
+
+// ── Room vignette system ──
+function drawRoomVignette(strength, tintR, tintG, tintB) {
+    strength = strength || 0.3;
+    tintR = tintR || 0; tintG = tintG || 0; tintB = tintB || 0;
+    const vg = ctx.createRadialGradient(350, 250, 140, 350, 250, 420);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(0.65, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, `rgba(${tintR},${tintG},${tintB},${strength})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+}
 
 let boss = {
     active: false,
@@ -1094,6 +1195,9 @@ function createExplosion(x, y) {
             life: 1
         });
     }
+    triggerScreenShake(6);
+    emitParticles(x, y, 'spark', 12);
+    emitParticles(x, y, 'ember', 8);
 }
 
 function createMuzzleFlash(x, y, facing) {
@@ -3975,16 +4079,44 @@ function drawWrenchProjectile(x, y, rotation) {
     ctx.restore();
 }
 
-// Draw wrench shatter pieces
+// Draw wrench shatter pieces — metallic fragments with sparks
 function drawWrenchShatter(pieces) {
     for(const p of pieces) {
+        const alpha = Math.max(0, p.life / 30);
         ctx.save();
-        ctx.globalAlpha = Math.max(0, p.life / 30);
+        ctx.globalAlpha = alpha;
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
-        ctx.fillStyle = '#7a7a7a';
+
+        // Metallic fragment with highlight
+        const grad = ctx.createLinearGradient(-p.size, -2, p.size, 2);
+        grad.addColorStop(0, '#5a5a5a');
+        grad.addColorStop(0.4, '#a0a0a0');
+        grad.addColorStop(0.6, '#c8c8c8');
+        grad.addColorStop(1, '#6a6a6a');
+        ctx.fillStyle = grad;
         ctx.fillRect(-p.size, -2, p.size * 2, 4);
+
+        // Edge highlight
+        ctx.strokeStyle = `rgba(200,200,200,${alpha * 0.6})`;
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(-p.size, -2, p.size * 2, 4);
+
+        // Trailing spark (only early in life)
+        if(p.life > 18) {
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.fillStyle = '#ffcc44';
+            ctx.beginPath();
+            ctx.arc(-p.size * 0.5, 0, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         ctx.restore();
+    }
+    // Emit spark particles on first frame of shatter
+    if(pieces.length > 0 && pieces[0].life > 28) {
+        triggerScreenShake(3);
+        emitParticles(pieces[0].x, pieces[0].y, 'spark', 6);
     }
 }
 
@@ -17817,6 +17949,24 @@ function drawAcidBurst(ab) {
     const elapsed = Date.now() - ab.startTime;
     const t = ab.life; // 0..1
 
+    // --- Acid glow — eerie green light radiating from splash zone ---
+    const glowAlpha = 0.12 * (1 - t * 0.6);
+    const glowR = 40 + t * 80;
+    const acidGlow = ctx.createRadialGradient(ab.npcX, 396, 0, ab.npcX, 396, 120 + t * 60);
+    acidGlow.addColorStop(0, `rgba(120,255,20,${glowAlpha})`);
+    acidGlow.addColorStop(0.5, `rgba(80,200,10,${glowAlpha * 0.4})`);
+    acidGlow.addColorStop(1, 'rgba(0,80,0,0)');
+    ctx.fillStyle = acidGlow;
+    ctx.fillRect(ab.npcX - 200, 250, 400, 200);
+
+    // Screen shake on initial acid hit
+    if(elapsed < 200) triggerScreenShake(3);
+
+    // Emit acid steam particles
+    if(frame % 3 === 0 && t < 0.8) {
+        emitParticles(ab.npcX + (Math.random() - 0.5) * 40, 390, 'steam', 1, { angle: -Math.PI / 2, spread: 0.6 });
+    }
+
     // --- Acid spray burst from pipe ---
     for (let d = 0; d < 12; d++) {
         const dripPhase = (d / 12 + elapsed / 600) % 1;
@@ -18121,7 +18271,7 @@ function drawScene() {
     ctx.scale(dpr, dpr);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.translate(GX, GY);
+    ctx.translate(GX + screenShake.dx, GY + screenShake.dy);
 
     // RT Games Presents Screen
     if(state === 'rtPresents') {
@@ -18383,23 +18533,42 @@ function drawScene() {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
+        // Animated red vignette pulse on death screens
+        if(state === 'over' || state === 'fired' || state === 'gameover') {
+            const pulse = 0.08 + Math.sin(frame * 0.04) * 0.04;
+            const deathVig = ctx.createRadialGradient(350, 250, 80, 350, 250, 400);
+            deathVig.addColorStop(0, 'rgba(0,0,0,0)');
+            deathVig.addColorStop(0.6, `rgba(80,0,0,${pulse})`);
+            deathVig.addColorStop(1, `rgba(120,0,0,${pulse * 2.5})`);
+            ctx.fillStyle = deathVig;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+
         if(state === 'over') {
+            // Glowing red text with shadow
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 15 + Math.sin(frame * 0.06) * 5;
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
+            ctx.shadowBlur = 0;
         } else if(state === 'fired') {
-            // Level 5: Killed yourself in furnace
+            ctx.shadowColor = '#ff4400';
+            ctx.shadowBlur = 15 + Math.sin(frame * 0.06) * 5;
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
+            ctx.shadowBlur = 0;
         } else if(state === 'gameover') {
-            // Level 5: Didn't burn 6 documents in time
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 12 + Math.sin(frame * 0.05) * 4;
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("GAME OVER", 350, 180);
+            ctx.shadowBlur = 0;
         } else if(state === 'win') {
             ctx.fillStyle = '#27ae60';
             ctx.font = 'bold 56px Arial';
@@ -20824,6 +20993,55 @@ function drawScene() {
             ctx.fillText('-$', player.x, floatY);
         }
         level6.damageFlash = Math.max(0, level6.damageFlash - 0.04);
+    }
+
+    // Draw ambient particles over gameplay
+    if(state === 'playing') {
+        drawParticles();
+
+        // Room-specific ambient particle emission
+        if(level === 6) {
+            if(level6.room === 'cloningRoom' && frame % 8 === 0) {
+                emitParticles(Math.random() * 700, 400, 'steam', 1, { angle: -Math.PI / 2, spread: 0.5 });
+            }
+            if((level6.room === 'furnaceRoom') && frame % 4 === 0) {
+                emitParticles(350 + (Math.random() - 0.5) * 200, 380, 'ember', 1, { angle: -Math.PI / 2, spread: 1.2 });
+            }
+            if(level6.room === 'nuclearBridge' && frame % 12 === 0) {
+                emitParticles(Math.random() * 700, 420, 'spark', 1, { angle: -Math.PI / 2, spread: 0.8 });
+            }
+        }
+        if(level === 5) {
+            if(level5.room === 'furnace' && frame % 5 === 0) {
+                emitParticles(350 + (Math.random() - 0.5) * 150, 390, 'ember', 1, { angle: -Math.PI / 2, spread: 1.0 });
+            }
+            if(level5.room === 'pipeRoom' && frame % 15 === 0) {
+                emitParticles(Math.random() * 700, 60, 'dust', 1, { angle: Math.PI / 2, spread: 0.6 });
+            }
+        }
+
+        // Subtle cinematic vignette during gameplay
+        if(level === 6) {
+            if(level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
+                drawRoomVignette(0.4, 0, 0, 0);
+            } else if(level6.room === 'cloningRoom') {
+                drawRoomVignette(0.25, 0, 10, 5);
+            } else if(level6.room === 'nuclearBridge') {
+                drawRoomVignette(0.3, 10, 5, 0);
+            } else if(level6.room === 'ceoOffice') {
+                drawRoomVignette(0.2, 5, 3, 0);
+            } else {
+                drawRoomVignette(0.15, 0, 0, 0);
+            }
+        } else if(level === 5) {
+            if(level5.room === 'furnace') {
+                drawRoomVignette(0.3, 15, 5, 0);
+            } else {
+                drawRoomVignette(0.12, 0, 0, 0);
+            }
+        } else {
+            drawRoomVignette(0.1, 0, 0, 0);
+        }
     }
 
     // Draw mute indicator (always on top during gameplay)
@@ -24226,6 +24444,9 @@ if (keys[' '] || keys['action']) {
                         level6.missileExplosionTime = Date.now();
                         level6.missileFireTimer = 0;
                         bullets.splice(i, 1);
+                        triggerScreenShake(12);
+                        emitParticles(missileHitX, missileHitY + 30, 'spark', 20);
+                        emitParticles(missileHitX, missileHitY + 30, 'ember', 15);
 
                         // Radial destruction — blast center at missile position
                         const blastCenterX = missileHitX;
@@ -25430,6 +25651,8 @@ function gameLoop() {
     }
     
     update();
+    updateParticles();
+    updateScreenShake();
     drawScene();
     document.getElementById('level').textContent = level;
     document.getElementById('score').textContent = score;
