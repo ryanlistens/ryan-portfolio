@@ -509,6 +509,8 @@ let ui = {
     gunChoice: 0
 };
 
+let waterCoolerCooldown = 0; // frames until cooler can be used again
+
 let npcs = [];
 let cracks = [];
 let acidBursts = []; // acid-dissolve events triggered on pipe burst
@@ -612,6 +614,32 @@ function updateScreenShake() {
         screenShake.intensity = 0;
         screenShake.dx = 0;
         screenShake.dy = 0;
+    }
+}
+
+// ── Damage flash system — red overlay when player takes damage ──
+let damageFlash = { active: false, timer: 0, maxTimer: 20 };
+
+function triggerDamageFlash() {
+    damageFlash.active = true;
+    damageFlash.timer = damageFlash.maxTimer;
+    triggerScreenShake(6);
+}
+
+function drawDamageFlash() {
+    if(!damageFlash.active) return;
+    if(damageFlash.timer > 0) {
+        const alpha = (damageFlash.timer / damageFlash.maxTimer) * 0.4;
+        // Red vignette pulse from edges
+        const flashGrad = ctx.createRadialGradient(350, 250, 100, 350, 250, 400);
+        flashGrad.addColorStop(0, `rgba(255,0,0,0)`);
+        flashGrad.addColorStop(0.6, `rgba(255,0,0,${alpha * 0.3})`);
+        flashGrad.addColorStop(1, `rgba(180,0,0,${alpha})`);
+        ctx.fillStyle = flashGrad;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        damageFlash.timer--;
+    } else {
+        damageFlash.active = false;
     }
 }
 
@@ -1326,7 +1354,7 @@ function drawHeldDoc(x, y, colorName) {
 
     // Document label text on folder
     ctx.fillStyle = '#666';
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText(col.name, x, y - 50);
 }
@@ -1334,10 +1362,15 @@ function drawHeldDoc(x, y, colorName) {
 function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
 
+    // Idle bobbing — subtle breathing animation when stationary
+    const isMoving = player.lastMove && (Date.now() - player.lastMove < 150);
+    const idleBob = isMoving ? 0 : Math.sin(Date.now() * 0.003) * 1.5;
+    y += idleBob;
+
     // Shadow — at foot level (y+36 = shoe bottom)
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 36 - idleBob, 12, 4, 0, 0, Math.PI * 2); // shadow stays grounded
     ctx.fill();
 
     // Anti-aliased character outline (dark shadow behind entire sprite)
@@ -1349,13 +1382,18 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
     ctx.restore();
 
     if(facing === 'left') {
-        // Mullet hair — flowing shape with gradient
-        ctx.fillStyle = '#3a2a1a';
+        // Mullet hair — flowing shape with canvas gradient
+        const hairGrad = ctx.createLinearGradient(x - 6*s, y - 16*s, x + 8*s, y - 6*s);
+        hairGrad.addColorStop(0, '#4a3a2a');
+        hairGrad.addColorStop(0.4, '#3a2a1a');
+        hairGrad.addColorStop(0.8, '#2a1a0a');
+        hairGrad.addColorStop(1, '#3a2a1a');
+        ctx.fillStyle = hairGrad;
         ctx.fillRect(x - 5*s, y - 16*s, 12*s, 4*s);
         ctx.fillRect(x - 6*s, y - 12*s, 14*s, 10*s);
-        // Hair highlight
-        ctx.fillStyle = '#4a3a2a';
-        ctx.fillRect(x - 4*s, y - 15*s, 4*s, 2*s);
+        // Hair shine highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(x - 3*s, y - 15*s, 3*s, s);
 
         // Face with skin tone
         ctx.fillStyle = '#f5c89a';
@@ -1423,13 +1461,18 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y + 17*s - legL, 4*s, s);
 
     } else if(facing === 'right') {
-        // Mullet hair — flowing shape with gradient
-        ctx.fillStyle = '#3a2a1a';
+        // Mullet hair — flowing shape with canvas gradient
+        const hairGradR = ctx.createLinearGradient(x - 8*s, y - 16*s, x + 5*s, y - 6*s);
+        hairGradR.addColorStop(0, '#3a2a1a');
+        hairGradR.addColorStop(0.4, '#4a3a2a');
+        hairGradR.addColorStop(0.8, '#2a1a0a');
+        hairGradR.addColorStop(1, '#3a2a1a');
+        ctx.fillStyle = hairGradR;
         ctx.fillRect(x - 7*s, y - 16*s, 12*s, 4*s);
         ctx.fillRect(x - 8*s, y - 12*s, 14*s, 10*s);
-        // Hair highlight
-        ctx.fillStyle = '#4a3a2a';
-        ctx.fillRect(x - 2*s, y - 15*s, 4*s, 2*s);
+        // Hair shine highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(x - s, y - 15*s, 3*s, s);
 
         // Face with skin tone gradient
         ctx.fillStyle = '#f5c89a';
@@ -1490,13 +1533,19 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y + 16*s - legR, 4*s, 2*s);
 
     } else {
-        // Mullet hair — flowing on both sides
-        ctx.fillStyle = '#3a2a1a';
+        // Mullet hair — flowing on both sides with canvas gradient
+        const hairGradF = ctx.createLinearGradient(x - 8*s, y - 16*s, x + 8*s, y - 6*s);
+        hairGradF.addColorStop(0, '#3a2a1a');
+        hairGradF.addColorStop(0.3, '#4a3a2a');
+        hairGradF.addColorStop(0.5, '#2a1a0a');
+        hairGradF.addColorStop(0.7, '#4a3a2a');
+        hairGradF.addColorStop(1, '#3a2a1a');
+        ctx.fillStyle = hairGradF;
         ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
         ctx.fillRect(x - 8*s, y - 12*s, 16*s, 10*s);
-        // Hair highlight center
-        ctx.fillStyle = '#4a3a2a';
-        ctx.fillRect(x - 2*s, y - 15*s, 4*s, 2*s);
+        // Hair shine highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(x - s, y - 15*s, 3*s, s);
 
         // Face with skin tone
         ctx.fillStyle = '#f5c89a';
@@ -1620,13 +1669,25 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         }
 
+        // Lapel fold
+        ctx.fillStyle = 'rgba(200,200,200,0.25)';
+        ctx.fillRect(x - 6*s, y - 2*s, s, 8*s);
+        ctx.fillRect(x + 5*s, y - 2*s, s, 8*s);
+        // Pocket square
+        ctx.fillStyle = '#e8e0d0';
+        ctx.fillRect(x + 3*s, y, 2*s, 2*s);
+        ctx.fillStyle = '#d4c8b0';
+        ctx.fillRect(x + 3*s, y, 2*s, s);
+
+        // Pants waistband
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
-
-        ctx.fillStyle = '#000';
+        // Animated legs — walk cycle moves entire lower leg + shoe
         const legL = Math.sin(frame * 0.25) * 5;
+        ctx.fillRect(x - 5*s, y + 12*s + legL * 0.4, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 12*s - legL * 0.4, 4*s, 8*s);
+        // Polished shoes
+        ctx.fillStyle = '#000';
         ctx.fillRect(x - 5*s, y + 20*s + legL, 4*s, 2*s);
         ctx.fillRect(x + s, y + 20*s - legL, 4*s, 2*s);
 
@@ -1683,13 +1744,25 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         }
 
+        // Lapel fold
+        ctx.fillStyle = 'rgba(200,200,200,0.25)';
+        ctx.fillRect(x - 6*s, y - 2*s, s, 8*s);
+        ctx.fillRect(x + 5*s, y - 2*s, s, 8*s);
+        // Pocket square
+        ctx.fillStyle = '#e8e0d0';
+        ctx.fillRect(x - 5*s, y, 2*s, 2*s);
+        ctx.fillStyle = '#d4c8b0';
+        ctx.fillRect(x - 5*s, y, 2*s, s);
+
+        // Pants waistband
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
-
-        ctx.fillStyle = '#000';
+        // Animated legs — walk cycle moves entire lower leg + shoe
         const legR = Math.sin(frame * 0.25) * 5;
+        ctx.fillRect(x - 5*s, y + 12*s + legR * 0.4, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 12*s - legR * 0.4, 4*s, 8*s);
+        // Polished shoes
+        ctx.fillStyle = '#000';
         ctx.fillRect(x - 5*s, y + 20*s + legR, 4*s, 2*s);
         ctx.fillRect(x + s, y + 20*s - legR, 4*s, 2*s);
 
@@ -1745,18 +1818,29 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         }
 
+        // Lapel fold
+        ctx.fillStyle = 'rgba(200,200,200,0.25)';
+        ctx.fillRect(x - 6*s, y - 2*s, s, 8*s);
+        ctx.fillRect(x + 5*s, y - 2*s, s, 8*s);
+        // Pocket square
+        ctx.fillStyle = '#e8e0d0';
+        ctx.fillRect(x + 3*s, y, 2*s, 2*s);
+        ctx.fillStyle = '#d4c8b0';
+        ctx.fillRect(x + 3*s, y, 2*s, s);
+
         // Dark pants with subtle highlight
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
+        // Animated legs — walk cycle moves entire lower leg + shoe
+        const leg = Math.sin(frame * 0.25) * 5;
+        ctx.fillRect(x - 5*s, y + 12*s + leg * 0.4, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 12*s - leg * 0.4, 4*s, 8*s);
         // Pants highlight
         ctx.fillStyle = 'rgba(60,60,60,0.2)';
-        ctx.fillRect(x - 4*s, y + 13*s, s, 6*s);
+        ctx.fillRect(x - 4*s, y + 13*s + leg * 0.4, s, 6*s);
 
         // Polished shoes
         ctx.fillStyle = '#000';
-        const leg = Math.sin(frame * 0.25) * 5;
         ctx.fillRect(x - 5*s, y + 20*s + leg, 4*s, 2*s);
         ctx.fillRect(x + s, y + 20*s - leg, 4*s, 2*s);
         // Shoe shine
@@ -3190,7 +3274,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(signLX + 2, signY + 1, signW - 4, signH - 2);
     // "PIPETECH" text — bold, centered on sign
     ctx.fillStyle = '#2a2a2a';
-    ctx.font = 'bold 12px Arial';
+    ctx.font = scaledFont(12, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('PIPETECH', signPostX, signY + 12);
     // Text shadow for depth
@@ -3912,7 +3996,7 @@ function drawComputer(x, y) {
     ctx.fillStyle = '#333';
     ctx.fillRect(x - 25, y + 4, 50, 14);
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     for(let kr = 0; kr < 3; kr++) {
         for(let kc = 0; kc < 8; kc++) {
             ctx.strokeRect(x - 23 + kc * 6, y + 5 + kr * 4, 5, 3);
@@ -3920,7 +4004,7 @@ function drawComputer(x, y) {
     }
 
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', x, y + 30);
 }
@@ -4009,7 +4093,7 @@ function draw3DPrinter(x, y) {
     ctx.fillRect(x - 25, y + 12, 50, 8);
     
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('3D PRINTER', x, y + 18);
 }
@@ -4018,6 +4102,20 @@ function drawGhostGun(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
+
+    // Ethereal glow aura — pulsing ghostly green
+    const ghostPulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.15;
+    ctx.save();
+    ctx.globalAlpha = ghostPulse;
+    ctx.shadowColor = '#40ff80';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = 'rgba(64,255,128,0.06)';
+    const gx = facing === 'left' ? x - 35 : facing === 'right' ? x + 15 : x - 10;
+    ctx.fillRect(gx, y - 16, 24, 20);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
     const skinColor = '#f5c89a';
     const sleeveColor = '#800020'; // Red jacket sleeve
 
@@ -4300,7 +4398,7 @@ function drawWrenchShatter(pieces) {
 
         // Edge highlight
         ctx.strokeStyle = `rgba(200,200,200,${alpha * 0.6})`;
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         ctx.strokeRect(-p.size, -2, p.size * 2, 4);
 
         // Trailing spark (only early in life)
@@ -4803,7 +4901,7 @@ function drawCashSack(x, y) {
 
     // $ symbol
     ctx.fillStyle = '#3a5a2a';
-    ctx.font = 'bold 14px Arial';
+    ctx.font = scaledFont(14, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('$', x, y + 8);
 }
@@ -4913,7 +5011,7 @@ function drawCCTVCamera(mountX, mountY, facingRight) {
     ctx.fill();
     // Tiny starburst rays on lens
     ctx.strokeStyle = 'rgba(200,220,255,0.25)';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     for (let r = 0; r < 4; r++) {
         const ra = r * Math.PI / 4;
         ctx.beginPath();
@@ -5574,7 +5672,7 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.fillStyle = unlocked ? '#002200' : '#002211';
         ctx.fillRect(kpSide + 2, kpY - 2, 16, 10);
         ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace');
         ctx.textAlign = 'center';
         ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpSide + 10, kpY + 6);
         // Button grid
@@ -5731,7 +5829,7 @@ function drawWaterCooler(x, y) {
     ctx.fillStyle = '#3366cc';
     ctx.fillRect(x - 10, y - 38, 20, 10);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+    ctx.font = scaledFont(8, 'bold', 'Arial'); ctx.textAlign = 'center';
     ctx.fillText('AQUA', x, y - 31);
     // Bubble animation — one bubble rises every ~30 seconds
     const bubbleCycle = Math.floor(t / 30000);
@@ -5776,6 +5874,20 @@ function drawToolCabinet(x, y) {
         // Drawer recessed panel
         ctx.fillStyle = '#464646';
         ctx.fillRect(x - 20, dy + 3, 40, dh - 8);
+        // Tool silhouettes visible through glass-front panel
+        ctx.fillStyle = 'rgba(80,80,80,0.35)';
+        if(d === 0) { // top drawer: wrench + screwdriver
+            ctx.fillRect(x - 16, dy + 5, 14, 3); // wrench shape
+            ctx.fillRect(x + 4, dy + 5, 2, dh - 10); // screwdriver
+            ctx.fillRect(x + 2, dy + 5, 6, 2); // screwdriver handle
+        } else if(d === 1) { // middle drawer: pliers + hammer
+            ctx.fillRect(x - 14, dy + 4, 10, 3); // pliers
+            ctx.fillRect(x + 2, dy + 4, 3, dh - 9); // hammer handle
+            ctx.fillRect(x, dy + 4, 7, 4); // hammer head
+        } else { // bottom drawer: bigger tools
+            ctx.fillRect(x - 16, dy + 4, 18, 4); // pipe wrench
+            ctx.fillRect(x + 6, dy + 6, 12, 3); // level tool
+        }
         // Drawer handle (brushed steel bar)
         ctx.fillStyle = '#888';
         ctx.fillRect(x - 12, dy + (dh/2) - 3, 24, 6);
@@ -5796,7 +5908,7 @@ function drawToolCabinet(x, y) {
     ctx.fillStyle = '#d4af37';
     ctx.fillRect(x - 16, y - 66, 32, 4);
     ctx.fillStyle = '#8a6a00';
-    ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+    ctx.font = scaledFont(8, 'bold', 'Arial'); ctx.textAlign = 'center';
     ctx.fillText('TOOLS', x, y - 63);
     // Base feet
     ctx.fillStyle = '#333';
@@ -5841,7 +5953,7 @@ function drawMarkerBoard(x, y, boardLv) {
         ctx.fillStyle = '#1a3ab8';
         ctx.fillText('WELCOME', x, y - 22);
         // "MULLET PRO!" slightly smaller
-        ctx.font = 'bold 14px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial');
         ctx.fillText('MULLET PRO!', x, y - 7);
         // Exclamation underline flourish
         ctx.strokeStyle = '#1a3ab8'; ctx.lineWidth = 1.5;
@@ -5864,14 +5976,14 @@ function drawMarkerBoard(x, y, boardLv) {
 
         // Title — red marker, underlined
         ctx.fillStyle = '#aa0000';
-        ctx.font = 'bold 10px Arial';
+        ctx.font = scaledFont(10, 'bold', 'Arial');
         ctx.fillText('PROPER WRENCH TECHNIQUE', x, y - 33);
         ctx.strokeStyle = '#aa0000'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 60, y - 29); ctx.lineTo(x + 60, y - 29); ctx.stroke();
 
         // "Righty tighty, lefty loosey" — black marker
         ctx.fillStyle = '#111';
-        ctx.font = 'bold 9px Arial';
+        ctx.font = scaledFont(9, 'bold', 'Arial');
         ctx.fillText('Righty tighty,', x, y - 18);
         ctx.fillText('lefty loosey', x, y - 8);
 
@@ -5921,29 +6033,29 @@ function drawMarkerBoard(x, y, boardLv) {
 
         // Title bar
         ctx.fillStyle = '#1a3a8a';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace');
         ctx.fillText('FLOW ANALYSIS', x, y - 34);
         ctx.strokeStyle = '#1a3a8a'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 58, y - 30); ctx.lineTo(x + 58, y - 30); ctx.stroke();
 
         // Core equation: Q = A·v (flow = area × velocity)
         ctx.fillStyle = '#111';
-        ctx.font = '8px monospace';
+        ctx.font = scaledFont(8, null, 'monospace');
         ctx.fillText('Q = \u03c0r\u00b2 \u00b7 v', x, y - 20);
 
         // Summed capacity formula
-        ctx.font = '9px monospace';
+        ctx.font = scaledFont(9, null, 'monospace');
         ctx.fillStyle = '#333';
         ctx.fillText('C\u209c = \u03a3(Q\u1d62 \u00b7 \u03b7\u1d62)', x, y - 10);
 
         // Minimum efficiency threshold in red
         ctx.fillStyle = '#b00000';
-        ctx.font = 'bold 9px monospace';
+        ctx.font = scaledFont(9, 'bold', 'monospace');
         ctx.fillText('\u03b7\u1d56\u1d56 \u2265 0.82 (\u00b13\u03c3)', x, y);
 
         // Per-pipe capacity bar chart — labeled R G B Y
         ctx.fillStyle = '#555';
-        ctx.font = '8px monospace';
+        ctx.font = scaledFont(8, null, 'monospace');
         ctx.textAlign = 'left';
         const barLabels = ['R','G','B','Y'];
         const barColors5 = ['#e74c3c','#27ae60','#005f99','#d4a017'];
@@ -5957,7 +6069,7 @@ function drawMarkerBoard(x, y, boardLv) {
             ctx.strokeRect(bx5, y + 35 - barHeights5[i], 18, barHeights5[i]);
             // Label
             ctx.fillStyle = '#333';
-            ctx.font = '8px monospace';
+            ctx.font = scaledFont(8, null, 'monospace');
             ctx.fillText(barLabels[i], bx5 + 6, y + 42);
         }
         // X-axis baseline
@@ -5975,36 +6087,36 @@ function drawMarkerBoard(x, y, boardLv) {
 
         // Title — deep crimson for critical-tier planning
         ctx.fillStyle = '#6a0010';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace');
         ctx.fillText('SYSTEM STABILITY', x, y - 34);
         ctx.strokeStyle = '#6a0010'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 58, y - 30); ctx.lineTo(x + 58, y - 30); ctx.stroke();
 
         // MTBF / MTTR ratio formula
         ctx.fillStyle = '#111';
-        ctx.font = '9px monospace';
+        ctx.font = scaledFont(9, null, 'monospace');
         ctx.fillText('MTBF / MTTR = \u03b7\u209b', x, y - 20);
 
         // Reliability function
         ctx.fillStyle = '#003366';
-        ctx.font = '9px monospace';
+        ctx.font = scaledFont(9, null, 'monospace');
         ctx.fillText('R(t) = e^(-t/MTBF)', x, y - 11);
 
         // Redundancy requirement
         ctx.fillStyle = '#111';
-        ctx.font = 'bold 9px monospace';
+        ctx.font = scaledFont(9, 'bold', 'monospace');
         ctx.fillText('Topology: N+2 req.', x, y - 2);
 
         // Failure probability threshold
         ctx.fillStyle = '#b00000';
-        ctx.font = '9px monospace';
+        ctx.font = scaledFont(9, null, 'monospace');
         ctx.fillText('P(fail) < 0.001/yr', x, y + 8);
 
         // Darcy-Weisbach pressure drop (horizontal layout)
         ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 56, y + 18); ctx.lineTo(x + 56, y + 18); ctx.stroke();
         ctx.fillStyle = '#555';
-        ctx.font = '8px monospace';
+        ctx.font = scaledFont(8, null, 'monospace');
         ctx.textAlign = 'left';
         ctx.fillText('P\u2081', x - 56, y + 28);
         ctx.textAlign = 'right';
@@ -6116,7 +6228,7 @@ function drawLevel5PipeRoom() {
     ctx.fillRect(50, 102, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
-    ctx.font = '10px Arial';
+    ctx.font = scaledFont(10, null, 'Arial');
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
 
     // Four colored stripe bands on the sign (below tagline)
@@ -6162,12 +6274,21 @@ function drawLevel5PipeRoom() {
     ctx.fillRect(comp.x - 5, comp.y, 10, 3);
     
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
 
     // Water cooler — between 3D printer area (x=50) and doc printer (x=180)
     drawWaterCooler(110, 400);
+    // Water cooler interaction prompt
+    if(Math.abs(player.x - 110) < 45 && lives < 3 && waterCoolerCooldown <= 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(55, 348, 110, 22);
+        ctx.fillStyle = '#4fc3f7';
+        ctx.font = scaledFont(11, 'bold', 'Arial');
+        ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] - DRINK', 110, 364);
+    }
 
     // Tool cabinet — under PipeTech sign, left side (level 5 has no 3D printer at x=50)
     drawToolCabinet(65, 400);
@@ -6362,7 +6483,7 @@ function drawLevel6EmployeePipeRoom() {
     ctx.fillRect(50, 72, 160, 1);
 
     ctx.fillStyle = '#aaaaaa';
-    ctx.font = '10px Arial';
+    ctx.font = scaledFont(10, null, 'Arial');
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 87);
 
     // Four colored stripe bands on the sign
@@ -6401,7 +6522,7 @@ function drawLevel6EmployeePipeRoom() {
     ctx.fillStyle = '#444';
     ctx.fillRect(comp.x - 5, comp.y, 10, 3);
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
 
@@ -6423,7 +6544,7 @@ function drawLevel6EmployeePipeRoom() {
         ctx.fillStyle = '#2a2a2a';
         ctx.fillRect(prX - 28, prY + 12, 56, 9);
         ctx.fillStyle = '#f5f2ec';
-        ctx.font = 'bold 8px Arial';
+        ctx.font = scaledFont(8, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('AUTO-WRENCH', prX, prY + 19);
         if(level6.pipeRoomPrinting) {
@@ -6436,12 +6557,21 @@ function drawLevel6EmployeePipeRoom() {
             ctx.fillStyle = 'rgba(0,0,0,0.82)';
             ctx.fillRect(prX - 55, prY - 52, 110, 22);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 12px Arial';
+            ctx.font = scaledFont(12, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('[ ACTION ] - PRINT', prX, prY - 36);
         }
     }
     drawWaterCooler(130, 400);
+    // Water cooler interaction prompt
+    if(Math.abs(player.x - 130) < 45 && lives < 3 && waterCoolerCooldown <= 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(75, 348, 110, 22);
+        ctx.fillStyle = '#4fc3f7';
+        ctx.font = scaledFont(11, 'bold', 'Arial');
+        ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] - DRINK', 130, 364);
+    }
 
     // Marker board — Level 6 schematic
     drawMarkerBoard(150, 240, 6);
@@ -6577,15 +6707,15 @@ function drawLevel5Hallway() {
     ctx.translate(520, 418); ctx.rotate(0.15);
     ctx.fillRect(0, 0, 28, 9);
     ctx.restore();
-    // Flickering fluorescent light effect — one light buzzes
+    // Flickering fluorescent light effect — one light buzzes (between RED and GREEN doors)
     const hallT = Date.now();
     const flickerOn = Math.sin(hallT / 80) > -0.3;
     if(flickerOn) {
         ctx.fillStyle = 'rgba(255,250,230,0.04)';
-        ctx.fillRect(100, -GY, 120, 400 + GY);
+        ctx.fillRect(210, -GY, 50, 400 + GY);
     } else {
         ctx.fillStyle = 'rgba(0,0,0,0.02)';
-        ctx.fillRect(100, -GY, 120, 400 + GY);
+        ctx.fillRect(210, -GY, 50, 400 + GY);
     }
 
     // CEO portrait at top - photorealistic image with ornate frame
@@ -7031,7 +7161,7 @@ function drawLevel5FurnaceRoom() {
         ctx.strokeRect(rdX, rdY, rdW, rdH);
 
         if (player.x > 600) {
-            ctx.font = 'bold 14px Arial';
+            ctx.font = scaledFont(14, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillStyle = 'rgba(0,0,0,0.7)';
             ctx.fillRect(rdX + rdW/2 - 55, rdY - 20, 110, 18);
@@ -7190,7 +7320,7 @@ function drawOfficePlant(x, y) {
         ctx.strokeStyle = '#1a6e1a'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -l.len); ctx.stroke();
         // Secondary veins (organic arc curves)
-        ctx.strokeStyle = 'rgba(26,110,26,0.5)'; ctx.lineWidth = 0.7;
+        ctx.strokeStyle = 'rgba(26,110,26,0.5)'; ctx.lineWidth = 1;
         for(let v = 1; v <= 4; v++) {
             const vy = -l.len * (v / 5);
             const vw = l.w * (1 - v / 6) * 0.6;
@@ -7359,7 +7489,7 @@ function drawRecliningBoss(fx, fy) {
     for(let i = 0; i < zz.length; i++) {
         const a = Math.max(0, Math.sin((t * 0.55 + i * 0.38) * Math.PI));
         ctx.fillStyle = `rgba(140,170,255,${(a * 0.75).toFixed(2)})`;
-        ctx.font = 'bold 8px Arial';
+        ctx.font = scaledFont(8, 'bold', 'Arial');
         ctx.fillText(zz[i].ch, hx + zz[i].ox, hy + zz[i].oy);
     }
 }
@@ -8011,7 +8141,7 @@ function drawOfficeRoom(officeName) {
                 ctx.rect(bk.x, by + 2, bk.w, bk.h - 2);
                 ctx.clip();
                 ctx.fillStyle = 'rgba(255,255,255,0.9)';
-                ctx.font = 'bold 8px Arial';
+                ctx.font = scaledFont(8, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 const lines = bk.title.split('\n');
                 lines.forEach((line, li) => {
@@ -8623,12 +8753,12 @@ function drawLevel6PipeRoom() {
         // BULLET-PROOF label on door glass
         ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.fillRect(gdX + 2, gdY + 7, gdW - 4, 15);
-        ctx.fillStyle = '#88ddff'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#88ddff'; ctx.font = scaledFont(9, 'bold', 'Arial'); ctx.textAlign = 'center';
         ctx.fillText('BULLET-PROOF GLASS', gdX + gdW / 2, gdY + 17);
         // RESTRICTED ACCESS label above door
         ctx.fillStyle = '#aa1100';
         ctx.fillRect(gdX - 5, gdY - 20, gdW + 10, 16);
-        ctx.fillStyle = '#ffe0e0'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffe0e0'; ctx.font = scaledFont(8, 'bold', 'Arial'); ctx.textAlign = 'center';
         ctx.fillText('RESTRICTED ACCESS', gdX + gdW / 2, gdY - 8);
 
         // External conduit box on right glass wall (pipe connection point)
@@ -8795,7 +8925,7 @@ function drawLevel6PipeRoom() {
     ctx.lineWidth = 1;
     ctx.strokeRect(elvX + elvW / 2 - 22, elvY - 20, 44, 16);
     ctx.fillStyle = '#00ff88';
-    ctx.font = 'bold 12px monospace';
+    ctx.font = scaledFont(12, 'bold', 'monospace');
     ctx.textAlign = 'center';
     ctx.fillText('B1', elvX + elvW / 2, elvY - 8);
     // Call button panel (right of door)
@@ -8835,7 +8965,7 @@ function drawLevel6PipeRoom() {
     }
 
     if(player.x < 50) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(10, 350, 110, 20);
@@ -8867,7 +8997,7 @@ function drawLevel6PipeRoom() {
             ctx.fillStyle = 'rgba(0,0,0,0.82)';
             ctx.fillRect(prX - 58, prY - 52, 116, 22);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 12px Arial';
+            ctx.font = scaledFont(12, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('[ ACTION ] - PRINT', prX, prY - 36);
         }
@@ -8903,6 +9033,36 @@ function drawLevel6MegacomputerRoom() {
     screenGlow.addColorStop(1, 'rgba(10,20,40,0)');
     ctx.fillStyle = screenGlow;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Blinking server rack status lights along back wall
+    for(let rack = 0; rack < 6; rack++) {
+        const rackX = 30 + rack * 115;
+        // Server rack frame
+        ctx.fillStyle = '#222';
+        ctx.fillRect(rackX, 20, 50, 120);
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rackX, 20, 50, 120);
+        // Blinking LEDs — each server unit has 2-3 lights
+        for(let sled = 0; sled < 4; sled++) {
+            const sledY = 28 + sled * 28;
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(rackX + 3, sledY, 44, 22);
+            // Status lights with unique blink patterns
+            for(let led = 0; led < 3; led++) {
+                const phase = rack * 1.7 + sled * 2.3 + led * 3.1;
+                const blink = Math.sin(megaT * 0.003 + phase) > 0.2;
+                const color = led === 0 ? (blink ? '#00ff44' : '#003300') :
+                              led === 1 ? (Math.sin(megaT * 0.005 + phase) > 0 ? '#ffaa00' : '#332200') :
+                              (Math.sin(megaT * 0.007 + phase) > 0.5 ? '#00aaff' : '#001133');
+                ctx.fillStyle = color;
+                ctx.fillRect(rackX + 6 + led * 8, sledY + 3, 4, 4);
+            }
+            // Drive activity indicator
+            ctx.fillStyle = Math.sin(megaT * 0.01 + rack + sled) > 0.8 ? '#ff4400' : '#220000';
+            ctx.fillRect(rackX + 38, sledY + 3, 6, 4);
+        }
+    }
 
     // ---- HYDRONIC PUMPING SYSTEM — "Heart of all industry" ----
     // Dense multidirectional wall pipe network drawn behind all foreground elements
@@ -9266,7 +9426,7 @@ function drawLevel6MegacomputerRoom() {
     const textBlink = Math.floor(Date.now() / 700) % 2;
     if(textBlink) {
         ctx.fillStyle = '#00ff00';
-        ctx.font = 'bold 9px monospace';
+        ctx.font = scaledFont(9, 'bold', 'monospace');
         ctx.textAlign = 'center';
         ctx.fillText('Awaiting', screenX + screenW / 2, screenY + 12);
         ctx.fillText('executive', screenX + screenW / 2, screenY + 20);
@@ -9486,7 +9646,7 @@ function drawLevel6MegacomputerRoom() {
         if(noteRead && !level6.pistol.pickedUp && !level6.hasDetectiveHat && (playerNearHat || Math.abs(player.x - pistolGX) < 80)) {
             const midX = (pistolGX + hatX) / 2;
             const midY = Math.min(pistolGY, hatY) - 36;
-            ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+            ctx.font = scaledFont(14, 'bold', 'Arial'); ctx.textAlign = 'center';
             const lw = ctx.measureText('[ ACTION ] - TAKE HAT AND GUN').width + 20;
             const lx2 = Math.max(0, Math.min(midX - lw / 2, 700 - lw));
             ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(lx2, midY, lw, 22);
@@ -9496,7 +9656,7 @@ function drawLevel6MegacomputerRoom() {
         // ── View-note prompt ──────────────────────────────────────────────────────
         const noteInteractX2 = noteScreenX - 9;
         if(!level6.viewingDetectiveNote && !level6.pistol.dropped && Math.abs(player.x - noteInteractX2) < 50 && Math.abs(player.y - detectiveY) < 60) {
-            ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+            ctx.font = scaledFont(14, 'bold', 'Arial'); ctx.textAlign = 'center';
             const nw = ctx.measureText('[ ACTION ] - VIEW NOTE').width + 20;
             const nx2 = Math.max(0, Math.min(noteInteractX2 - nw / 2, 700 - nw));
             ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(nx2, noteScreenY - 28, nw, 22);
@@ -10014,7 +10174,7 @@ function drawNuclearAssemblyBridge() {
         ctx.fillStyle = '#40ff20';
         ctx.fillRect(tankLeft - 9, tankTop + 10 + (tankH - 16) * 0.12, 6, (tankH - 16) * 0.88);
         // Label
-        ctx.fillStyle = '#80ff20'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#80ff20'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
         ctx.fillText('GOO TANK', TANK_X, tankTop - 8);
 
         // ── RADIOACTIVE ACID POOL — glowing floor-level pool under tank ────────
@@ -10365,7 +10525,7 @@ function drawNuclearAssemblyBridge() {
             }
             // CLASSIFIED stamp when full
             if (inCrateCount >= MISSILES_PER_CRATE) {
-                ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText('CLASSIFIED', crateDrawX, crateBaseY - crateH - 6);
             }
         }
@@ -10375,7 +10535,7 @@ function drawNuclearAssemblyBridge() {
         ctx.strokeStyle = '#334433'; ctx.lineWidth = 1;
         ctx.strokeRect(SYR_X + 30, BELT_Y - mH - 48, 66, 20);
         const displayCount = (isLoadingCrate || isSwapping) ? MISSILES_PER_CRATE : missilesDone;
-        ctx.fillStyle = '#40ff20'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#40ff20'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
         ctx.fillText(displayCount + '/' + MISSILES_PER_CRATE + ' LOADED', SYR_X + 63, BELT_Y - mH - 34);
 
         // ── TRUCK DOCK ───────────────────────────────────────────────────────
@@ -10413,7 +10573,7 @@ function drawNuclearAssemblyBridge() {
                 ctx.strokeRect(tx + 16, trY - trH + 4, 32, trH - 8);
             }
             if (label) {
-                ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText(label, tx + trW / 2, trY - trH / 2 + 2);
             }
             ctx.globalAlpha = 1;
@@ -10445,7 +10605,7 @@ function drawNuclearAssemblyBridge() {
             drawTruck(arriveX, 1, false, null);
             // Beep indicator — backing-up warning
             if (Math.floor(_ft / 350) % 2 === 0) {
-                ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText('BEEP', arriveX + trW / 2, trY - trH - 8);
             }
         } else {
@@ -10454,15 +10614,15 @@ function drawNuclearAssemblyBridge() {
             drawTruck(dockL, 1, truckLoaded, truckLoaded ? '\u26a0 ARMED' : null);
             // Status label
             if (isLoadingCrate) {
-                ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#ffcc00'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText('LOADING' + '.'.repeat(Math.floor((_ft / 400) % 4)), dockL + trW / 2, trY - trH - 8);
             } else if (inMissileCycle) {
-                ctx.fillStyle = '#00ff88'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#00ff88'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText('WAITING', dockL + trW / 2, trY - trH - 8);
             }
         }
         // Label
-        ctx.fillStyle = '#ff8844'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#ff8844'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
         ctx.fillText('TRUCK DOCK', DOCK_X, BELT_Y - mH - 40);
 
         // ── INDUSTRIAL HAZARD AMBIANCE ─────────────────────────────────────
@@ -10614,7 +10774,7 @@ function drawNuclearAssemblyBridge() {
             ctx.beginPath(); ctx.arc(sl.x + sl.w/2 - 5, plateY + 15, 2, 0, Math.PI * 2); ctx.fill();
             // Stenciled text — larger for mobile
             ctx.fillStyle = '#88aa66';
-            ctx.font = 'bold 10px monospace';
+            ctx.font = scaledFont(10, 'bold', 'monospace');
             ctx.textAlign = 'center';
             ctx.fillText(sl.t, sl.x, plateY + 14);
         });
@@ -10808,7 +10968,7 @@ function drawNuclearAssemblyBridge() {
         ctx.save();
         ctx.globalAlpha = hazardPulse * 0.9;
         ctx.fillStyle = gapColors[gi];
-        ctx.font = 'bold 11px monospace';
+        ctx.font = scaledFont(11, 'bold', 'monospace');
         ctx.textAlign = 'center';
         ctx.fillText(gapLabels[gi], gapMid - GX, bridgePlatY + 26);
         ctx.globalAlpha = 1;
@@ -10956,7 +11116,7 @@ function drawNuclearAssemblyBridge() {
             ctx.fillRect(bx - 60, by - 82 - bob, 120, 16);
             ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
             ctx.strokeRect(bx - 60, by - 82 - bob, 120, 16);
-            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(8, 'bold', 'monospace'); ctx.textAlign = 'center';
             ctx.fillText('\u26a0 ARMED & DANGEROUS \u26a0', bx, by - 70 - bob);
 
         } else if(bcb.deathTime > 0) {
@@ -11013,7 +11173,7 @@ function drawNuclearAssemblyBridge() {
                 ctx.restore();
 
                 // "AAAGH!" text
-                ctx.fillStyle = '#ff4444'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.globalAlpha = 1 - sp * 0.5;
                 ctx.fillText('AAAGH!', bx, stumbleY - 30);
                 ctx.globalAlpha = 1;
@@ -11066,7 +11226,7 @@ function drawNuclearAssemblyBridge() {
 
                 // Screaming text that follows
                 if (fp < 0.7) {
-                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.globalAlpha = 1 - fp;
                     ctx.fillText('AAAAAAA!', bx, fallY - 20);
                     ctx.globalAlpha = 1;
@@ -11100,11 +11260,11 @@ function drawNuclearAssemblyBridge() {
                     }
                     ctx.globalAlpha = 1;
                     if (impactElapsed < 1) {
-                        ctx.fillStyle = '#80ff20'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#80ff20'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*SIZZLE*', bx, targetY - 24 - impactElapsed * 20);
                     }
                     if (impactElapsed < 0.5) {
-                        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 10px monospace';
+                        ctx.fillStyle = '#ffff00'; ctx.font = scaledFont(10, 'bold', 'monospace');
                         ctx.fillText('*SPLASH*', bx, targetY - 40);
                     }
 
@@ -11196,10 +11356,10 @@ function drawNuclearAssemblyBridge() {
                         ctx.fillStyle = '#ff4444'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
                         ctx.fillText('*SKEWERED*', bx, targetY - 46);
                     } else if (impactElapsed < 1.5) {
-                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(13, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*SQUELCH*', bx, targetY - 42);
                     } else if (impactElapsed < 3.5) {
-                        ctx.fillStyle = '#40ff20'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#40ff20'; ctx.font = scaledFont(11, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*BLORP BLORP*', bx, targetY - 38);
                     }
 
@@ -11255,7 +11415,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.fillRect(mX - 10 + kick, mY - mMH - legOut - 5, 9, 6);
                         ctx.fillRect(mX - 1 - kick, mY - mMH - legOut * 0.85 - 5, 9, 6);
                         if (stuffProg > 0.3 && Math.floor(impactElapsed * 4) % 2 === 0) {
-                            ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                            ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                             ctx.fillText('(MUFFLED SCREAMING)', mX, mY - mMH - legOut - 12);
                         }
                     }
@@ -11277,7 +11437,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.lineTo(mX + mMW/2, mY - mMH);
                         ctx.closePath(); ctx.fill();
                         // Radiation mark on sealed casing
-                        ctx.fillStyle = '#ff4444'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(11, null, 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('\u2622', mX, mY - mMH/2 + 4);
                     }
 
@@ -11290,7 +11450,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1.5;
                         ctx.strokeRect(520 - crateW/2, targetY - crateH, crateW, crateH);
                         if (crateProg > 0.2) {
-                            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                            ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                             ctx.fillText('CLASSIFIED', 520, targetY - crateH - 6);
                         }
                     }
@@ -11300,16 +11460,16 @@ function drawNuclearAssemblyBridge() {
                         ctx.fillStyle = '#ff4444'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
                         ctx.fillText('*CRUNCH*', bx, targetY - 62);
                     } else if (impactElapsed < 1.8) {
-                        ctx.fillStyle = '#ff6600'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff6600'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('IT FITS! SOMEHOW!', bx, targetY - 58);
                     } else if (impactElapsed < stuffDur + 0.3) {
-                        ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ffcc00'; ctx.font = scaledFont(13, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*SEALED*', mX, targetY - 56);
                     } else if (slideProg > 0 && slideProg < 0.85) {
-                        ctx.fillStyle = '#ccc'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ccc'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('SPECIAL DELIVERY...', mX, targetY - 54);
                     } else if (crateProg > 0.3) {
-                        ctx.fillStyle = '#aaa'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#aaa'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*CRATED FOR EXPORT*', 520, targetY - 56);
                     }
                 } } // end warhead if-time-guard
@@ -11378,13 +11538,13 @@ function drawNuclearAssemblyBridge() {
 
                     // Impact text
                     if (impactElapsed < 0.7) {
-                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(14, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*THUD*', bx, targetY - 28);
                     } else if (slideProg < 1 && slideProg > 0.05) {
-                        ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ffcc00'; ctx.font = scaledFont(11, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*BELT DRAG*', slideX, targetY - 24);
                     } else if (runProg > 0.3 && runProg < 0.9) {
-                        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*CRUNCH*', truckTireX, targetY - 28);
                     }
                 } } // end conveyor if-time-guard
@@ -11435,18 +11595,18 @@ function drawNuclearAssemblyBridge() {
 
                     // Text
                     if (impactElapsed < 0.8) {
-                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(14, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*CRASH*', bx, targetY - 30);
                     } else if (runProg > 0.3 && runProg < 0.8) {
-                        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*CRUNCH*', bx, targetY - 26);
                         // Backing-up beep
                         if (Math.floor(impactElapsed * 3) % 2 === 0) {
-                            ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace';
+                            ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(9, 'bold', 'monospace');
                             ctx.fillText('BEEP BEEP', bx + 40, targetY - 40);
                         }
                     } else if (runProg > 0.8) {
-                        ctx.fillStyle = '#aaa'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#aaa'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*ROADKILL*', bx, targetY - 22);
                     }
                 } } // end truck if-time-guard
@@ -11467,7 +11627,7 @@ function drawNuclearAssemblyBridge() {
                     ctx.moveTo(bx - 12, targetY - 7); ctx.lineTo(bx - 15, targetY - 3);
                     ctx.stroke();
                     if (impactElapsed < 1) {
-                        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('*SPLAT*', bx, targetY - 30);
                     }
                 }
@@ -11535,7 +11695,7 @@ function drawNuclearAssemblyBridge() {
                 ctx.fillStyle = 'rgba(255,255,255,0.9)';
                 const bubX = cx + 30, bubY = bridgeRailY - 10 - toppleProg * 20;
                 ctx.beginPath(); ctx.ellipse(bubX, bubY, 28, 12, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#cc0000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#cc0000'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText('NOOO!', bubX, bubY + 3);
             }
         } else if(elapsed < fallEnd) {
@@ -11598,7 +11758,7 @@ function drawNuclearAssemblyBridge() {
                 }
                 ctx.globalAlpha = 1;
                 if(procElapsed < 2) {
-                    ctx.fillStyle = '#80ff20'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#80ff20'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*SSSSIZZLE*', cx, targetY - 30);
                 }
             } else if(dType === 'syringe') {
@@ -11648,10 +11808,10 @@ function drawNuclearAssemblyBridge() {
                 ctx.beginPath(); ctx.ellipse(cx + twitch, targetY + 18, pR, pR * 0.4, 0, 0, Math.PI * 2); ctx.fill();
                 ctx.globalAlpha = 1;
                 if(procElapsed < 0.6) {
-                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(13, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*SKEWERED*', cx, targetY - bH - 20);
                 } else if(procElapsed < 2.5) {
-                    ctx.fillStyle = '#40ff20'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#40ff20'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*BLORP BLORP*', cx, targetY - bH - 18);
                 }
             } else if(dType === 'warhead') {
@@ -11686,14 +11846,14 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillRect(mSX - 7 + kick, mSY - mH - legOut, 7, legOut);
                     ctx.fillRect(mSX + 1 - kick, mSY - mH - legOut * 0.85, 7, legOut * 0.85);
                     if(wStuff > 0.3 && Math.floor(procElapsed * 4) % 2 === 0) {
-                        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(8, 'bold', 'monospace'); ctx.textAlign = 'center';
                         ctx.fillText('(MUFFLED SCREAMING)', mSX, mSY - mH - legOut - 10);
                     }
                 }
                 if(wSeal >= 1) {
                     ctx.fillStyle = '#5a5a6a';
                     ctx.beginPath(); ctx.moveTo(mSX-mW/2, mSY-mH); ctx.lineTo(mSX, mSY-mH-13); ctx.lineTo(mSX+mW/2, mSY-mH); ctx.closePath(); ctx.fill();
-                    ctx.fillStyle = '#ff4444'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(11, null, 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('\u2622', mSX, mSY - mH/2 + 3);
                 }
                 if(wSlide > 0.85) {
@@ -11704,10 +11864,10 @@ function drawNuclearAssemblyBridge() {
                     ctx.strokeRect(496, targetY - 38, 48, 38);
                 }
                 if(procElapsed < 1.0) {
-                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(14, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*CRUNCH*', cx, targetY - 58);
                 } else if(wSlide > 0.1 && wSlide < 0.9) {
-                    ctx.fillStyle = '#ccc'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ccc'; ctx.font = scaledFont(11, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('SPECIAL DELIVERY...', mSX, targetY - 52);
                 }
             } else if(dType === 'conveyor') {
@@ -11762,13 +11922,13 @@ function drawNuclearAssemblyBridge() {
                     ctx.globalAlpha = 1;
                 }
                 if(procElapsed < 0.7) {
-                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(14, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*THUD*', cx, targetY - 28);
                 } else if(slideProg < 1 && slideProg > 0.05) {
-                    ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ffcc00'; ctx.font = scaledFont(11, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*BELT DRAG*', slideX, targetY - 24);
                 } else if(runProg > 0.3 && runProg < 0.9) {
-                    ctx.fillStyle = '#ff8800'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*CRUNCH*', truckTireX, targetY - 28);
                 }
             } else if(dType === 'truck') {
@@ -11810,17 +11970,17 @@ function drawNuclearAssemblyBridge() {
                     }
                 }
                 if(procElapsed < 0.8) {
-                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(14, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*CRASH*', cx, targetY - 30);
                 } else if(runProg > 0.3 && runProg < 0.8) {
-                    ctx.fillStyle = '#ff8800'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*CRUNCH*', cx, targetY - 26);
                     if(Math.floor(procElapsed * 3) % 2 === 0) {
-                        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace';
+                        ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(9, 'bold', 'monospace');
                         ctx.fillText('BEEP BEEP', cx + 40, targetY - 40);
                     }
                 } else if(runProg > 0.8) {
-                    ctx.fillStyle = '#aaa'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#aaa'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*ROADKILL*', cx, targetY - 22);
                 }
             } else {
@@ -11839,7 +11999,7 @@ function drawNuclearAssemblyBridge() {
                 ctx.moveTo(cx - 12, targetY - 7); ctx.lineTo(cx - 15, targetY - 3);
                 ctx.stroke();
                 if(procElapsed < 1) {
-                    ctx.fillStyle = '#ff4444'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                    ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                     ctx.fillText('*SPLAT*', cx, targetY - 30);
                 }
             }
@@ -11860,10 +12020,10 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillRect(bx2, drop.y + 0 + dropBob, 4, 3);
                     ctx.fillStyle = '#d4af37';
                 }
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff'; ctx.font = scaledFont(10, 'bold', 'Arial'); ctx.textAlign = 'center';
                 ctx.fillText('x3', drop.x, drop.y + 16 + dropBob);
                 if(Math.abs(player.x - drop.x) < 50) {
-                    ctx.font = 'bold 13px Arial';
+                    ctx.font = scaledFont(13, 'bold', 'Arial');
                     const ammoLabelW = ctx.measureText('[ ACTION ] - TAKE AMMO').width + 16;
                     const ammoLabelX = Math.max(0, Math.min(drop.x - ammoLabelW / 2, GAME_W - ammoLabelW));
                     ctx.fillStyle = 'rgba(0,0,0,0.82)';
@@ -11877,7 +12037,7 @@ function drawNuclearAssemblyBridge() {
 
     // Nav hint
     if(player.x < 85) {
-        ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+        ctx.font = scaledFont(14, 'bold', 'Arial'); ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.82)';
         ctx.fillRect(8, bridgePlatY + 26, 160, 24);
         ctx.fillStyle = '#ff9966';
@@ -11886,7 +12046,7 @@ function drawNuclearAssemblyBridge() {
 
   } catch(bridgeErr) {
     console.error('Bridge render error:', bridgeErr);
-    ctx.fillStyle = '#ff0000'; ctx.font = '12px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#ff0000'; ctx.font = scaledFont(12, null, 'monospace'); ctx.textAlign = 'left';
     ctx.fillText('RENDER ERR: ' + bridgeErr.message, 10, 240);
   }
 }
@@ -12045,7 +12205,7 @@ function drawLevel6EmployeeLobby() {
     ctx.fillStyle = '#222';
     ctx.fillRect(elvX + elvW/2 - 20, elvY - 18, 40, 14);
     ctx.fillStyle = '#00ff88';
-    ctx.font = 'bold 9px monospace';
+    ctx.font = scaledFont(9, 'bold', 'monospace');
     ctx.textAlign = 'center';
     ctx.fillText('EMP', elvX + elvW/2, elvY - 8);
     // Frame
@@ -12069,7 +12229,7 @@ function drawLevel6EmployeeLobby() {
                 ctx.fillStyle = 'rgba(0,0,0,0.7)';
                 ctx.fillRect(370, 310, 100, 20);
                 ctx.fillStyle = '#ff6666';
-                ctx.font = 'bold 10px Arial';
+                ctx.font = scaledFont(10, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillText('...?', 420, 324);
             }
@@ -12257,7 +12417,7 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = '#2a2a2a'; ctx.fillRect(hatchX + 2, hatchY - 26, hatchW - 4, 18);
         ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
         ctx.strokeRect(hatchX + 2, hatchY - 26, hatchW - 4, 18);
-        ctx.fillStyle = '#cc3333'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#cc3333'; ctx.font = scaledFont(10, 'bold', 'monospace'); ctx.textAlign = 'center';
         ctx.fillText('PM DELIVERY', hatchX + hatchW/2, hatchY - 13);
         // Sign backlight glow
         ctx.fillStyle = `rgba(204,51,51,${0.15 + Math.sin(t / 1500) * 0.08})`;
@@ -12400,7 +12560,7 @@ function drawLevel6CloningRoom() {
             ctx.globalAlpha = 1;
 
             // Label
-            ctx.fillStyle = '#666'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#666'; ctx.font = scaledFont(8, null, 'monospace'); ctx.textAlign = 'center';
             ctx.fillText(tank.label, tx + sW/2, ty + sH + 14);
         }
 
@@ -12522,7 +12682,7 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(fertX + 15, fertY + 8, fertW - 30, 4);
 
         // FERTILIZER label
-        ctx.fillStyle = '#555'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#555'; ctx.font = scaledFont(8, 'bold', 'monospace'); ctx.textAlign = 'center';
         ctx.fillText('NUTRIENT SUBSTRATE', fertX + fertW/2, fertY - 5);
     }
 
@@ -12961,7 +13121,7 @@ function drawLevel6CloningRoom() {
     ctx.fillRect(170, -8, 150, 22);
     ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
     ctx.strokeRect(170, -8, 150, 22);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.font = scaledFont(14, 'bold', 'Arial'); ctx.textAlign = 'center';
     ctx.fillText('PM PRINTER', 245, 8);
 
     // === CONCEALED DOOR — left wall sliding brick panel ===
@@ -13003,7 +13163,7 @@ function drawLevel6CloningRoom() {
             ctx.fillStyle = '#fff';
             ctx.fillRect(posterX, posterY, posterW, posterH);
             ctx.fillStyle = '#cc0000';
-            ctx.font = 'bold 9px Arial';
+            ctx.font = scaledFont(9, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('LAB SAFETY', posterX + posterW/2, posterY + 20);
             ctx.fillText('FIRST', posterX + posterW/2, posterY + 30);
@@ -13366,7 +13526,7 @@ function drawLevel6CloningRoom() {
 
     // Direction prompts
     if (player.x > 620) {
-        ctx.font = 'bold 14px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(660 - 55, 360, 110, 20);
@@ -13441,7 +13601,7 @@ function drawCloneFollower(x, y, facing) {
 
     // "CLONE" tag
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 18, y - 70, 36, 12);
-    ctx.fillStyle = '#ff6666'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(9, 'bold', 'Arial'); ctx.textAlign = 'center';
     ctx.fillText('CLONE', x, y - 61);
 }
 
@@ -13628,7 +13788,7 @@ function drawL6FurnaceRoom() {
     ctx.fillStyle = '#ddd';
     ctx.fillRect(jsX + 28, jsY, 6, 5);
     ctx.fillStyle = '#cc2222';
-    ctx.font = '3px Arial';
+    ctx.font = '8px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('PT', jsX + 31, jsY + 4);
 
@@ -14046,7 +14206,7 @@ function drawLevel6UnderbellyHallway() {
         ctx.fillStyle = '#222';
         ctx.fillRect(cr.x + 6, cr.y + cr.h * 0.25, cr.w - 12, cr.h * 0.5);
         ctx.fillStyle = '#c8b888';
-        ctx.font = 'bold 8px Arial';
+        ctx.font = scaledFont(8, 'bold', 'Arial');
         ctx.textAlign = 'center';
         const lines = crateLabels[ci].split('\n');
         for(let li = 0; li < lines.length; li++) {
@@ -14122,7 +14282,7 @@ function drawLevel6UnderbellyHallway() {
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(10, 350, 120, 20);
         ctx.fillStyle = '#ff6666';
-        ctx.font = 'bold 14px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('\u2190 UNDERBELLY', 70, 364);
     }
@@ -14130,7 +14290,7 @@ function drawLevel6UnderbellyHallway() {
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(580, 350, 120, 20);
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 14px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('SMARTWARE \u2192', 640, 364);
     }
@@ -14308,7 +14468,7 @@ function drawLevel6Underbelly() {
     ctx.beginPath(); ctx.arc(brlX, brlY - 10, 5, 0, Math.PI * 2); ctx.fill();
     // "RADIOACTIVE" label on barrel
     ctx.fillStyle = `rgba(255,215,0,${0.7 + Math.sin(t / 400) * 0.2})`;
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('RADIOACTIVE', brlX, brlY + 28);
 
@@ -14380,7 +14540,7 @@ function drawLevel6Underbelly() {
     }
     // "DRAIN" label etched into floor
     ctx.fillStyle = `rgba(80,80,70,${0.5 * dimFactor})`;
-    ctx.font = 'bold 8px Arial';
+    ctx.font = scaledFont(8, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('DRAIN', sewX, sewY + 18);
 
@@ -14429,7 +14589,7 @@ function drawLevel6Underbelly() {
     ctx.lineWidth = 2;
     ctx.strokeRect(dmpX - 38, dmpY + 15, 76, 28);
     ctx.fillStyle = '#cc2222';
-    ctx.font = 'bold 14px Arial';
+    ctx.font = scaledFont(14, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('PM WASTE', dmpX, dmpY + 34);
     // Biohazard symbol — larger, brighter
@@ -14618,7 +14778,7 @@ function drawLevel6Underbelly() {
         // Crash impact when bars hit floor
         if(dropProg > 0.8 && dropProg < 1) {
             ctx.fillStyle = 'rgba(255,200,0,0.3)';
-            ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+            ctx.font = scaledFont(14, 'bold', 'monospace'); ctx.textAlign = 'center';
             ctx.fillText('*CLANG*', pmX, cageY + cageH + 30);
         }
     }
@@ -14682,7 +14842,7 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = '#cc0000';
     ctx.fillRect(cageX + cageW + 5, cageY + 30, 40, 18);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 9px Arial';
+    ctx.font = scaledFont(9, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('DANGER', cageX + cageW + 25, cageY + 42);
     ctx.fillStyle = '#ffcc00';
@@ -14878,7 +15038,7 @@ function drawLevel6Underbelly() {
             ctx.restore();
             // Burp text
             if(satisfiedT > 0.5) {
-                ctx.fillStyle = '#88cc00'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#88cc00'; ctx.font = scaledFont(12, 'bold', 'monospace'); ctx.textAlign = 'center';
                 ctx.fillText('*BURP*', pmX + 20, my - 60);
             }
         }
@@ -15072,7 +15232,7 @@ function drawLevel6Underbelly() {
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(580, 310, 120, 20);
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 14px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('HALLWAY \u2192', 640, 326);
     }
@@ -15085,6 +15245,8 @@ function drawLevel6Underbelly() {
 }
 
 function drawLevel6Entryway() {
+    const entryT = Date.now();
+
     // Deep red corporate power room with warm gradient
     const entryGrad = ctx.createLinearGradient(0, -GY, 0, 400);
     entryGrad.addColorStop(0, '#7a0000');
@@ -15094,12 +15256,36 @@ function drawLevel6Entryway() {
     ctx.fillStyle = entryGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Rich dark floor
+    // Warm ambient light pool from overhead chandelier
+    const chandGlow = ctx.createRadialGradient(350, 80, 10, 350, 200, 280);
+    chandGlow.addColorStop(0, 'rgba(255,200,100,0.06)');
+    chandGlow.addColorStop(0.5, 'rgba(255,180,80,0.03)');
+    chandGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = chandGlow;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Chandelier fixture
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(340, -GY, 20, 30 + GY);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(330, 28, 40, 8);
+    // Crystal drops
+    for(let c = 0; c < 5; c++) {
+        const cx = 332 + c * 9;
+        const sparkle = 0.4 + Math.sin(entryT * 0.002 + c) * 0.3;
+        ctx.fillStyle = `rgba(255,240,200,${sparkle})`;
+        ctx.fillRect(cx, 36, 2, 6);
+    }
+
+    // Rich dark floor with polished sheen
     const floorGrad = ctx.createLinearGradient(0, 400, 0, 500);
     floorGrad.addColorStop(0, '#6a0000');
     floorGrad.addColorStop(1, '#580000');
     ctx.fillStyle = floorGrad;
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    // Floor sheen reflection
+    ctx.fillStyle = 'rgba(255,200,150,0.02)';
+    ctx.fillRect(-GX, 400, CANVAS_W, 15);
 
     for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = '#550000';
@@ -15179,7 +15365,7 @@ function drawLevel6Entryway() {
     ctx.lineWidth = 1;
     ctx.strokeRect(eelvX + eelvW/2 - 22, eelvY - 20, 44, 16);
     ctx.fillStyle = '#00ff88';
-    ctx.font = 'bold 12px monospace';
+    ctx.font = scaledFont(12, 'bold', 'monospace');
     ctx.fillText('CEO', eelvX + eelvW/2, eelvY - 8);
 
     if(Math.abs(player.x - 350) < 100 && player.y > 360) {
@@ -15494,7 +15680,7 @@ function drawLevel6CEOOffice() {
             ctx.ellipse(sx, sy, 5, 5, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 8px Arial';
+            ctx.font = scaledFont(8, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('$', sx, sy + 3);
         };
@@ -15897,7 +16083,7 @@ function drawLevel6CEOOffice() {
 
         // Terminal-style text
         ctx.fillStyle = '#0a0a0a';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace');
         ctx.textAlign = 'center';
         ctx.fillText('SYSTEM', monX + 16, monY + 10);
         ctx.fillText('READY', monX + 16, monY + 17);
@@ -16012,7 +16198,7 @@ function drawLevel6CEOOffice() {
     ctx.arc(trophyCenterX, cabinetY + 22, 10, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#0a0a0a';
-    ctx.font = 'bold 8px Arial';
+    ctx.font = scaledFont(8, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('CEO', trophyCenterX, cabinetY + 25);
 
@@ -16298,7 +16484,7 @@ function drawLevel6CEOOffice() {
 
         // Stenciled text
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace');
         ctx.textAlign = 'center';
         ctx.fillText('PIPE', missileX, missileY + 30);
         ctx.fillText('TECH', missileX, missileY + 36);
@@ -16313,7 +16499,7 @@ function drawLevel6CEOOffice() {
             ctx.fillStyle = 'rgba(0,0,0,0.7)';
             ctx.fillRect(missileX - 55, missileY + 66, 110, 16);
             ctx.fillStyle = '#ff6600';
-            ctx.font = 'bold 10px Arial';
+            ctx.font = scaledFont(10, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('SHOOT THE MISSILE?', missileX, missileY + 78);
         }
@@ -16379,7 +16565,7 @@ function drawLevel6CEOOffice() {
         }
     }
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 8px Arial';
+    ctx.font = scaledFont(8, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('PIPETECH', tvX + 13, tvY + 17);
     // Colored stripes under sign (matching level 5)
@@ -16529,7 +16715,7 @@ function drawLevel6CEOOffice() {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(tvX, tvY, tvW, 9);
     ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 8px monospace';
+    ctx.font = scaledFont(8, 'bold', 'monospace');
     ctx.textAlign = 'left';
     ctx.fillText('CAM 1  PIPE ROOM', tvX + 2, tvY + 7);
     // Timestamp
@@ -16869,7 +17055,7 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(bbx - 8, bby - 2, 16, 4);
         // Label
         ctx.fillStyle = '#ff6600';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace');
         ctx.textAlign = 'center';
         ctx.fillText('BLACK BOX', bbx, bby + 14);
 
@@ -16982,6 +17168,43 @@ function drawLetterUI() {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
         ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', CANVAS_W / 2, viewH + 33);
+    } else {
+        // Canvas fallback — aged paper texture with hand-typed letter feel
+        const paperGrad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
+        paperGrad.addColorStop(0, '#f4e8c8');
+        paperGrad.addColorStop(0.3, '#efe0b8');
+        paperGrad.addColorStop(0.7, '#e8d8a8');
+        paperGrad.addColorStop(1, '#e0d0a0');
+        ctx.fillStyle = paperGrad;
+        ctx.fillRect(30, 20, CANVAS_W - 60, CANVAS_H - 80);
+        // Paper fiber texture
+        ctx.fillStyle = 'rgba(180,160,120,0.06)';
+        for(let py = 25; py < CANVAS_H - 60; py += 6) {
+            ctx.fillRect(35, py, CANVAS_W - 70, 1);
+        }
+        // Aged edge staining
+        ctx.fillStyle = 'rgba(140,100,50,0.08)';
+        ctx.fillRect(30, 20, 8, CANVAS_H - 80);
+        ctx.fillRect(CANVAS_W - 38, 20, 8, CANVAS_H - 80);
+        ctx.fillRect(30, 20, CANVAS_W - 60, 6);
+        // Coffee ring stain
+        ctx.strokeStyle = 'rgba(120,80,30,0.07)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(540, 380, 35, 0, Math.PI * 2); ctx.stroke();
+
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 20px serif'; ctx.textAlign = 'center';
+        ctx.fillText('CONFIDENTIAL LETTER', CANVAS_W / 2, 70);
+        ctx.font = '16px serif'; ctx.textAlign = 'left';
+        ctx.fillText('To whom it may concern,', 60, 120);
+        ctx.fillText('This document contains sensitive information', 60, 155);
+        ctx.fillText('regarding operations at PipeTech Industries.', 60, 185);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.88)';
+        ctx.fillRect(0, CANVAS_H - 50, CANVAS_W, 50);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('ACTION TO CLOSE', CANVAS_W / 2, CANVAS_H - 20);
     }
     ctx.restore();
 }
@@ -17110,6 +17333,38 @@ function drawSafeUI() {
         vaultShadow.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = vaultShadow;
         ctx.fillRect(70, 70, 560, 360);
+
+        // Decorative combination dial (cosmetic — safe is already open)
+        const dialX = 580, dialY = 130, dialR = 28;
+        // Dial face
+        const dialGrad = ctx.createRadialGradient(dialX - 3, dialY - 3, 2, dialX, dialY, dialR);
+        dialGrad.addColorStop(0, '#666');
+        dialGrad.addColorStop(0.7, '#444');
+        dialGrad.addColorStop(1, '#333');
+        ctx.fillStyle = dialGrad;
+        ctx.beginPath(); ctx.arc(dialX, dialY, dialR, 0, Math.PI * 2); ctx.fill();
+        // Dial rim
+        ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(dialX, dialY, dialR, 0, Math.PI * 2); ctx.stroke();
+        // Tick marks around dial
+        for(let t = 0; t < 12; t++) {
+            const ta = (t / 12) * Math.PI * 2;
+            ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(dialX + Math.cos(ta) * (dialR - 6), dialY + Math.sin(ta) * (dialR - 6));
+            ctx.lineTo(dialX + Math.cos(ta) * (dialR - 2), dialY + Math.sin(ta) * (dialR - 2));
+            ctx.stroke();
+        }
+        // Dial pointer (slowly rotating)
+        const dialAngle = Date.now() * 0.0002;
+        ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(dialX, dialY);
+        ctx.lineTo(dialX + Math.cos(dialAngle) * (dialR - 8), dialY + Math.sin(dialAngle) * (dialR - 8));
+        ctx.stroke();
+        // Center knob
+        ctx.fillStyle = '#555';
+        ctx.beginPath(); ctx.arc(dialX, dialY, 5, 0, Math.PI * 2); ctx.fill();
 
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 32px Arial';
@@ -17360,7 +17615,7 @@ function drawSafeUI() {
     // Hint text
     if(level6.safeShowHint) {
         ctx.fillStyle = '#ffaa00';
-        ctx.font = 'bold 13px Arial';
+        ctx.font = scaledFont(13, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('HINT: Check the pipe room colors', 350, safeBtnY + 50);
     }
@@ -17415,7 +17670,7 @@ function drawElevatorUI() {
         ctx.fillText(opts[i], 350, oy + 33);
         if (isCurrentFloor) {
             ctx.fillStyle = '#555';
-            ctx.font = '11px Arial';
+            ctx.font = scaledFont(11, null, 'Arial');
             ctx.fillText('(YOU ARE HERE)', 350, oy + 48);
         }
     }
@@ -17500,6 +17755,13 @@ function drawKeypadUI() {
 
         ctx.fillStyle = isSelected ? '#00ccff' : '#2a2a2a';
         ctx.fillRect(bx, by, btnW, btnH);
+        // Worn button marks — frequently-used keys show wear
+        if(!isSelected && (i === 0 || i === 2 || i === 4)) {
+            ctx.fillStyle = 'rgba(60,60,60,0.4)';
+            ctx.fillRect(bx + 12, by + 8, btnW - 24, btnH - 16);
+            ctx.fillStyle = 'rgba(80,80,80,0.2)';
+            ctx.fillRect(bx + 18, by + 14, btnW - 36, btnH - 28);
+        }
         ctx.strokeStyle = isSelected ? '#fff' : '#444';
         ctx.lineWidth = isSelected ? 3 : 1;
         ctx.strokeRect(bx, by, btnW, btnH);
@@ -17544,21 +17806,21 @@ function drawKeypadUI() {
     ctx.lineWidth = clrSelected ? 3 : 1;
     ctx.strokeRect(gridX + 2 * (btnW + gap), escBtnY, btnW, 36);
     ctx.fillStyle = clrSelected ? '#000' : '#00ccff';
-    ctx.font = 'bold 14px Arial';
+    ctx.font = scaledFont(14, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('CLR', gridX + 2 * (btnW + gap) + btnW / 2, escBtnY + 24);
 
     // Hint text (shown when ? is selected or was pressed)
     if(level6.keypadShowHint) {
         ctx.fillStyle = '#ffaa00';
-        ctx.font = 'bold 13px Arial';
+        ctx.font = scaledFont(13, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('HINT: There are 4 pipes', 350, escBtnY + 56);
     }
 
     // Instructions
     ctx.fillStyle = '#888';
-    ctx.font = 'bold 12px Arial';
+    ctx.font = scaledFont(12, 'bold', 'Arial');
     ctx.textAlign = 'center';
     ctx.fillText('◄►▲▼ SELECT   ACTION ENTER', 350, escBtnY + (level6.keypadShowHint ? 72 : 56));
 }
@@ -18143,7 +18405,7 @@ function drawCEO(x, y, facing) {
         ctx.fillStyle = '#1e8449';
         ctx.fillRect(sackX - 3, sackY - 8, 6, 4);
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 10px Arial';
+        ctx.font = scaledFont(10, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('$', sackX, sackY + 3);
     }
@@ -18230,7 +18492,7 @@ function drawCEO(x, y, facing) {
             // Dollar sign
             if(alive) {
                 ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 8px Arial';
+                ctx.font = scaledFont(8, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillText('$', ix + iconW * 0.5, iy + iconH * 0.72);
             }
@@ -18469,7 +18731,7 @@ function drawHolsterButton() {
 
     // Active weapon label at top of button
     ctx.fillStyle = wrenchActive ? '#e8a020' : '#aaaaaa';
-    ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+    ctx.font = scaledFont(9, 'bold', 'Arial'); ctx.textAlign = 'center';
     ctx.fillText(wrenchActive ? 'WRENCH' : 'GUN', cx, btnY + 11);
 
     // Icon: wrench or gun depending on active weapon
@@ -18509,7 +18771,7 @@ function drawHolsterUI() {
     ctx.strokeRect(uiX - 4, uiY - 4, totalW + 8, slotH + 36);
 
     // Title
-    ctx.fillStyle = '#c89050'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#c89050'; ctx.font = scaledFont(11, 'bold', 'Arial'); ctx.textAlign = 'center';
     ctx.fillText('INVENTORY', uiX + totalW / 2, uiY + slotH + 22);
 
     for(let i = 0; i < weapons.length; i++) {
@@ -18554,11 +18816,11 @@ function drawHolsterUI() {
         ctx.restore();
 
         // Weapon name
-        ctx.fillStyle = '#f5e8c0'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#f5e8c0'; ctx.font = scaledFont(11, 'bold', 'Arial'); ctx.textAlign = 'left';
         ctx.fillText(w.name, sx + 56, sy + 28);
 
         // Ammo count
-        ctx.fillStyle = '#aaa'; ctx.font = '10px Arial';
+        ctx.fillStyle = '#aaa'; ctx.font = scaledFont(10, null, 'Arial');
         ctx.fillText('AMMO: ' + w.ammo, sx + 56, sy + 46);
 
         // Ammo pips
@@ -18570,7 +18832,7 @@ function drawHolsterUI() {
     }
 
     // Close hint
-    ctx.fillStyle = '#888'; ctx.font = '10px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#888'; ctx.font = scaledFont(10, null, 'Arial'); ctx.textAlign = 'center';
     ctx.fillText('tap weapon to equip  •  tap holster to close', uiX + totalW / 2, uiY + slotH + 32);
 }
 
@@ -19502,11 +19764,11 @@ function drawScene() {
                     ctx.beginPath(); ctx.moveTo(dx - 2, dy - 10 + bob); ctx.lineTo(dx + 3, dy - 10 + bob); ctx.lineTo(dx + 0.5, dy - 15 + bob); ctx.closePath(); ctx.fill();
                     // "x1" label
                     ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
+                    ctx.font = scaledFont(10, 'bold', 'Arial'); ctx.textAlign = 'center';
                     ctx.fillText('x1', dx + 1, dy + 7 + bob);
                     // Pickup prompt
                     if (Math.abs(player.x - dx) < 40) {
-                        ctx.font = 'bold 12px Arial';
+                        ctx.font = scaledFont(12, 'bold', 'Arial');
                         const pw = ctx.measureText('[ ACTION ] - TAKE AMMO').width + 16;
                         const px = Math.max(0, Math.min(dx - pw / 2, 700 - pw));
                         ctx.fillStyle = 'rgba(0,0,0,0.82)';
@@ -19747,12 +20009,12 @@ function drawScene() {
                             ctx.fillStyle = '#d4af37';
                         }
                         ctx.fillStyle = '#fff';
-                        ctx.font = 'bold 10px Arial';
+                        ctx.font = scaledFont(10, 'bold', 'Arial');
                         ctx.textAlign = 'center';
                         ctx.fillText('x3', drop.x, drop.y + 16 + dropBob);
                         // Pickup prompt when player is near
                         if(Math.abs(player.x - drop.x) < 50) {
-                            ctx.font = 'bold 13px Arial';
+                            ctx.font = scaledFont(13, 'bold', 'Arial');
                             const ammoLabelW = ctx.measureText('[ ACTION ] - TAKE AMMO').width + 16;
                             const ammoLabelX = Math.max(0, Math.min(drop.x - ammoLabelW / 2, GAME_W - ammoLabelW));
                             ctx.fillStyle = 'rgba(0,0,0,0.82)';
@@ -19769,7 +20031,7 @@ function drawScene() {
                 ctx.fillStyle = 'rgba(0,0,0,0.7)';
                 ctx.fillRect(10, 310, 120, 20);
                 ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 14px Arial';
+                ctx.font = scaledFont(14, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillText('\u2190 PIPE ROOM', 70, 326);
             }
@@ -19777,7 +20039,7 @@ function drawScene() {
                 ctx.fillStyle = 'rgba(0,0,0,0.7)';
                 ctx.fillRect(600, 310, 100, 20);
                 ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 14px Arial';
+                ctx.font = scaledFont(14, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillText('FURNACE \u2192', 650, 326);
             }
@@ -20009,10 +20271,10 @@ function drawScene() {
                     ctx.fillRect(190, 375, 320, 46);
                     ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
                     ctx.strokeRect(190, 375, 320, 46);
-                    ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+                    ctx.font = scaledFont(14, 'bold', 'Arial'); ctx.textAlign = 'center';
                     ctx.fillStyle = '#ffd700';
                     ctx.fillText('[ ACTION ] — Accept Your Share', 350, 395);
-                    ctx.font = '11px Arial'; ctx.fillStyle = '#ccaa55';
+                    ctx.font = scaledFont(11, null, 'Arial'); ctx.fillStyle = '#ccaa55';
                     ctx.fillText('The means of production — yours!', 350, 413);
                 }
             }
@@ -20025,11 +20287,11 @@ function drawScene() {
                 ctx.strokeStyle = '#ffd700';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(240, promptY, 220, 40);
-                ctx.font = 'bold 14px Arial';
+                ctx.font = scaledFont(14, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillStyle = '#ffd700';
                 ctx.fillText('[ ACTION ] \u2014 LEAVE OFFICE', 350, promptY + 16);
-                ctx.font = '10px Arial';
+                ctx.font = scaledFont(10, null, 'Arial');
                 ctx.fillStyle = '#cc8800';
                 const exitHint = ceo.state === 'dead' ? 'Exit to entryway' :
                     ceo.state === 'hunting' ? '\u26a0 CEO will pursue you' : 'Exit to entryway';
@@ -20126,7 +20388,7 @@ function drawScene() {
             // Uses counter (e.g. "WRENCH 2/3")
             const usesLeft = 3 - level6.wrenchUses;
             ctx.fillStyle = usesLeft <= 1 ? '#ff8844' : '#aaaaaa';
-            ctx.font = 'bold 11px Arial';
+            ctx.font = scaledFont(11, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('WRENCH ' + usesLeft + '/3', player.x, player.y - 44);
         }
@@ -20147,7 +20409,7 @@ function drawScene() {
             ctx.fillRect(ceo.x - 45, ceo.y - 70, 90, 16);
             ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
             ctx.strokeRect(ceo.x - 45, ceo.y - 70, 90, 16);
-            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(8, 'bold', 'monospace'); ctx.textAlign = 'center';
             ctx.fillText('\u26a0 CEO PURSUIT \u26a0', ceo.x, ceo.y - 58);
         }
         // Dead pursuing CEO (non-bridge death)
@@ -20250,10 +20512,10 @@ function drawScene() {
                 ctx.fillStyle = '#aaa';
                 ctx.fillRect(57, 403, 2, 8);
                 ctx.fillStyle = '#f5f2ec';
-                ctx.font = 'bold 14px Arial';
+                ctx.font = scaledFont(14, 'bold', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillText('AUTO-WRENCH', 100, 455);
-                ctx.font = 'bold 10px Arial';
+                ctx.font = scaledFont(10, 'bold', 'Arial');
                 ctx.fillStyle = '#ff8844';
                 ctx.fillText('3 uses • boomerang', 100, 467);
             } else {
@@ -20413,7 +20675,7 @@ function drawScene() {
                 ctx.fillStyle = level6.caseClosedChoice === 0 ? '#ffd700' : '#444';
                 ctx.fillRect(ccBtn1X, ccBtnY, btnW, btnH);
                 ctx.fillStyle = level6.caseClosedChoice === 0 ? '#000' : '#999';
-                ctx.font = 'bold 14px Arial';
+                ctx.font = scaledFont(14, 'bold', 'Arial');
                 ctx.fillText('AWAIT', ccBtn1X + btnW / 2, ccBtnY + 16);
                 ctx.fillText('REASSIGNMENT?', ccBtn1X + btnW / 2, ccBtnY + 32);
 
@@ -20798,7 +21060,7 @@ function drawScene() {
 
             // Subtitle — the missile quote, cleaner spacing
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'italic 14px Arial';
+            ctx.font = scaledFont(14, 'italic', 'Arial');
             ctx.fillText('The missile blew the case wide open,', 350, 125);
             ctx.fillText('as well as the CEO, thanks to a mysterious', 350, 145);
             ctx.fillText('black box found within the rubble.', 350, 165);
@@ -20856,7 +21118,7 @@ function drawScene() {
                 ctx.shadowBlur = 0;
             }
             // "BLACK BOX" label
-            ctx.fillStyle = '#ff6666'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(9, 'bold', 'monospace'); ctx.textAlign = 'center';
             ctx.fillText('BLACK BOX', bbX + bbW/2, bbY + bbH - 6);
 
             // Fedora silhouette resting on rubble — slightly larger
@@ -21048,7 +21310,7 @@ function drawScene() {
                             const jumpH = Math.max(0, Math.sin(cheerPhase)) * 8;
                             if(jumpH > 2) {
                                 ctx.fillStyle = '#ffd700';
-                                ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+                                ctx.font = scaledFont(12, 'bold', 'Arial'); ctx.textAlign = 'center';
                                 ctx.fillText('!', npc.x, 310 - jumpH - 50);
                             }
                         }
@@ -21162,7 +21424,7 @@ function drawScene() {
                 // Caption below frame
                 const caption = slideCaptions[currentSlide % slideCaptions.length];
                 ctx.fillStyle = '#ccaa66';
-                ctx.font = 'italic 14px Arial';
+                ctx.font = scaledFont(14, 'italic', 'Arial');
                 ctx.textAlign = 'center';
                 ctx.fillText(caption, 350, frameY + frameH + 26);
 
@@ -21344,7 +21606,7 @@ function drawScene() {
     ctx.fillRect(50, 102, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
-    ctx.font = '10px Arial';
+    ctx.font = scaledFont(10, null, 'Arial');
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
 
     // Four colored stripe bands on the sign (below tagline)
@@ -21375,7 +21637,7 @@ function drawScene() {
             ctx.fillStyle = 'rgba(0,0,0,0.82)';
             ctx.fillRect(printer3d.x - 55, printer3d.y - 52, 110, 22);
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 12px Arial';
+            ctx.font = scaledFont(12, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('[ ACTION ] - PRINT', printer3d.x, printer3d.y - 36);
         }
@@ -21383,6 +21645,15 @@ function drawScene() {
 
     // Water cooler — between 3D printer area (x=50) and doc printer (x=180)
     drawWaterCooler(110, 400);
+    // Water cooler interaction prompt
+    if(Math.abs(player.x - 110) < 45 && lives < 3 && waterCoolerCooldown <= 0 && !ui.show && !ui.gunUI) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(55, 348, 110, 22);
+        ctx.fillStyle = '#4fc3f7';
+        ctx.font = scaledFont(11, 'bold', 'Arial');
+        ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] - DRINK', 110, 364);
+    }
 
     // Tool cabinet — under PipeTech sign, left side (skip in level 4 where 3D printer occupies x=20-80)
     if(level !== 4) drawToolCabinet(65, 400);
@@ -21534,7 +21805,7 @@ function drawScene() {
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
         ctx.fillRect(player.x - 20, player.y - 55, 40, 16);
         ctx.fillStyle = pipeWrench.killCount >= 1 ? '#ff8844' : '#aaaaaa';
-        ctx.font = 'bold 11px Arial';
+        ctx.font = scaledFont(11, 'bold', 'Arial');
         ctx.textAlign = 'center';
         ctx.fillText('WRENCH ' + (2 - pipeWrench.killCount) + '/2', player.x, player.y - 44);
     }
@@ -21547,7 +21818,7 @@ function drawScene() {
     if(level === 1 && skipPressCount > 5) {
         const bluePM = npcs.find(n => n.color.name === 'BLUE');
         if(bluePM && Math.abs(player.x - bluePM.x) < 50) {
-            ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+            ctx.font = scaledFont(11, 'bold', 'Arial'); ctx.textAlign = 'center';
             const hint = (skipPressCount - 5) + '/15';
             const hw = ctx.measureText(hint).width + 12;
             ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -21559,7 +21830,7 @@ function drawScene() {
     if(level === 1 && skipGreenPressCount > 5) {
         const greenPM = npcs.find(n => n.color.name === 'GREEN');
         if(greenPM && Math.abs(player.x - greenPM.x) < 50) {
-            ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+            ctx.font = scaledFont(11, 'bold', 'Arial'); ctx.textAlign = 'center';
             const hint = (skipGreenPressCount - 5) + '/15';
             const hw = ctx.measureText(hint).width + 12;
             ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -21571,7 +21842,7 @@ function drawScene() {
     if(level === 1 && skipRedPressCount > 5) {
         const redPM = npcs.find(n => n.color.name === 'RED');
         if(redPM && Math.abs(player.x - redPM.x) < 50) {
-            ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+            ctx.font = scaledFont(11, 'bold', 'Arial'); ctx.textAlign = 'center';
             const hint = (skipRedPressCount - 5) + '/15';
             const hw = ctx.measureText(hint).width + 12;
             ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -21646,10 +21917,10 @@ function drawScene() {
             ctx.fillRect(57, 403, 2, 8);      // shine
 
             ctx.fillStyle = wrenchOwned ? '#555' : '#f5f2ec';
-            ctx.font = 'bold 14px Arial';
+            ctx.font = scaledFont(14, 'bold', 'Arial');
             ctx.textAlign = 'center';
             ctx.fillText('PIPE WRENCH', 100, 455);
-            ctx.font = 'bold 10px Arial';
+            ctx.font = scaledFont(10, 'bold', 'Arial');
             ctx.fillStyle = '#666';
             ctx.fillText(wrenchOwned ? 'already equipped' : '2 kills • breaks', 100, 467);
 
@@ -21715,8 +21986,9 @@ function drawScene() {
         level6.damageFlash = Math.max(0, level6.damageFlash - 0.04);
     }
 
-    // Draw ambient particles over gameplay
+    // Draw damage flash overlay and ambient particles
     if(state === 'playing') {
+        drawDamageFlash();
         drawParticles();
 
         // Room-specific ambient particle emission
@@ -22044,6 +22316,14 @@ function update() {
         if(level5.room === 'pipeRoom') {
             player.y = 380;
             const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
+
+            // Water cooler — drink to restore 1 life
+            if((keys[' '] || keys['action']) && Math.abs(player.x - 110) < 45 && lives < 3 && waterCoolerCooldown <= 0) {
+                lives = Math.min(3, lives + 1);
+                updateLives();
+                waterCoolerCooldown = 600;
+                keys[' '] = false; keys['action'] = false;
+            }
 
             // Steal doc from Mullet Pro directly
             if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
@@ -24040,6 +24320,11 @@ function update() {
 
                 // Left — to original pipe room (auto)
                 if(player.x < 40) {
+                    // Reset printer UI state before transition
+                    level6.pipeRoomPrinterUI = false;
+                    level6.pipeRoomPrinterConfirming = false;
+                    level6.pipeRoomPrinting = false;
+                    level6.pipeRoomPrintProgress = 0;
                     level6.room = 'employeePipeRoom';
                     player.x = 620;
                     player.y = 380;
@@ -24095,6 +24380,13 @@ function update() {
                 } else {
                     if(Math.abs(player.x - empPipeRoomPrinterX) < 60 && !level6.pipeRoomPrinting && (keys[' '] || keys['action'])) {
                         level6.pipeRoomPrinterUI = true;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                    // Water cooler — drink to restore 1 life
+                    if(Math.abs(player.x - 130) < 45 && lives < 3 && waterCoolerCooldown <= 0 && (keys[' '] || keys['action'])) {
+                        lives = Math.min(3, lives + 1);
+                        updateLives();
+                        waterCoolerCooldown = 600;
                         keys[' '] = false; keys['action'] = false;
                     }
                 }
@@ -25924,6 +26216,7 @@ if (keys[' '] || keys['action']) {
             lives--;
             score = Math.floor(score / 2);
             updateLives();
+            triggerDamageFlash();
             if(lives <= 0) {
                 state = 'over';
                 menuChoice = 0;
@@ -26112,6 +26405,15 @@ if (keys[' '] || keys['action']) {
 
         const atComputer = Math.abs(player.x - computer.x) < 60;
         const at3DPrinter = level === 4 && Math.abs(player.x - printer3d.x) < 60;
+        const atWaterCooler = Math.abs(player.x - 110) < 45;
+
+        // Water cooler — drink to restore 1 life
+        if(atWaterCooler && lives < 3 && waterCoolerCooldown <= 0 && !ui.show && !ui.gunUI) {
+            lives = Math.min(3, lives + 1);
+            updateLives();
+            waterCoolerCooldown = 600; // 10 second cooldown at 60fps
+            return;
+        }
 
         // Level 4: pipe wrench melee swing (not when near the 3D printer)
         if(level === 4 && pipeWrench.hasWrench && !pipeWrench.swinging && !ui.show && !ui.gunUI && !at3DPrinter) {
@@ -26275,6 +26577,7 @@ if (keys[' '] || keys['action']) {
             if(ab.penalise) {
                 lives--;
                 updateLives();
+                triggerDamageFlash();
                 resetting = true;
                 fadeOut = true;
                 fadeAlpha = 0;
@@ -26349,6 +26652,7 @@ function gameLoop() {
 
     frame++;
     if(player.shootTimer > 0) player.shootTimer--;
+    if(waterCoolerCooldown > 0) waterCoolerCooldown--;
     const now = Date.now();
     counter += now - lastTime;
     lastTime = now;
