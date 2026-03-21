@@ -1,186 +1,129 @@
-# Visual Overhaul Plan — Mullet Pro
+# Visual & Gameplay Quality Plan — Mullet Pro
 
-## Context
-- Single file: `game.html` (~25K lines)
-- 74 draw functions, ~10K canvas API calls, 347 font assignments
-- Fixed 700×500 logical game area with DPR-aware canvas sizing
-- All rendering is canvas-based (no WebGL)
+## Design Philosophy
+
+This game is a canvas-rendered 2D arcade game at 700×500 logical pixels. Every visual element is procedurally drawn — no sprite sheets, no WebGL. This means quality comes from **thoughtful use of canvas primitives**: arcs, bezier curves, gradients, and compositing. The goal is not photorealism — it's **polished, readable, satisfying pixel-scale art** with proper proportions, consistent sizing, and smooth animations.
+
+The overhaul targets three pillars:
+1. **Readability** — every element must be legible on mobile (360px-wide screens)
+2. **Consistency** — all characters share a proportion system; all signs clip their text
+3. **Polish** — curved shapes replace flat rectangles; gradients replace flat fills
 
 ---
 
-## Phase 1: Scaling & Readability Foundation
+## What's Been Done
 
-### 1A. Responsive Font System
-Create a font scale helper that adjusts based on canvas-to-viewport ratio:
+### Bugs Fixed
+- **Level 6 pipe NPC state reset**: `level5.npcPipes` now fully resets when entering Level 6, preventing carryover crack timers from causing instant pipe bursts in the employee pipe room
+- **Clone follower + hallway boss interaction**: Clone now avoids the boss's patrol zone (stays 65px clear) and absorbs boss bullets as a shield for the player, preventing the game-breaking scenario of traveling with the clone past the hallway cloning boss
+- **Acid burst array cleared** on level transition to prevent ghost animations
+
+### Player Sprites Redesigned
+Both `drawMulletPro()` and `drawBaldManager()` have been rebuilt from scratch:
+- **Oval heads** using `ctx.ellipse()` instead of `fillRect` squares
+- **Proper facial features**: round eyes with irises/pupils/highlights, curved eyebrows, shaped noses and mouths
+- **Mullet Pro**: flowing hair using bezier curves with gradient shading, burgundy leather jacket with V-neck collar, shaped shoulders, belt with gold buckle, tapered jeans, rounded boots
+- **Bald Manager**: polished dome with radial gradient shine, crisp white dress shirt with lapels, burgundy tie with knot detail, pocket square, tailored black trousers, polished oxford shoes
+- **Shared animation system**: both sprites use stroke-based arms with `lineCap: 'round'`, walk cycle drives arm swing, consistent shadow at y+36
+- **Consistent proportions**: both characters occupy the same footprint (~30px wide, ~66px tall) with heads at the same relative position
+
+### Font & Label Bleeding Fixed
+- All PIPETECH signs now clip text within sign boundaries using `ctx.clip()`
+- DOC PRINTER, 3D PRINTER, AUTO-WRENCH labels have properly sized dark backgrounds
+- CLONE tag widened from 36px to 44px with smaller bounded font
+- Direction prompts (HALLWAY →, ← PIPE ROOM, FURNACE →) use `scaledFont` with `bounded: true` to prevent mobile overflow
+- "GLOBAL LEADER IN PIPE DREAMS" tagline reduced from 10px unbounded to 8px bounded
+
+### Mobile Text Readability
+- Email UI (Pmail) headers and body text use `scaledFont()` for proper mobile scaling
+- Letter UI fallback text uses `scaledFont()` with serif family
+- Detective note canvas fallback text uses `scaledFont()` for all lines
+- Instruction bars ("ACTION TO CLOSE") use scaled fonts
+
+### Death Sequence Shortened
+- Acid burst melt animation reduced from 2.5s to 1.4s
+- Cleanup/removal reduced from 4.0s to 2.2s
+- Total death→reset time cut by ~45%
+
+---
+
+## What Still Needs Work
+
+### Priority 1: NPC Sprite Consistency ✓ COMPLETE
+
+All boss characters and NPCs now use curved shapes, stroke-based arms, oval heads, and consistent proportions.
+
+**Completed:**
+- `drawNPC()`: Pipe managers — round ellipse heads, proper eyes with iris/pupil, alert bubble with background
+- `drawBoss()`: Level 5 boss — complete rewrite with oval head, shaped torso, stroke-based arms with lineCap:'round', cigar in hand with smoke wisps, gold chain, tapered tie, rounded shoes. Shadow at y+36.
+- `drawCEO()`: Final boss — complete rewrite across all 4 facing directions (left/right/forward/back). Oval weathered head with wrinkle lines, jowls, deep-set eyes with bags, gray slicked hair, charcoal power suit with pinstripes/lapels/pocket square, dark red tie, stroke-based arms with gold watch/ring, cigar in mouth with smoke, rounded shoes. Gun overlay rewritten with stroke-based arm.
+- `drawDeadCEO()`: Rewritten with ellipse body, stroke-based limbs, oval head, rounded cigar
+- Cloning room boss (inline): Rewritten with oval head, shaped red shirt torso, stroke-based arms, rounded steel-toe boots, hard hat on top
+- Hallway cloning boss (inline): Same curved treatment as cloning room boss — consistent appearance across both locations
+- `drawCloneFollower()`: Shaped torso with quadraticCurveTo, stroke-based arms, ellipse shoes
+
+**Design constraint met**: All NPCs now share consistent foot position (~y+36 shadow) and proportional heads.
+
+### Priority 2: Remaining Sign & Label Quality
+
+Signs that still need clip treatment:
+- `drawLevel6MegacomputerRoom()` PIPETECH sign (line ~8608)
+- `drawNuclearAssemblyBridge()` signs (line ~9970)
+- `drawLevel6EmployeeLobby()` PIPETECH sign (line ~12101)
+- `drawLevel6Entryway()` and `drawLevel6CEOOffice()` various labels
+- Marker board schematic text (lines ~5953-6129) — very small text, needs to either be readable or removed
+
+### Priority 3: Environmental Props
+
+Props that would benefit from curved shapes:
+- `drawComputer()`: Monitor should use rounded rect, not flat box
+- `drawWaterCooler()`: Bottle should be more cylindrical
+- `drawOfficePlant()`: Leaves should use bezier curves
+- `drawBlueFuton()`: Cushions should be rounded
+- `drawTableDesk()`: Rounded edges
+
+### Priority 4: Room Atmosphere
+
+Each room type should have a distinct visual mood:
+- **Pipe rooms**: Industrial — overhead light cones, wet floor reflections, steam
+- **Hallways**: Corporate — warm lighting, clean floors, door detail
+- **Cloning room**: Sci-fi horror — green tint, pulsing lights, depth fog
+- **Furnace rooms**: Hot — orange/amber glow, heat shimmer, ember particles
+- **CEO office**: Luxury — warm golden lighting, rich textures
+- **Underbelly**: Dark — minimal lighting, grimy atmosphere, broken fixtures
+
+### Priority 5: UI Polish
+
+- **Holster UI** weapon selection overlay — needs better weapon icons
+- **Safe UI** combination dial — metallic rendering
+- **Elevator UI** — floor indicator, better button panel
+- **Keypad UI** — backlit keys
+
+---
+
+## Technical Notes
+
+### The scaledFont System
 ```js
-function scaledFont(size, weight, family) {
-    // On small screens (canvas CSS-scaled down), bump minimum sizes
-    const minSize = Math.max(size, 8); // no font below 8px logical
-    return `${weight} ${minSize}px ${family}`;
-}
+scaledFont(size, weight, family, bounded)
 ```
-- Replace the ~50 instances of fonts ≤7px with minimum 8px
-- Add a global `FONT_SCALE` multiplier for HUD/UI text (labels, signs, status readouts)
-- Keep artistic micro-text (like tiny sign labels) at their sizes but ensure they're at least 6px
+- `bounded: true` — for text inside fixed-size containers (signs, labels). Uses 6px minimum, skips FONT_SCALE. Prevents overflow on mobile.
+- `bounded: false` (default) — for floating UI text. Uses 8px minimum, applies FONT_SCALE (up to 1.5x on small viewports).
+- **Rule**: Any text that sits on/in a fixed-width element MUST use `bounded: true`.
 
-### 1B. Line Width Minimums
-- Replace `lineWidth = 0.5` instances (lines 1194, 2061, 2976) with minimum 1px
-- Ensure stress cracks, detail lines ≥1px for mobile visibility
+### Sprite Proportion Standard
+All player-scale characters should follow:
+- Shadow: `y + 36` from anchor
+- Head center: `y - 18` to `y - 20` from anchor
+- Shoulder width: ~28-30px
+- Total height: ~66-68px
+- Arms: stroke-based, `lineWidth: 5`, `lineCap: 'round'`
 
-### 1C. DPR Consistency Fix
-- Line 159: `const dpr` captured once — make it reactive to orientation changes
-- Audit the dual setTransform calls at lines 15819/15847 vs the scale at 17657 to ensure no double-scaling
+### Canvas Clipping for Signs
+Any sign with text must:
+1. Draw the sign background
+2. `ctx.save()` + `ctx.beginPath()` + `ctx.rect(signBounds)` + `ctx.clip()`
+3. Draw text
+4. `ctx.restore()`
 
----
-
-## Phase 2: Cloning Room Redesign (Primary Target)
-
-`drawLevel6CloningRoom()` at line 11334 — the branch namesake.
-
-### Current State
-- Dark industrial room with production pipeline: Slurpee tanks → Fertilizer → Contact manifold → Fetal tanks → Centrifuge → Conveyor → Hatchery
-- Good structural concept but visually flat — lots of `fillRect` boxes, minimal depth/lighting
-
-### Improvements
-1. **Ambient lighting**: Add a subtle overhead industrial light cone effect (radial gradient from ceiling lights casting visible pools of light on the floor)
-2. **Tank depth**: Replace flat fillRect tank bodies with rounded-corner paths + multi-stop gradients that simulate cylindrical curvature
-3. **Liquid effects**: Improve fluid animations in tanks — add surface meniscus, refraction highlights, more organic bubble paths
-4. **Fetal silhouettes**: Upgrade from simple circles to recognizable curled-up figures with visible limbs, using semi-transparent layered rendering
-5. **Hatchery entrance**: Add depth fog effect, dim red volumetric glow leaking from opening, animated steam/vapor particles
-6. **Conveyor belt**: Add proper belt texture (metallic slats), rolling animation, side rails with bolts
-7. **Floor reflections**: Wet industrial floor with subtle reflections of overhead elements
-8. **Color grading**: Apply a subtle green-tinted overlay to the entire room for sci-fi horror atmosphere
-9. **Equipment labels**: Ensure all label fonts (currently 6-8px monospace) are readable; raise to minimum 8px
-
----
-
-## Phase 3: Character Sprites
-
-### 3A. Mullet Pro (drawMulletPro, line 1204)
-- Add anti-aliased outlines (shadow stroke behind character)
-- Improve mullet hair detail — more flowing shape with gradient
-- Add subtle idle animation bobbing
-- Improve held-item rendering (gun, document, wrench)
-
-### 3B. Bald Manager (drawBaldManager, line 1372)
-- Add reflective head highlight
-- Improve suit detail (lapel, tie, pocket square)
-- Better walk cycle silhouette
-
-### 3C. Boss (drawBoss, line 1640)
-- Upgrade from block shapes to more detailed body
-- Add distinctive visual features (cigar glow, gold chain)
-
-### 3D. CEO (drawCEO, line 16460)
-- Most important NPC — needs most polish
-- Add power suit details, commanding posture
-
-### 3E. Clone Follower (drawCloneFollower, line 12339)
-- Distinguish visually from regular NPCs with eerie glow/transparency
-
----
-
-## Phase 4: Room-by-Room Visual Polish
-
-### Level 5 Rooms
-1. **Pipe Room** (drawLevel5PipeRoom, line 5477) — Add depth shadows under pipes, improve pipe metallic shading, add dripping condensation particles
-2. **Hallway** (drawLevel5Hallway, line 5938) — Improve floor tile pattern, add flickering fluorescent light effect, wall scuff marks
-3. **Furnace Room** (drawLevel5FurnaceRoom, line 6188) — Add heat shimmer distortion, ember particles, improved fire glow
-
-### Level 6 Rooms
-4. **Employee Pipe Room** (drawLevel6EmployeePipeRoom, line 5702) — Same pipe improvements as L5
-5. **Pipe Room** (drawLevel6PipeRoom, line 7667) — Improved industrial atmosphere
-6. **Megacomputer Room** (drawLevel6MegacomputerRoom, line 8156) — Add screen glow bleeding onto walls, blinking server lights, cable management detail
-7. **Nuclear Assembly Bridge** (drawNuclearAssemblyBridge, line 8942) — Add danger atmosphere, radiation glow, depth perspective on bridge
-8. **Employee Lobby** (drawLevel6EmployeeLobby, line 11137) — Corporate sterile lighting, polished floor reflections
-9. **Furnace Room L6** (drawL6FurnaceRoom, line 12450) — Enhanced fire/heat effects
-10. **Underbelly Hallway** (drawLevel6UnderbellyHallway, line 12790) — Grimy atmosphere, dripping water, broken lights
-11. **Underbelly** (drawLevel6Underbelly, line 13050) — Dark, oppressive depth
-12. **Entryway** (drawLevel6Entryway, line 13988) — First impression room, needs to set tone
-13. **CEO Office** (drawLevel6CEOOffice, line 14094) — Luxury contrast, warm lighting, power atmosphere
-
-### Office Rooms (drawOfficeRoom, line 6661)
-- Improve furniture rendering (desks, chairs, plants)
-- Add ambient office lighting (desk lamp pools)
-- Better computer screen glow effects
-
----
-
-## Phase 5: Environmental Props & Items
-
-### Infrastructure
-1. **CCTV Cameras** (line 4373) — Add lens flare, recording light, sweep animation
-2. **Fluorescent Lights** (line 4500) — Flickering effect, tube detail, light pool on surfaces below
-3. **Air Ducts** (line 4553) — Improve grime texture, add vent slats
-4. **Industrial Fan** (line 4615) — Better blade rendering, motion blur when spinning
-5. **Death Star Blast Door** (line 4778) — Improve sci-fi panel detail, add status lights, hydraulic pistons
-
-### Furniture & Objects
-6. **Water Cooler** (line 5116) — Add water bubble animation, light refraction
-7. **Tool Cabinet** (line 5187) — Add drawer handles, tool silhouettes visible through glass
-8. **Marker Board** (line 5237) — Improve handwriting style, add dry-erase smudges
-9. **Computer** (line 3515) — Better screen content, keyboard detail
-10. **3D Printer** (line 3558) — Add printing animation effects, layer detail
-11. **Office Plant** (line 6472) — Better leaf shapes, pot detail
-12. **Blue Futon** (line 6530) — Improve cushion rendering, fabric texture
-
-### Weapons
-13. **Ghost Gun** (line 3628) — Add ethereal glow, transparency effects
-14. **Pipe Wrench** (line 3788) — Metallic reflection, weight feel
-15. **Revolver** (line 3908) — Better barrel detail, cylinder rendering
-16. **Wrench Gun** (line 3867) — Hybrid weapon visual clarity
-
----
-
-## Phase 6: UI & HUD Polish
-
-### In-Game UI
-1. **Email UI** (line 15761) — Improve readability, better text layout
-2. **Letter UI** (line 15816) — Paper texture, aged look
-3. **Detective Note UI** (line 15844) — Handwritten feel, coffee stain
-4. **Safe UI** (line 15941) — Metallic dial, combination mechanism detail
-5. **Elevator UI** (line 16215) — Button panel, floor indicator
-6. **Keypad UI** (line 16268) — Backlit keys, worn button marks
-7. **Computer UI** (line 16397) — Terminal/DOS aesthetic, scan lines
-8. **Portrait UI** (line 17136) — Frame detail, canvas texture
-9. **Holster UI** (line 17269) — Quick-select weapon display
-
-### HUD Elements
-10. **Ammo Counter** (line 1114) — Cleaner display, icon for ammo type
-11. **Held Doc indicator** (line 1151) — Better document icon
-12. **Mute Indicator** (line 17160) — Cleaner speaker icon
-13. **Holster Button** (line 17225) — Better touch target visibility
-
----
-
-## Phase 7: Visual Effects & Atmosphere
-
-1. **Particle system**: Add reusable particle emitter for dust motes, sparks, steam, embers
-2. **Screen shake**: On explosions/impacts, add subtle canvas shake
-3. **Vignette**: Subtle dark edges on rooms for cinematic framing
-4. **Acid Burst** (line 17352) — Improve splatter effect, add glow
-5. **Wrench Shatter** (line 3854) — Better fragment physics/rendering
-6. **Death animation** — More impactful visual feedback
-
----
-
-## Phase 8: Title & Menu Screens
-
-1. **RT Presents screen** — Cinematic fade timing, better typography
-2. **Title screen fallback** — When image doesn't load, improve the pipe-bar aesthetic
-3. **Level cards** — Better transition effects, typography hierarchy
-4. **Menu polish** — Consistent visual language with in-game aesthetic
-
----
-
-## Implementation Strategy
-
-- Work through phases sequentially (1→8)
-- Within each phase, commit after each major subsection
-- Test on the 700×500 canvas after each change — visual regression is the main risk
-- The cloning room (Phase 2) gets the most attention as it's the branch focus
-- Reuse patterns established in early rooms for consistency in later rooms
-- Font/line-width fixes in Phase 1 propagate automatically to all rooms
-
-## Estimated Commits
-~15-20 commits across all phases, pushed to `claude/redesign-cloning-room-jl2eI`
+This prevents text from bleeding over sign edges regardless of font size or scaling.
