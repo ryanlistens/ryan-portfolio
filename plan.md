@@ -49,18 +49,20 @@ Both `drawMulletPro()` and `drawBaldManager()` have been rebuilt from scratch:
 
 ## What Still Needs Work
 
-### Priority 1: NPC Sprite Consistency
+### Priority 1: NPC Sprite Consistency ✓ COMPLETE
 
-The pipe managers (`drawNPC`), boss characters, and the clone follower still use the old rectangular style. They need the same curved-shape treatment as the player sprites.
+All boss characters and NPCs now use curved shapes, stroke-based arms, oval heads, and consistent proportions.
 
-**Specific targets:**
-- `drawNPC()` (line ~2195): Pipe managers in colored jumpsuits — need round heads, proper bodies
-- `drawBoss()` (line ~1954): Early boss — needs proportional body, not blocky rectangles
-- `drawCloneFollower()` (line ~13542): Red PM clone — already has curved hood but body is still rectangles
-- `drawCEO()` (line ~17914): Final boss — most detailed NPC, needs polish pass
-- Hallway cloning boss (inline at ~19839): Hard hat boss drawn inline — needs consistency with other bosses
+**Completed:**
+- `drawNPC()`: Pipe managers — round ellipse heads, proper eyes with iris/pupil, alert bubble with background
+- `drawBoss()`: Level 5 boss — complete rewrite with oval head, shaped torso, stroke-based arms with lineCap:'round', cigar in hand with smoke wisps, gold chain, tapered tie, rounded shoes. Shadow at y+36.
+- `drawCEO()`: Final boss — complete rewrite across all 4 facing directions (left/right/forward/back). Oval weathered head with wrinkle lines, jowls, deep-set eyes with bags, gray slicked hair, charcoal power suit with pinstripes/lapels/pocket square, dark red tie, stroke-based arms with gold watch/ring, cigar in mouth with smoke, rounded shoes. Gun overlay rewritten with stroke-based arm.
+- `drawDeadCEO()`: Rewritten with ellipse body, stroke-based limbs, oval head, rounded cigar
+- Cloning room boss (inline): Rewritten with oval head, shaped red shirt torso, stroke-based arms, rounded steel-toe boots, hard hat on top
+- Hallway cloning boss (inline): Same curved treatment as cloning room boss — consistent appearance across both locations
+- `drawCloneFollower()`: Shaped torso with quadraticCurveTo, stroke-based arms, ellipse shoes
 
-**Design constraint**: All NPCs should share the same head height (~y-30 from anchor) and foot position (~y+36) as the player sprites. Currently some NPCs are taller/shorter than the player, which looks random.
+**Design constraint met**: All NPCs now share consistent foot position (~y+36 shadow) and proportional heads.
 
 ### Priority 2: Remaining Sign & Label Quality
 
