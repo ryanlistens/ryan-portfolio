@@ -156,11 +156,28 @@ const ctx = canvas.getContext('2d');
 // Game area is always 700x500; canvas expands to fill the full viewport
 const GAME_W = 700, GAME_H = 500;
 let CANVAS_W = 700, CANVAS_H = 500, GX = 0, GY = 0;
-const dpr = window.devicePixelRatio || 1;
+let dpr = window.devicePixelRatio || 1;
+
+// Responsive font scaling — ensures readability on small screens and high-DPI displays
+let FONT_SCALE = 1;
+function scaledFont(size, weight, family) {
+    const scaled = Math.round(Math.max(size, 8) * FONT_SCALE);
+    return weight ? `${weight} ${scaled}px ${family || 'monospace'}` : `${scaled}px ${family || 'monospace'}`;
+}
+function updateFontScale() {
+    // On small viewports where canvas is scaled down, bump fonts proportionally
+    const cssW = parseFloat(canvas.style.width) || window.innerWidth;
+    const ratio = cssW / CANVAS_W;
+    // Below 1:1 mapping, scale fonts up so they stay readable; cap at 1.5x
+    FONT_SCALE = ratio < 0.8 ? Math.min(1.5, 0.8 / ratio) : 1;
+}
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const hud = document.getElementById('hud');
 function resizeCanvas() {
+    // Refresh DPR on every resize/orientation change (handles display switching & rotation)
+    dpr = window.devicePixelRatio || 1;
+
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const isLandscape = vw > vh;
@@ -201,6 +218,7 @@ function resizeCanvas() {
     }
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    updateFontScale();
 }
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
@@ -1850,17 +1868,27 @@ function drawBoss(x, y, facing) {
     const s = 2;
 
     // Shadow — at foot level (larger boss = bigger shadow)
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 50, 14, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 50, 16, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    
+
+    // Anti-aliased dark outline behind whole sprite
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x - 10*s - 1, y - 13*s - 1, 20*s + 2, 38*s + 2);
+
     const skinColor = boss.angry ? '#cc0000' : '#f5c89a';
-    
+    const skinHighlight = boss.angry ? '#dd3333' : '#fad5a8';
+
     if(facing === 'left') {
+        // HEAD — larger with more detail
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        
+        // Cheek highlight
+        ctx.fillStyle = skinHighlight;
+        ctx.fillRect(x - 4*s, y - 8*s, 3*s, 3*s);
+
+        // Eyes + angry brows
         ctx.fillStyle = '#000';
         if(boss.angry) {
             ctx.fillRect(x - 2*s, y - 10*s, 3*s, s);
@@ -1870,36 +1898,100 @@ function drawBoss(x, y, facing) {
             ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
             ctx.fillRect(x - 3*s, y - 6*s, 3*s, s);
         }
-        
+        // Eye glint
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x - s, y - 9*s, s, s);
+
+        // Neck
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
-        
+
+        // Gold chain on neck
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x - 3*s, y - s, 6*s, s);
+        ctx.fillStyle = '#ccaa00';
+        ctx.fillRect(x - 2*s, y, s, s); // chain pendant left dangle
+
+        // White dress shirt
         ctx.fillStyle = '#fff';
         ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        // Shirt shading on far side
         ctx.fillStyle = '#e0e0e0';
         ctx.fillRect(x + 5*s, y + s, 2*s, 11*s);
-        
+        // Shirt fold highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x - 5*s, y + 3*s, s, 7*s);
+
+        // Tie
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
-        
+        // Tie clip (gold)
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x - s, y + 5*s, 3*s, s);
+
+        // Arms
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
         ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
-        
+
+        // Cigar in left hand (extending outward)
+        ctx.save();
+        ctx.translate(x - 9*s, y + 5*s);
+        ctx.rotate(-0.15);
+        // Cigar body
+        ctx.fillStyle = '#8b5e3c';
+        ctx.fillRect(-7*s, 0, 7*s, s);
+        // Cigar band (gold ring)
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(-5*s, -0.3*s, 1.5*s, s + 0.6*s);
+        // Lit tip with animated glow
+        const cigarGlow = 0.7 + Math.sin(frame * 0.08) * 0.3;
+        ctx.fillStyle = `rgba(255,80,0,${cigarGlow})`;
+        ctx.fillRect(-7*s, 0, s, s);
+        ctx.fillStyle = `rgba(255,120,20,${cigarGlow * 0.6})`;
+        ctx.beginPath();
+        ctx.arc(-7*s, 0.5*s, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        // Smoke wisps
+        const smokeT = frame * 0.04;
+        for(let wi = 0; wi < 3; wi++) {
+            const sx = x - 20 - wi * 4 + Math.sin(smokeT + wi) * 3;
+            const sy = y + 2 - wi * 6;
+            const sa = 0.25 - wi * 0.07;
+            if(sa > 0) {
+                ctx.fillStyle = `rgba(200,200,210,${sa})`;
+                ctx.beginPath(); ctx.arc(sx, sy, 2 + wi, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        // Pants
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
         ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
         ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
-        
+        // Pant crease highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(x - 4*s, y + 17*s, s, 6*s);
+        ctx.fillRect(x + 2*s, y + 17*s, s, 6*s);
+
+        // Shoes — polished
         ctx.fillStyle = '#1a1a1a';
         const legL = boss.walking ? Math.sin(frame * 0.25) * 5 : 0;
         ctx.fillRect(x - 5*s, y + 24*s + legL, 4*s, 2*s);
         ctx.fillRect(x + s, y + 24*s - legL, 4*s, 2*s);
-        
+        // Shoe shine
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(x - 5*s, y + 24*s + legL, 2*s, s);
+        ctx.fillRect(x + s, y + 24*s - legL, 2*s, s);
+
     } else if(facing === 'right') {
+        // HEAD
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        
+        ctx.fillStyle = skinHighlight;
+        ctx.fillRect(x + s, y - 8*s, 3*s, 3*s);
+
         ctx.fillStyle = '#000';
         if(boss.angry) {
             ctx.fillRect(x - s, y - 10*s, 3*s, s);
@@ -1909,31 +2001,79 @@ function drawBoss(x, y, facing) {
             ctx.fillRect(x, y - 9*s, 2*s, 2*s);
             ctx.fillRect(x, y - 6*s, 3*s, s);
         }
-        
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x + s, y - 9*s, s, s);
+
+        // Neck
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
-        
+        // Gold chain
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x - 3*s, y - s, 6*s, s);
+        ctx.fillStyle = '#ccaa00';
+        ctx.fillRect(x + s, y, s, s);
+
+        // White dress shirt
         ctx.fillStyle = '#fff';
         ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
         ctx.fillStyle = '#e0e0e0';
         ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
-        
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x + 4*s, y + 3*s, s, 7*s);
+
+        // Tie
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
-        
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(x - 2*s, y + 5*s, 3*s, s);
+
+        // Arms
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
         ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
-        
+
+        // Cigar in right hand
+        ctx.save();
+        ctx.translate(x + 9*s, y + 5*s);
+        ctx.rotate(0.15);
+        ctx.fillStyle = '#8b5e3c';
+        ctx.fillRect(0, 0, 7*s, s);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(3.5*s, -0.3*s, 1.5*s, s + 0.6*s);
+        const cigarGlowR = 0.7 + Math.sin(frame * 0.08) * 0.3;
+        ctx.fillStyle = `rgba(255,80,0,${cigarGlowR})`;
+        ctx.fillRect(6*s, 0, s, s);
+        ctx.fillStyle = `rgba(255,120,20,${cigarGlowR * 0.6})`;
+        ctx.beginPath(); ctx.arc(7*s, 0.5*s, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        const smokeTR = frame * 0.04;
+        for(let wi = 0; wi < 3; wi++) {
+            const sx = x + 20 + wi * 4 + Math.sin(smokeTR + wi) * 3;
+            const sy = y + 2 - wi * 6;
+            const sa = 0.25 - wi * 0.07;
+            if(sa > 0) {
+                ctx.fillStyle = `rgba(200,200,210,${sa})`;
+                ctx.beginPath(); ctx.arc(sx, sy, 2 + wi, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        // Pants
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
         ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s);
         ctx.fillRect(x + s, y + 16*s, 4*s, 8*s);
-        
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(x - 4*s, y + 17*s, s, 6*s);
+        ctx.fillRect(x + 2*s, y + 17*s, s, 6*s);
+
+        // Shoes
         ctx.fillStyle = '#1a1a1a';
         const legR = boss.walking ? Math.sin(frame * 0.25) * 5 : 0;
         ctx.fillRect(x - 5*s, y + 24*s + legR, 4*s, 2*s);
         ctx.fillRect(x + s, y + 24*s - legR, 4*s, 2*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(x - 5*s, y + 24*s + legR, 2*s, s);
+        ctx.fillRect(x + s, y + 24*s - legR, 2*s, s);
     }
     
     if(boss.needsColor) {
@@ -3754,10 +3894,31 @@ function drawComputer(x, y) {
     
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(x - 20, y - 25, 40, 5);
-    
+
+    // Subtle scan lines on monitor
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 1;
+    for(let sl = 0; sl < 10; sl++) {
+        ctx.beginPath();
+        ctx.moveTo(x - 20, y - 25 + sl * 2);
+        ctx.lineTo(x + 20, y - 25 + sl * 2);
+        ctx.stroke();
+    }
+
     ctx.fillStyle = '#444';
     ctx.fillRect(x - 5, y, 10, 3);
-    
+
+    // Keyboard with key grid pattern
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x - 25, y + 4, 50, 14);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 0.5;
+    for(let kr = 0; kr < 3; kr++) {
+        for(let kc = 0; kc < 8; kc++) {
+            ctx.strokeRect(x - 23 + kc * 6, y + 5 + kr * 4, 5, 3);
+        }
+    }
+
     ctx.fillStyle = '#f5f2ec';
     ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
@@ -3781,8 +3942,27 @@ function draw3DPrinter(x, y) {
     ctx.lineWidth = 2;
     ctx.strokeRect(x - 16, y - 26, 32, 28);
     
+    // Horizontal build layer lines inside chamber
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for(let bl = 0; bl < 7; bl++) {
+        ctx.beginPath();
+        ctx.moveTo(x - 15, y - 24 + bl * 4);
+        ctx.lineTo(x + 15, y - 24 + bl * 4);
+        ctx.stroke();
+    }
+
     const isPrinting = ghostGun.printing || pipeWrench.printing;
     if(isPrinting) {
+        // Active printing glow effect
+        ctx.save();
+        ctx.shadowColor = 'rgba(100,180,255,0.7)';
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = 'rgba(100,180,255,0.25)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 16, y - 26, 32, 28);
+        ctx.shadowBlur = 0;
+        ctx.restore();
         const progress = ghostGun.printing ? ghostGun.printProgress : pipeWrench.printProgress;
         const isHeart = ghostGun.printing ? ghostGun.printingHeart : pipeWrench.printingHeart;
         if(isHeart) {
@@ -4041,20 +4221,41 @@ function drawPipeWrench(x, y, facing) {
     ctx.fillStyle = skinColor;
     ctx.fillRect(-3, 10, 7, 6);
 
+    // Shadow under wrench (weight feel)
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(0, 18, 8, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
     // Wrench (pointing up-ish, handle down)
-    // Handle
-    ctx.fillStyle = wrenchColor;
+    // Handle with metallic gradient
+    const shaftGrad = ctx.createLinearGradient(-3, 0, 3, 0);
+    shaftGrad.addColorStop(0, '#666');
+    shaftGrad.addColorStop(0.3, '#999');
+    shaftGrad.addColorStop(0.5, '#c0c0c0');
+    shaftGrad.addColorStop(0.7, '#999');
+    shaftGrad.addColorStop(1, '#666');
+    ctx.fillStyle = shaftGrad;
     ctx.fillRect(-3, -18, 6, 28);
-    // Head (open-end jaws)
-    ctx.fillStyle = wrenchColor;
+    // Head (open-end jaws) with metallic gradient
+    const headGrad = ctx.createLinearGradient(-8, 0, 8, 0);
+    headGrad.addColorStop(0, '#666');
+    headGrad.addColorStop(0.35, '#999');
+    headGrad.addColorStop(0.5, '#bbb');
+    headGrad.addColorStop(0.65, '#999');
+    headGrad.addColorStop(1, '#666');
+    ctx.fillStyle = headGrad;
     ctx.fillRect(-8, -28, 16, 12);
     // Jaw gap
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(-5, -26, 5, 8);
     ctx.fillRect(0, -26, 5, 8);
-    // Shine
-    ctx.fillStyle = wrenchShine;
-    ctx.fillRect(-2, -22, 2, 14);
+    // Highlight stripe along shaft (metallic reflection)
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(-1, -18, 2, 28);
+    // Head highlight stripe
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(-8, -24, 16, 2);
 
     ctx.restore();
 }
@@ -4196,11 +4397,17 @@ function drawRevolver(x, y, facing) {
         const gunX = x - 28;
         const gunY = y - 10;
 
-        // Barrel
-        ctx.fillStyle = '#4a4a4a';
+        // Barrel with metallic gradient
+        const bGradL = ctx.createLinearGradient(gunX - 14, gunY - 2, gunX - 14, gunY + 3);
+        bGradL.addColorStop(0, '#6a6a6a');
+        bGradL.addColorStop(0.3, '#8a8a8a');
+        bGradL.addColorStop(0.5, '#555');
+        bGradL.addColorStop(1, '#3a3a3a');
+        ctx.fillStyle = bGradL;
         ctx.fillRect(gunX - 14, gunY - 2, 18, 5);
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(gunX - 14, gunY - 1, 18, 2);
+        // Barrel bore line
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(gunX - 14, gunY, 18, 1);
 
         // Barrel tip/sight
         ctx.fillStyle = '#1a1a1a';
@@ -4694,6 +4901,28 @@ function drawCCTVCamera(mountX, mountY, facingRight) {
     ctx.arc(lensX + dir * 0.5, -1, 1, 0, Math.PI * 2);
     ctx.fill();
 
+    // HD lens flare — bright highlight with radial glow
+    ctx.save();
+    const flareGrad = ctx.createRadialGradient(lensX + dir * 0.3, -0.5, 0, lensX + dir * 0.3, -0.5, 4);
+    flareGrad.addColorStop(0, 'rgba(220,240,255,0.7)');
+    flareGrad.addColorStop(0.3, 'rgba(180,210,255,0.3)');
+    flareGrad.addColorStop(1, 'rgba(180,210,255,0)');
+    ctx.fillStyle = flareGrad;
+    ctx.beginPath();
+    ctx.arc(lensX + dir * 0.3, -0.5, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny starburst rays on lens
+    ctx.strokeStyle = 'rgba(200,220,255,0.25)';
+    ctx.lineWidth = 0.5;
+    for (let r = 0; r < 4; r++) {
+        const ra = r * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(lensX + Math.cos(ra) * 2, Math.sin(ra) * 2);
+        ctx.lineTo(lensX + Math.cos(ra) * 5, Math.sin(ra) * 5);
+        ctx.stroke();
+    }
+    ctx.restore();
+
     // Recording indicator LED — red blinking dot
     const ledOn = Math.floor(t * 1.5) % 2 === 0;
     if(ledOn) {
@@ -4869,6 +5098,31 @@ function drawGrimyAirDuct(ductX, ceilingY, ductW) {
         ctx.stroke();
     }
 
+    // Vent slats detail — darker lines across duct front face
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    for (let vs = dy + 5; vs < dy + ductH - 3; vs += 4) {
+        ctx.beginPath();
+        ctx.moveTo(ductX + 3, vs);
+        ctx.lineTo(ductX + ductW - 3, vs);
+        ctx.stroke();
+    }
+
+    // Extra grime — dark oily smudges and rust spots
+    ctx.fillStyle = 'rgba(30,25,10,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(ductX + ductW * 0.25, dy + ductH * 0.5, 18, 6, 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(50,30,10,0.12)';
+    ctx.beginPath();
+    ctx.ellipse(ductX + ductW * 0.7, dy + ductH * 0.4, 14, 5, -0.15, 0, Math.PI * 2);
+    ctx.fill();
+    // Rust spots
+    ctx.fillStyle = 'rgba(120,60,20,0.15)';
+    ctx.beginPath(); ctx.arc(ductX + ductW * 0.15, dy + 8, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ductX + ductW * 0.85, dy + 12, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ductX + ductW * 0.45, dy + 6, 2.5, 0, Math.PI * 2); ctx.fill();
+
     // Shadow beneath duct
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.fillRect(ductX - 2, dy + ductH, ductW + 4, 6);
@@ -4938,7 +5192,7 @@ function drawIndustrialFan(cx, cy, radius) {
         ctx.save();
         ctx.translate(cx, cy);
 
-        // Blade body — tapered, perspective-correct
+        // Blade body — tapered, perspective-correct with gradient
         ctx.beginPath();
         ctx.moveTo(0, -2);
         ctx.lineTo(bladeX * 0.15, bladeY * 0.15 - 2);
@@ -4948,7 +5202,14 @@ function drawIndustrialFan(cx, cy, radius) {
         ctx.lineTo(bladeX * 0.15, bladeY * 0.15 + 2);
         ctx.lineTo(0, 2);
         ctx.closePath();
-        ctx.fillStyle = `rgba(${shade},${shade},${shade},${alpha.toFixed(2)})`;
+        // Gradient across blade for depth
+        const bladeGrad = ctx.createLinearGradient(0, -2, bladeX, bladeY);
+        const sLight = Math.min(shade + 30, 180);
+        const sDark = Math.max(shade - 20, 30);
+        bladeGrad.addColorStop(0, `rgba(${sLight},${sLight},${sLight},${alpha.toFixed(2)})`);
+        bladeGrad.addColorStop(0.4, `rgba(${shade},${shade},${shade},${alpha.toFixed(2)})`);
+        bladeGrad.addColorStop(1, `rgba(${sDark},${sDark},${sDark},${(alpha * 0.8).toFixed(2)})`);
+        ctx.fillStyle = bladeGrad;
         ctx.fill();
 
         // Blade edge highlight
@@ -4964,14 +5225,26 @@ function drawIndustrialFan(cx, cy, radius) {
         ctx.restore();
     }
 
-    // Motion blur ring — subtle sweep to sell rotation
+    // Motion blur ring — layered sweep for HD spin effect
     ctx.save();
-    ctx.globalAlpha = 0.06;
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = radius * 0.06;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, radius * 0.85, radius * squash * 0.85, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    for (let mb = 0; mb < 3; mb++) {
+        ctx.globalAlpha = 0.04 - mb * 0.01;
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = radius * (0.08 - mb * 0.02);
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, radius * (0.82 + mb * 0.06), radius * squash * (0.82 + mb * 0.06), 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    // Radial motion blur on blade tips — faded arcs
+    ctx.globalAlpha = 0.035;
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < bladeCount; i++) {
+        const tipAngle = angle + (i / bladeCount) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, radius * 0.92, radius * squash * 0.92, 0, tipAngle - 0.3, tipAngle + 0.3);
+        ctx.stroke();
+    }
     ctx.restore();
 
     // Redraw motor hub on top of blades
@@ -5180,6 +5453,41 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.shadowBlur = 0;
     }
 
+
+    // Hydraulic piston detail — visible on both frame pillars
+    ctx.save();
+    const pistonLX = leftPillarX + 3;
+    const pistonTopY = y + 4;
+    const pistonBotY = y + h - 8;
+    const pistonTravel = openPct * (pistonBotY - pistonTopY) * 0.35;
+    // Left piston cylinder housing
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(pistonLX, pistonTopY, 8, pistonBotY - pistonTopY);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(pistonLX + 1, pistonTopY, 2, pistonBotY - pistonTopY);
+    // Chrome piston rod
+    const rodGrad = ctx.createLinearGradient(pistonLX + 2, 0, pistonLX + 6, 0);
+    rodGrad.addColorStop(0, '#888');
+    rodGrad.addColorStop(0.5, '#ccc');
+    rodGrad.addColorStop(1, '#888');
+    ctx.fillStyle = rodGrad;
+    ctx.fillRect(pistonLX + 2, pistonTopY + 6 + pistonTravel, 4, (pistonBotY - pistonTopY) * 0.5);
+    // End caps
+    ctx.fillStyle = '#555';
+    ctx.fillRect(pistonLX - 1, pistonTopY - 2, 10, 5);
+    ctx.fillRect(pistonLX - 1, pistonBotY - 1, 10, 4);
+    // Right piston — mirrored
+    const pistonRX = rightPillarX + frameW - 11;
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(pistonRX, pistonTopY, 8, pistonBotY - pistonTopY);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(pistonRX + 1, pistonTopY, 2, pistonBotY - pistonTopY);
+    ctx.fillStyle = rodGrad;
+    ctx.fillRect(pistonRX + 2, pistonTopY + 6 + pistonTravel, 4, (pistonBotY - pistonTopY) * 0.5);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(pistonRX - 1, pistonTopY - 2, 10, 5);
+    ctx.fillRect(pistonRX - 1, pistonBotY - 1, 10, 4);
+    ctx.restore();
     // Door opening / blade animation
     if (openPct > 0.02) {
         // Dark recessed interior behind door
@@ -5993,6 +6301,26 @@ function drawLevel6EmployeePipeRoom() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
+    // Wet floor puddle reflections
+    const epFloorSheen = ctx.createLinearGradient(0, 400, 0, 500);
+    epFloorSheen.addColorStop(0, 'rgba(60,55,75,0.10)');
+    epFloorSheen.addColorStop(0.5, 'rgba(40,38,55,0.05)');
+    epFloorSheen.addColorStop(1, 'rgba(30,28,40,0.0)');
+    ctx.fillStyle = epFloorSheen;
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    // Condensation drips on walls
+    const ept = Date.now();
+    for(let di = 0; di < 5; di++) {
+        const dx = 60 + di * 130;
+        const dripY = 80 + ((ept / 25 + di * 60) % 320);
+        ctx.fillStyle = 'rgba(140,160,180,0.15)';
+        ctx.fillRect(dx, dripY, 1, 8);
+        ctx.fillStyle = 'rgba(140,160,180,0.08)';
+        ctx.beginPath(); ctx.arc(dx + 0.5, dripY + 8, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    // Floor-level haze from pipes
+    ctx.fillStyle = 'rgba(60,55,75,0.06)';
+    ctx.fillRect(-GX, 380, CANVAS_W, 25);
 
     // Ceiling surface — Level 6 style (lower ceiling, y=8)
     drawCeilingSurface(8);
@@ -6234,6 +6562,30 @@ function drawLevel5Hallway() {
         ctx.strokeStyle = '#988870';
         ctx.lineWidth = 1;
         ctx.strokeRect(i * 35, 400, 35, 100);
+    }
+    // Floor scuff marks — shoe marks from foot traffic
+    ctx.fillStyle = 'rgba(80,70,55,0.08)';
+    ctx.save();
+    ctx.translate(200, 420); ctx.rotate(0.1);
+    ctx.fillRect(0, 0, 25, 8);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(380, 425); ctx.rotate(-0.05);
+    ctx.fillRect(0, 0, 22, 7);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(520, 418); ctx.rotate(0.15);
+    ctx.fillRect(0, 0, 28, 9);
+    ctx.restore();
+    // Flickering fluorescent light effect — one light buzzes
+    const hallT = Date.now();
+    const flickerOn = Math.sin(hallT / 80) > -0.3;
+    if(flickerOn) {
+        ctx.fillStyle = 'rgba(255,250,230,0.04)';
+        ctx.fillRect(100, -GY, 120, 400 + GY);
+    } else {
+        ctx.fillStyle = 'rgba(0,0,0,0.02)';
+        ctx.fillRect(100, -GY, 120, 400 + GY);
     }
 
     // CEO portrait at top - photorealistic image with ornate frame
@@ -6491,6 +6843,14 @@ function drawLevel5FurnaceRoom() {
             ctx.lineWidth = 1;
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
+    }
+
+    // Heat shimmer — wavering distortion above furnace
+    for(let hi = 0; hi < 6; hi++) {
+        const hx = 280 + hi * 22 + Math.sin(furnaceT / 180 + hi * 0.9) * 5;
+        const hy = 180 + Math.sin(furnaceT / 250 + hi) * 20;
+        ctx.fillStyle = `rgba(255,100,30,${0.025 + Math.sin(furnaceT / 350 + hi) * 0.01})`;
+        ctx.beginPath(); ctx.ellipse(hx, hy, 8, 25, 0, 0, Math.PI * 2); ctx.fill();
     }
 
     // Ember particles floating up from furnace area
@@ -6783,9 +7143,17 @@ function drawOfficePlant(x, y) {
     ctx.lineTo(x + 12, y - 22);
     ctx.lineTo(x + 16, y);
     ctx.closePath(); ctx.fill();
-    // Pot rim
+    // Pot shadow underneath
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 2, 17, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Pot rim with highlight
     ctx.fillStyle = '#d4774a';
     ctx.fillRect(x - 17, y - 24, 34, 5);
+    // Rim top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(x - 17, y - 24, 34, 2);
     // Pot detail band
     ctx.strokeStyle = '#a85428'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x - 15, y - 10); ctx.lineTo(x + 15, y - 10); ctx.stroke();
@@ -6821,6 +7189,18 @@ function drawOfficePlant(x, y) {
         // Midrib
         ctx.strokeStyle = '#1a6e1a'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -l.len); ctx.stroke();
+        // Secondary veins (organic arc curves)
+        ctx.strokeStyle = 'rgba(26,110,26,0.5)'; ctx.lineWidth = 0.7;
+        for(let v = 1; v <= 4; v++) {
+            const vy = -l.len * (v / 5);
+            const vw = l.w * (1 - v / 6) * 0.6;
+            ctx.beginPath(); ctx.moveTo(0, vy);
+            ctx.quadraticCurveTo(-vw * 0.6, vy - l.len * 0.04, -vw, vy - l.len * 0.08);
+            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, vy);
+            ctx.quadraticCurveTo(vw * 0.6, vy - l.len * 0.04, vw, vy - l.len * 0.08);
+            ctx.stroke();
+        }
         // Monstera splits (on larger leaves)
         if(l.len > 40) {
             ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
@@ -6841,22 +7221,35 @@ function drawBlueFuton(x, y) {
     ctx.fillRect(x - 50, y - 4, 100, 6);
     ctx.fillRect(x - 48, y + 2, 8, 8);
     ctx.fillRect(x + 40, y + 2, 8, 8);
-    // Futon base cushion — thick and low
-    ctx.fillStyle = futonColor;
+    // Futon base cushion — thick and low with fabric depth gradient
+    const cushGrad = ctx.createLinearGradient(x, y - 20, x, y - 2);
+    cushGrad.addColorStop(0, futonHighlight);
+    cushGrad.addColorStop(0.25, futonColor);
+    cushGrad.addColorStop(0.7, '#163a70');
+    cushGrad.addColorStop(1, futonColor);
+    ctx.fillStyle = cushGrad;
     ctx.fillRect(x - 48, y - 20, 96, 18);
-    // Base cushion top highlight
-    ctx.fillStyle = futonHighlight;
-    ctx.fillRect(x - 48, y - 20, 96, 4);
+    // Subtle fabric highlight bands across seat
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    for(let fb = 0; fb < 4; fb++) {
+        ctx.fillRect(x - 48, y - 19 + fb * 5, 96, 2);
+    }
     // Seat cushion dividers
     ctx.strokeStyle = '#163880'; ctx.lineWidth = 1;
     for(let c = 0; c < 3; c++) {
         ctx.beginPath(); ctx.moveTo(x - 16 + c * 16, y - 20); ctx.lineTo(x - 16 + c * 16, y - 2); ctx.stroke();
     }
-    // Backrest
-    ctx.fillStyle = futonColor;
+    // Backrest with fabric fold gradient
+    const backGrad = ctx.createLinearGradient(x - 50, 0, x - 36, 0);
+    backGrad.addColorStop(0, futonHighlight);
+    backGrad.addColorStop(0.3, futonColor);
+    backGrad.addColorStop(0.8, '#163a70');
+    backGrad.addColorStop(1, futonColor);
+    ctx.fillStyle = backGrad;
     ctx.fillRect(x - 50, y - 50, 14, 32);
-    ctx.fillStyle = futonHighlight;
-    ctx.fillRect(x - 50, y - 50, 14, 5);
+    // Backrest top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x - 50, y - 50, 14, 3);
     // Backrest buttons
     ctx.fillStyle = '#163880';
     for(let b = 0; b < 3; b++) {
@@ -6871,16 +7264,24 @@ function drawBlueFuton(x, y) {
     // Piping trim
     ctx.fillStyle = '#4a90d9';
     ctx.fillRect(x - 48, y - 2, 96, 3);
-    // Armrest left
-    ctx.fillStyle = futonColor;
+    // Armrest left with cushion gradient
+    const armLGrad = ctx.createLinearGradient(x - 50, y - 22, x - 50, y);
+    armLGrad.addColorStop(0, futonHighlight);
+    armLGrad.addColorStop(0.3, futonColor);
+    armLGrad.addColorStop(1, '#163a70');
+    ctx.fillStyle = armLGrad;
     ctx.fillRect(x - 50, y - 22, 8, 22);
-    ctx.fillStyle = futonHighlight;
-    ctx.fillRect(x - 50, y - 22, 8, 4);
-    // Armrest right
-    ctx.fillStyle = futonColor;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(x - 50, y - 22, 8, 2);
+    // Armrest right with cushion gradient
+    const armRGrad = ctx.createLinearGradient(x + 42, y - 22, x + 42, y);
+    armRGrad.addColorStop(0, futonHighlight);
+    armRGrad.addColorStop(0.3, futonColor);
+    armRGrad.addColorStop(1, '#163a70');
+    ctx.fillStyle = armRGrad;
     ctx.fillRect(x + 42, y - 22, 8, 22);
-    ctx.fillStyle = futonHighlight;
-    ctx.fillRect(x + 42, y - 22, 8, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(x + 42, y - 22, 8, 2);
 }
 
 // Draw boss reclining on futon after a nap
@@ -8012,6 +8413,26 @@ function drawLevel6PipeRoom() {
             ctx.lineWidth = 1;
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
+    }
+    // Floor reflective sheen
+    const l6prSheen = ctx.createLinearGradient(0, 400, 0, 500);
+    l6prSheen.addColorStop(0, 'rgba(80,74,95,0.10)');
+    l6prSheen.addColorStop(0.5, 'rgba(50,48,65,0.05)');
+    l6prSheen.addColorStop(1, 'rgba(30,28,40,0.0)');
+    ctx.fillStyle = l6prSheen;
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    // Industrial atmosphere — pipe steam haze
+    const l6prt = Date.now();
+    ctx.fillStyle = `rgba(60,55,75,${0.05 + Math.sin(l6prt / 3000) * 0.02})`;
+    ctx.fillRect(-GX, 360, CANVAS_W, 45);
+    // Condensation drips on walls
+    for(let di = 0; di < 4; di++) {
+        const dx = 150 + di * 140;
+        const dripY = 60 + ((l6prt / 30 + di * 70) % 340);
+        ctx.fillStyle = 'rgba(130,150,170,0.12)';
+        ctx.fillRect(dx, dripY, 1, 10);
+        ctx.fillStyle = 'rgba(130,150,170,0.07)';
+        ctx.beginPath(); ctx.arc(dx + 0.5, dripY + 10, 2, 0, Math.PI * 2); ctx.fill();
     }
 
     // Ceiling surface and overhead fixtures (drawn early, behind sign)
@@ -10394,6 +10815,17 @@ function drawNuclearAssemblyBridge() {
         ctx.restore();
     }
 
+    // ── RADIATION SHIMMER — subtle heat-haze distortion on bridge deck ──────
+    const radShimmer = Math.sin(_t * 0.005) * 0.03;
+    ctx.fillStyle = `rgba(60,255,20,${0.02 + radShimmer})`;
+    ctx.fillRect(-GX, bridgePlatY - 8, CANVAS_W, 16);
+    // Depth perspective — distant factory floor darkens with atmospheric haze
+    const depthHaze = ctx.createLinearGradient(0, 300, 0, factFloor);
+    depthHaze.addColorStop(0, 'rgba(6,8,6,0)');
+    depthHaze.addColorStop(1, 'rgba(6,8,6,0.3)');
+    ctx.fillStyle = depthHaze;
+    ctx.fillRect(-GX, 300, CANVAS_W, factFloor - 300);
+
     // ── CEILING (above bridge) ───────────────────────────────────────────────
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(-GX, -GY, CANVAS_W, railTopY - 6 + GY);
@@ -11861,18 +12293,34 @@ function drawLevel6CloningRoom() {
             ctx.fillStyle = '#666';
             ctx.fillRect(tx - 4, ty + sH, sW + 8, 4); // bracket shelf
 
-            // Outer tank shell
-            ctx.fillStyle = '#2a2a2a'; ctx.fillRect(tx - 2, ty - 2, sW + 4, sH + 4);
-            ctx.strokeStyle = tank.outline; ctx.lineWidth = 2;
-            ctx.strokeRect(tx - 2, ty - 2, sW + 4, sH + 4);
+            // Outer tank shell — rounded cylindrical appearance
+            const tankR = 6;
+            ctx.beginPath();
+            ctx.moveTo(tx - 2 + tankR, ty - 2);
+            ctx.arcTo(tx - 2 + sW + 4, ty - 2, tx - 2 + sW + 4, ty - 2 + sH + 4, tankR);
+            ctx.arcTo(tx - 2 + sW + 4, ty - 2 + sH + 4, tx - 2, ty - 2 + sH + 4, tankR);
+            ctx.arcTo(tx - 2, ty - 2 + sH + 4, tx - 2, ty - 2, tankR);
+            ctx.arcTo(tx - 2, ty - 2, tx - 2 + sW + 4, ty - 2, tankR);
+            ctx.closePath();
+            ctx.fillStyle = '#2a2a2a'; ctx.fill();
+            ctx.strokeStyle = tank.outline; ctx.lineWidth = 2; ctx.stroke();
 
-            // Glass body — dark interior with subtle depth
+            // Glass body — cylindrical curvature via multi-stop gradient
             const glassGrad = ctx.createLinearGradient(tx, 0, tx + sW, 0);
-            glassGrad.addColorStop(0, 'rgba(15,15,15,0.95)');
-            glassGrad.addColorStop(0.3, 'rgba(8,8,8,0.9)');
-            glassGrad.addColorStop(0.7, 'rgba(8,8,8,0.9)');
-            glassGrad.addColorStop(1, 'rgba(15,15,15,0.95)');
-            ctx.fillStyle = glassGrad; ctx.fillRect(tx, ty, sW, sH);
+            glassGrad.addColorStop(0, 'rgba(20,20,20,0.97)');
+            glassGrad.addColorStop(0.12, 'rgba(12,12,12,0.93)');
+            glassGrad.addColorStop(0.35, 'rgba(6,6,6,0.88)');
+            glassGrad.addColorStop(0.65, 'rgba(6,6,6,0.88)');
+            glassGrad.addColorStop(0.88, 'rgba(12,12,12,0.93)');
+            glassGrad.addColorStop(1, 'rgba(20,20,20,0.97)');
+            ctx.beginPath();
+            ctx.moveTo(tx + tankR, ty);
+            ctx.arcTo(tx + sW, ty, tx + sW, ty + sH, tankR - 2);
+            ctx.arcTo(tx + sW, ty + sH, tx, ty + sH, tankR - 2);
+            ctx.arcTo(tx, ty + sH, tx, ty, tankR - 2);
+            ctx.arcTo(tx, ty, tx + sW, ty, tankR - 2);
+            ctx.closePath();
+            ctx.fillStyle = glassGrad; ctx.fill();
 
             // Swirling goo fill (Slurpee machine style) — enhanced with depth
             ctx.save();
@@ -11900,6 +12348,27 @@ function drawLevel6CloningRoom() {
             ctx.beginPath();
             ctx.ellipse(tx + sW/2, ty + 4, sW/2 - 2, 3, 0, 0, Math.PI * 2);
             ctx.fill();
+            // Refraction highlights — bright caustic lines where light bends through glass+liquid
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            ctx.lineWidth = 1;
+            // Left edge refraction band
+            ctx.beginPath();
+            ctx.moveTo(tx + 3, ty + 8);
+            ctx.quadraticCurveTo(tx + 2, ty + sH * 0.5, tx + 4, ty + sH - 6);
+            ctx.stroke();
+            // Right edge refraction band
+            ctx.beginPath();
+            ctx.moveTo(tx + sW - 3, ty + 8);
+            ctx.quadraticCurveTo(tx + sW - 2, ty + sH * 0.5, tx + sW - 4, ty + sH - 6);
+            ctx.stroke();
+            // Central caustic shimmer
+            const causticX = tx + sW * 0.4 + Math.sin(spin * 2) * 4;
+            ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(causticX, ty + 10);
+            ctx.quadraticCurveTo(causticX + 3, ty + sH * 0.4, causticX - 2, ty + sH - 10);
+            ctx.stroke();
             ctx.restore();
 
             // Golf-ball sized PM prenatal eggs floating inside
@@ -12186,28 +12655,71 @@ function drawLevel6CloningRoom() {
             ctx.fillRect(vx + 4, vy + ftH, 6, 15);
             ctx.fillRect(vx + ftW - 10, vy + ftH, 6, 15);
 
-            // Steel vat body
+            // Steel vat body — cylindrical with rounded corners
+            const vatR = 8;
             const vatGrad = ctx.createLinearGradient(vx, 0, vx + ftW, 0);
-            vatGrad.addColorStop(0, '#444');
+            vatGrad.addColorStop(0, '#3a3a3a');
+            vatGrad.addColorStop(0.15, '#555');
             vatGrad.addColorStop(0.3, '#666');
             vatGrad.addColorStop(0.5, '#777');
             vatGrad.addColorStop(0.7, '#666');
-            vatGrad.addColorStop(1, '#444');
-            ctx.fillStyle = vatGrad;
-            ctx.fillRect(vx, vy, ftW, ftH);
+            vatGrad.addColorStop(0.85, '#555');
+            vatGrad.addColorStop(1, '#3a3a3a');
+            ctx.beginPath();
+            ctx.moveTo(vx + vatR, vy);
+            ctx.arcTo(vx + ftW, vy, vx + ftW, vy + ftH, vatR);
+            ctx.arcTo(vx + ftW, vy + ftH, vx, vy + ftH, vatR);
+            ctx.arcTo(vx, vy + ftH, vx, vy, vatR);
+            ctx.arcTo(vx, vy, vx + ftW, vy, vatR);
+            ctx.closePath();
+            ctx.fillStyle = vatGrad; ctx.fill();
+            // Cylindrical highlight band (specular on left third)
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.fillRect(vx + 4, vy + 4, 6, ftH - 8);
 
-            // Steel rims
+            // Steel rims — rounded to match tank
             ctx.fillStyle = '#999';
             ctx.fillRect(vx - 2, vy - 3, ftW + 4, 6);
             ctx.fillRect(vx - 2, vy + ftH - 3, ftW + 4, 6);
 
-            // Viewing window
-            ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            ctx.fillRect(vx + 6, vy + 15, ftW - 12, ftH - 30);
+            // Viewing window — rounded glass pane
+            const winR = 5;
+            const winX = vx + 6, winY = vy + 15, winW = ftW - 12, winH = ftH - 30;
+            ctx.beginPath();
+            ctx.moveTo(winX + winR, winY);
+            ctx.arcTo(winX + winW, winY, winX + winW, winY + winH, winR);
+            ctx.arcTo(winX + winW, winY + winH, winX, winY + winH, winR);
+            ctx.arcTo(winX, winY + winH, winX, winY, winR);
+            ctx.arcTo(winX, winY, winX + winW, winY, winR);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill();
             const oozeAlpha = 0.5 + Math.sin(t / 1000 + vi * 1.5) * 0.15;
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(winX + winR, winY);
+            ctx.arcTo(winX + winW, winY, winX + winW, winY + winH, winR);
+            ctx.arcTo(winX + winW, winY + winH, winX, winY + winH, winR);
+            ctx.arcTo(winX, winY + winH, winX, winY, winR);
+            ctx.arcTo(winX, winY, winX + winW, winY, winR);
+            ctx.closePath();
+            ctx.clip();
             ctx.fillStyle = vatColors[vi]; ctx.globalAlpha = oozeAlpha;
-            ctx.fillRect(vx + 7, vy + 16, ftW - 14, ftH - 32);
+            ctx.fillRect(winX, winY, winW, winH);
             ctx.globalAlpha = 1;
+            // Refraction highlights inside fetal tank viewing window
+            ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(winX + 2, winY + 5);
+            ctx.quadraticCurveTo(winX + 1, winY + winH * 0.5, winX + 3, winY + winH - 5);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(winX + winW - 2, winY + 5);
+            ctx.quadraticCurveTo(winX + winW - 1, winY + winH * 0.5, winX + winW - 3, winY + winH - 5);
+            ctx.stroke();
+            ctx.restore();
 
             // Floating fetal PM silhouette — curled-up recognizable figure
             const fetalBobY = vy + 38 + Math.sin(t / 800 + vi * 2) * 10;
@@ -12996,6 +13508,32 @@ function drawL6FurnaceRoom() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
+    // Warm ambient gradient from furnace casting across walls
+    const l6ft = Date.now();
+    const warmWall = ctx.createRadialGradient(420, 340, 30, 420, 340, 350);
+    warmWall.addColorStop(0, 'rgba(255,80,20,0.08)');
+    warmWall.addColorStop(0.5, 'rgba(200,40,10,0.04)');
+    warmWall.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = warmWall;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    // Heat shimmer — subtle wavering distortion effect above furnace
+    for(let hi = 0; hi < 8; hi++) {
+        const hx = 360 + hi * 14 + Math.sin(l6ft / 200 + hi * 0.8) * 4;
+        const hy = 200 + Math.sin(l6ft / 300 + hi) * 15;
+        ctx.fillStyle = `rgba(255,120,30,${0.03 + Math.sin(l6ft / 400 + hi) * 0.01})`;
+        ctx.beginPath(); ctx.ellipse(hx, hy, 6, 20, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // Floating embers near furnace
+    for(let ei = 0; ei < 6; ei++) {
+        const emberPhase = ((l6ft / 2000 + ei * 0.3) % 1);
+        const ex = 380 + ei * 18 + Math.sin(l6ft / 600 + ei * 2) * 15;
+        const ey = 340 - emberPhase * 200;
+        const ea = (1 - emberPhase) * 0.5;
+        if(ea > 0) {
+            ctx.fillStyle = `rgba(255,${150 + ei * 15},30,${ea})`;
+            ctx.beginPath(); ctx.arc(ex, ey, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
+    }
 
     // === FURNACE (center-right, prominent) ===
     const fx = 420, fy = 340;
@@ -13327,16 +13865,39 @@ function drawLevel6UnderbellyHallway() {
     // === TRANSITION HALLWAY — industrial to crude underbelly ===
     // Left half: crude cobblestone/brick, Right half: industrial tile (fading transition)
 
-    // Wall — dingy, water-stained concrete
-    ctx.fillStyle = '#3a3530';
+    // Wall — dingy, water-stained concrete with oppressive gradient
+    const ubhWallGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    ubhWallGrad.addColorStop(0, '#3a3530');
+    ubhWallGrad.addColorStop(0.6, '#352f2a');
+    ubhWallGrad.addColorStop(1, '#2a2520');
+    ctx.fillStyle = ubhWallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    // Wall grime streaks
-    for(let i = 0; i < 6; i++) {
+    // Wall grime streaks — thicker, more numerous
+    for(let i = 0; i < 8; i++) {
         ctx.fillStyle = `rgba(20,25,15,${0.2 + i * 0.03})`;
-        ctx.fillRect(80 + i * 110, 30 + i * 8, 3, 200);
+        ctx.fillRect(50 + i * 85, 20 + i * 6, 3, 240);
         ctx.fillStyle = `rgba(15,20,10,0.12)`;
-        ctx.fillRect(83 + i * 110, 50 + i * 12, 5, 170);
+        ctx.fillRect(53 + i * 85, 40 + i * 10, 5, 200);
+        // Water stain halos
+        ctx.fillStyle = 'rgba(30,35,25,0.08)';
+        ctx.beginPath(); ctx.ellipse(52 + i * 85, 30 + i * 6, 12, 8, 0, 0, Math.PI * 2); ctx.fill();
     }
+    // Dripping water animation
+    for(let wi = 0; wi < 4; wi++) {
+        const wx = 100 + wi * 155;
+        const wDripY = 50 + ((t / 20 + wi * 80) % 350);
+        ctx.fillStyle = 'rgba(120,140,160,0.18)';
+        ctx.fillRect(wx, wDripY, 1, 12);
+        // Drip bead at bottom
+        ctx.fillStyle = 'rgba(120,140,160,0.12)';
+        ctx.beginPath(); ctx.arc(wx + 0.5, wDripY + 12, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // Broken/flickering light patches — uneven illumination
+    const flickerPhase = Math.sin(t / 150) > 0.7 ? 0.06 : 0.02;
+    ctx.fillStyle = `rgba(255,240,200,${flickerPhase})`;
+    ctx.fillRect(200, 20, 80, 380);
+    ctx.fillStyle = 'rgba(255,240,200,0.03)';
+    ctx.fillRect(450, 20, 70, 380);
 
     // === FLOOR — transition from industrial tile (right) to cobblestone (left) ===
     const floorY = 400;
@@ -16329,13 +16890,29 @@ function drawLevel6CEOOffice() {
 function drawEmailUI(officeName) {
     const email = OFFICE_EMAILS[officeName];
 
-    // Full-screen email for mobile readability
-    ctx.fillStyle = '#f5f2ec';
+    // Full-screen email — subtle paper texture with warm tint
+    const emailBg = ctx.createLinearGradient(0, -GY, 0, CANVAS_H);
+    emailBg.addColorStop(0, '#f8f5ef');
+    emailBg.addColorStop(0.5, '#f5f2ec');
+    emailBg.addColorStop(1, '#f0ede5');
+    ctx.fillStyle = emailBg;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    // Subtle paper fiber texture
+    ctx.fillStyle = 'rgba(200,190,170,0.04)';
+    for(let py = -GY; py < CANVAS_H; py += 8) {
+        ctx.fillRect(-GX, py, CANVAS_W, 1);
+    }
 
     const office = level5.hallway.offices.find(o => o.name === officeName);
-    ctx.fillStyle = office.color.hex;
+    // Header bar with gradient depth
+    const headerGrad = ctx.createLinearGradient(0, -GY, 0, 50 + GY);
+    headerGrad.addColorStop(0, office.color.hex);
+    headerGrad.addColorStop(1, office.color.hex + 'dd');
+    ctx.fillStyle = headerGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, 50 + GY);
+    // Header bottom shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(-GX, 50, CANVAS_W, 3);
 
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 28px Arial';
@@ -16512,10 +17089,26 @@ function drawSafeUI() {
         ctx.fillStyle = 'rgba(0,0,0,0.9)';
         ctx.fillRect(50, 50, 600, 400);
 
-        ctx.fillStyle = '#2a2a2a';
+        // Metallic safe interior gradient
+        const safeGrad = ctx.createLinearGradient(60, 60, 60, 440);
+        safeGrad.addColorStop(0, '#333');
+        safeGrad.addColorStop(0.3, '#2a2a2a');
+        safeGrad.addColorStop(1, '#1e1e1e');
+        ctx.fillStyle = safeGrad;
         ctx.fillRect(60, 60, 580, 380);
+        // Steel border bevel
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+        ctx.strokeRect(60, 60, 580, 380);
+        ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+        ctx.strokeRect(62, 62, 576, 376);
 
         ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(70, 70, 560, 360);
+        // Vault interior shadow
+        const vaultShadow = ctx.createRadialGradient(350, 250, 50, 350, 250, 300);
+        vaultShadow.addColorStop(0, 'rgba(40,40,40,0.3)');
+        vaultShadow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = vaultShadow;
         ctx.fillRect(70, 70, 560, 360);
 
         ctx.fillStyle = '#f5f2ec';
@@ -17056,23 +17649,44 @@ function drawComputerUI() {
 function drawCEO(x, y, facing) {
     const s = 2;
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    // Shadow — commanding presence, wider and darker
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 36, 14, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 36, 16, 6, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Anti-aliased dark outline behind whole sprite for crisp edges
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x - 8*s - 1, y - 15*s - 1, 16*s + 2, 40*s + 2);
 
     const skinColor = ceo.blinkTimer > 0 ? '#cc0000' : '#d4a882';
     const weatheredSkin = '#c49872';
 
     if(facing === 'left') {
-        // BODY - Dark charcoal suit
+        // BODY - Dark charcoal power suit — broader shoulders for commanding posture
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        // Shoulder pads (broader silhouette)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x - 8*s, y + s, 2*s, 3*s);
+        ctx.fillRect(x + 6*s, y + s, 2*s, 3*s);
 
-        // Suit jacket shading
+        // Suit jacket shading — pinstripe texture
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x + 5*s, y + s, 2*s, 11*s);
+        // Subtle pinstripes
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        for(let pin = -6; pin <= 5; pin += 2) {
+            ctx.fillRect(x + pin*s, y + s, 1, 11*s);
+        }
+        // Lapel fold
+        ctx.fillStyle = '#383838';
+        ctx.fillRect(x - 5*s, y + s, 2*s, 6*s);
+        // Pocket square
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 6*s, y + 3*s, 2*s, s);
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(x - 6*s, y + 4*s, 2*s, s);
 
         // Dark red tie
         ctx.fillStyle = '#8b0000';
@@ -17169,13 +17783,29 @@ function drawCEO(x, y, facing) {
         }
 
     } else if(facing === 'right') {
-        // BODY - Dark charcoal suit
+        // BODY - Dark charcoal power suit — broader shoulders
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
+        // Shoulder pads
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x - 8*s, y + s, 2*s, 3*s);
+        ctx.fillRect(x + 6*s, y + s, 2*s, 3*s);
 
-        // Suit jacket shading
+        // Suit jacket shading + pinstripes
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        for(let pin = -6; pin <= 5; pin += 2) {
+            ctx.fillRect(x + pin*s, y + s, 1, 11*s);
+        }
+        // Lapel fold
+        ctx.fillStyle = '#383838';
+        ctx.fillRect(x + 3*s, y + s, 2*s, 6*s);
+        // Pocket square
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x + 4*s, y + 3*s, 2*s, s);
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(x + 4*s, y + 4*s, 2*s, s);
 
         // Dark red tie
         ctx.fillStyle = '#8b0000';
