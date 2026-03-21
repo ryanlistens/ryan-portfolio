@@ -505,8 +505,109 @@ function bulletImpact(x, y) {
         const speed = 2 + Math.random() * 3;
         impactSparks.push({ x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 6 + Math.floor(Math.random() * 4) });
     }
+    triggerScreenShake(2);
+    emitParticles(x, y, 'spark', 4);
 }
 let bossDoor = { state: 'closed', openPct: 0 };
+
+// ── Reusable particle system ──
+let ambientParticles = [];
+const PARTICLE_TYPES = {
+    dust:  { color: [180,170,150], sizeMin: 1, sizeMax: 3, speedMin: 0.1, speedMax: 0.4, lifeMin: 80, lifeMax: 200, gravity: -0.01, fadeIn: 0.15 },
+    spark: { color: [255,200,60],  sizeMin: 1, sizeMax: 2.5, speedMin: 1.5, speedMax: 4, lifeMin: 15, lifeMax: 35, gravity: 0.12, fadeIn: 0 },
+    steam: { color: [200,210,220], sizeMin: 3, sizeMax: 8, speedMin: 0.2, speedMax: 0.6, lifeMin: 60, lifeMax: 140, gravity: -0.03, fadeIn: 0.2 },
+    ember: { color: [255,100,20],  sizeMin: 1, sizeMax: 2, speedMin: 0.5, speedMax: 2, lifeMin: 30, lifeMax: 70, gravity: -0.06, fadeIn: 0 }
+};
+
+function emitParticles(x, y, type, count, opts) {
+    const pt = PARTICLE_TYPES[type];
+    if(!pt) return;
+    const spread = (opts && opts.spread) || Math.PI * 2;
+    const baseAngle = (opts && opts.angle != null) ? opts.angle : -Math.PI / 2;
+    for(let i = 0; i < count; i++) {
+        const angle = baseAngle + (Math.random() - 0.5) * spread;
+        const speed = pt.speedMin + Math.random() * (pt.speedMax - pt.speedMin);
+        const life = pt.lifeMin + Math.floor(Math.random() * (pt.lifeMax - pt.lifeMin));
+        ambientParticles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: pt.sizeMin + Math.random() * (pt.sizeMax - pt.sizeMin),
+            life, maxLife: life,
+            gravity: pt.gravity,
+            fadeIn: pt.fadeIn,
+            r: pt.color[0] + Math.floor((Math.random() - 0.5) * 30),
+            g: pt.color[1] + Math.floor((Math.random() - 0.5) * 30),
+            b: pt.color[2] + Math.floor((Math.random() - 0.5) * 30),
+            type
+        });
+    }
+}
+
+function updateParticles() {
+    for(let i = ambientParticles.length - 1; i >= 0; i--) {
+        const p = ambientParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.life--;
+        if(p.type === 'ember') { p.vx *= 0.98; p.vy *= 0.98; }
+        if(p.life <= 0) ambientParticles.splice(i, 1);
+    }
+}
+
+function drawParticles() {
+    for(const p of ambientParticles) {
+        const prog = 1 - p.life / p.maxLife;
+        let alpha;
+        if(p.fadeIn > 0 && prog < p.fadeIn) alpha = prog / p.fadeIn;
+        else alpha = p.life / p.maxLife;
+        alpha = Math.min(1, alpha * 0.8);
+        ctx.globalAlpha = alpha;
+        if(p.type === 'spark' || p.type === 'ember') {
+            ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            // glow
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2); ctx.fill();
+        } else {
+            ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    ctx.globalAlpha = 1;
+}
+
+// ── Global screen shake system ──
+let screenShake = { intensity: 0, decay: 0.88, dx: 0, dy: 0 };
+
+function triggerScreenShake(intensity) {
+    screenShake.intensity = Math.max(screenShake.intensity, intensity);
+}
+
+function updateScreenShake() {
+    if(screenShake.intensity > 0.2) {
+        screenShake.dx = (Math.random() - 0.5) * screenShake.intensity;
+        screenShake.dy = (Math.random() - 0.5) * screenShake.intensity;
+        screenShake.intensity *= screenShake.decay;
+    } else {
+        screenShake.intensity = 0;
+        screenShake.dx = 0;
+        screenShake.dy = 0;
+    }
+}
+
+// ── Room vignette system ──
+function drawRoomVignette(strength, tintR, tintG, tintB) {
+    strength = strength || 0.3;
+    tintR = tintR || 0; tintG = tintG || 0; tintB = tintB || 0;
+    const vg = ctx.createRadialGradient(350, 250, 140, 350, 250, 420);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(0.65, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, `rgba(${tintR},${tintG},${tintB},${strength})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+}
 
 let boss = {
     active: false,
@@ -1094,6 +1195,9 @@ function createExplosion(x, y) {
             life: 1
         });
     }
+    triggerScreenShake(6);
+    emitParticles(x, y, 'spark', 12);
+    emitParticles(x, y, 'ember', 8);
 }
 
 function createMuzzleFlash(x, y, facing) {
@@ -1112,16 +1216,24 @@ function checkPromotion() {
 
 // SECTION 6: Character Drawing Functions
 function drawAmmoCounter(x, y, ammo) {
-    // Background panel for visibility
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    // Background panel with gradient for visibility
+    const ammoGrad = ctx.createLinearGradient(x - 30, y - 65, x - 30, y - 45);
+    ammoGrad.addColorStop(0, 'rgba(0,0,0,0.8)');
+    ammoGrad.addColorStop(1, 'rgba(20,15,0,0.7)');
+    ctx.fillStyle = ammoGrad;
     const panelWidth = 60;
     const panelHeight = 20;
     ctx.fillRect(x - panelWidth/2, y - 65, panelWidth, panelHeight);
 
-    // Border
+    // Border with glow
     ctx.strokeStyle = '#ffd700';
     ctx.lineWidth = 2;
     ctx.strokeRect(x - panelWidth/2, y - 65, panelWidth, panelHeight);
+    // Subtle gold glow
+    ctx.shadowColor = '#ffd700';
+    ctx.shadowBlur = 4;
+    ctx.strokeRect(x - panelWidth/2, y - 65, panelWidth, panelHeight);
+    ctx.shadowBlur = 0;
 
     // Ammo count number
     ctx.fillStyle = '#fff';
@@ -1191,7 +1303,7 @@ function drawHeldDoc(x, y, colorName) {
 
     // Color stripe border
     ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.strokeRect(folderX + 4, folderY + 4, folderWidth - 8, 6);
 
     // Document label text on folder
@@ -1205,79 +1317,124 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
 
     // Shadow — at foot level (y+36 = shoe bottom)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 36, 10, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // Anti-aliased character outline (dark shadow behind entire sprite)
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 9*s - 1, y - 16*s - 1, 18*s + 2, 38*s + 2);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
     if(facing === 'left') {
+        // Mullet hair — flowing shape with gradient
         ctx.fillStyle = '#3a2a1a';
         ctx.fillRect(x - 5*s, y - 16*s, 12*s, 4*s);
         ctx.fillRect(x - 6*s, y - 12*s, 14*s, 10*s);
+        // Hair highlight
+        ctx.fillStyle = '#4a3a2a';
+        ctx.fillRect(x - 4*s, y - 15*s, 4*s, 2*s);
 
+        // Face with skin tone
         ctx.fillStyle = '#f5c89a';
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        // Cheek blush
+        ctx.fillStyle = 'rgba(200,140,100,0.2)';
+        ctx.fillRect(x - 5*s, y - 6*s, 3*s, 3*s);
 
+        // Eyes with highlights
         ctx.fillStyle = '#000';
         ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(x - s, y - 9*s, s, s);
+        ctx.fillStyle = '#000';
         ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
 
+        // Jacket with shading
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
         ctx.fillStyle = '#600018';
         ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
+        // Jacket highlight on left edge
+        ctx.fillStyle = '#901030';
+        ctx.fillRect(x - 7*s, y - 1*s, s, 8*s);
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
 
         // Arms - raised if holding, extended if hasGun, otherwise hanging
         ctx.fillStyle = '#800020';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide left arm (will be drawn by gun function), show right arm hanging
             ctx.fillRect(x + 7*s, y, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillRect(x + 7*s, y, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         }
-        
+
+        // Jeans with highlight
         ctx.fillStyle = '#a4c2db';
         const legL = Math.sin(frame * 0.25) * 5;
         ctx.fillRect(x - 5*s, y + 8*s + legL * 0.4, 4*s, 8*s);
         ctx.fillRect(x + s, y + 8*s - legL * 0.4, 4*s, 8*s);
+        // Jean highlight
+        ctx.fillStyle = 'rgba(180,210,230,0.15)';
+        ctx.fillRect(x - 4*s, y + 9*s + legL * 0.4, s, 6*s);
+        ctx.fillRect(x + 2*s, y + 9*s - legL * 0.4, s, 6*s);
 
+        // Boots with detail
         ctx.fillStyle = '#654321';
         ctx.fillRect(x - 5*s, y + 16*s + legL, 4*s, 2*s);
         ctx.fillRect(x + s, y + 16*s - legL, 4*s, 2*s);
+        // Boot sole
+        ctx.fillStyle = '#3a2010';
+        ctx.fillRect(x - 5*s, y + 17*s + legL, 4*s, s);
+        ctx.fillRect(x + s, y + 17*s - legL, 4*s, s);
 
     } else if(facing === 'right') {
+        // Mullet hair — flowing shape with gradient
         ctx.fillStyle = '#3a2a1a';
         ctx.fillRect(x - 7*s, y - 16*s, 12*s, 4*s);
         ctx.fillRect(x - 8*s, y - 12*s, 14*s, 10*s);
+        // Hair highlight
+        ctx.fillStyle = '#4a3a2a';
+        ctx.fillRect(x - 2*s, y - 15*s, 4*s, 2*s);
 
+        // Face with skin tone gradient
         ctx.fillStyle = '#f5c89a';
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        // Cheek blush
+        ctx.fillStyle = 'rgba(200,140,100,0.2)';
+        ctx.fillRect(x + 2*s, y - 6*s, 3*s, 3*s);
 
         ctx.fillStyle = '#000';
         ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+        // Eye highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(x + s, y - 9*s, s, s);
         ctx.fillRect(x, y - 5*s, 3*s, s);
 
+        // Jacket with shading
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
         ctx.fillStyle = '#600018';
         ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        // Jacket highlight on right edge
+        ctx.fillStyle = '#901030';
+        ctx.fillRect(x + 5*s, y - 1*s, s, 8*s);
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
 
@@ -1315,22 +1472,37 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y + 16*s - legR, 4*s, 2*s);
 
     } else {
+        // Mullet hair — flowing on both sides
         ctx.fillStyle = '#3a2a1a';
         ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
         ctx.fillRect(x - 8*s, y - 12*s, 16*s, 10*s);
+        // Hair highlight center
+        ctx.fillStyle = '#4a3a2a';
+        ctx.fillRect(x - 2*s, y - 15*s, 4*s, 2*s);
 
+        // Face with skin tone
         ctx.fillStyle = '#f5c89a';
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
 
+        // Eyes with highlights
         ctx.fillStyle = '#000';
         ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
         ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(x - 2*s, y - 9*s, s, s);
+        ctx.fillRect(x + 2*s, y - 9*s, s, s);
+        // Mouth
+        ctx.fillStyle = '#000';
         ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
 
+        // Jacket with shading
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
         ctx.fillStyle = '#600018';
         ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        // Jacket highlight
+        ctx.fillStyle = '#901030';
+        ctx.fillRect(x + 5*s, y - 1*s, s, 8*s);
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
 
@@ -1372,22 +1544,30 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
 function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
 
-    // Shadow — at foot level (y+42 = shoe bottom)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    // Shadow — at foot level
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 42, 10, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 42, 12, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const skinColor = '#f5c89a';
 
     if(facing === 'left') {
+        // Head with bald reflective dome
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
         ctx.fillStyle = '#e8d4b8';
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        // Reflective head shine
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(x - 2*s, y - 12*s, 4*s, 2*s);
 
+        // Eyes with highlights
         ctx.fillStyle = '#000';
         ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x - s, y - 9*s, s, s);
+        ctx.fillStyle = '#000';
         ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
 
         ctx.fillStyle = '#fff';
@@ -1433,19 +1613,30 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y + 20*s - legL, 4*s, 2*s);
 
     } else if(facing === 'right') {
+        // Head with bald reflective dome
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
         ctx.fillStyle = '#e8d4b8';
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        // Reflective head shine
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(x - 2*s, y - 12*s, 4*s, 2*s);
 
         ctx.fillStyle = '#000';
         ctx.fillRect(x, y - 9*s, 2*s, 2*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x + s, y - 9*s, s, s);
+        ctx.fillStyle = '#000';
         ctx.fillRect(x, y - 5*s, 3*s, s);
 
+        // White shirt with lapel shading
         ctx.fillStyle = '#fff';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
         ctx.fillStyle = '#e0e0e0';
         ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        // Subtle shirt fold highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x + 4*s, y, s, 6*s);
 
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
@@ -1485,41 +1676,50 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y + 20*s - legR, 4*s, 2*s);
 
     } else {
+        // Head with bald reflective dome
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
         ctx.fillStyle = '#e8d4b8';
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
+        // Reflective head shine
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(x - 2*s, y - 12*s, 4*s, 2*s);
 
         ctx.fillStyle = '#000';
         ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
         ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
+        // Eye highlights
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x - 2*s, y - 9*s, s, s);
+        ctx.fillRect(x + 2*s, y - 9*s, s, s);
+        ctx.fillStyle = '#000';
         ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
 
+        // White shirt with lapel shading
         ctx.fillStyle = '#fff';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
         ctx.fillStyle = '#e0e0e0';
         ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        // Shirt fold highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x + 4*s, y, s, 6*s);
 
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
 
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
+        // Arms
         ctx.fillStyle = '#fff';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillRect(x + 7*s, y, 2*s, 7*s);
             ctx.fillStyle = skinColor;
@@ -1527,15 +1727,24 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         }
 
+        // Dark pants with subtle highlight
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
         ctx.fillRect(x - 5*s, y + 12*s, 4*s, 8*s);
         ctx.fillRect(x + s, y + 12*s, 4*s, 8*s);
+        // Pants highlight
+        ctx.fillStyle = 'rgba(60,60,60,0.2)';
+        ctx.fillRect(x - 4*s, y + 13*s, s, 6*s);
 
+        // Polished shoes
         ctx.fillStyle = '#000';
         const leg = Math.sin(frame * 0.25) * 5;
         ctx.fillRect(x - 5*s, y + 20*s + leg, 4*s, 2*s);
         ctx.fillRect(x + s, y + 20*s - leg, 4*s, 2*s);
+        // Shoe shine
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(x - 4*s, y + 20*s + leg, 2*s, s);
+        ctx.fillRect(x + 2*s, y + 20*s - leg, 2*s, s);
     }
 
     // === DETECTIVE FEDORA HAT — drawn on top when wearing ===
@@ -1640,10 +1849,10 @@ function drawPipeManagerBack(x, y, color, animOffset) {
 function drawBoss(x, y, facing) {
     const s = 2;
 
-    // Shadow — at foot level (y+50 ≈ shoe bottom)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    // Shadow — at foot level (larger boss = bigger shadow)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 50, 12, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 50, 14, 5, 0, 0, Math.PI * 2);
     ctx.fill();
     
     const skinColor = boss.angry ? '#cc0000' : '#f5c89a';
@@ -2058,7 +2267,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
         ctx.fillRect(tx - 5, ty - 20, 10, 28);
         // Tree bark texture
         ctx.strokeStyle = '#5a3520';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(tx - 3, ty - 18); ctx.lineTo(tx - 2, ty + 5); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(tx + 2, ty - 15); ctx.lineTo(tx + 3, ty + 2); ctx.stroke();
 
@@ -2079,7 +2288,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
         }
         // Apple stems
         ctx.strokeStyle = '#4a3520';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         for(let ap of applePositions) {
             ctx.beginPath(); ctx.moveTo(tx + ap[0], ty + ap[1] - 3); ctx.lineTo(tx + ap[0] + 1, ty + ap[1] - 5); ctx.stroke();
         }
@@ -2097,7 +2306,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             ctx.fillStyle = '#ff6b6b';
             ctx.beginPath(); ctx.arc(tx + fa[0] - 0.6, groundY + fa[1] - 0.8, 1, 0, Math.PI * 2); ctx.fill();
             // Stem
-            ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(tx + fa[0], groundY + fa[1] - 2.5); ctx.lineTo(tx + fa[0] + 0.8, groundY + fa[1] - 4); ctx.stroke();
         }
         // One apple rolled closer toward the window
@@ -2108,7 +2317,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
         ctx.beginPath(); ctx.arc(rolledX, rolledY, 3, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#e74c3c';
         ctx.beginPath(); ctx.arc(rolledX - 0.8, rolledY - 1, 1.2, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(rolledX, rolledY - 3); ctx.lineTo(rolledX + 1, rolledY - 4.5); ctx.stroke();
         // Tiny leaf on rolled apple
         ctx.fillStyle = '#27ae60';
@@ -2267,7 +2476,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             ctx.fillRect(-13, -9, 5, 10);
             // Bag mesh texture
             ctx.strokeStyle = '#3a6a3a';
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(-13, -7); ctx.lineTo(-8, -7); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(-13, -4); ctx.lineTo(-8, -4); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(-13, -1); ctx.lineTo(-8, -1); ctx.stroke();
@@ -2295,7 +2504,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             ctx.fillRect(-4, -18, 6, 3);
             // Steering wheel
             ctx.strokeStyle = '#333';
-            ctx.lineWidth = 0.8;
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.arc(1, -12, 2.5, 0, Math.PI * 2); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(1, -9.5); ctx.lineTo(2, -8); ctx.stroke();
             // Exhaust pipe
@@ -2365,7 +2574,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             ctx.fillRect(wx, wy + 14, ww, 6);
             // Rain streaks
             ctx.strokeStyle = 'rgba(180,200,220,0.5)';
-            ctx.lineWidth = 0.7;
+            ctx.lineWidth = 1;
             for(let r = 0; r < 15; r++) {
                 const rx = wx + 3 + r * 4.2 + Math.sin(t / 300 + r) * 2;
                 const rainY = ((t / 140 + r * 41) % (wh * 0.6)) + wy + 20;
@@ -2464,7 +2673,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
             // Splash rings on water surface
             const ringSize = splashPct * 10;
             ctx.strokeStyle = `rgba(150,220,255,${0.4 * (1 - splashPct)})`;
-            ctx.lineWidth = 0.8;
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.ellipse(fishX, pondCy, ringSize, ringSize * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
         }
 
@@ -2481,13 +2690,13 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
                     // Outer ring
                     const outerSize = spCycle * 6;
                     ctx.strokeStyle = `rgba(200,230,255,${0.5 * (1 - progress)})`;
-                    ctx.lineWidth = 0.8;
+                    ctx.lineWidth = 1;
                     ctx.beginPath(); ctx.ellipse(spX, spY, outerSize, outerSize * 0.35, 0, 0, Math.PI * 2); ctx.stroke();
                     // Inner ring
                     if(spCycle > 0.12) {
                         const innerSize = (spCycle - 0.12) * 4;
                         ctx.strokeStyle = `rgba(200,230,255,${0.35 * (1 - progress)})`;
-                        ctx.lineWidth = 0.5;
+                        ctx.lineWidth = 1;
                         ctx.beginPath(); ctx.ellipse(spX, spY, innerSize, innerSize * 0.35, 0, 0, Math.PI * 2); ctx.stroke();
                     }
                 }
@@ -2556,7 +2765,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
         const windStreakX = (t / 8 + 100) % (ww + 40) + wx - 20;
         if(windStreakX > wx && windStreakX < wx + ww - 10) {
             ctx.strokeStyle = 'rgba(255,255,200,0.25)';
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(windStreakX, groundY - 5);
             ctx.lineTo(windStreakX + 12, groundY - 6);
@@ -2587,7 +2796,7 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
                 ctx.beginPath(); ctx.ellipse(0, 0, twR * 0.6, twR * 0.5, 1.2, 0, Math.PI * 2); ctx.stroke();
                 // Core wisps — tan
                 ctx.strokeStyle = '#b8942a';
-                ctx.lineWidth = 0.8;
+                ctx.lineWidth = 1;
                 ctx.beginPath(); ctx.moveTo(-5, -2); ctx.lineTo(5, 2); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(-2, 5); ctx.lineTo(2, -5); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(-2, 5); ctx.stroke();
@@ -2683,7 +2892,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(wx, bldgTop, ww, bldgH);
     // Concrete panel grid lines (horizontal)
     ctx.strokeStyle = '#6a6058';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     for(let py = 0; py < 3; py++) {
         const ly = bldgTop + 2 + py * (bldgH / 3);
         ctx.beginPath(); ctx.moveTo(wx, ly); ctx.lineTo(wx + ww, ly); ctx.stroke();
@@ -2736,7 +2945,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(entX + 15, bldgBot - 5, 10, 4);
     // Door frame highlight
     ctx.strokeStyle = '#888';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.strokeRect(entX + 3, bldgBot - 5, 10, 4);
     ctx.strokeRect(entX + 15, bldgBot - 5, 10, 4);
     // Awning over entrance
@@ -2928,7 +3137,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         ctx.fill();
         // Center ridge line (body seam)
         ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(bcx, bcy - bh/2 - 1); ctx.lineTo(bcx, bcy + bh/2 + 1); ctx.stroke();
         // Headlights (round, VW style)
         ctx.fillStyle = '#ffe';
@@ -2969,7 +3178,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         ctx.fillRect(cvx - cvw*0.3, cvy - cvh/2 + 2, cvw*0.6, cvh*0.12);
         // Chrome trim along sides
         ctx.strokeStyle = '#ddd';
-        ctx.lineWidth = 0.7;
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(cvx - cvw/2 + 1, cvy); ctx.lineTo(cvx + cvw/2 - 1, cvy); ctx.stroke();
         // Headlights & tail lights
         ctx.fillStyle = '#ffe';
@@ -3011,7 +3220,7 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         ctx.fillRect(cdx - cdw*0.28, cdy + cdh*0.2, cdw*0.56, cdh*0.1);
         // Chrome trim
         ctx.strokeStyle = '#888';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(cdx - cdw/2 + 1, cdy - cdh*0.05); ctx.lineTo(cdx + cdw/2 - 1, cdy - cdh*0.05); ctx.stroke();
         // Chrome grille (front)
         ctx.fillStyle = '#666';
@@ -3046,11 +3255,11 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(vanCx - vanW*0.4, vanCy, vanW*0.8, vanH*0.4);
     // Side panel line
     ctx.strokeStyle = '#ccc';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(vanCx - vanW/2 + 1, vanCy - vanH*0.1); ctx.lineTo(vanCx + vanW/2 - 1, vanCy - vanH*0.1); ctx.stroke();
     // Rear doors (double)
     ctx.strokeStyle = '#bbb';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(vanCx, vanCy + vanH*0.1); ctx.lineTo(vanCx, vanCy + vanH/2 - 1); ctx.stroke();
     // Tail lights
     ctx.fillStyle = '#cc2222';
@@ -3194,7 +3403,7 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
         if (stressPct > 0.65) {
             const crackAlpha = (stressPct - 0.65) / 0.35;
             ctx.strokeStyle = `rgba(30,0,0,${crackAlpha * 0.7})`;
-            ctx.lineWidth = 0.8;
+            ctx.lineWidth = 1;
             const numCracks = 5;
             for (let c = 0; c < numCracks; c++) {
                 const ang = (c / numCracks) * Math.PI * 2 + now * 0.0003;
@@ -3550,7 +3759,7 @@ function drawComputer(x, y) {
     ctx.fillRect(x - 5, y, 10, 3);
     
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 7px Arial';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', x, y + 30);
 }
@@ -3620,7 +3829,7 @@ function draw3DPrinter(x, y) {
     ctx.fillRect(x - 25, y + 12, 50, 8);
     
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 7px Arial';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('3D PRINTER', x, y + 18);
 }
@@ -3659,12 +3868,22 @@ function drawGhostGun(x, y, facing) {
         const gunX = x - 28;
         const gunY = y - 10;
 
-        // Barrel pointing left
-        ctx.fillStyle = '#999';
+        // Barrel pointing left — metallic shading
+        ctx.fillStyle = '#888';
         ctx.fillRect(gunX - 10, gunY - 3, 18, 6);
+        // Barrel highlight
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(gunX - 10, gunY - 3, 18, 2);
+        // Barrel shadow
+        ctx.fillStyle = '#666';
+        ctx.fillRect(gunX - 10, gunY + 1, 18, 2);
 
-        // Barrel extension
+        // Barrel extension (muzzle)
+        ctx.fillStyle = '#777';
         ctx.fillRect(gunX - 16, gunY - 2, 6, 4);
+        // Muzzle bore
+        ctx.fillStyle = '#333';
+        ctx.fillRect(gunX - 17, gunY - 1, 2, 2);
 
         // Slide/sight
         ctx.fillStyle = '#777';
@@ -3697,12 +3916,22 @@ function drawGhostGun(x, y, facing) {
         const gunX = x + 28;
         const gunY = y - 10;
 
-        // Barrel pointing right
-        ctx.fillStyle = '#999';
+        // Barrel pointing right — metallic shading
+        ctx.fillStyle = '#888';
         ctx.fillRect(gunX - 8, gunY - 3, 18, 6);
+        // Barrel highlight
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(gunX - 8, gunY - 3, 18, 2);
+        // Barrel shadow
+        ctx.fillStyle = '#666';
+        ctx.fillRect(gunX - 8, gunY + 1, 18, 2);
 
-        // Barrel extension
+        // Barrel extension (muzzle)
+        ctx.fillStyle = '#777';
         ctx.fillRect(gunX + 10, gunY - 2, 6, 4);
+        // Muzzle bore
+        ctx.fillStyle = '#333';
+        ctx.fillRect(gunX + 15, gunY - 1, 2, 2);
 
         // Slide/sight
         ctx.fillStyle = '#777';
@@ -3850,16 +4079,44 @@ function drawWrenchProjectile(x, y, rotation) {
     ctx.restore();
 }
 
-// Draw wrench shatter pieces
+// Draw wrench shatter pieces — metallic fragments with sparks
 function drawWrenchShatter(pieces) {
     for(const p of pieces) {
+        const alpha = Math.max(0, p.life / 30);
         ctx.save();
-        ctx.globalAlpha = Math.max(0, p.life / 30);
+        ctx.globalAlpha = alpha;
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
-        ctx.fillStyle = '#7a7a7a';
+
+        // Metallic fragment with highlight
+        const grad = ctx.createLinearGradient(-p.size, -2, p.size, 2);
+        grad.addColorStop(0, '#5a5a5a');
+        grad.addColorStop(0.4, '#a0a0a0');
+        grad.addColorStop(0.6, '#c8c8c8');
+        grad.addColorStop(1, '#6a6a6a');
+        ctx.fillStyle = grad;
         ctx.fillRect(-p.size, -2, p.size * 2, 4);
+
+        // Edge highlight
+        ctx.strokeStyle = `rgba(200,200,200,${alpha * 0.6})`;
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(-p.size, -2, p.size * 2, 4);
+
+        // Trailing spark (only early in life)
+        if(p.life > 18) {
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.fillStyle = '#ffcc44';
+            ctx.beginPath();
+            ctx.arc(-p.size * 0.5, 0, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         ctx.restore();
+    }
+    // Emit spark particles on first frame of shatter
+    if(pieces.length > 0 && pieces[0].life > 28) {
+        triggerScreenShake(3);
+        emitParticles(pieces[0].x, pieces[0].y, 'spark', 6);
     }
 }
 
@@ -3957,7 +4214,7 @@ function drawRevolver(x, y, facing) {
         ctx.beginPath(); ctx.roundRect(cylX, cylY, cylW, cylH, 2); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.10)';
         ctx.fillRect(cylX + 2, cylY + 1, cylW - 4, 3);
-        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
         for(let i = 1; i < 6; i++) {
             const fx = cylX + (cylW / 6) * i;
             ctx.beginPath(); ctx.moveTo(fx, cylY + 1); ctx.lineTo(fx, cylY + cylH - 1); ctx.stroke();
@@ -3989,7 +4246,7 @@ function drawRevolver(x, y, facing) {
 
         // Grip texture
         ctx.strokeStyle = '#654321';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         for(let i = 0; i < 4; i++) {
             ctx.beginPath();
             ctx.moveTo(gunX + 6, gunY + 3 + i*2);
@@ -4053,7 +4310,7 @@ function drawRevolver(x, y, facing) {
         ctx.beginPath(); ctx.roundRect(cylX, cylY, cylW, cylH, 2); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.10)';
         ctx.fillRect(cylX + 2, cylY + 1, cylW - 4, 3);
-        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
         for(let i = 1; i < 6; i++) {
             const fx = cylX + (cylW / 6) * i;
             ctx.beginPath(); ctx.moveTo(fx, cylY + 1); ctx.lineTo(fx, cylY + cylH - 1); ctx.stroke();
@@ -4085,7 +4342,7 @@ function drawRevolver(x, y, facing) {
 
         // Grip texture
         ctx.strokeStyle = '#654321';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         for(let i = 0; i < 4; i++) {
             ctx.beginPath();
             ctx.moveTo(gunX + 6, gunY + 3 + i*2);
@@ -4151,7 +4408,7 @@ function drawRevolver(x, y, facing) {
         ctx.beginPath(); ctx.roundRect(cylX, cylY, cylW, cylH, 2); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.10)';
         ctx.fillRect(cylX + 2, cylY + 1, cylW - 4, 3);
-        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
         for(let i = 1; i < 6; i++) {
             const fx = cylX + (cylW / 6) * i;
             ctx.beginPath(); ctx.moveTo(fx, cylY + 1); ctx.lineTo(fx, cylY + cylH - 1); ctx.stroke();
@@ -4183,7 +4440,7 @@ function drawRevolver(x, y, facing) {
 
         // Grip texture
         ctx.strokeStyle = '#654321';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         for(let i = 0; i < 4; i++) {
             ctx.beginPath();
             ctx.moveTo(gunX + 6, gunY + 3 + i*2);
@@ -4247,7 +4504,7 @@ function drawRevolver(x, y, facing) {
         ctx.beginPath(); ctx.roundRect(cylX, cylY, cylW, cylH, 2); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.10)';
         ctx.fillRect(cylX + 2, cylY + 1, cylW - 4, 3);
-        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
         for(let i = 1; i < 6; i++) {
             const fx = cylX + (cylW / 6) * i;
             ctx.beginPath(); ctx.moveTo(fx, cylY + 1); ctx.lineTo(fx, cylY + cylH - 1); ctx.stroke();
@@ -4279,7 +4536,7 @@ function drawRevolver(x, y, facing) {
 
         // Grip texture
         ctx.strokeStyle = '#654321';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         for(let i = 0; i < 4; i++) {
             ctx.beginPath();
             ctx.moveTo(gunX + 6, gunY + 3 + i*2);
@@ -4478,7 +4735,7 @@ function drawCeilingSurface(ceilingY) {
     ctx.fillRect(-GX, ceilingY, CANVAS_W, 4);
     // Subtle texture lines across ceiling
     ctx.strokeStyle = 'rgba(60,60,60,0.6)';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     for(let i = -GY; i < ceilingY; i += 6) {
         ctx.beginPath();
         ctx.moveTo(-GX, i);
@@ -4501,6 +4758,10 @@ function drawFluorescentLight(cx, ceilingY, len) {
     len = len || 80;
     const hw = len / 2;
     const fy = ceilingY;
+    // Subtle flicker — occasional brightness variation
+    const flickerSeed = cx * 17.3 + ceilingY * 7.1;
+    const flickerVal = Math.sin(Date.now() * 0.01 + flickerSeed) * Math.sin(Date.now() * 0.037 + flickerSeed);
+    const flicker = flickerVal > 0.92 ? 0.7 : 1; // occasional dim
 
     // Housing — dark metal shell flush with ceiling bottom
     ctx.fillStyle = '#2c2c2c';
@@ -4511,6 +4772,7 @@ function drawFluorescentLight(cx, ceilingY, len) {
     ctx.fillRect(cx - hw - 2, fy - 6, len + 4, 6);
 
     // Diffuser panel (frosted plastic)
+    ctx.globalAlpha = flicker;
     ctx.fillStyle = '#c8d8f0';
     ctx.fillRect(cx - hw, fy - 5, len, 5);
 
@@ -4547,6 +4809,7 @@ function drawFluorescentLight(cx, ceilingY, len) {
     ctx.beginPath();
     ctx.ellipse(cx, fy - 2, 6, 2, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
 }
 
 // Grimy overhead air duct — rectangular duct running along ceiling
@@ -4691,7 +4954,7 @@ function drawIndustrialFan(cx, cy, radius) {
         // Blade edge highlight
         if(depth > 0) {
             ctx.strokeStyle = `rgba(140,140,140,${(alpha * 0.5).toFixed(2)})`;
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(bladeX * 0.2, bladeY * 0.2 - 1.8);
             ctx.lineTo(bladeX * 0.9, bladeY * 0.9 - 1.3);
@@ -5003,7 +5266,7 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.fillStyle = unlocked ? '#002200' : '#002211';
         ctx.fillRect(kpSide + 2, kpY - 2, 16, 10);
         ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.font = 'bold 6px monospace';
+        ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpSide + 10, kpY + 6);
         // Button grid
@@ -5152,7 +5415,7 @@ function drawWaterCooler(x, y) {
     ctx.fillStyle = '#888';
     ctx.fillRect(x - 11, y - 16, 22, 2);
     // Side vents
-    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1;
     for(let v = 0; v < 4; v++) {
         ctx.beginPath(); ctx.moveTo(x + 11, y - 44 + v * 8); ctx.lineTo(x + 11, y - 38 + v * 8); ctx.stroke();
     }
@@ -5160,7 +5423,7 @@ function drawWaterCooler(x, y) {
     ctx.fillStyle = '#3366cc';
     ctx.fillRect(x - 10, y - 38, 20, 10);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+    ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
     ctx.fillText('AQUA', x, y - 31);
     // Bubble animation — one bubble rises every ~30 seconds
     const bubbleCycle = Math.floor(t / 30000);
@@ -5172,7 +5435,7 @@ function drawWaterCooler(x, y) {
         ctx.fillStyle = `rgba(180,230,255,${0.7 * (1 - bPct)})`;
         ctx.beginPath(); ctx.arc(x + 3, bY, bSize, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = `rgba(100,180,240,${0.5 * (1 - bPct)})`;
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         ctx.stroke();
     }
     // Base/feet
@@ -5225,7 +5488,7 @@ function drawToolCabinet(x, y) {
     ctx.fillStyle = '#d4af37';
     ctx.fillRect(x - 16, y - 66, 32, 4);
     ctx.fillStyle = '#8a6a00';
-    ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+    ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
     ctx.fillText('TOOLS', x, y - 63);
     // Base feet
     ctx.fillStyle = '#333';
@@ -5305,7 +5568,7 @@ function drawMarkerBoard(x, y, boardLv) {
         ctx.fillText('lefty loosey', x, y - 8);
 
         // Divider
-        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 55, y - 2); ctx.lineTo(x + 55, y - 2); ctx.stroke();
 
         // Torquing wrench illustration — wrench head with curved torque arrow
@@ -5352,7 +5615,7 @@ function drawMarkerBoard(x, y, boardLv) {
         ctx.fillStyle = '#1a3a8a';
         ctx.font = 'bold 8px monospace';
         ctx.fillText('FLOW ANALYSIS', x, y - 34);
-        ctx.strokeStyle = '#1a3a8a'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#1a3a8a'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 58, y - 30); ctx.lineTo(x + 58, y - 30); ctx.stroke();
 
         // Core equation: Q = A·v (flow = area × velocity)
@@ -5361,18 +5624,18 @@ function drawMarkerBoard(x, y, boardLv) {
         ctx.fillText('Q = \u03c0r\u00b2 \u00b7 v', x, y - 20);
 
         // Summed capacity formula
-        ctx.font = '7px monospace';
+        ctx.font = '9px monospace';
         ctx.fillStyle = '#333';
         ctx.fillText('C\u209c = \u03a3(Q\u1d62 \u00b7 \u03b7\u1d62)', x, y - 10);
 
         // Minimum efficiency threshold in red
         ctx.fillStyle = '#b00000';
-        ctx.font = 'bold 7px monospace';
+        ctx.font = 'bold 9px monospace';
         ctx.fillText('\u03b7\u1d56\u1d56 \u2265 0.82 (\u00b13\u03c3)', x, y);
 
         // Per-pipe capacity bar chart — labeled R G B Y
         ctx.fillStyle = '#555';
-        ctx.font = '6px monospace';
+        ctx.font = '8px monospace';
         ctx.textAlign = 'left';
         const barLabels = ['R','G','B','Y'];
         const barColors5 = ['#e74c3c','#27ae60','#005f99','#d4a017'];
@@ -5382,15 +5645,15 @@ function drawMarkerBoard(x, y, boardLv) {
             // Bar
             ctx.fillStyle = barColors5[i];
             ctx.fillRect(bx5, y + 35 - barHeights5[i], 18, barHeights5[i]);
-            ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
             ctx.strokeRect(bx5, y + 35 - barHeights5[i], 18, barHeights5[i]);
             // Label
             ctx.fillStyle = '#333';
-            ctx.font = '6px monospace';
+            ctx.font = '8px monospace';
             ctx.fillText(barLabels[i], bx5 + 6, y + 42);
         }
         // X-axis baseline
-        ctx.strokeStyle = '#444'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 56, y + 35); ctx.lineTo(x + 56, y + 35); ctx.stroke();
 
         ctx.restore();
@@ -5406,34 +5669,34 @@ function drawMarkerBoard(x, y, boardLv) {
         ctx.fillStyle = '#6a0010';
         ctx.font = 'bold 8px monospace';
         ctx.fillText('SYSTEM STABILITY', x, y - 34);
-        ctx.strokeStyle = '#6a0010'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#6a0010'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 58, y - 30); ctx.lineTo(x + 58, y - 30); ctx.stroke();
 
         // MTBF / MTTR ratio formula
         ctx.fillStyle = '#111';
-        ctx.font = '7px monospace';
+        ctx.font = '9px monospace';
         ctx.fillText('MTBF / MTTR = \u03b7\u209b', x, y - 20);
 
         // Reliability function
         ctx.fillStyle = '#003366';
-        ctx.font = '7px monospace';
+        ctx.font = '9px monospace';
         ctx.fillText('R(t) = e^(-t/MTBF)', x, y - 11);
 
         // Redundancy requirement
         ctx.fillStyle = '#111';
-        ctx.font = 'bold 7px monospace';
+        ctx.font = 'bold 9px monospace';
         ctx.fillText('Topology: N+2 req.', x, y - 2);
 
         // Failure probability threshold
         ctx.fillStyle = '#b00000';
-        ctx.font = '7px monospace';
+        ctx.font = '9px monospace';
         ctx.fillText('P(fail) < 0.001/yr', x, y + 8);
 
         // Darcy-Weisbach pressure drop (horizontal layout)
-        ctx.strokeStyle = '#444'; ctx.lineWidth = 0.7;
+        ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x - 56, y + 18); ctx.lineTo(x + 56, y + 18); ctx.stroke();
         ctx.fillStyle = '#555';
-        ctx.font = '6px monospace';
+        ctx.font = '8px monospace';
         ctx.textAlign = 'left';
         ctx.fillText('P\u2081', x - 56, y + 28);
         ctx.textAlign = 'right';
@@ -5462,7 +5725,7 @@ function drawMarkerBoard(x, y, boardLv) {
             ctx.fillRect(-n.w/2, -n.h/2, n.w, n.h);
             ctx.fillStyle = 'rgba(0,0,0,0.08)';
             ctx.fillRect(-n.w/2, -n.h/2, n.w, 4);
-            ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.8;
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
             for(let l = 0; l < n.lines; l++) {
                 const ly = -n.h/2 + 7 + l * 5;
                 const lw = n.w - 6 - (l === n.lines - 1 ? n.w * 0.35 : 0);
@@ -5475,6 +5738,7 @@ function drawMarkerBoard(x, y, boardLv) {
 
 // SECTION 9: Level 5 Scene Drawing Functions (Part 1)
 function drawLevel5PipeRoom() {
+    const pipeRoomT = Date.now();
     // Industrial painted concrete slab brick wall — medium warm grey
     ctx.fillStyle = '#9a9590';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
@@ -5590,7 +5854,7 @@ function drawLevel5PipeRoom() {
     ctx.fillRect(comp.x - 5, comp.y, 10, 3);
     
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 7px Arial';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
 
@@ -5809,7 +6073,7 @@ function drawLevel6EmployeePipeRoom() {
     ctx.fillStyle = '#444';
     ctx.fillRect(comp.x - 5, comp.y, 10, 3);
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 7px Arial';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('DOC PRINTER', comp.x, comp.y + 30);
 
@@ -5831,7 +6095,7 @@ function drawLevel6EmployeePipeRoom() {
         ctx.fillStyle = '#2a2a2a';
         ctx.fillRect(prX - 28, prY + 12, 56, 9);
         ctx.fillStyle = '#f5f2ec';
-        ctx.font = 'bold 6px Arial';
+        ctx.font = 'bold 8px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('AUTO-WRENCH', prX, prY + 19);
         if(level6.pipeRoomPrinting) {
@@ -5924,6 +6188,25 @@ function drawLevel6EmployeePipeRoom() {
     drawIndustrialFan(420, 32, 70);
     drawCCTVCamera(640, 185, false);
 
+    // Atmospheric: condensation drips from ceiling pipes
+    for(let d = 0; d < 5; d++) {
+        const dripSeed = d * 173.7;
+        const dripX = 100 + (dripSeed % 500);
+        const dripPhase = ((pipeRoomT * 0.0003 + dripSeed * 0.01) % 1);
+        if(dripPhase < 0.3) {
+            const dy = 40 + dripPhase / 0.3 * 360;
+            ctx.fillStyle = `rgba(140,160,180,${0.15 * (1 - dripPhase / 0.3)})`;
+            ctx.beginPath(); ctx.ellipse(dripX, dy, 1.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // Subtle industrial haze at floor level
+    const hazeGrad = ctx.createLinearGradient(0, 350, 0, 420);
+    hazeGrad.addColorStop(0, 'rgba(180,170,160,0)');
+    hazeGrad.addColorStop(1, 'rgba(180,170,160,0.06)');
+    ctx.fillStyle = hazeGrad;
+    ctx.fillRect(-GX, 350, CANVAS_W, 70);
+
     // Right edge door prompt
     if(player.x >= 600) {
         ctx.font = 'bold 16px Arial';
@@ -5936,7 +6219,12 @@ function drawLevel6EmployeePipeRoom() {
 }
 
 function drawLevel5Hallway() {
-    ctx.fillStyle = '#d4c8b0';
+    // Warm beige hallway with subtle warm lighting
+    const hallGrad = ctx.createLinearGradient(0, -GY, 0, 500);
+    hallGrad.addColorStop(0, '#d8ccb4');
+    hallGrad.addColorStop(0.5, '#d4c8b0');
+    hallGrad.addColorStop(1, '#cec0a8');
+    ctx.fillStyle = hallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     
     ctx.fillStyle = '#a89b85';
@@ -6186,18 +6474,35 @@ function drawLevel5Hallway() {
 
 // SECTION 10: Level 5 Scene Drawing Functions (Part 2)
 function drawLevel5FurnaceRoom() {
-    ctx.fillStyle = '#2b2520';
+    const furnaceT = Date.now();
+    // Dark room with warm ambient from furnace
+    const roomGrad = ctx.createRadialGradient(350, 300, 50, 350, 300, 400);
+    roomGrad.addColorStop(0, '#3a2d25');
+    roomGrad.addColorStop(1, '#2b2520');
+    ctx.fillStyle = roomGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
+
     ctx.fillStyle = '#1a1815';
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
-    
+
     for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#0a0a08';
             ctx.lineWidth = 1;
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
+    }
+
+    // Ember particles floating up from furnace area
+    for(let e = 0; e < 8; e++) {
+        const seed = e * 89.3;
+        const emberPhase = ((furnaceT * 0.0005 + seed * 0.1) % 1);
+        const ex = 300 + Math.sin(seed + furnaceT * 0.001) * 80 + (seed % 100);
+        const ey = 380 - emberPhase * 350;
+        const eAlpha = 0.4 * (1 - emberPhase) * (emberPhase > 0.1 ? 1 : emberPhase / 0.1);
+        const eSize = 1 + Math.sin(seed) * 0.5;
+        ctx.fillStyle = `rgba(255,${120 + Math.floor(seed % 80)},30,${eAlpha})`;
+        ctx.beginPath(); ctx.arc(ex, ey, eSize, 0, Math.PI * 2); ctx.fill();
     }
     
     const furnace = level5.furnaceRoom.furnace;
@@ -6260,7 +6565,7 @@ function drawLevel5FurnaceRoom() {
     ctx.textBaseline = 'alphabetic';
     // Tumbler groove lines (top and bottom of digit window)
     ctx.strokeStyle = '#333';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(counterX - 8, counterY - 4); ctx.lineTo(counterX + 8, counterY - 4); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(counterX - 8, counterY + 4); ctx.lineTo(counterX + 8, counterY + 4); ctx.stroke();
     // Mounting screws
@@ -6444,12 +6749,12 @@ function drawYellowCat(x, y, facing, state) {
     // Nose + mouth
     ctx.fillStyle = '#e88080';
     ctx.beginPath(); ctx.moveTo(-1, -15); ctx.lineTo(1, -15); ctx.lineTo(0, -14); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#b86060'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#b86060'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(-2, -12); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(2, -12); ctx.stroke();
 
     // Whiskers
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 0.7;
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(-12, -14); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(-11, -12); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(2, -15); ctx.lineTo(12, -14); ctx.stroke();
@@ -6514,7 +6819,7 @@ function drawOfficePlant(x, y) {
         ctx.bezierCurveTo(l.w * 0.8, -l.len * 0.7, l.w, -l.len * 0.4, 0, 0);
         ctx.fill();
         // Midrib
-        ctx.strokeStyle = '#1a6e1a'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#1a6e1a'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -l.len); ctx.stroke();
         // Monstera splits (on larger leaves)
         if(l.len > 40) {
@@ -6561,7 +6866,7 @@ function drawBlueFuton(x, y) {
     ctx.fillStyle = '#ffd700';
     ctx.fillRect(x + 22, y - 18, 16, 14);
     ctx.fillStyle = '#ffa500';
-    ctx.strokeStyle = '#cc8800'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#cc8800'; ctx.lineWidth = 1;
     ctx.strokeRect(x + 24, y - 16, 12, 10);
     // Piping trim
     ctx.fillStyle = '#4a90d9';
@@ -6592,7 +6897,7 @@ function drawRecliningBoss(fx, fy) {
     // Head pillow (cream) at left end of cushion
     ctx.fillStyle = '#f0ede0';
     ctx.fillRect(fx - 46, cy - 8, 24, 16);
-    ctx.strokeStyle = '#c8c4b0'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#c8c4b0'; ctx.lineWidth = 1;
     ctx.strokeRect(fx - 46, cy - 8, 24, 16);
     ctx.lineWidth = 1;
 
@@ -6600,7 +6905,7 @@ function drawRecliningBoss(fx, fy) {
     ctx.fillStyle = pantsColor;
     ctx.fillRect(fx + 2, cy - 7, 46, 14);
     // Trouser crease
-    ctx.strokeStyle = '#444'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(fx + 2, cy); ctx.lineTo(fx + 48, cy); ctx.stroke();
     ctx.lineWidth = 1;
 
@@ -6661,15 +6966,27 @@ function drawRecliningBoss(fx, fy) {
 function drawOfficeRoom(officeName) {
     const office = level5.hallway.offices.find(o => o.name === officeName);
     const color = office.color;
-    
-    ctx.fillStyle = '#d4c8b0';
+
+    // Warm beige walls with subtle depth
+    const offWallGrad = ctx.createLinearGradient(0, -GY, 0, 300);
+    offWallGrad.addColorStop(0, '#d8ccb4');
+    offWallGrad.addColorStop(0.5, '#d4c8b0');
+    offWallGrad.addColorStop(1, '#cec0a8');
+    ctx.fillStyle = offWallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, 300 + GY);
-    
+
     // Color-coded carpet — prominent tint matching office manager color
     ctx.fillStyle = color.hex;
     ctx.globalAlpha = 0.55;
     ctx.fillRect(-GX, 300, CANVAS_W, CANVAS_H);
     ctx.globalAlpha = 1;
+
+    // Desk lamp warm light pool
+    const deskLampGlow = ctx.createRadialGradient(450, 280, 10, 450, 300, 120);
+    deskLampGlow.addColorStop(0, 'rgba(255,240,200,0.08)');
+    deskLampGlow.addColorStop(1, 'rgba(255,240,200,0)');
+    ctx.fillStyle = deskLampGlow;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     for(let i = -4; i < 24; i++) {
         ctx.strokeStyle = color.hex;
@@ -6767,7 +7084,7 @@ function drawOfficeRoom(officeName) {
         ctx.fillStyle = '#e74c3c';
         const apples = [[-20,-82],[15,-92],[0,-68],[-28,-98],[28,-76],[6,-104],[-14,-72],[22,-88]];
         for(let ap of apples) { ctx.beginPath(); ctx.arc(tx+ap[0], ty+ap[1], 5, 0, Math.PI*2); ctx.fill(); }
-        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 1;
         for(let ap of apples) { ctx.beginPath(); ctx.moveTo(tx+ap[0], ty+ap[1]-5); ctx.lineTo(tx+ap[0]+2, ty+ap[1]-9); ctx.stroke(); }
         // Fallen apples on the ground beneath tree
         const fallenApples5 = [[-35, 5], [-12, 9], [14, 4], [32, 7]];
@@ -6778,7 +7095,7 @@ function drawOfficeRoom(officeName) {
             ctx.beginPath(); ctx.arc(tx + fa[0], gndY + fa[1], 5, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#ff6b6b';
             ctx.beginPath(); ctx.arc(tx + fa[0] - 1, gndY + fa[1] - 1.5, 2, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 0.8;
+            ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(tx + fa[0], gndY + fa[1] - 5); ctx.lineTo(tx + fa[0] + 1.5, gndY + fa[1] - 8); ctx.stroke();
         }
         // One apple rolled closer toward the window
@@ -6789,7 +7106,7 @@ function drawOfficeRoom(officeName) {
         ctx.beginPath(); ctx.arc(rolledX5, rolledY5, 5.5, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#e74c3c';
         ctx.beginPath(); ctx.arc(rolledX5 - 1.5, rolledY5 - 1.5, 2.2, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(rolledX5, rolledY5 - 5.5); ctx.lineTo(rolledX5 + 1.5, rolledY5 - 8.5); ctx.stroke();
         ctx.fillStyle = '#27ae60';
         ctx.beginPath(); ctx.ellipse(rolledX5 + 2, rolledY5 - 9, 3, 1.2, 0.5, 0, Math.PI * 2); ctx.fill();
@@ -6901,7 +7218,7 @@ function drawOfficeRoom(officeName) {
             ctx.fillRect(-24, -16, 8, 18);
             // Bag mesh texture
             ctx.strokeStyle = '#3a6a3a';
-            ctx.lineWidth = 0.7;
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(-24, -12); ctx.lineTo(-16, -12); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(-24, -6); ctx.lineTo(-16, -6); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(-24, 0); ctx.lineTo(-16, 0); ctx.stroke();
@@ -6998,7 +7315,7 @@ function drawOfficeRoom(officeName) {
             ctx.fillRect(wL, cloudY5 + 8, wW, 10);
             // Rain streaks — visible and steady
             ctx.strokeStyle = 'rgba(180,200,220,0.45)';
-            ctx.lineWidth = 0.8;
+            ctx.lineWidth = 1;
             for(let r = 0; r < 35; r++) {
                 const rx = wL + 10 + r * 9 + Math.sin(t / 300 + r * 1.3) * 3;
                 const rainY = ((t / 110 + r * 47) % ((wBot - wT) * 0.65)) + wT + 35;
@@ -7089,13 +7406,13 @@ function drawOfficeRoom(officeName) {
                     // Outer ring
                     const outerSize = spCycle * 12;
                     ctx.strokeStyle = `rgba(200,230,255,${0.5 * (1 - progress)})`;
-                    ctx.lineWidth = 0.9;
+                    ctx.lineWidth = 1;
                     ctx.beginPath(); ctx.ellipse(spX, spY, outerSize, outerSize * 0.3, 0, 0, Math.PI * 2); ctx.stroke();
                     // Inner ring
                     if(spCycle > 0.1) {
                         const innerSize = (spCycle - 0.1) * 8;
                         ctx.strokeStyle = `rgba(200,230,255,${0.35 * (1 - progress)})`;
-                        ctx.lineWidth = 0.6;
+                        ctx.lineWidth = 1;
                         ctx.beginPath(); ctx.ellipse(spX, spY, innerSize, innerSize * 0.3, 0, 0, Math.PI * 2); ctx.stroke();
                     }
                 }
@@ -7293,7 +7610,7 @@ function drawOfficeRoom(officeName) {
                 ctx.rect(bk.x, by + 2, bk.w, bk.h - 2);
                 ctx.clip();
                 ctx.fillStyle = 'rgba(255,255,255,0.9)';
-                ctx.font = 'bold 4px Arial';
+                ctx.font = 'bold 8px Arial';
                 ctx.textAlign = 'center';
                 const lines = bk.title.split('\n');
                 lines.forEach((line, li) => {
@@ -7405,7 +7722,7 @@ function drawOfficeRoom(officeName) {
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(deskX - 8, deskY + 26, 16, 9);
     // Back highlight seam
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(deskX, deskY + 37); ctx.lineTo(deskX, deskY + 55); ctx.stroke();
 
     // === DESK — warm walnut wood ===
@@ -7419,7 +7736,7 @@ function drawOfficeRoom(officeName) {
     ctx.fillStyle = '#7a5535';
     ctx.fillRect(deskX - 48, deskY + 2, 96, 12);
     // Wood grain lines
-    ctx.strokeStyle = 'rgba(40,20,5,0.2)'; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = 'rgba(40,20,5,0.2)'; ctx.lineWidth = 1;
     for(let g = 0; g < 7; g++) {
         ctx.beginPath(); ctx.moveTo(deskX - 48 + g * 14, deskY + 2); ctx.lineTo(deskX - 48 + g * 14 + 8, deskY + 38); ctx.stroke();
     }
@@ -7507,7 +7824,7 @@ function drawOfficeRoom(officeName) {
     ctx.fillStyle = '#bbb';
     ctx.fillRect(kbX - 10, kbY + 13, 20, 2);
     // Keyboard edge shadow
-    ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
     ctx.strokeRect(kbX - 24, kbY, 48, 16);
 
     // === DESK PHONE — left side of desk ===
@@ -7602,7 +7919,7 @@ function drawOfficeRoom(officeName) {
         ctx.fillStyle = '#f5f0e8';
         ctx.fillRect(letterX - 7, deskY + 8, 14, 18);
         // Fold line
-        ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(letterX - 7, deskY + 14); ctx.lineTo(letterX + 7, deskY + 14); ctx.stroke();
         // Coffee stain ring
         ctx.strokeStyle = 'rgba(139,69,19,0.4)'; ctx.lineWidth = 1.5;
@@ -7885,7 +8202,7 @@ function drawLevel6PipeRoom() {
         // BULLET-PROOF label on door glass
         ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.fillRect(gdX + 2, gdY + 7, gdW - 4, 15);
-        ctx.fillStyle = '#88ddff'; ctx.font = 'bold 7px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#88ddff'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
         ctx.fillText('BULLET-PROOF GLASS', gdX + gdW / 2, gdY + 17);
         // RESTRICTED ACCESS label above door
         ctx.fillStyle = '#aa1100';
@@ -8154,8 +8471,16 @@ function drawLevel6PipeRoom() {
 }
 
 function drawLevel6MegacomputerRoom() {
-    // Dark room background
+    const megaT = Date.now();
+    // Dark room with subtle cool blue ambient from screens
     ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    // Blue screen glow bleeding onto walls
+    const screenGlow = ctx.createRadialGradient(350, 200, 30, 350, 250, 350);
+    screenGlow.addColorStop(0, 'rgba(30,60,120,0.08)');
+    screenGlow.addColorStop(0.6, 'rgba(20,40,80,0.04)');
+    screenGlow.addColorStop(1, 'rgba(10,20,40,0)');
+    ctx.fillStyle = screenGlow;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // ---- HYDRONIC PUMPING SYSTEM — "Heart of all industry" ----
@@ -8520,7 +8845,7 @@ function drawLevel6MegacomputerRoom() {
     const textBlink = Math.floor(Date.now() / 700) % 2;
     if(textBlink) {
         ctx.fillStyle = '#00ff00';
-        ctx.font = 'bold 7px monospace';
+        ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('Awaiting', screenX + screenW / 2, screenY + 12);
         ctx.fillText('executive', screenX + screenW / 2, screenY + 20);
@@ -8726,7 +9051,7 @@ function drawLevel6MegacomputerRoom() {
         // ── Note in left hand (screen x = noteScreenX = 520) ─────────────────────
         if(!level6.pistol.dropped) {
             ctx.fillStyle = '#f4e5a8'; ctx.fillRect(noteScreenX - 18, noteScreenY, 18, 24);
-            ctx.strokeStyle = '#c0c0c0'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = '#c0c0c0'; ctx.lineWidth = 1;
             for(let i = 0; i < 7; i++) {
                 ctx.beginPath(); ctx.moveTo(noteScreenX - 16, noteScreenY + 3 + i*3);
                 ctx.lineTo(noteScreenX - 2, noteScreenY + 3 + i*3); ctx.stroke();
@@ -8866,7 +9191,7 @@ function drawLevel6MegacomputerRoom() {
                 if (isVert) { ctx.ellipse(chainCx, cy + 3, 2, 3.5, 0, 0, Math.PI * 2); }
                 else         { ctx.ellipse(chainCx, cy + 3, 3.5, 2, 0, 0, Math.PI * 2); }
                 ctx.stroke();
-                ctx.strokeStyle = 'rgba(120,100,80,0.25)'; ctx.lineWidth = 0.5; ctx.stroke();
+                ctx.strokeStyle = 'rgba(120,100,80,0.25)'; ctx.lineWidth = 1; ctx.stroke();
             }
             ctx.fillStyle = '#282420'; ctx.fillRect(chainCx - 4, signTop - 6, 8, 8);
             ctx.strokeStyle = '#484038'; ctx.lineWidth = 1; ctx.strokeRect(chainCx - 4, signTop - 6, 8, 8);
@@ -8999,7 +9324,7 @@ function drawNuclearAssemblyBridge() {
     ctx.fillStyle = '#0c100c';
     ctx.fillRect(-GX, factCeilY + 30, CANVAS_W, factFloor - factCeilY - 30);
     // Brick/panel pattern
-    ctx.strokeStyle = 'rgba(16,20,16,0.35)'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = 'rgba(16,20,16,0.35)'; ctx.lineWidth = 1;
     for(let by = factCeilY + 50; by < factFloor; by += 28) {
         ctx.beginPath(); ctx.moveTo(-GX, by); ctx.lineTo(CANVAS_W, by); ctx.stroke();
     }
@@ -9441,7 +9766,7 @@ function drawNuclearAssemblyBridge() {
         ctx.strokeStyle = '#8899aa'; ctx.lineWidth = 1.5;
         ctx.strokeRect(SYR_X - 8, syrDrawY, 16, syringeH);
         // Graduation marks
-        ctx.strokeStyle = 'rgba(100,120,140,0.35)'; ctx.lineWidth = 0.5;
+        ctx.strokeStyle = 'rgba(100,120,140,0.35)'; ctx.lineWidth = 1;
         for (let ml = syrDrawY + 5; ml < syrDrawY + syringeH - 2; ml += 6) {
             ctx.beginPath(); ctx.moveTo(SYR_X - 7, ml); ctx.lineTo(SYR_X - 3, ml); ctx.stroke();
         }
@@ -9598,13 +9923,13 @@ function drawNuclearAssemblyBridge() {
             ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1.5;
             ctx.strokeRect(crateDrawX - crateW / 2, crateBaseY - crateH, crateW, crateH);
             // Wooden slat lines
-            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 1;
             for (let sl = crateBaseY - crateH + 10; sl < crateBaseY; sl += 10) {
                 ctx.beginPath(); ctx.moveTo(crateDrawX - crateW / 2, sl);
                 ctx.lineTo(crateDrawX + crateW / 2, sl); ctx.stroke();
             }
             // Cross brace
-            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = '#3a3a20'; ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(crateDrawX - crateW / 2, crateBaseY - crateH);
             ctx.lineTo(crateDrawX + crateW / 2, crateBaseY);
@@ -9663,7 +9988,7 @@ function drawNuclearAssemblyBridge() {
             if (hasLoad) {
                 ctx.fillStyle = '#2e2e18';
                 ctx.fillRect(tx + 16, trY - trH + 4, 32, trH - 8);
-                ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 0.5;
+                ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1;
                 ctx.strokeRect(tx + 16, trY - trH + 4, 32, trH - 8);
             }
             if (label) {
@@ -9953,7 +10278,7 @@ function drawNuclearAssemblyBridge() {
     ctx.fillStyle = '#1e1c1c';
     ctx.fillRect(-GX, bridgePlatY - 4, CANVAS_W, 8);
     // Grate pattern — fine grid
-    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 1;
     for(let gx = -GX; gx < CANVAS_W; gx += 8) {
         ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 4); ctx.lineTo(gx, bridgePlatY + 4); ctx.stroke();
     }
@@ -10046,7 +10371,7 @@ function drawNuclearAssemblyBridge() {
             }
             ctx.restore();
             // Thin border
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
             ctx.strokeRect(edgeX, bridgePlatY - 8, 10, 14);
         }
         ctx.restore();
@@ -10469,7 +10794,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.fillRect(bx - 10, mY - 2, slideX - bx + 24, 12);
                         ctx.globalAlpha = 1;
                         // Belt stripe
-                        ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                        ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
                         for (let bs = bx; bs < slideX + 20; bs += 18) {
                             ctx.beginPath(); ctx.moveTo(bs, mY + 4); ctx.lineTo(bs + 10, mY + 4); ctx.stroke();
                         }
@@ -10533,7 +10858,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1.5;
                         ctx.strokeRect(520 - crateW/2, targetY - crateH, crateW, crateH);
                         if (crateProg > 0.2) {
-                            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+                            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
                             ctx.fillText('CLASSIFIED', 520, targetY - crateH - 6);
                         }
                     }
@@ -10604,7 +10929,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.beginPath(); ctx.arc(tireX, targetY + 4, 9, 0, Math.PI * 2); ctx.fill();
                         ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.stroke();
                         // Tire treads
-                        ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                        ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
                         const treadA = impactElapsed * 14;
                         for (let ti = 0; ti < 6; ti++) {
                             const ta = treadA + ti * Math.PI / 3;
@@ -10665,7 +10990,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.beginPath(); ctx.arc(truckWheelX, targetY + 2, 8, 0, Math.PI * 2); ctx.fill();
                         ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.stroke();
                         // Tire treads
-                        ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                        ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
                         const treadAngle = impactElapsed * 12;
                         for (let ti = 0; ti < 6; ti++) {
                             const ta = treadAngle + ti * Math.PI / 3;
@@ -10991,7 +11316,7 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillStyle = '#111';
                     ctx.beginPath(); ctx.arc(tireX, targetY + 4, 9, 0, Math.PI * 2); ctx.fill();
                     ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.stroke();
-                    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
                     const treadA = procElapsed * 14;
                     for(let ti = 0; ti < 6; ti++) {
                         const ta = treadA + ti * Math.PI / 3;
@@ -11042,7 +11367,7 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillStyle = '#111';
                     ctx.beginPath(); ctx.arc(truckWheelX, targetY + 2, 8, 0, Math.PI * 2); ctx.fill();
                     ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.stroke();
-                    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.5;
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
                     const treadAngle = procElapsed * 12;
                     for(let ti = 0; ti < 6; ti++) {
                         const ta = treadAngle + ti * Math.PI / 3;
@@ -11135,11 +11460,15 @@ function drawNuclearAssemblyBridge() {
 }
 
 function drawLevel6EmployeeLobby() {
-    // Dark industrial lobby — same aesthetic as Level 6 pipe room
-    ctx.fillStyle = '#3a3a3a';
+    // Dark industrial lobby — sterile corporate atmosphere
+    const lobbyGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    lobbyGrad.addColorStop(0, '#404040');
+    lobbyGrad.addColorStop(0.5, '#3a3a3a');
+    lobbyGrad.addColorStop(1, '#353535');
+    ctx.fillStyle = lobbyGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Floor tiles
+    // Polished floor tiles with subtle reflections
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     for(let i = -4; i < 24; i++) {
@@ -11149,6 +11478,9 @@ function drawLevel6EmployeeLobby() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
+    // Floor sheen — polished corporate floor
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(-GX, 400, CANVAS_W, 15);
 
     // Four bold colored stripe bands — above PipeTech sign, nursery/delivery room motif
     const lobbyLineY = 8;
@@ -11337,18 +11669,35 @@ function drawLevel6CloningRoom() {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Back wall surface — dark steel panels
-    ctx.fillStyle = '#222';
+    // Back wall surface — dark steel panels with depth
+    const wallGrad = ctx.createLinearGradient(0, -GY, 0, 420);
+    wallGrad.addColorStop(0, '#252525');
+    wallGrad.addColorStop(0.5, '#222');
+    wallGrad.addColorStop(1, '#1e1e1e');
+    ctx.fillStyle = wallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, 420 + GY);
-    // Subtle panel seams on back wall
+    // Steel panel seams on back wall — vertical with subtle highlight/shadow
     for(let px = -2; px < 20; px++) {
-        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+        // Dark seam
+        ctx.strokeStyle = '#181818'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(px * 40, -GY); ctx.lineTo(px * 40, 400); ctx.stroke();
+        // Highlight catch on right side of seam
+        ctx.strokeStyle = 'rgba(255,255,255,0.02)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(px * 40 + 1, -GY); ctx.lineTo(px * 40 + 1, 400); ctx.stroke();
     }
+    // Horizontal panel seam bands
+    for(let py = 0; py < 3; py++) {
+        const seamY = 100 + py * 130;
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-GX, seamY, CANVAS_W, 1);
+        ctx.fillStyle = 'rgba(255,255,255,0.015)'; ctx.fillRect(-GX, seamY + 1, CANVAS_W, 1);
+    }
+    // Wall-floor junction — dark grout line
+    ctx.fillStyle = '#0f0f0f'; ctx.fillRect(-GX, 398, CANVAS_W, 3);
 
-    // Industrial floor — clean, uncluttered
+    // Industrial floor — wet, reflective surface
     ctx.fillStyle = '#151515';
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+    // Floor tile grid
     for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#111';
@@ -11356,49 +11705,131 @@ function drawLevel6CloningRoom() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
+    // Wet floor sheen — gradient across floor surface
+    const floorSheen = ctx.createLinearGradient(0, 400, 0, 500);
+    floorSheen.addColorStop(0, 'rgba(40,60,50,0.12)');
+    floorSheen.addColorStop(0.4, 'rgba(30,80,60,0.06)');
+    floorSheen.addColorStop(1, 'rgba(20,40,30,0.0)');
+    ctx.fillStyle = floorSheen;
+    ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
+
+    // Overhead industrial light cones — 3 ceiling-mounted lights casting pools
+    const lightPositions = [150, 350, 550];
+    for(const lx of lightPositions) {
+        // Light cone (trapezoid from ceiling to floor)
+        const coneGrad = ctx.createRadialGradient(lx, -10, 5, lx, 250, 280);
+        coneGrad.addColorStop(0, 'rgba(255,245,220,0.10)');
+        coneGrad.addColorStop(0.4, 'rgba(255,240,200,0.04)');
+        coneGrad.addColorStop(1, 'rgba(255,240,200,0)');
+        ctx.fillStyle = coneGrad;
+        ctx.beginPath();
+        ctx.moveTo(lx - 15, -GY);
+        ctx.lineTo(lx - 120, 420);
+        ctx.lineTo(lx + 120, 420);
+        ctx.lineTo(lx + 15, -GY);
+        ctx.closePath();
+        ctx.fill();
+        // Floor light pool
+        ctx.fillStyle = 'rgba(255,245,220,0.04)';
+        ctx.beginPath();
+        ctx.ellipse(lx, 405, 80, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Light fixture on ceiling
+        ctx.fillStyle = '#555';
+        ctx.fillRect(lx - 18, -GY, 36, 6);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(lx - 14, -GY + 6, 28, 3);
+        // Warm bulb glow
+        const bulbPulse = 0.6 + Math.sin(t / 3000 + lx * 0.01) * 0.15;
+        ctx.fillStyle = `rgba(255,240,200,${bulbPulse})`;
+        ctx.beginPath(); ctx.arc(lx, -GY + 10, 4, 0, Math.PI * 2); ctx.fill();
+    }
 
     // === HATCHERY ENTRANCE — dark tunnel opening in back wall (right side) ===
     // This is where the conveyor belt disappears into — implied PM delivery room behind
     {
         const hatchX = 575, hatchY = 180, hatchW = 90, hatchH = 220;
-        // Dark opening cut into wall
-        ctx.fillStyle = '#050505';
+        // Dark opening cut into wall — deep void
+        ctx.fillStyle = '#020202';
         ctx.fillRect(hatchX, hatchY, hatchW, hatchH);
-        // Inner darkness gradient
+        // Depth fog gradient — darker toward the back
         const hGrad = ctx.createLinearGradient(hatchX, 0, hatchX + hatchW, 0);
-        hGrad.addColorStop(0, 'rgba(5,5,5,0.3)');
+        hGrad.addColorStop(0, 'rgba(15,8,5,0.4)');
+        hGrad.addColorStop(0.5, 'rgba(5,2,1,0.8)');
         hGrad.addColorStop(1, 'rgba(0,0,0,1)');
         ctx.fillStyle = hGrad;
         ctx.fillRect(hatchX, hatchY, hatchW, hatchH);
-        // Ominous red/amber glow from deep inside
-        const hGlow = 0.15 + Math.sin(t / 2000) * 0.08;
-        ctx.fillStyle = `rgba(180,40,20,${hGlow})`;
-        ctx.fillRect(hatchX + 30, hatchY + 20, hatchW - 30, hatchH - 40);
+        // Ominous red/amber volumetric glow from deep inside
+        const hGlow = 0.18 + Math.sin(t / 2000) * 0.10;
+        const innerGlow = ctx.createRadialGradient(hatchX + hatchW - 10, hatchY + hatchH/2, 5, hatchX + hatchW/2, hatchY + hatchH/2, hatchW);
+        innerGlow.addColorStop(0, `rgba(200,50,20,${hGlow * 1.2})`);
+        innerGlow.addColorStop(0.4, `rgba(150,30,10,${hGlow * 0.6})`);
+        innerGlow.addColorStop(1, 'rgba(80,15,5,0)');
+        ctx.fillStyle = innerGlow;
+        ctx.fillRect(hatchX, hatchY, hatchW, hatchH);
         // Implied shapes in the darkness — distant incubator silhouettes
-        ctx.fillStyle = `rgba(120,30,15,${hGlow * 0.6})`;
-        for(let si = 0; si < 3; si++) {
-            ctx.fillRect(hatchX + 45 + si * 15, hatchY + 60 + si * 20, 8, 30);
+        ctx.fillStyle = `rgba(100,25,10,${hGlow * 0.5})`;
+        for(let si = 0; si < 4; si++) {
+            const silX = hatchX + 40 + si * 12;
+            const silY = hatchY + 50 + si * 25;
+            ctx.fillRect(silX, silY, 6, 35);
+            // Tiny indicator lights on silhouettes
+            const blinkPhase = Math.sin(t / 800 + si * 1.7) > 0.3;
+            if(blinkPhase) {
+                ctx.fillStyle = `rgba(255,60,20,${hGlow * 0.8})`;
+                ctx.beginPath(); ctx.arc(silX + 3, silY + 3, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = `rgba(100,25,10,${hGlow * 0.5})`;
+            }
         }
-        // Steel frame around opening
-        ctx.strokeStyle = '#444'; ctx.lineWidth = 4;
-        ctx.strokeRect(hatchX, hatchY, hatchW, hatchH);
-        // Hazard stripes on frame
+        // Red glow bleeding out of opening onto surrounding wall
         ctx.save();
-        ctx.beginPath(); ctx.rect(hatchX - 6, hatchY - 6, hatchW + 12, 6); ctx.clip();
+        const bleedGlow = ctx.createRadialGradient(hatchX + hatchW/2, hatchY + hatchH/2, 30, hatchX + hatchW/2, hatchY + hatchH/2, 140);
+        bleedGlow.addColorStop(0, `rgba(180,40,20,${hGlow * 0.15})`);
+        bleedGlow.addColorStop(1, 'rgba(120,20,10,0)');
+        ctx.fillStyle = bleedGlow;
+        ctx.fillRect(hatchX - 50, hatchY - 50, hatchW + 100, hatchH + 100);
+        ctx.restore();
+        // Heavy steel frame around opening
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 5;
+        ctx.strokeRect(hatchX, hatchY, hatchW, hatchH);
+        // Frame depth — inner bevel
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+        ctx.strokeRect(hatchX + 3, hatchY + 3, hatchW - 6, hatchH - 6);
+        // Hazard stripes on frame (top and bottom)
+        ctx.save();
+        ctx.beginPath(); ctx.rect(hatchX - 6, hatchY - 8, hatchW + 12, 8); ctx.clip();
         for(let hs = -2; hs < 16; hs++) {
             ctx.fillStyle = (hs % 2 === 0) ? '#ccaa00' : '#222';
             ctx.beginPath();
-            ctx.moveTo(hatchX - 6 + hs * 12, hatchY - 6);
-            ctx.lineTo(hatchX - 6 + hs * 12 + 8, hatchY - 6);
+            ctx.moveTo(hatchX - 6 + hs * 12, hatchY - 8);
+            ctx.lineTo(hatchX - 6 + hs * 12 + 8, hatchY - 8);
             ctx.lineTo(hatchX - 6 + hs * 12 + 14, hatchY);
             ctx.lineTo(hatchX - 6 + hs * 12 + 6, hatchY);
             ctx.closePath(); ctx.fill();
         }
         ctx.restore();
-        // HATCHERY sign above opening
-        ctx.fillStyle = '#333'; ctx.fillRect(hatchX + 5, hatchY - 22, hatchW - 10, 16);
+        // Bottom hazard stripes
+        ctx.save();
+        ctx.beginPath(); ctx.rect(hatchX - 6, hatchY + hatchH, hatchW + 12, 8); ctx.clip();
+        for(let hs = -2; hs < 16; hs++) {
+            ctx.fillStyle = (hs % 2 === 0) ? '#ccaa00' : '#222';
+            ctx.beginPath();
+            ctx.moveTo(hatchX - 6 + hs * 12, hatchY + hatchH);
+            ctx.lineTo(hatchX - 6 + hs * 12 + 8, hatchY + hatchH);
+            ctx.lineTo(hatchX - 6 + hs * 12 + 14, hatchY + hatchH + 8);
+            ctx.lineTo(hatchX - 6 + hs * 12 + 6, hatchY + hatchH + 8);
+            ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        // HATCHERY sign above opening — improved
+        ctx.fillStyle = '#2a2a2a'; ctx.fillRect(hatchX + 2, hatchY - 26, hatchW - 4, 18);
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+        ctx.strokeRect(hatchX + 2, hatchY - 26, hatchW - 4, 18);
         ctx.fillStyle = '#cc3333'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('PM DELIVERY', hatchX + hatchW/2, hatchY - 10);
+        ctx.fillText('PM DELIVERY', hatchX + hatchW/2, hatchY - 13);
+        // Sign backlight glow
+        ctx.fillStyle = `rgba(204,51,51,${0.15 + Math.sin(t / 1500) * 0.08})`;
+        ctx.fillRect(hatchX + 4, hatchY - 24, hatchW - 8, 14);
     }
 
     // ============================================================
@@ -11435,20 +11866,40 @@ function drawLevel6CloningRoom() {
             ctx.strokeStyle = tank.outline; ctx.lineWidth = 2;
             ctx.strokeRect(tx - 2, ty - 2, sW + 4, sH + 4);
 
-            // Glass body
-            ctx.fillStyle = 'rgba(10,10,10,0.9)'; ctx.fillRect(tx, ty, sW, sH);
+            // Glass body — dark interior with subtle depth
+            const glassGrad = ctx.createLinearGradient(tx, 0, tx + sW, 0);
+            glassGrad.addColorStop(0, 'rgba(15,15,15,0.95)');
+            glassGrad.addColorStop(0.3, 'rgba(8,8,8,0.9)');
+            glassGrad.addColorStop(0.7, 'rgba(8,8,8,0.9)');
+            glassGrad.addColorStop(1, 'rgba(15,15,15,0.95)');
+            ctx.fillStyle = glassGrad; ctx.fillRect(tx, ty, sW, sH);
 
-            // Swirling goo fill (Slurpee machine style)
+            // Swirling goo fill (Slurpee machine style) — enhanced with depth
             ctx.save();
             ctx.beginPath(); ctx.rect(tx, ty, sW, sH); ctx.clip();
-            for(let gi = 0; gi < 10; gi++) {
-                const gPhase = (gi / 10 + spin) % 1;
+            // Background goo layer (deeper, more opaque)
+            for(let gi = 0; gi < 12; gi++) {
+                const gPhase = (gi / 12 + spin) % 1;
                 const gx = tx + (gPhase * (sW + 30)) % (sW + 30) - 15;
-                const alpha = 0.3 + Math.sin(gPhase * Math.PI * 2) * 0.1;
+                const alpha = 0.35 + Math.sin(gPhase * Math.PI * 2) * 0.15;
                 ctx.fillStyle = tank.goo + alpha + ')';
-                ctx.fillRect(gx - 5, ty, 14, sH);
+                ctx.fillRect(gx - 6, ty, 16, sH);
             }
-            ctx.fillStyle = tank.goo + '0.2)'; ctx.fillRect(tx, ty, sW, sH);
+            // Surface swirl highlights (brighter, thinner)
+            for(let gi = 0; gi < 5; gi++) {
+                const gPhase = (gi / 5 + spin * 1.3) % 1;
+                const gx = tx + (gPhase * sW);
+                ctx.fillStyle = tank.goo + '0.15)';
+                ctx.beginPath();
+                ctx.ellipse(gx, ty + sH/2 + Math.sin(gPhase * 6) * sH * 0.3, 8, sH * 0.4, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.fillStyle = tank.goo + '0.22)'; ctx.fillRect(tx, ty, sW, sH);
+            // Meniscus at liquid surface
+            ctx.fillStyle = tank.goo + '0.4)';
+            ctx.beginPath();
+            ctx.ellipse(tx + sW/2, ty + 4, sW/2 - 2, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
             ctx.restore();
 
             // Golf-ball sized PM prenatal eggs floating inside
@@ -11480,7 +11931,7 @@ function drawLevel6CloningRoom() {
             ctx.globalAlpha = 1;
 
             // Label
-            ctx.fillStyle = '#666'; ctx.font = '6px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#666'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
             ctx.fillText(tank.label, tx + sW/2, ty + sH + 14);
         }
 
@@ -11758,13 +12209,33 @@ function drawLevel6CloningRoom() {
             ctx.fillRect(vx + 7, vy + 16, ftW - 14, ftH - 32);
             ctx.globalAlpha = 1;
 
-            // Floating fetal PM silhouette — bobbing
+            // Floating fetal PM silhouette — curled-up recognizable figure
             const fetalBobY = vy + 38 + Math.sin(t / 800 + vi * 2) * 10;
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.beginPath(); ctx.arc(vx + ftW/2, fetalBobY, 6, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(vx + ftW/2, fetalBobY + 10, 8, 0, Math.PI); ctx.fill();
-            ctx.fillRect(vx + ftW/2 - 10, fetalBobY + 5, 4, 3);
-            ctx.fillRect(vx + ftW/2 + 6, fetalBobY + 5, 4, 3);
+            const fetalRot = Math.sin(t / 3000 + vi) * 0.15; // slow gentle rotation
+            ctx.save();
+            ctx.translate(vx + ftW/2, fetalBobY);
+            ctx.rotate(fetalRot);
+            // Translucent body glow
+            ctx.fillStyle = 'rgba(245,213,168,0.15)';
+            ctx.beginPath(); ctx.ellipse(0, 4, 12, 16, 0, 0, Math.PI * 2); ctx.fill();
+            // Head (large relative to body — fetal proportions)
+            ctx.fillStyle = 'rgba(245,213,168,0.5)';
+            ctx.beginPath(); ctx.arc(0, -4, 7, 0, Math.PI*2); ctx.fill();
+            // Curled body
+            ctx.fillStyle = 'rgba(220,190,150,0.4)';
+            ctx.beginPath(); ctx.ellipse(0, 6, 6, 10, 0, 0, Math.PI*2); ctx.fill();
+            // Tucked arms
+            ctx.fillStyle = 'rgba(245,213,168,0.35)';
+            ctx.fillRect(-8, 0, 4, 8);
+            ctx.fillRect(4, 0, 4, 8);
+            // Tucked legs
+            ctx.fillRect(-5, 10, 4, 6);
+            ctx.fillRect(1, 10, 4, 6);
+            // Eye dots (closed/sleeping)
+            ctx.fillStyle = 'rgba(80,50,30,0.4)';
+            ctx.fillRect(-3, -5, 2, 1);
+            ctx.fillRect(1, -5, 2, 1);
+            ctx.restore();
 
             // Bubbles
             for(let b = 0; b < 3; b++) {
@@ -11899,23 +12370,44 @@ function drawLevel6CloningRoom() {
         const beltX1 = 665; // disappears into hatchery opening
         const beltSpeed = (beltT * 0.07) % 22;
 
-        // Belt rails
-        ctx.fillStyle = '#4a4a4a';
-        ctx.fillRect(beltX0, beltY - 3, beltX1 - beltX0, 3);
-        ctx.fillRect(beltX0, beltY + beltH, beltX1 - beltX0, 3);
-        // Belt surface
-        ctx.fillStyle = '#2e2e2e';
+        // Belt rails — brushed steel with highlight
+        const railGrad = ctx.createLinearGradient(0, beltY - 3, 0, beltY);
+        railGrad.addColorStop(0, '#666');
+        railGrad.addColorStop(0.5, '#5a5a5a');
+        railGrad.addColorStop(1, '#444');
+        ctx.fillStyle = railGrad;
+        ctx.fillRect(beltX0, beltY - 4, beltX1 - beltX0, 4);
+        ctx.fillRect(beltX0, beltY + beltH, beltX1 - beltX0, 4);
+        // Rail highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(beltX0, beltY - 4, beltX1 - beltX0, 1);
+        ctx.fillRect(beltX0, beltY + beltH, beltX1 - beltX0, 1);
+        // Belt surface — metallic slats with motion
+        const beltGrad = ctx.createLinearGradient(0, beltY, 0, beltY + beltH);
+        beltGrad.addColorStop(0, '#363636');
+        beltGrad.addColorStop(0.3, '#2e2e2e');
+        beltGrad.addColorStop(0.7, '#282828');
+        beltGrad.addColorStop(1, '#222');
+        ctx.fillStyle = beltGrad;
         ctx.fillRect(beltX0, beltY, beltX1 - beltX0, beltH);
         ctx.save();
         ctx.beginPath(); ctx.rect(beltX0, beltY, beltX1 - beltX0, beltH); ctx.clip();
+        // Metallic slat dividers — moving with belt
         for(let bx = beltX0 - beltSpeed; bx < beltX1 + 22; bx += 22) {
-            ctx.fillStyle = '#1e1e1e'; ctx.fillRect(bx, beltY + 1, 3, beltH - 2);
+            // Slat gap (dark line)
+            ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx, beltY, 2, beltH);
+            // Slat highlight (left edge catch light)
+            ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(bx + 2, beltY, 1, beltH);
+            // Bolt rivets on every 4th slat
             if(Math.round((bx - beltX0) / 22) % 4 === 0) {
-                ctx.fillStyle = 'rgba(255,210,0,0.12)'; ctx.fillRect(bx - 1, beltY + 1, 5, beltH - 2);
+                ctx.fillStyle = '#555';
+                ctx.beginPath(); ctx.arc(bx + 11, beltY + 3, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(bx + 11, beltY + beltH - 3, 1.5, 0, Math.PI * 2); ctx.fill();
             }
         }
         ctx.restore();
-        ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(beltX0, beltY, beltX1 - beltX0, 3);
+        // Surface sheen reflection
+        ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(beltX0, beltY, beltX1 - beltX0, 3);
 
         // Start roller
         ctx.fillStyle = '#666'; ctx.beginPath(); ctx.arc(beltX0, beltY + beltH/2, 9, 0, Math.PI*2); ctx.fill();
@@ -11999,7 +12491,7 @@ function drawLevel6CloningRoom() {
             ctx.fillStyle = '#fff';
             ctx.fillRect(posterX, posterY, posterW, posterH);
             ctx.fillStyle = '#cc0000';
-            ctx.font = 'bold 7px Arial';
+            ctx.font = 'bold 9px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('LAB SAFETY', posterX + posterW/2, posterY + 20);
             ctx.fillText('FIRST', posterX + posterW/2, posterY + 30);
@@ -12324,6 +12816,42 @@ function drawLevel6CloningRoom() {
         ctx.restore();
     }
 
+    // === ATMOSPHERIC EFFECTS ===
+
+    // Floating dust motes / particles in light cones
+    for(let p = 0; p < 12; p++) {
+        const seed = p * 137.5;
+        const px = ((t * 0.008 + seed) % 700);
+        const py = 20 + ((seed * 7.3 + t * 0.003) % 380);
+        const pAlpha = 0.08 + Math.sin(t / 2000 + p) * 0.04;
+        const pSize = 1 + Math.sin(seed) * 0.5;
+        ctx.fillStyle = `rgba(200,220,200,${pAlpha})`;
+        ctx.beginPath(); ctx.arc(px, py, pSize, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Steam wisps rising from hatchery entrance
+    for(let s = 0; s < 4; s++) {
+        const steamPhase = ((t * 0.0004 + s * 0.3) % 1);
+        const sx = 600 + Math.sin(t / 1500 + s * 2) * 15;
+        const sy = 380 - steamPhase * 200;
+        const sAlpha = 0.06 * (1 - steamPhase);
+        const sSize = 8 + steamPhase * 25;
+        ctx.fillStyle = `rgba(180,40,20,${sAlpha})`;
+        ctx.beginPath(); ctx.arc(sx, sy, sSize, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Cinematic vignette — dark edges for dramatic framing
+    const vigGrad = ctx.createRadialGradient(350, 220, 180, 350, 220, 420);
+    vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vigGrad.addColorStop(0.7, 'rgba(0,0,0,0)');
+    vigGrad.addColorStop(1, 'rgba(0,10,5,0.25)');
+    ctx.fillStyle = vigGrad;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Subtle green sci-fi color grade over everything
+    ctx.fillStyle = 'rgba(0,40,20,0.04)';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
     // Direction prompts
     if (player.x > 620) {
         ctx.font = 'bold 14px Arial';
@@ -12343,9 +12871,15 @@ function drawCloneFollower(x, y, facing) {
     const stride = isWalking ? Math.sin(clt / 125) * 3 : 0;
 
     ctx.save();
-    // Subtle red aura
-    ctx.fillStyle = 'rgba(255,50,50,0.06)';
-    ctx.beginPath(); ctx.arc(x, y - 12, 24, 0, Math.PI * 2); ctx.fill();
+    // Eerie red aura — pulsing glow
+    const cloneGlowAlpha = 0.06 + Math.sin(clt / 600) * 0.03;
+    ctx.fillStyle = `rgba(255,50,50,${cloneGlowAlpha})`;
+    ctx.beginPath(); ctx.arc(x, y - 12, 28, 0, Math.PI * 2); ctx.fill();
+    // Inner glow ring
+    ctx.fillStyle = `rgba(255,30,30,${cloneGlowAlpha * 0.7})`;
+    ctx.beginPath(); ctx.arc(x, y - 12, 20, 0, Math.PI * 2); ctx.fill();
+    // Slight transparency to distinguish from originals
+    ctx.globalAlpha = 0.92;
 
     // Hood
     ctx.fillStyle = '#cc2222';
@@ -12395,7 +12929,7 @@ function drawCloneFollower(x, y, facing) {
 
     // "CLONE" tag
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 18, y - 70, 36, 12);
-    ctx.fillStyle = '#ff6666'; ctx.font = 'bold 7px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff6666'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
     ctx.fillText('CLONE', x, y - 61);
 }
 
@@ -12674,7 +13208,7 @@ function drawL6FurnaceRoom() {
     ctx.strokeRect(sdX, sdY, sdW, sdH);
     // Subtle handle scratch marks
     ctx.strokeStyle = '#4a4540';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(sdX + sdW - 5, sdY + 40);
     ctx.lineTo(sdX + sdW - 5, sdY + 60);
@@ -12906,7 +13440,7 @@ function drawLevel6UnderbellyHallway() {
         ctx.beginPath(); ctx.arc(pileX + p.x, pileY + p.y, p.r * 0.55, 0, Math.PI * 2); ctx.fill();
         // Rust streaks
         ctx.strokeStyle = 'rgba(160,80,20,0.4)';
-        ctx.lineWidth = 0.8;
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(pileX + p.x + 1, pileY + p.y - 1, p.r * 0.75, 0.5, 2.5); ctx.stroke();
     }
     // Floor shadow under pipe pile
@@ -12934,7 +13468,7 @@ function drawLevel6UnderbellyHallway() {
         ctx.fillRect(cr.x, cr.y, cr.w, 3);
         // Plank lines
         ctx.strokeStyle = '#4a3a1a';
-        ctx.lineWidth = 0.8;
+        ctx.lineWidth = 1;
         for(let pl = 1; pl < 3; pl++) {
             ctx.beginPath();
             ctx.moveTo(cr.x, cr.y + pl * (cr.h / 3));
@@ -13003,7 +13537,7 @@ function drawLevel6UnderbellyHallway() {
     ctx.fillStyle = 'rgba(100,150,200,0.3)';
     ctx.fillRect(fwX - 12, fwY - 12, 24, 14);
     ctx.strokeStyle = '#aaa';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.strokeRect(fwX - 12, fwY - 12, 24, 14);
 
     // === SINGLE DIM LIGHT FIXTURE ===
@@ -13054,8 +13588,12 @@ function drawLevel6Underbelly() {
     const baseDim = flicker > 0 ? 0.3 + Math.random() * 0.4 : 1;
     const dimFactor = baseDim;
 
-    // Dark grimy concrete walls
-    ctx.fillStyle = `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`;
+    // Dark grimy concrete walls with oppressive gradient
+    const underGrad = ctx.createLinearGradient(0, -GY, 0, 500);
+    underGrad.addColorStop(0, `rgb(${Math.floor(30 * dimFactor)},${Math.floor(25 * dimFactor)},${Math.floor(22 * dimFactor)})`);
+    underGrad.addColorStop(0.5, `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`);
+    underGrad.addColorStop(1, `rgb(${Math.floor(25 * dimFactor)},${Math.floor(20 * dimFactor)},${Math.floor(18 * dimFactor)})`);
+    ctx.fillStyle = underGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
     // Water stain streaks on walls
@@ -13209,7 +13747,7 @@ function drawLevel6Underbelly() {
     ctx.beginPath(); ctx.arc(brlX, brlY - 10, 5, 0, Math.PI * 2); ctx.fill();
     // "RADIOACTIVE" label on barrel
     ctx.fillStyle = `rgba(255,215,0,${0.7 + Math.sin(t / 400) * 0.2})`;
-    ctx.font = 'bold 7px Arial';
+    ctx.font = 'bold 9px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('RADIOACTIVE', brlX, brlY + 28);
 
@@ -13420,7 +13958,7 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = '#ddd';
     ctx.fillRect(mx + 10, my - 20 + breathe, 8, 6);
     ctx.fillStyle = '#333';
-    ctx.font = '4px Arial';
+    ctx.font = '8px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('PT', mx + 14, my - 15 + breathe);
 
@@ -13587,7 +14125,7 @@ function drawLevel6Underbelly() {
     ctx.textAlign = 'center';
     ctx.fillText('DANGER', cageX + cageW + 25, cageY + 42);
     ctx.fillStyle = '#ffcc00';
-    ctx.font = '7px Arial';
+    ctx.font = '9px Arial';
     ctx.fillText('DO NOT FEED', cageX + cageW + 25, cageY + 55);
 
     // === PM EATING ANIMATION ===
@@ -13986,10 +14524,20 @@ function drawLevel6Underbelly() {
 }
 
 function drawLevel6Entryway() {
-    ctx.fillStyle = '#8b0000';
+    // Deep red corporate power room with warm gradient
+    const entryGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    entryGrad.addColorStop(0, '#7a0000');
+    entryGrad.addColorStop(0.3, '#8b0000');
+    entryGrad.addColorStop(0.7, '#8b0000');
+    entryGrad.addColorStop(1, '#750000');
+    ctx.fillStyle = entryGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    ctx.fillStyle = '#660000';
+    // Rich dark floor
+    const floorGrad = ctx.createLinearGradient(0, 400, 0, 500);
+    floorGrad.addColorStop(0, '#6a0000');
+    floorGrad.addColorStop(1, '#580000');
+    ctx.fillStyle = floorGrad;
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
 
     for(let i = -4; i < 24; i++) {
@@ -14092,19 +14640,39 @@ function drawLevel6Entryway() {
 }
 
 function drawLevel6CEOOffice() {
-    // Black void background
+    const ceoT = Date.now();
+    // Black void background with subtle warm ambient
     ctx.fillStyle = '#000';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
-    // Room floor - circular rug
+    // Warm ambient light pooling from center
+    const ambientGlow = ctx.createRadialGradient(350, 200, 20, 350, 250, 380);
+    ambientGlow.addColorStop(0, 'rgba(60,40,20,0.15)');
+    ambientGlow.addColorStop(0.5, 'rgba(40,25,10,0.08)');
+    ambientGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ambientGlow;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Room floor - circular rug with richer texture
     const rugCenterX = 350;
     const rugCenterY = 350;
-    
+
+    // Rug shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(rugCenterX, rugCenterY + 5, 305, 145, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Outer rug border
     ctx.fillStyle = '#2b1810';
     ctx.beginPath();
     ctx.ellipse(rugCenterX, rugCenterY, 300, 140, 0, 0, Math.PI * 2);
     ctx.fill();
-    
+    // Rug fringe detail
+    ctx.strokeStyle = '#3a2010';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(rugCenterX, rugCenterY, 298, 138, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
     ctx.fillStyle = '#3a2416';
     ctx.beginPath();
     ctx.ellipse(rugCenterX, rugCenterY, 280, 120, 0, 0, Math.PI * 2);
@@ -14365,7 +14933,7 @@ function drawLevel6CEOOffice() {
             ctx.ellipse(sx, sy, 5, 5, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 6px Arial';
+            ctx.font = 'bold 8px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('$', sx, sy + 3);
         };
@@ -14516,7 +15084,7 @@ function drawLevel6CEOOffice() {
 
             // Grip texture (horizontal lines)
             ctx.strokeStyle = '#654321';
-            ctx.lineWidth = 0.5*scale;
+            ctx.lineWidth = Math.max(1, 0.5*scale);
             for(let i = 0; i < 4; i++) {
                 ctx.beginPath();
                 ctx.moveTo(revX + 6*scale, revY + 3*scale + i*2*scale);
@@ -14768,7 +15336,7 @@ function drawLevel6CEOOffice() {
 
         // Terminal-style text
         ctx.fillStyle = '#0a0a0a';
-        ctx.font = 'bold 6px monospace';
+        ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('SYSTEM', monX + 16, monY + 10);
         ctx.fillText('READY', monX + 16, monY + 17);
@@ -14883,7 +15451,7 @@ function drawLevel6CEOOffice() {
     ctx.arc(trophyCenterX, cabinetY + 22, 10, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#0a0a0a';
-    ctx.font = 'bold 6px Arial';
+    ctx.font = 'bold 8px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('CEO', trophyCenterX, cabinetY + 25);
 
@@ -15029,7 +15597,7 @@ function drawLevel6CEOOffice() {
         ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
         // White stress highlights along cracks
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 1;
         for(let r = 0; r < 5; r++) {
             const angle = r * (Math.PI * 2 / 5) + 0.5;
             ctx.beginPath();
@@ -15092,7 +15660,7 @@ function drawLevel6CEOOffice() {
 
     // Glass edge highlights on remaining shards
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(mirrorX + 10, mirrorY + 10);
     ctx.lineTo(mirrorX + 22, mirrorY + 28);
@@ -15169,7 +15737,7 @@ function drawLevel6CEOOffice() {
 
         // Stenciled text
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.font = 'bold 5px monospace';
+        ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('PIPE', missileX, missileY + 30);
         ctx.fillText('TECH', missileX, missileY + 36);
@@ -15232,7 +15800,7 @@ function drawLevel6CEOOffice() {
     ctx.fillRect(tvX, floorY + 1, tvW, 1);
     // Floor tiles
     ctx.strokeStyle = '#666';
-    ctx.lineWidth = 0.3;
+    ctx.lineWidth = 1;
     for(let ft = 0; ft < 12; ft++) {
         ctx.strokeRect(tvX + ft * 6, floorY + 1, 6, 6);
     }
@@ -15250,7 +15818,7 @@ function drawLevel6CEOOffice() {
         }
     }
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 4px Arial';
+    ctx.font = 'bold 8px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('PIPETECH', tvX + 13, tvY + 17);
     // Colored stripes under sign (matching level 5)
@@ -15286,7 +15854,7 @@ function drawLevel6CEOOffice() {
     }
     // Window frame
     ctx.strokeStyle = '#666';
-    ctx.lineWidth = 0.8;
+    ctx.lineWidth = 1;
     ctx.strokeRect(winX, winY, winW, winH);
     // Cross bar
     ctx.beginPath(); ctx.moveTo(winX + winW / 2, winY); ctx.lineTo(winX + winW / 2, winY + winH); ctx.stroke();
@@ -15321,7 +15889,7 @@ function drawLevel6CEOOffice() {
 
         // Ladder beside pipe
         ctx.strokeStyle = '#777';
-        ctx.lineWidth = 0.4;
+        ctx.lineWidth = 1;
         // Rails
         ctx.beginPath(); ctx.moveTo(px - 3, tvY + 14); ctx.lineTo(px - 3, floorY); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(px + 3, tvY + 14); ctx.lineTo(px + 3, floorY); ctx.stroke();
@@ -15361,7 +15929,7 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(px - 2.2, pmY - 2.8, 4.4, 1.5);
         // Both arms animated — reaching for pipe/wrench motion
         ctx.strokeStyle = '#f5c08a';
-        ctx.lineWidth = 0.6;
+        ctx.lineWidth = 1;
         // Left arm reaching to pipe
         ctx.beginPath();
         ctx.moveTo(px - 2, pmY + 2);
@@ -15400,7 +15968,7 @@ function drawLevel6CEOOffice() {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(tvX, tvY, tvW, 9);
     ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 5px monospace';
+    ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'left';
     ctx.fillText('CAM 1  PIPE ROOM', tvX + 2, tvY + 7);
     // Timestamp
@@ -15430,7 +15998,7 @@ function drawLevel6CEOOffice() {
     ctx.beginPath(); ctx.arc(bhX, bhY, 6, 0, Math.PI * 2); ctx.stroke();
     // Radiating crack lines
     ctx.strokeStyle = 'rgba(150,150,150,0.7)';
-    ctx.lineWidth = 0.8;
+    ctx.lineWidth = 1;
     for(let r = 0; r < 6; r++) {
         const angle = r * (Math.PI * 2 / 6) + 0.2;
         const len = 8 + (r % 3) * 6;
@@ -15740,7 +16308,7 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(bbx - 8, bby - 2, 16, 4);
         // Label
         ctx.fillStyle = '#ff6600';
-        ctx.font = 'bold 5px monospace';
+        ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('BLACK BOX', bbx, bby + 14);
 
@@ -16026,7 +16594,7 @@ function drawSafeUI() {
 
         // Grip texture (horizontal lines)
         ctx.strokeStyle = '#b8941e';
-        ctx.lineWidth = 0.5*iconScale;
+        ctx.lineWidth = Math.max(1, 0.5*iconScale);
         for(let i = 0; i < 4; i++) {
             ctx.beginPath();
             ctx.moveTo(revIconX + 6*iconScale, revIconY + 3*iconScale + i*2*iconScale);
@@ -16269,12 +16837,20 @@ function drawKeypadUI() {
     ctx.fillStyle = 'rgba(0,0,0,0.92)';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Keypad panel frame — dark steel
+    // Keypad panel frame — dark steel with beveled edges
     const panelW = 320, panelH = 380;
     const px = 350 - panelW / 2, py = 60;
+    // Outer glow
+    ctx.fillStyle = 'rgba(0,204,255,0.03)';
+    ctx.fillRect(px - 8, py - 8, panelW + 16, panelH + 16);
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(px, py, panelW, panelH);
-    ctx.fillStyle = '#222';
+    // Beveled inner panel
+    const innerGrad = ctx.createLinearGradient(px, py, px, py + panelH);
+    innerGrad.addColorStop(0, '#282828');
+    innerGrad.addColorStop(0.5, '#222');
+    innerGrad.addColorStop(1, '#1c1c1c');
+    ctx.fillStyle = innerGrad;
     ctx.fillRect(px + 6, py + 6, panelW - 12, panelH - 12);
 
     // Cyan header LED strip
@@ -16404,8 +16980,28 @@ function drawComputerUI() {
     ctx.fillStyle = 'rgba(0,0,0,0.95)';
     ctx.fillRect(50, 50, 600, 400);
 
-    ctx.fillStyle = '#1a1a1a';
+    // Terminal screen with green tint
+    const termGrad = ctx.createLinearGradient(60, 60, 60, 440);
+    termGrad.addColorStop(0, '#1a1f1a');
+    termGrad.addColorStop(0.5, '#1a1a1a');
+    termGrad.addColorStop(1, '#1a1a1e');
+    ctx.fillStyle = termGrad;
     ctx.fillRect(60, 60, 580, 380);
+
+    // CRT scan line overlay
+    ctx.save();
+    ctx.globalAlpha = 0.04;
+    for(let sl = 62; sl < 438; sl += 3) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(62, sl, 576, 1);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Screen edge glow
+    ctx.strokeStyle = 'rgba(100,200,100,0.08)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(62, 62, 576, 376);
 
     ctx.fillStyle = '#f5f2ec';
     ctx.font = 'bold 32px Arial';
@@ -17353,6 +17949,24 @@ function drawAcidBurst(ab) {
     const elapsed = Date.now() - ab.startTime;
     const t = ab.life; // 0..1
 
+    // --- Acid glow — eerie green light radiating from splash zone ---
+    const glowAlpha = 0.12 * (1 - t * 0.6);
+    const glowR = 40 + t * 80;
+    const acidGlow = ctx.createRadialGradient(ab.npcX, 396, 0, ab.npcX, 396, 120 + t * 60);
+    acidGlow.addColorStop(0, `rgba(120,255,20,${glowAlpha})`);
+    acidGlow.addColorStop(0.5, `rgba(80,200,10,${glowAlpha * 0.4})`);
+    acidGlow.addColorStop(1, 'rgba(0,80,0,0)');
+    ctx.fillStyle = acidGlow;
+    ctx.fillRect(ab.npcX - 200, 250, 400, 200);
+
+    // Screen shake on initial acid hit
+    if(elapsed < 200) triggerScreenShake(3);
+
+    // Emit acid steam particles
+    if(frame % 3 === 0 && t < 0.8) {
+        emitParticles(ab.npcX + (Math.random() - 0.5) * 40, 390, 'steam', 1, { angle: -Math.PI / 2, spread: 0.6 });
+    }
+
     // --- Acid spray burst from pipe ---
     for (let d = 0; d < 12; d++) {
         const dripPhase = (d / 12 + elapsed / 600) % 1;
@@ -17657,7 +18271,7 @@ function drawScene() {
     ctx.scale(dpr, dpr);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.translate(GX, GY);
+    ctx.translate(GX + screenShake.dx, GY + screenShake.dy);
 
     // RT Games Presents Screen
     if(state === 'rtPresents') {
@@ -17665,11 +18279,21 @@ function drawScene() {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-        // Fade-in effect
-        const alpha = Math.min(1, frame / 60); // Fade in over 1 second
-        ctx.globalAlpha = alpha;
+        // Cinematic fade-in: logo fades from 0-1s, text fades from 0.5-1.5s
+        const logoAlpha = Math.min(1, frame / 60);
+        const textAlpha = Math.min(1, Math.max(0, (frame - 30) / 60));
+
+        // Subtle warm spotlight behind logo
+        ctx.globalAlpha = logoAlpha * 0.15;
+        const spotGrad = ctx.createRadialGradient(350, 220, 20, 350, 220, 200);
+        spotGrad.addColorStop(0, '#ffd700');
+        spotGrad.addColorStop(0.5, '#ff6b35');
+        spotGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = spotGrad;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
         // Draw mullet logo centered
+        ctx.globalAlpha = logoAlpha;
         if(mulletLogoImg.complete && mulletLogoImg.naturalWidth > 0) {
             const logoSize = 200;
             const logoX = (700 - logoSize) / 2;
@@ -17677,11 +18301,18 @@ function drawScene() {
             ctx.drawImage(mulletLogoImg, logoX, logoY, logoSize, logoSize);
         }
 
-        // "presents..." text with Playfair Display font
+        // "presents..." text with Playfair Display font — separate fade
+        ctx.globalAlpha = textAlpha;
         ctx.fillStyle = '#ffffff';
         ctx.font = 'italic 36px "Playfair Display", serif';
         ctx.textAlign = 'center';
         ctx.fillText('presents...', 350, 370);
+
+        // Cinematic letterbox bars (subtle)
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-GX, -GY, CANVAS_W, 30);
+        ctx.fillRect(-GX, 470, CANVAS_W, 30 + (CANVAS_H - 500));
 
         ctx.globalAlpha = 1;
 
@@ -17689,7 +18320,7 @@ function drawScene() {
         if(Math.floor(frame / 30) % 2 === 0 && frame > 60) {
             ctx.fillStyle = '#ffd700';
             ctx.font = '16px "Press Start 2P", monospace';
-            ctx.fillText('PRESS ANY BUTTON', 350, 440);
+            ctx.fillText('PRESS ANY BUTTON', 350, 450);
         }
 
         ctx.restore(); return;
@@ -17744,36 +18375,57 @@ function drawScene() {
             ctx.drawImage(titleScreenImg, 0, 0, 700, 500);
         } else {
             // Noir industrial prison aesthetic - minimal and visual
-            // Dark film noir gradient background
+            // Dark film noir gradient background with depth
             const bgGrad = ctx.createLinearGradient(0, 0, 0, 500);
-            bgGrad.addColorStop(0, '#0a0a0a');
-            bgGrad.addColorStop(0.5, '#1a1a1a');
-            bgGrad.addColorStop(1, '#0f0f0f');
+            bgGrad.addColorStop(0, '#050505');
+            bgGrad.addColorStop(0.3, '#141414');
+            bgGrad.addColorStop(0.7, '#1a1a1a');
+            bgGrad.addColorStop(1, '#080808');
             ctx.fillStyle = bgGrad;
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-            // Industrial pipe prison bars - vertical pipes creating dramatic prison aesthetic
-            ctx.globalAlpha = 0.5;
+            // Floor reflection — subtle gradient at bottom
+            const floorGrad = ctx.createLinearGradient(0, 380, 0, 500);
+            floorGrad.addColorStop(0, 'rgba(255,255,255,0)');
+            floorGrad.addColorStop(1, 'rgba(255,255,255,0.03)');
+            ctx.fillStyle = floorGrad;
+            ctx.fillRect(-GX, 380, CANVAS_W, 120);
+
+            // Industrial pipe prison bars - vertical pipes with better metallic rendering
             const pipeSpacing = 100;
             for(let i = 0; i < 8; i++) {
                 const pipeX = i * pipeSpacing;
                 const colorIndex = i % 4;
 
-                // Dark metallic pipe body
-                ctx.fillStyle = COLORS[colorIndex].hex;
+                // Pipe shadow on floor
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(pipeX + 10, 0, 30, 500);
+
+                // Dark metallic pipe body with cylindrical gradient
+                const pipeGrad = ctx.createLinearGradient(pipeX, 0, pipeX + 25, 0);
+                pipeGrad.addColorStop(0, 'rgba(0,0,0,0.7)');
+                pipeGrad.addColorStop(0.3, COLORS[colorIndex].hex);
+                pipeGrad.addColorStop(0.5, COLORS[colorIndex].hex);
+                pipeGrad.addColorStop(0.7, COLORS[colorIndex].hex);
+                pipeGrad.addColorStop(1, 'rgba(0,0,0,0.7)');
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = pipeGrad;
                 ctx.fillRect(pipeX, 0, 25, 500);
 
-                // Metallic highlight on left edge
-                ctx.fillStyle = 'rgba(255,255,255,0.15)';
-                ctx.fillRect(pipeX, 0, 8, 500);
+                // Metallic specular highlight
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.fillRect(pipeX + 6, 0, 4, 500);
 
-                // Deep shadow on right edge
-                ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                ctx.fillRect(pipeX + 20, 0, 5, 500);
+                // Rivet details
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = '#444';
+                for(let ry = 50; ry < 500; ry += 100) {
+                    ctx.beginPath(); ctx.arc(pipeX + 12, ry, 3, 0, Math.PI * 2); ctx.fill();
+                }
             }
             ctx.globalAlpha = 1.0;
 
-            // Dramatic title - centered
+            // Dramatic title with glow
             const textGrad = ctx.createLinearGradient(200, 200, 500, 260);
             textGrad.addColorStop(0, '#ff6b35');
             textGrad.addColorStop(0.5, '#f7931e');
@@ -17781,11 +18433,22 @@ function drawScene() {
 
             ctx.font = 'bold 84px Arial';
             ctx.textAlign = 'center';
+            ctx.shadowColor = '#ff6b35';
+            ctx.shadowBlur = 20;
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 10;
             ctx.strokeText('MULLET PRO', 350, 250);
             ctx.fillStyle = textGrad;
             ctx.fillText('MULLET PRO', 350, 250);
+            ctx.shadowBlur = 0;
+
+            // CRT scan line overlay for retro feel
+            ctx.globalAlpha = 0.04;
+            for(let sl = 0; sl < 500; sl += 3) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(-GX, sl, CANVAS_W, 1);
+            }
+            ctx.globalAlpha = 1;
         }
 
         // Blinking call-to-action overlay with retro arcade font
@@ -17846,18 +18509,43 @@ function drawScene() {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
+        // Fade-in transition based on cardTimer
+        const cardFade = Math.min(1, cardTimer / 20);
+        ctx.globalAlpha = cardFade;
+
+        // Dramatic radial light burst behind level number
+        const burstAlpha = 0.08 + Math.sin(frame * 0.03) * 0.03;
+        const burstGrad = ctx.createRadialGradient(350, 200, 10, 350, 200, 250);
+        burstGrad.addColorStop(0, `rgba(255,107,53,${burstAlpha})`);
+        burstGrad.addColorStop(0.5, `rgba(255,215,0,${burstAlpha * 0.4})`);
+        burstGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = burstGrad;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
         const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
         lvlGrad.addColorStop(0, '#ff6b35');
         lvlGrad.addColorStop(1, '#ffd700');
 
         ctx.font = 'bold 80px Arial';
         ctx.textAlign = 'center';
+        ctx.shadowColor = '#ff6b35';
+        ctx.shadowBlur = 15;
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 8;
         ctx.strokeText('LEVEL ' + level, 350, 200);
         ctx.fillStyle = lvlGrad;
         ctx.fillText('LEVEL ' + level, 350, 200);
+        ctx.shadowBlur = 0;
 
+        // Decorative line under level number
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = cardFade * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(200, 220); ctx.lineTo(500, 220);
+        ctx.stroke();
+
+        ctx.globalAlpha = cardFade;
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 32px Arial';
         const msgs = ['', 'TRAINING DAY', 'PRESSURE RISING!', 'MAXIMUM CHAOS!', '3D PRINTER UNLOCKED!', 'MANAGEMENT', 'THE CEO WANTS TO MEET YOU'];
@@ -17870,6 +18558,7 @@ function drawScene() {
                 ctx.fillText('GET READY!', 350, 370);
             }
         }
+        ctx.globalAlpha = 1;
 
         // Draw mute indicator on level cards
         drawMuteIndicator();
@@ -17880,17 +18569,29 @@ function drawScene() {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
+        // Celebration radial glow
+        const celebPulse = 0.06 + Math.sin(frame * 0.04) * 0.03;
+        const celebGrad = ctx.createRadialGradient(350, 200, 20, 350, 200, 300);
+        celebGrad.addColorStop(0, `rgba(255,215,0,${celebPulse})`);
+        celebGrad.addColorStop(0.6, `rgba(255,107,53,${celebPulse * 0.3})`);
+        celebGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = celebGrad;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
         const promoGrad = ctx.createLinearGradient(200, 100, 500, 200);
         promoGrad.addColorStop(0, '#ffd700');
         promoGrad.addColorStop(1, '#ff6b35');
 
         ctx.font = 'bold 56px Arial';
         ctx.textAlign = 'center';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 18;
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 8;
         ctx.strokeText('CONGRATS!', 350, 150);
         ctx.fillStyle = promoGrad;
         ctx.fillText('CONGRATS!', 350, 150);
+        ctx.shadowBlur = 0;
 
         ctx.fillStyle = '#f5f2ec';
         ctx.font = 'bold 36px Arial';
@@ -17898,7 +18599,10 @@ function drawScene() {
 
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 48px Arial';
+        ctx.shadowColor = '#ff6b35';
+        ctx.shadowBlur = 12;
         ctx.fillText('PIPE BOSS', 350, 280);
+        ctx.shadowBlur = 0;
 
         ctx.fillStyle = '#f5f2ec';
         ctx.font = '32px Arial';
@@ -17919,23 +18623,42 @@ function drawScene() {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
+        // Animated red vignette pulse on death screens
+        if(state === 'over' || state === 'fired' || state === 'gameover') {
+            const pulse = 0.08 + Math.sin(frame * 0.04) * 0.04;
+            const deathVig = ctx.createRadialGradient(350, 250, 80, 350, 250, 400);
+            deathVig.addColorStop(0, 'rgba(0,0,0,0)');
+            deathVig.addColorStop(0.6, `rgba(80,0,0,${pulse})`);
+            deathVig.addColorStop(1, `rgba(120,0,0,${pulse * 2.5})`);
+            ctx.fillStyle = deathVig;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+
         if(state === 'over') {
+            // Glowing red text with shadow
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 15 + Math.sin(frame * 0.06) * 5;
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
+            ctx.shadowBlur = 0;
         } else if(state === 'fired') {
-            // Level 5: Killed yourself in furnace
+            ctx.shadowColor = '#ff4400';
+            ctx.shadowBlur = 15 + Math.sin(frame * 0.06) * 5;
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
+            ctx.shadowBlur = 0;
         } else if(state === 'gameover') {
-            // Level 5: Didn't burn 6 documents in time
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 12 + Math.sin(frame * 0.05) * 4;
             ctx.fillStyle = '#e74c3c';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("GAME OVER", 350, 180);
+            ctx.shadowBlur = 0;
         } else if(state === 'win') {
             ctx.fillStyle = '#27ae60';
             ctx.font = 'bold 56px Arial';
@@ -19493,7 +20216,7 @@ function drawScene() {
             ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2;
             ctx.strokeRect(bbX, bbY, bbW, bbH);
             // Inner panel line
-            ctx.strokeStyle = '#ff222266'; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = '#ff222266'; ctx.lineWidth = 1;
             ctx.strokeRect(bbX + 4, bbY + 4, bbW - 8, bbH - 8);
             // Blinking red light on box
             if(Math.floor(rubbleTime / 500) % 2 === 0) {
@@ -19503,7 +20226,7 @@ function drawScene() {
                 ctx.shadowBlur = 0;
             }
             // "BLACK BOX" label
-            ctx.fillStyle = '#ff6666'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff6666'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
             ctx.fillText('BLACK BOX', bbX + bbW/2, bbY + bbH - 6);
 
             // Fedora silhouette resting on rubble — slightly larger
@@ -20360,6 +21083,55 @@ function drawScene() {
             ctx.fillText('-$', player.x, floatY);
         }
         level6.damageFlash = Math.max(0, level6.damageFlash - 0.04);
+    }
+
+    // Draw ambient particles over gameplay
+    if(state === 'playing') {
+        drawParticles();
+
+        // Room-specific ambient particle emission
+        if(level === 6) {
+            if(level6.room === 'cloningRoom' && frame % 8 === 0) {
+                emitParticles(Math.random() * 700, 400, 'steam', 1, { angle: -Math.PI / 2, spread: 0.5 });
+            }
+            if((level6.room === 'furnaceRoom') && frame % 4 === 0) {
+                emitParticles(350 + (Math.random() - 0.5) * 200, 380, 'ember', 1, { angle: -Math.PI / 2, spread: 1.2 });
+            }
+            if(level6.room === 'nuclearBridge' && frame % 12 === 0) {
+                emitParticles(Math.random() * 700, 420, 'spark', 1, { angle: -Math.PI / 2, spread: 0.8 });
+            }
+        }
+        if(level === 5) {
+            if(level5.room === 'furnace' && frame % 5 === 0) {
+                emitParticles(350 + (Math.random() - 0.5) * 150, 390, 'ember', 1, { angle: -Math.PI / 2, spread: 1.0 });
+            }
+            if(level5.room === 'pipeRoom' && frame % 15 === 0) {
+                emitParticles(Math.random() * 700, 60, 'dust', 1, { angle: Math.PI / 2, spread: 0.6 });
+            }
+        }
+
+        // Subtle cinematic vignette during gameplay
+        if(level === 6) {
+            if(level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
+                drawRoomVignette(0.4, 0, 0, 0);
+            } else if(level6.room === 'cloningRoom') {
+                drawRoomVignette(0.25, 0, 10, 5);
+            } else if(level6.room === 'nuclearBridge') {
+                drawRoomVignette(0.3, 10, 5, 0);
+            } else if(level6.room === 'ceoOffice') {
+                drawRoomVignette(0.2, 5, 3, 0);
+            } else {
+                drawRoomVignette(0.15, 0, 0, 0);
+            }
+        } else if(level === 5) {
+            if(level5.room === 'furnace') {
+                drawRoomVignette(0.3, 15, 5, 0);
+            } else {
+                drawRoomVignette(0.12, 0, 0, 0);
+            }
+        } else {
+            drawRoomVignette(0.1, 0, 0, 0);
+        }
     }
 
     // Draw mute indicator (always on top during gameplay)
@@ -23762,6 +24534,9 @@ if (keys[' '] || keys['action']) {
                         level6.missileExplosionTime = Date.now();
                         level6.missileFireTimer = 0;
                         bullets.splice(i, 1);
+                        triggerScreenShake(12);
+                        emitParticles(missileHitX, missileHitY + 30, 'spark', 20);
+                        emitParticles(missileHitX, missileHitY + 30, 'ember', 15);
 
                         // Radial destruction — blast center at missile position
                         const blastCenterX = missileHitX;
@@ -24966,6 +25741,8 @@ function gameLoop() {
     }
     
     update();
+    updateParticles();
+    updateScreenShake();
     drawScene();
     document.getElementById('level').textContent = level;
     document.getElementById('score').textContent = score;
