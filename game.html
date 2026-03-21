@@ -1118,16 +1118,16 @@ function initLevel(lv) {
         level6.pipeRoomPrinting = false;
         level6.pipeRoomPrintProgress = 0;
 
-        // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
-        // This matters when the player skips directly to level 6 without playing level 5
-        if(level5.npcPipes.length === 0) {
-            level5.npcPipes = [
-                {x: 280, y: 368, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
-                {x: 380, y: 368, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
-                {x: 480, y: 368, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
-                {x: 580, y: 368, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
-            ];
-        }
+        // Reset level5 pipe room state for Level 6 employee pipe room reuse.
+        // Always reset — carrying over crackStartTime from Level 5 can cause
+        // instant pipe bursts when entering Level 6 employee pipe room.
+        level5.npcPipes = [
+            {x: 280, y: 368, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 380, y: 368, color: COLORS[1], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 480, y: 368, color: COLORS[2], state: 'happy', needsDoc: false, crackStartTime: null},
+            {x: 580, y: 368, color: COLORS[3], state: 'happy', needsDoc: false, crackStartTime: null}
+        ];
+        acidBursts = []; // Clear any leftover acid burst animations from Level 5
         level5.mulletPro.hasDoc = false;
         level5.mulletPro.docColor = null;
         level5.mulletPro.giveTimer = 0;
@@ -1370,510 +1370,482 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
     const idleBob = isMoving ? 0 : Math.sin(Date.now() * 0.003) * 1.5;
     y += idleBob;
 
-    // Shadow — at foot level (y+36 = shoe bottom)
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    // Shadow — at foot level
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 36 - idleBob, 12, 4, 0, 0, Math.PI * 2); // shadow stays grounded
+    ctx.ellipse(x, y + 36 - idleBob, 14, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Anti-aliased character outline (dark shadow behind entire sprite)
-    ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x - 9*s - 1, y - 16*s - 1, 18*s + 2, 38*s + 2);
-    ctx.globalAlpha = 1;
-    ctx.restore();
+    const leg = Math.sin(frame * 0.25) * 5;
+    const skinColor = '#f5c89a';
+    const skinShadow = '#d4a870';
+    const jacketMain = '#800020';
+    const jacketDark = '#5a0016';
+    const jacketLight = '#a01030';
+    const jeanColor = '#7090b0';
+    const jeanLight = '#8aa8c4';
+    const bootColor = '#4a2810';
+    const bootLight = '#654321';
+    const hairDark = '#2a1a0a';
+    const hairMid = '#3a2a1a';
+    const hairLight = '#4a3a2a';
 
-    if(facing === 'left') {
-        // Mullet hair — flowing shape with canvas gradient
-        const hairGrad = ctx.createLinearGradient(x - 6*s, y - 16*s, x + 8*s, y - 6*s);
-        hairGrad.addColorStop(0, '#4a3a2a');
-        hairGrad.addColorStop(0.4, '#3a2a1a');
-        hairGrad.addColorStop(0.8, '#2a1a0a');
-        hairGrad.addColorStop(1, '#3a2a1a');
-        ctx.fillStyle = hairGrad;
-        ctx.fillRect(x - 5*s, y - 16*s, 12*s, 4*s);
-        ctx.fillRect(x - 6*s, y - 12*s, 14*s, 10*s);
-        // Hair shine highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(x - 3*s, y - 15*s, 3*s, s);
+    // Determine facing direction multiplier: -1 for left, 1 for right, 0 for forward
+    const dir = facing === 'left' ? -1 : facing === 'right' ? 1 : 0;
 
-        // Face with skin tone
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        // Cheek blush
-        ctx.fillStyle = 'rgba(200,140,100,0.2)';
-        ctx.fillRect(x - 5*s, y - 6*s, 3*s, 3*s);
+    // --- BOOTS ---
+    ctx.fillStyle = bootColor;
+    ctx.beginPath();
+    ctx.ellipse(x - 5 + dir * 0.5, y + 33 + leg * 0.4, 5, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 5 - dir * 0.5, y + 33 - leg * 0.4, 5, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Boot tops
+    ctx.fillStyle = bootLight;
+    ctx.fillRect(x - 8, y + 28 + leg * 0.4, 6, 5);
+    ctx.fillRect(x + 2, y + 28 - leg * 0.4, 6, 5);
 
-        // Eyes with highlights
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fillRect(x - s, y - 9*s, s, s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
+    // --- JEANS ---
+    const jeanGrad = ctx.createLinearGradient(x - 6, y + 14, x + 6, y + 14);
+    jeanGrad.addColorStop(0, jeanColor);
+    jeanGrad.addColorStop(0.5, jeanLight);
+    jeanGrad.addColorStop(1, jeanColor);
+    ctx.fillStyle = jeanGrad;
+    // Left leg
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 14);
+    ctx.lineTo(x - 9, y + 29 + leg * 0.4);
+    ctx.lineTo(x - 2, y + 29 + leg * 0.4);
+    ctx.lineTo(x - 1, y + 14);
+    ctx.closePath(); ctx.fill();
+    // Right leg
+    ctx.beginPath();
+    ctx.moveTo(x + 1, y + 14);
+    ctx.lineTo(x + 2, y + 29 - leg * 0.4);
+    ctx.lineTo(x + 9, y + 29 - leg * 0.4);
+    ctx.lineTo(x + 8, y + 14);
+    ctx.closePath(); ctx.fill();
+    // Belt
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 8, y + 14, 16, 3);
+    // Belt buckle
+    ctx.fillStyle = '#c0a040';
+    ctx.fillRect(x - 2, y + 14, 4, 3);
 
-        // Jacket with shading
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#600018';
-        ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
-        // Jacket highlight on left edge
-        ctx.fillStyle = '#901030';
-        ctx.fillRect(x - 7*s, y - 1*s, s, 8*s);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
-        ctx.fillStyle = '#800020';
-        if(holding) {
-            ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        } else {
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        }
-
-        // Jeans with highlight
-        ctx.fillStyle = '#a4c2db';
-        const legL = Math.sin(frame * 0.25) * 5;
-        ctx.fillRect(x - 5*s, y + 8*s + legL * 0.4, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 8*s - legL * 0.4, 4*s, 8*s);
-        // Jean highlight
-        ctx.fillStyle = 'rgba(180,210,230,0.15)';
-        ctx.fillRect(x - 4*s, y + 9*s + legL * 0.4, s, 6*s);
-        ctx.fillRect(x + 2*s, y + 9*s - legL * 0.4, s, 6*s);
-
-        // Boots with detail
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s + legL, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 16*s - legL, 4*s, 2*s);
-        // Boot sole
-        ctx.fillStyle = '#3a2010';
-        ctx.fillRect(x - 5*s, y + 17*s + legL, 4*s, s);
-        ctx.fillRect(x + s, y + 17*s - legL, 4*s, s);
-
-    } else if(facing === 'right') {
-        // Mullet hair — flowing shape with canvas gradient
-        const hairGradR = ctx.createLinearGradient(x - 8*s, y - 16*s, x + 5*s, y - 6*s);
-        hairGradR.addColorStop(0, '#3a2a1a');
-        hairGradR.addColorStop(0.4, '#4a3a2a');
-        hairGradR.addColorStop(0.8, '#2a1a0a');
-        hairGradR.addColorStop(1, '#3a2a1a');
-        ctx.fillStyle = hairGradR;
-        ctx.fillRect(x - 7*s, y - 16*s, 12*s, 4*s);
-        ctx.fillRect(x - 8*s, y - 12*s, 14*s, 10*s);
-        // Hair shine highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(x - s, y - 15*s, 3*s, s);
-
-        // Face with skin tone gradient
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        // Cheek blush
-        ctx.fillStyle = 'rgba(200,140,100,0.2)';
-        ctx.fillRect(x + 2*s, y - 6*s, 3*s, 3*s);
-
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x, y - 9*s, 2*s, 2*s);
-        // Eye highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fillRect(x + s, y - 9*s, s, s);
-        ctx.fillRect(x, y - 5*s, 3*s, s);
-
-        // Jacket with shading
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#600018';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
-        // Jacket highlight on right edge
-        ctx.fillStyle = '#901030';
-        ctx.fillRect(x + 5*s, y - 1*s, s, 8*s);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
-        ctx.fillStyle = '#800020';
-        if(holding) {
-            // Raised arms to carry doc
-            ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-        } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        }
-        
-        ctx.fillStyle = '#a4c2db';
-        const legR = Math.sin(frame * 0.25) * 5;
-        ctx.fillRect(x - 5*s, y + 8*s + legR * 0.4, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 8*s - legR * 0.4, 4*s, 8*s);
-
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s + legR, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 16*s - legR, 4*s, 2*s);
-
+    // --- JACKET TORSO ---
+    const jacketGrad = ctx.createLinearGradient(x - 14, y - 4, x + 14, y - 4);
+    jacketGrad.addColorStop(0, dir <= 0 ? jacketLight : jacketDark);
+    jacketGrad.addColorStop(0.5, jacketMain);
+    jacketGrad.addColorStop(1, dir >= 0 ? jacketLight : jacketDark);
+    ctx.fillStyle = jacketGrad;
+    // Torso shape — rounded shoulders tapering to waist
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 15);
+    ctx.lineTo(x - 14, y - 2);
+    ctx.quadraticCurveTo(x - 14, y - 6, x - 10, y - 6);
+    ctx.lineTo(x + 10, y - 6);
+    ctx.quadraticCurveTo(x + 14, y - 6, x + 14, y - 2);
+    ctx.lineTo(x + 8, y + 15);
+    ctx.closePath();
+    ctx.fill();
+    // Collar / V-neck
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y - 6);
+    ctx.lineTo(x, y + 2);
+    ctx.lineTo(x + 4, y - 6);
+    ctx.closePath(); ctx.fill();
+    // Shirt visible in V
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.moveTo(x - 3, y - 5);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + 3, y - 5);
+    ctx.closePath(); ctx.fill();
+    // Jacket pocket on lit side
+    ctx.fillStyle = jacketDark;
+    if(dir !== 0) {
+        ctx.fillRect(x + dir * 4, y + 4, 5, 3);
     } else {
-        // Mullet hair — flowing on both sides with canvas gradient
-        const hairGradF = ctx.createLinearGradient(x - 8*s, y - 16*s, x + 8*s, y - 6*s);
-        hairGradF.addColorStop(0, '#3a2a1a');
-        hairGradF.addColorStop(0.3, '#4a3a2a');
-        hairGradF.addColorStop(0.5, '#2a1a0a');
-        hairGradF.addColorStop(0.7, '#4a3a2a');
-        hairGradF.addColorStop(1, '#3a2a1a');
-        ctx.fillStyle = hairGradF;
-        ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
-        ctx.fillRect(x - 8*s, y - 12*s, 16*s, 10*s);
-        // Hair shine highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(x - s, y - 15*s, 3*s, s);
+        ctx.fillRect(x + 4, y + 4, 5, 3);
+        ctx.fillRect(x - 9, y + 4, 5, 3);
+    }
 
-        // Face with skin tone
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+    // --- ARMS ---
+    ctx.strokeStyle = jacketMain;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    if(holding) {
+        // Raised arms carrying doc
+        ctx.beginPath(); ctx.moveTo(x - 12, y - 2); ctx.lineTo(x - 14, y - 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 12, y - 2); ctx.lineTo(x + 14, y - 20); ctx.stroke();
+        ctx.fillStyle = skinColor;
+        ctx.beginPath(); ctx.arc(x - 14, y - 22, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 14, y - 22, 3, 0, Math.PI * 2); ctx.fill();
+    } else if(hasGun) {
+        // Gun arm extended, other arm relaxed
+        const gunDir = dir || 1;
+        ctx.beginPath(); ctx.moveTo(x + gunDir * 12, y - 2); ctx.lineTo(x + gunDir * 16, y + 6); ctx.stroke();
+        ctx.fillStyle = skinColor;
+        ctx.beginPath(); ctx.arc(x + gunDir * 16, y + 8, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - gunDir * 12, y - 2); ctx.lineTo(x - gunDir * 14, y + 10); ctx.stroke();
+        ctx.fillStyle = skinColor;
+        ctx.beginPath(); ctx.arc(x - gunDir * 14, y + 12, 3, 0, Math.PI * 2); ctx.fill();
+    } else {
+        // Relaxed hanging arms with slight swing
+        const armSwing = leg * 0.3;
+        ctx.beginPath(); ctx.moveTo(x - 12, y - 2); ctx.lineTo(x - 14 + armSwing, y + 12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 12, y - 2); ctx.lineTo(x + 14 - armSwing, y + 12); ctx.stroke();
+        ctx.fillStyle = skinColor;
+        ctx.beginPath(); ctx.arc(x - 14 + armSwing, y + 13, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 14 - armSwing, y + 13, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.lineCap = 'butt';
 
-        // Eyes with highlights
+    // --- NECK ---
+    ctx.fillStyle = skinShadow;
+    ctx.fillRect(x - 3, y - 10, 6, 5);
+
+    // --- HEAD (oval) ---
+    const headY = y - 18;
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 2, headY, 10, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Face shadow on far side
+    ctx.fillStyle = skinShadow;
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 2 - dir * 8, headY + 1, 4, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Cheek blush
+    ctx.fillStyle = 'rgba(200,130,90,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 6, headY + 3, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- MULLET HAIR ---
+    const hairGrad = ctx.createLinearGradient(x - 14, headY - 12, x + 14, headY);
+    hairGrad.addColorStop(0, hairLight);
+    hairGrad.addColorStop(0.5, hairDark);
+    hairGrad.addColorStop(1, hairMid);
+    ctx.fillStyle = hairGrad;
+    // Top of head hair
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 2, headY - 4, 11, 8, 0, Math.PI, 0);
+    ctx.fill();
+    // Mullet flowing behind — the signature look
+    if(dir !== 0) {
+        // Side view: mullet flows behind
+        ctx.beginPath();
+        ctx.moveTo(x - dir * 8, headY - 6);
+        ctx.quadraticCurveTo(x - dir * 14, headY - 2, x - dir * 16, headY + 8);
+        ctx.quadraticCurveTo(x - dir * 15, headY + 14, x - dir * 10, headY + 10);
+        ctx.lineTo(x - dir * 6, headY + 2);
+        ctx.closePath();
+        ctx.fill();
+        // Hair shine
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.beginPath();
+        ctx.ellipse(x - dir * 10, headY, 3, 5, dir * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // Front view: mullet frames face on both sides
+        ctx.beginPath();
+        ctx.moveTo(x - 10, headY - 6);
+        ctx.quadraticCurveTo(x - 14, headY, x - 14, headY + 10);
+        ctx.lineTo(x - 8, headY + 4);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + 10, headY - 6);
+        ctx.quadraticCurveTo(x + 14, headY, x + 14, headY + 10);
+        ctx.lineTo(x + 8, headY + 4);
+        ctx.closePath(); ctx.fill();
+    }
+
+    // --- FACE DETAILS ---
+    if(dir !== 0) {
+        // Side view: one eye visible
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.ellipse(x + dir * 5, headY - 2, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2a1a0a';
+        ctx.beginPath(); ctx.arc(x + dir * 5.5, headY - 1.5, 1.5, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#000';
-        ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
-        ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fillRect(x - 2*s, y - 9*s, s, s);
-        ctx.fillRect(x + 2*s, y - 9*s, s, s);
+        ctx.beginPath(); ctx.arc(x + dir * 5.5, headY - 1.5, 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(x + dir * 5, headY - 2.5, 0.6, 0, Math.PI * 2); ctx.fill();
+        // Eyebrow
+        ctx.strokeStyle = hairDark; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x + dir * 3, headY - 5); ctx.lineTo(x + dir * 7, headY - 4.5); ctx.stroke();
+        // Nose
+        ctx.strokeStyle = skinShadow; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + dir * 7, headY); ctx.lineTo(x + dir * 8, headY + 3); ctx.stroke();
+        // Mouth — slight smirk
+        ctx.strokeStyle = '#8a5030'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + dir * 3, headY + 5); ctx.quadraticCurveTo(x + dir * 6, headY + 6, x + dir * 7, headY + 4.5); ctx.stroke();
+    } else {
+        // Front view: both eyes
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.ellipse(x - 4, headY - 2, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 4, headY - 2, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2a1a0a';
+        ctx.beginPath(); ctx.arc(x - 3.5, headY - 1.5, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4.5, headY - 1.5, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x - 3.5, headY - 1.5, 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4.5, headY - 1.5, 0.8, 0, Math.PI * 2); ctx.fill();
+        // Eye highlights
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(x - 4, headY - 2.5, 0.6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4, headY - 2.5, 0.6, 0, Math.PI * 2); ctx.fill();
+        // Eyebrows
+        ctx.strokeStyle = hairDark; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x - 6, headY - 5); ctx.lineTo(x - 2, headY - 5.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 2, headY - 5.5); ctx.lineTo(x + 6, headY - 5); ctx.stroke();
+        // Nose
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath(); ctx.ellipse(x, headY + 2, 2, 1.5, 0, 0, Math.PI); ctx.fill();
         // Mouth
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
-
-        // Jacket with shading
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#600018';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
-        // Jacket highlight
-        ctx.fillStyle = '#901030';
-        ctx.fillRect(x + 5*s, y - 1*s, s, 8*s);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
-        ctx.fillStyle = '#800020';
-        if(holding) {
-            // Raised arms to carry doc
-            ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-        } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        }
-
-        ctx.fillStyle = '#a4c2db';
-        const leg = Math.sin(frame * 0.25) * 5;
-        ctx.fillRect(x - 5*s, y + 8*s + leg * 0.4, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 8*s - leg * 0.4, 4*s, 8*s);
-
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s + leg, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 16*s - leg, 4*s, 2*s);
+        ctx.strokeStyle = '#8a5030'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x - 3, headY + 5); ctx.quadraticCurveTo(x, headY + 6.5, x + 3, headY + 5); ctx.stroke();
     }
 }
 
 function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
 
-    // Shadow — at foot level
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    // Shadow — at foot level, same as MulletPro
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 42, 12, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 36, 14, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    const leg = Math.sin(frame * 0.25) * 5;
     const skinColor = '#f5c89a';
+    const skinShadow = '#d4a870';
+    const shirtWhite = '#f0eff0';
+    const shirtShadow = '#d0d0d0';
+    const tieColor = '#800020';
+    const pantsColor = '#1a1a1a';
+    const pantsHighlight = '#2a2a2a';
 
-    if(facing === 'left') {
-        // Head with bald reflective dome
+    const dir = facing === 'left' ? -1 : facing === 'right' ? 1 : 0;
+
+    // --- SHOES (polished black oxfords) ---
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.ellipse(x - 5 + dir * 0.5, y + 33 + leg * 0.4, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 5 - dir * 0.5, y + 33 - leg * 0.4, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Shoe shine
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath();
+    ctx.ellipse(x - 4 + dir * 0.5, y + 32 + leg * 0.4, 2, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 6 - dir * 0.5, y + 32 - leg * 0.4, 2, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- PANTS (tailored dark trousers) ---
+    ctx.fillStyle = pantsColor;
+    // Left leg
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 16);
+    ctx.lineTo(x - 8, y + 31 + leg * 0.4);
+    ctx.lineTo(x - 1, y + 31 + leg * 0.4);
+    ctx.lineTo(x - 1, y + 16);
+    ctx.closePath(); ctx.fill();
+    // Right leg
+    ctx.beginPath();
+    ctx.moveTo(x + 1, y + 16);
+    ctx.lineTo(x + 1, y + 31 - leg * 0.4);
+    ctx.lineTo(x + 8, y + 31 - leg * 0.4);
+    ctx.lineTo(x + 8, y + 16);
+    ctx.closePath(); ctx.fill();
+    // Pants crease highlight
+    ctx.fillStyle = pantsHighlight;
+    ctx.fillRect(x - 5, y + 17 + leg * 0.4, 1, 12);
+    ctx.fillRect(x + 4, y + 17 - leg * 0.4, 1, 12);
+
+    // --- SHIRT TORSO (white dress shirt, broader shoulders) ---
+    const shirtGrad = ctx.createLinearGradient(x - 14, y - 4, x + 14, y - 4);
+    shirtGrad.addColorStop(0, dir <= 0 ? shirtWhite : shirtShadow);
+    shirtGrad.addColorStop(0.5, shirtWhite);
+    shirtGrad.addColorStop(1, dir >= 0 ? shirtWhite : shirtShadow);
+    ctx.fillStyle = shirtGrad;
+    // Torso shape — structured shoulders, tapered waist
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 17);
+    ctx.lineTo(x - 15, y - 2);
+    ctx.quadraticCurveTo(x - 15, y - 7, x - 10, y - 7);
+    ctx.lineTo(x + 10, y - 7);
+    ctx.quadraticCurveTo(x + 15, y - 7, x + 15, y - 2);
+    ctx.lineTo(x + 8, y + 17);
+    ctx.closePath();
+    ctx.fill();
+    // Belt
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 8, y + 14, 16, 3);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(x - 2, y + 14, 4, 3);
+    // Tie
+    ctx.fillStyle = tieColor;
+    ctx.beginPath();
+    ctx.moveTo(x - 3, y - 7);
+    ctx.lineTo(x + 3, y - 7);
+    ctx.lineTo(x + 2, y + 4);
+    ctx.lineTo(x, y + 7);
+    ctx.lineTo(x - 2, y + 4);
+    ctx.closePath(); ctx.fill();
+    // Tie knot
+    ctx.fillStyle = '#600018';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 6, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Shirt button dots
+    ctx.fillStyle = shirtShadow;
+    for(let b = 0; b < 3; b++) {
+        ctx.beginPath(); ctx.arc(x + 4, y + 2 + b * 4, 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+    // Lapels
+    ctx.strokeStyle = shirtShadow; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x - 3, y - 7); ctx.lineTo(x - 10, y + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 3, y - 7); ctx.lineTo(x + 10, y + 4); ctx.stroke();
+    // Pocket square
+    ctx.fillStyle = '#e8d0a0';
+    ctx.beginPath();
+    ctx.moveTo(x + dir * 6 + 3, y);
+    ctx.lineTo(x + dir * 6 + 6, y - 2);
+    ctx.lineTo(x + dir * 6 + 8, y);
+    ctx.lineTo(x + dir * 6 + 6, y + 2);
+    ctx.closePath(); ctx.fill();
+
+    // --- ARMS ---
+    ctx.strokeStyle = shirtWhite;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    if(holding) {
+        ctx.beginPath(); ctx.moveTo(x - 13, y - 2); ctx.lineTo(x - 14, y - 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 13, y - 2); ctx.lineTo(x + 14, y - 20); ctx.stroke();
         ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        ctx.fillStyle = '#e8d4b8';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
-        // Reflective head shine
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fillRect(x - 2*s, y - 12*s, 4*s, 2*s);
-
-        // Eyes with highlights
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.fillRect(x - s, y - 9*s, s, s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
-
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
-        ctx.fillStyle = '#fff';
-        if(holding) {
-            // Raised arms to carry doc
-            ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // Gun-holding: hide left arm (will be drawn by gun function), show right arm hanging
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        }
-
-        // Lapel fold
-        ctx.fillStyle = 'rgba(200,200,200,0.25)';
-        ctx.fillRect(x - 6*s, y - 2*s, s, 8*s);
-        ctx.fillRect(x + 5*s, y - 2*s, s, 8*s);
-        // Pocket square
-        ctx.fillStyle = '#e8e0d0';
-        ctx.fillRect(x + 3*s, y, 2*s, 2*s);
-        ctx.fillStyle = '#d4c8b0';
-        ctx.fillRect(x + 3*s, y, 2*s, s);
-
-        // Pants waistband
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        // Animated legs — walk cycle moves entire lower leg + shoe
-        const legL = Math.sin(frame * 0.25) * 5;
-        ctx.fillRect(x - 5*s, y + 12*s + legL * 0.4, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s - legL * 0.4, 4*s, 8*s);
-        // Polished shoes
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 20*s + legL, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 20*s - legL, 4*s, 2*s);
-
-    } else if(facing === 'right') {
-        // Head with bald reflective dome
+        ctx.beginPath(); ctx.arc(x - 14, y - 22, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 14, y - 22, 3, 0, Math.PI * 2); ctx.fill();
+    } else if(hasGun) {
+        const gunDir = dir || 1;
+        ctx.beginPath(); ctx.moveTo(x + gunDir * 13, y - 2); ctx.lineTo(x + gunDir * 16, y + 6); ctx.stroke();
         ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        ctx.fillStyle = '#e8d4b8';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
-        // Reflective head shine
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fillRect(x - 2*s, y - 12*s, 4*s, 2*s);
-
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x, y - 9*s, 2*s, 2*s);
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.fillRect(x + s, y - 9*s, s, s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x, y - 5*s, 3*s, s);
-
-        // White shirt with lapel shading
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
-        // Subtle shirt fold highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillRect(x + 4*s, y, s, 6*s);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
-        ctx.fillStyle = '#fff';
-        if(holding) {
-            // Raised arms to carry doc
-            ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-        } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        }
-
-        // Lapel fold
-        ctx.fillStyle = 'rgba(200,200,200,0.25)';
-        ctx.fillRect(x - 6*s, y - 2*s, s, 8*s);
-        ctx.fillRect(x + 5*s, y - 2*s, s, 8*s);
-        // Pocket square
-        ctx.fillStyle = '#e8e0d0';
-        ctx.fillRect(x - 5*s, y, 2*s, 2*s);
-        ctx.fillStyle = '#d4c8b0';
-        ctx.fillRect(x - 5*s, y, 2*s, s);
-
-        // Pants waistband
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        // Animated legs — walk cycle moves entire lower leg + shoe
-        const legR = Math.sin(frame * 0.25) * 5;
-        ctx.fillRect(x - 5*s, y + 12*s + legR * 0.4, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s - legR * 0.4, 4*s, 8*s);
-        // Polished shoes
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 20*s + legR, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 20*s - legR, 4*s, 2*s);
-
+        ctx.beginPath(); ctx.arc(x + gunDir * 16, y + 8, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - gunDir * 13, y - 2); ctx.lineTo(x - gunDir * 14, y + 10); ctx.stroke();
+        ctx.fillStyle = skinColor;
+        ctx.beginPath(); ctx.arc(x - gunDir * 14, y + 12, 3, 0, Math.PI * 2); ctx.fill();
     } else {
-        // Head with bald reflective dome
+        const armSwing = leg * 0.3;
+        ctx.beginPath(); ctx.moveTo(x - 13, y - 2); ctx.lineTo(x - 14 + armSwing, y + 12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 13, y - 2); ctx.lineTo(x + 14 - armSwing, y + 12); ctx.stroke();
         ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        ctx.fillStyle = '#e8d4b8';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
-        // Reflective head shine
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fillRect(x - 2*s, y - 12*s, 4*s, 2*s);
+        ctx.beginPath(); ctx.arc(x - 14 + armSwing, y + 13, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 14 - armSwing, y + 13, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.lineCap = 'butt';
 
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 3*s, y - 9*s, 2*s, 2*s);
-        ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
-        // Eye highlights
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.fillRect(x - 2*s, y - 9*s, s, s);
-        ctx.fillRect(x + 2*s, y - 9*s, s, s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
+    // --- NECK ---
+    ctx.fillStyle = skinShadow;
+    ctx.fillRect(x - 3, y - 11, 6, 5);
 
-        // White shirt with lapel shading
+    // --- HEAD (bald, round, polished) ---
+    const headY = y - 19;
+    // Main head shape
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 1, headY, 11, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Bald dome highlight — reflective sheen
+    const shineGrad = ctx.createRadialGradient(x + dir * 2 - 2, headY - 6, 0, x + dir * 1, headY, 12);
+    shineGrad.addColorStop(0, 'rgba(255,255,255,0.28)');
+    shineGrad.addColorStop(0.4, 'rgba(255,255,255,0.08)');
+    shineGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = shineGrad;
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 1, headY, 11, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Ear (side view)
+    if(dir !== 0) {
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath();
+        ctx.ellipse(x - dir * 10, headY + 1, 3, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // --- FACE DETAILS ---
+    if(dir !== 0) {
+        // Side view: one eye
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
-        // Shirt fold highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillRect(x + 4*s, y, s, 6*s);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
-
-        // Arms
-        ctx.fillStyle = '#fff';
-        if(holding) {
-            ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-        } else {
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        }
-
-        // Lapel fold
-        ctx.fillStyle = 'rgba(200,200,200,0.25)';
-        ctx.fillRect(x - 6*s, y - 2*s, s, 8*s);
-        ctx.fillRect(x + 5*s, y - 2*s, s, 8*s);
-        // Pocket square
-        ctx.fillStyle = '#e8e0d0';
-        ctx.fillRect(x + 3*s, y, 2*s, 2*s);
-        ctx.fillStyle = '#d4c8b0';
-        ctx.fillRect(x + 3*s, y, 2*s, s);
-
-        // Dark pants with subtle highlight
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        // Animated legs — walk cycle moves entire lower leg + shoe
-        const leg = Math.sin(frame * 0.25) * 5;
-        ctx.fillRect(x - 5*s, y + 12*s + leg * 0.4, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s - leg * 0.4, 4*s, 8*s);
-        // Pants highlight
-        ctx.fillStyle = 'rgba(60,60,60,0.2)';
-        ctx.fillRect(x - 4*s, y + 13*s + leg * 0.4, s, 6*s);
-
-        // Polished shoes
+        ctx.beginPath(); ctx.ellipse(x + dir * 5, headY - 1, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3a3020';
+        ctx.beginPath(); ctx.arc(x + dir * 5.5, headY - 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 20*s + leg, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 20*s - leg, 4*s, 2*s);
-        // Shoe shine
-        ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        ctx.fillRect(x - 4*s, y + 20*s + leg, 2*s, s);
-        ctx.fillRect(x + 2*s, y + 20*s - leg, 2*s, s);
+        ctx.beginPath(); ctx.arc(x + dir * 5.5, headY - 0.5, 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(x + dir * 5, headY - 1.5, 0.6, 0, Math.PI * 2); ctx.fill();
+        // Eyebrow (thicker, more serious)
+        ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.moveTo(x + dir * 3, headY - 4); ctx.lineTo(x + dir * 8, headY - 3.5); ctx.stroke();
+        // Nose
+        ctx.strokeStyle = skinShadow; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + dir * 7, headY + 1); ctx.lineTo(x + dir * 8, headY + 4); ctx.stroke();
+        // Mouth — stern line
+        ctx.strokeStyle = '#8a5030'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + dir * 3, headY + 6); ctx.lineTo(x + dir * 7, headY + 5.5); ctx.stroke();
+    } else {
+        // Front view: both eyes
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.ellipse(x - 4, headY - 1, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 4, headY - 1, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3a3020';
+        ctx.beginPath(); ctx.arc(x - 3.5, headY - 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4.5, headY - 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x - 3.5, headY - 0.5, 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4.5, headY - 0.5, 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(x - 4, headY - 1.5, 0.6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 4, headY - 1.5, 0.6, 0, Math.PI * 2); ctx.fill();
+        // Eyebrows
+        ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.moveTo(x - 7, headY - 4); ctx.lineTo(x - 2, headY - 4.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 2, headY - 4.5); ctx.lineTo(x + 7, headY - 4); ctx.stroke();
+        // Nose
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath(); ctx.ellipse(x, headY + 3, 2, 1.5, 0, 0, Math.PI); ctx.fill();
+        // Mouth — firm expression
+        ctx.strokeStyle = '#8a5030'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x - 3, headY + 6); ctx.lineTo(x + 3, headY + 6); ctx.stroke();
     }
 
     // === DETECTIVE FEDORA HAT — drawn on top when wearing ===
     if(typeof level6 !== 'undefined' && level6.hasDetectiveHat) {
-        const hatTopY = y - 13*s; // Just above bald head
+        const hatTopY = headY - 8;
         // Hat brim — wide dark gray ellipse
         ctx.fillStyle = '#3a3a3a';
         ctx.beginPath();
-        ctx.ellipse(x, hatTopY + 2, 14, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + dir * 1, hatTopY + 4, 16, 5, 0, 0, Math.PI * 2);
         ctx.fill();
         // Hat crown — pinched fedora shape
         ctx.fillStyle = '#2a2a2a';
         ctx.beginPath();
-        ctx.moveTo(x - 9, hatTopY);
-        ctx.lineTo(x - 5, hatTopY - 8);
-        ctx.lineTo(x - 1, hatTopY - 5);
-        ctx.lineTo(x + 1, hatTopY - 5);
-        ctx.lineTo(x + 5, hatTopY - 8);
-        ctx.lineTo(x + 9, hatTopY);
+        ctx.moveTo(x - 10, hatTopY + 2);
+        ctx.lineTo(x - 6, hatTopY - 6);
+        ctx.lineTo(x - 1, hatTopY - 3);
+        ctx.lineTo(x + 1, hatTopY - 3);
+        ctx.lineTo(x + 6, hatTopY - 6);
+        ctx.lineTo(x + 10, hatTopY + 2);
         ctx.closePath();
         ctx.fill();
         // Hat band
         ctx.fillStyle = '#4a4a4a';
-        ctx.fillRect(x - 8, hatTopY - 1, 16, 2);
+        ctx.fillRect(x - 9, hatTopY + 1, 18, 2);
     }
 }
 
@@ -4006,10 +3978,13 @@ function drawComputer(x, y) {
         }
     }
 
+    // Label with background to prevent bleed
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x - 32, y + 22, 64, 12);
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = scaledFont(9, 'bold', 'Arial', true);
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
     ctx.textAlign = 'center';
-    ctx.fillText('DOC PRINTER', x, y + 30);
+    ctx.fillText('DOC PRINTER', x, y + 31);
 }
 
 function draw3DPrinter(x, y) {
@@ -4092,13 +4067,13 @@ function draw3DPrinter(x, y) {
     ctx.fillStyle = '#00ff00';
     ctx.fillRect(x - 20, y + 5, 4, 4);
     
+    // Label with background to contain text
     ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(x - 25, y + 12, 50, 8);
-    
+    ctx.fillRect(x - 28, y + 12, 56, 10);
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = scaledFont(9, 'bold', 'Arial', true);
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
     ctx.textAlign = 'center';
-    ctx.fillText('3D PRINTER', x, y + 18);
+    ctx.fillText('3D PRINTER', x, y + 19);
 }
 
 function drawGhostGun(x, y, facing) {
@@ -6222,17 +6197,21 @@ function drawLevel5PipeRoom() {
         }
     }
 
+    // Clip sign text within sign bounds
+    ctx.save();
+    ctx.beginPath(); ctx.rect(28, 58, 204, 94); ctx.clip();
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 36px Arial';
+    ctx.font = 'bold 30px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', 130, 95);
+    ctx.fillText('PIPETECH', 130, 92);
 
     ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(50, 102, 160, 1);
+    ctx.fillRect(50, 98, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
-    ctx.font = scaledFont(10, null, 'Arial');
-    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 112);
+    ctx.restore();
 
     // Four colored stripe bands on the sign (below tagline)
     for(let i = 0; i < 4; i++) {
@@ -6477,25 +6456,29 @@ function drawLevel6EmployeePipeRoom() {
         }
     }
 
+    // Clip text to sign bounds so nothing bleeds over
+    ctx.save();
+    ctx.beginPath(); ctx.rect(28, 28, 204, 94); ctx.clip();
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 36px Arial';
+    ctx.font = 'bold 30px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', 130, 65);
+    ctx.fillText('PIPETECH', 130, 62);
 
     ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(50, 72, 160, 1);
+    ctx.fillRect(50, 68, 160, 1);
 
     ctx.fillStyle = '#aaaaaa';
-    ctx.font = scaledFont(10, null, 'Arial');
-    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 87);
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 82);
 
     // Four colored stripe bands on the sign
     for(let i = 0; i < 4; i++) {
         ctx.fillStyle = COLORS[i].hex;
-        ctx.fillRect(35, 94 + i * 6, 190, 4);
+        ctx.fillRect(35, 88 + i * 6, 190, 4);
         ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.fillRect(35, 94 + i * 6, 190, 1);
+        ctx.fillRect(35, 88 + i * 6, 190, 1);
     }
+    ctx.restore();
 
     // Doc printer — still present (for visual consistency)
     const comp = level5.computer;
@@ -6670,10 +6653,10 @@ function drawLevel6EmployeePipeRoom() {
 
     // Right edge door prompt
     if(player.x >= 600) {
-        ctx.font = 'bold 16px Arial';
+        ctx.font = scaledFont(14, 'bold', 'Arial', true);
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(660 - 85, 308, 170, 24);
+        ctx.fillRect(660 - 65, 310, 130, 22);
         ctx.fillStyle = '#ffd700';
         ctx.fillText('HALLWAY \u2192', 660, 325);
     }
@@ -13602,10 +13585,10 @@ function drawCloneFollower(x, y, facing) {
 
     ctx.restore();
 
-    // "CLONE" tag
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 18, y - 70, 36, 12);
-    ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(9, 'bold', 'Arial', true); ctx.textAlign = 'center';
-    ctx.fillText('CLONE', x, y - 61);
+    // "CLONE" tag — wider background to prevent text bleed
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 22, y - 70, 44, 14);
+    ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(8, 'bold', 'Arial', true); ctx.textAlign = 'center';
+    ctx.fillText('CLONE', x, y - 60);
 }
 
 // === CLONE FOLLOWER AI — updates clone position to trail behind player ===
@@ -13640,6 +13623,15 @@ function updateCloneFollower() {
     } else if(player.facing === 'left' || player.x < cf.x - 10) {
         cf.targetX = player.x + cf.followDist;
         cf.facing = 'left';
+    }
+
+    // In hallway with boss alive, clone stays behind player (avoids boss zone)
+    if(level6.room === 'employeeHallway' && level6.hallwayCloningBoss && level6.hallwayCloningBoss.alive) {
+        const bossX = level6.hallwayCloningBoss.x;
+        // Clone won't walk into the boss's patrol zone — stays at least 60px away
+        if(cf.targetX > bossX - 60 && cf.targetX < bossX + 60) {
+            cf.targetX = player.x < bossX ? bossX - 65 : bossX + 65;
+        }
     }
 
     // Clamp target within room bounds
@@ -17104,15 +17096,15 @@ function drawEmailUI(officeName) {
     ctx.fillRect(-GX, 50, CANVAS_W, 3);
 
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px Arial';
+    ctx.font = scaledFont(24, 'bold', 'Arial');
     ctx.textAlign = 'left';
     ctx.fillText('Pmail', 20, 36);
 
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 18px Arial';
+    ctx.font = scaledFont(16, 'bold', 'Arial');
     ctx.fillText('From: ' + email.from, 20, 82);
     ctx.fillText('To: ' + email.to, 20, 108);
-    ctx.font = 'bold 20px Arial';
+    ctx.font = scaledFont(18, 'bold', 'Arial');
     ctx.fillText('Subject: ' + email.subject, 20, 140);
 
     ctx.strokeStyle = '#ccc';
@@ -17129,12 +17121,12 @@ function drawEmailUI(officeName) {
     ctx.clip();
 
     ctx.fillStyle = '#000';
-    ctx.font = '22px Arial';
+    ctx.font = scaledFont(18, null, 'Arial');
     const lines = email.body.split('\n');
     let yPos = 185 - level5.emailScrollOffset;
     for(let line of lines) {
         ctx.fillText(line, 20, yPos);
-        yPos += 32;
+        yPos += 28;
     }
     ctx.restore();
 
@@ -17142,9 +17134,9 @@ function drawEmailUI(officeName) {
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
     ctx.fillRect(-GX, 450, CANVAS_W, CANVAS_H);
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 18px Arial';
+    ctx.font = scaledFont(16, 'bold', 'Arial');
     ctx.textAlign = 'center';
-    ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, 481);
+    ctx.fillText('ACTION TO CLOSE    \u25B2\u25BC SCROLL', 350, 478);
 }
 
 function drawLetterUI() {
@@ -17196,9 +17188,9 @@ function drawLetterUI() {
         ctx.beginPath(); ctx.arc(540, 380, 35, 0, Math.PI * 2); ctx.stroke();
 
         ctx.fillStyle = '#333';
-        ctx.font = 'bold 20px serif'; ctx.textAlign = 'center';
+        ctx.font = scaledFont(18, 'bold', 'serif'); ctx.textAlign = 'center';
         ctx.fillText('CONFIDENTIAL LETTER', CANVAS_W / 2, 70);
-        ctx.font = '16px serif'; ctx.textAlign = 'left';
+        ctx.font = scaledFont(14, null, 'serif'); ctx.textAlign = 'left';
         ctx.fillText('To whom it may concern,', 60, 120);
         ctx.fillText('This document contains sensitive information', 60, 155);
         ctx.fillText('regarding operations at PipeTech Industries.', 60, 185);
@@ -17206,7 +17198,7 @@ function drawLetterUI() {
         ctx.fillStyle = 'rgba(0,0,0,0.88)';
         ctx.fillRect(0, CANVAS_H - 50, CANVAS_W, 50);
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
+        ctx.font = scaledFont(16, 'bold', 'Arial'); ctx.textAlign = 'center';
         ctx.fillText('ACTION TO CLOSE', CANVAS_W / 2, CANVAS_H - 20);
     }
     ctx.restore();
@@ -17241,26 +17233,26 @@ function drawDetectiveNoteUI() {
         const instrH = 50;
         const viewH = CANVAS_H - instrH;
         const noteLines = [
-            { text: 'CASE FILE — KHAN INVESTIGATIONS', style: 'bold 14px monospace', color: '#c8a830' },
-            { text: '——————————————————————————', style: '11px monospace', color: '#7a6020' },
-            { text: 'SUBJECT: PipeTech Global Corp.', style: 'bold 12px monospace', color: '#d4b040' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'Day 14. They know I\'m here.', style: 'italic 13px monospace', color: '#c8c8a0' },
-            { text: 'Found the lower level assembly bay.', style: '12px monospace', color: '#c8c8a0' },
-            { text: 'This isn\'t a pipe company.', style: '12px monospace', color: '#c8c8a0' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'Warheads. Private label.', style: 'bold 13px monospace', color: '#ff9944' },
-            { text: 'Shipped under "industrial supply" docs.', style: '12px monospace', color: '#c8c8a0' },
-            { text: 'CEO signs every manifest personally.', style: '12px monospace', color: '#c8c8a0' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'Contact inside: R. (RED office, 3rd fl)', style: '12px monospace', color: '#88ccff' },
-            { text: 'She\'s scared. Rightfully so.', style: 'italic 12px monospace', color: '#88ccff' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'If you\'re reading this:', style: 'bold 13px monospace', color: '#ff4444' },
-            { text: 'The black box is real.', style: 'bold 13px monospace', color: '#ff4444' },
-            { text: 'Get it out.', style: 'bold 13px monospace', color: '#ff4444' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: '— Khan', style: 'italic 14px monospace', color: '#c8a830' },
+            { text: 'CASE FILE — KHAN INVESTIGATIONS', style: scaledFont(14, 'bold', 'monospace'), color: '#c8a830' },
+            { text: '——————————————————————————', style: scaledFont(11, null, 'monospace'), color: '#7a6020' },
+            { text: 'SUBJECT: PipeTech Global Corp.', style: scaledFont(12, 'bold', 'monospace'), color: '#d4b040' },
+            { text: '', style: scaledFont(11, null, 'monospace'), color: '#c8c8a0' },
+            { text: 'Day 14. They know I\'m here.', style: scaledFont(13, 'italic', 'monospace'), color: '#c8c8a0' },
+            { text: 'Found the lower level assembly bay.', style: scaledFont(12, null, 'monospace'), color: '#c8c8a0' },
+            { text: 'This isn\'t a pipe company.', style: scaledFont(12, null, 'monospace'), color: '#c8c8a0' },
+            { text: '', style: scaledFont(11, null, 'monospace'), color: '#c8c8a0' },
+            { text: 'Warheads. Private label.', style: scaledFont(13, 'bold', 'monospace'), color: '#ff9944' },
+            { text: 'Shipped under "industrial supply" docs.', style: scaledFont(12, null, 'monospace'), color: '#c8c8a0' },
+            { text: 'CEO signs every manifest personally.', style: scaledFont(12, null, 'monospace'), color: '#c8c8a0' },
+            { text: '', style: scaledFont(11, null, 'monospace'), color: '#c8c8a0' },
+            { text: 'Contact inside: R. (RED office, 3rd fl)', style: scaledFont(12, null, 'monospace'), color: '#88ccff' },
+            { text: 'She\'s scared. Rightfully so.', style: scaledFont(12, 'italic', 'monospace'), color: '#88ccff' },
+            { text: '', style: scaledFont(11, null, 'monospace'), color: '#c8c8a0' },
+            { text: 'If you\'re reading this:', style: scaledFont(13, 'bold', 'monospace'), color: '#ff4444' },
+            { text: 'The black box is real.', style: scaledFont(13, 'bold', 'monospace'), color: '#ff4444' },
+            { text: 'Get it out.', style: scaledFont(13, 'bold', 'monospace'), color: '#ff4444' },
+            { text: '', style: scaledFont(11, null, 'monospace'), color: '#c8c8a0' },
+            { text: '— Khan', style: scaledFont(14, 'italic', 'monospace'), color: '#c8a830' },
         ];
 
         // Paper background
@@ -20031,19 +20023,19 @@ function drawScene() {
 
             // Direction prompts for L6 revisit — auto transitions
             if(player.x < 80) {
-                ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                ctx.fillRect(10, 310, 120, 20);
-                ctx.fillStyle = '#ffd700';
-                ctx.font = scaledFont(14, 'bold', 'Arial');
+                ctx.font = scaledFont(12, 'bold', 'Arial', true);
                 ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(10, 312, 120, 20);
+                ctx.fillStyle = '#ffd700';
                 ctx.fillText('\u2190 PIPE ROOM', 70, 326);
             }
             if(player.x > 600) {
-                ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                ctx.fillRect(600, 310, 100, 20);
-                ctx.fillStyle = '#ffd700';
-                ctx.font = scaledFont(14, 'bold', 'Arial');
+                ctx.font = scaledFont(12, 'bold', 'Arial', true);
                 ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(600, 312, 100, 20);
+                ctx.fillStyle = '#ffd700';
                 ctx.fillText('FURNACE \u2192', 650, 326);
             }
 
@@ -21600,17 +21592,21 @@ function drawScene() {
         }
     }
 
+    // Clip sign text within sign bounds
+    ctx.save();
+    ctx.beginPath(); ctx.rect(28, 58, 204, 94); ctx.clip();
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 36px Arial';
+    ctx.font = 'bold 30px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PIPETECH', 130, 95);
+    ctx.fillText('PIPETECH', 130, 92);
 
     ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(50, 102, 160, 1);
+    ctx.fillRect(50, 98, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
-    ctx.font = scaledFont(10, null, 'Arial');
-    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
+    ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 112);
+    ctx.restore();
 
     // Four colored stripe bands on the sign (below tagline)
     for(let i = 0; i < 4; i++) {
@@ -25213,13 +25209,25 @@ if (keys[' '] || keys['action']) {
                     continue;
                 }
             
+                // Clone follower absorbs boss bullets (acts as shield for player)
+                if(bullets[i].fromCEO && level6.cloneFollower.active && level6.cloneFollower.room === level6.room) {
+                    const cf = level6.cloneFollower;
+                    if(Math.abs(bullets[i].x - cf.x) < 20 && Math.abs(bullets[i].y - cf.y) < 30) {
+                        bulletImpact(bullets[i].x, bullets[i].y);
+                        bullets.splice(i, 1);
+                        // Clone flinches but survives (it's a clone — resilient)
+                        emitParticles(cf.x, cf.y - 15, 'spark', 3);
+                        continue;
+                    }
+                }
+
                 if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
                     level6.moneyLives--;
                     level6.damageFlash = 1;
                     updateLives();
                     bulletImpact(bullets[i].x, bullets[i].y);
                     bullets.splice(i, 1);
-                
+
                     if(level6.moneyLives <= 0) {
                         state = 'over';
                         menuChoice = 0;
@@ -26574,7 +26582,7 @@ if (keys[' '] || keys['action']) {
     // Advance acid burst animations; trigger reset when each completes
     for(let i = acidBursts.length - 1; i >= 0; i--) {
         const ab = acidBursts[i];
-        ab.life = Math.min((Date.now() - ab.startTime) / 2500, 1);
+        ab.life = Math.min((Date.now() - ab.startTime) / 1400, 1);
         if(ab.life >= 1 && !ab.done) {
             ab.done = true;
             if(ab.penalise) {
@@ -26590,7 +26598,7 @@ if (keys[' '] || keys['action']) {
                 }
             }
         }
-        if(Date.now() - ab.startTime > 4000) {
+        if(Date.now() - ab.startTime > 2200) {
             acidBursts.splice(i, 1);
         }
     }
