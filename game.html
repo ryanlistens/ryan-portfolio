@@ -961,6 +961,25 @@ function initLevel(lv) {
         level6.keycardY = 0;
         level6.cloningDoorUnlocked = false; // concealed door to furnace room
         level6.cloningDoorOpen = 0; // slide animation 0-1
+        // Red PM clone follower — spawns in employee lobby, follows player on employee floor
+        level6.cloneFollower = {
+            active: false,       // becomes true when clone is recruited via dialogue
+            room: 'employeeLobby', // tracks which room the clone is in
+            x: 540,              // clone position (starts near elevator)
+            y: 380,
+            facing: 'left',
+            targetX: 540,        // where clone wants to walk to (trails player)
+            followDist: 45       // how far behind player to trail
+        };
+        // Red PM dialogue state — typewriter dialogue when first entering employee lobby
+        level6.redPMDialogue = false;
+        level6.redPMDialogueLine = 0;
+        level6.redPMDialogueChars = 0;
+        level6.redPMDialogueShown = false;
+        level6.redPMAccepted = false;
+        // Employee floor completion flag
+        level6.employeeFloorComplete = false;
+        level6.factoryReset = false;
         // Underbelly backroom state
         level6.mutantPM = { x: 380, y: 350, aggroTimer: 0, shakeIntensity: 0, cageOpen: false, cageLockShot: false, barsDropTime: 0, escaped: false, escapeTime: 0, eating: false, eatTarget: null, eatTime: 0 };
         level6.cageKey = { found: false, used: false, useTime: 0 };
@@ -5970,8 +5989,8 @@ function drawLevel6EmployeePipeRoom() {
         drawPipeSection(npc, pipeY, gasketY, l6epStressPct);
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
-        // RED PM is now a clone in the cloning room — pipe stays, NPC absent
-        if(npc.color.name !== 'RED') {
+        // RED PM is now a clone in the cloning room — pipe stays, NPC absent (unless factory reset)
+        if(npc.color.name !== 'RED' || level6.factoryReset) {
             const isMelting = acidBursts.some(ab => ab.npc === npc);
             if (!isMelting) {
                 drawStepLadder(npc.x, npc.y, npc.color);
@@ -11419,6 +11438,26 @@ function drawLevel6EmployeeLobby() {
 
     // (3D printer moved to cloning room)
 
+    // === RED PM in employee lobby — waiting near elevator or following ===
+    if(!level6.factoryReset) {
+        const cf = level6.cloneFollower;
+        if(cf.active && cf.room === 'employeeLobby') {
+            drawCloneFollower(cf.x, cf.y, cf.facing);
+        } else if(!cf.active) {
+            // Draw Red PM standing near elevator, waiting for dialogue
+            drawCloneFollower(540, 380, 'left');
+            // Speech bubble hint if player is nearby and dialogue hasn't started
+            if(!level6.redPMDialogue && !level6.redPMDialogueShown && Math.abs(player.x - 540) < 120) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(490, 310, 100, 20);
+                ctx.fillStyle = '#ff6666';
+                ctx.font = scaledFont(10, 'bold', 'Arial', false);
+                ctx.textAlign = 'center';
+                ctx.fillText('...?', 540, 324);
+            }
+        }
+    }
+
     // Direction prompts
     if(player.x > 560) {
         ctx.font = 'bold 16px Arial';
@@ -12337,8 +12376,8 @@ function drawLevel6CloningRoom() {
 
     // (Slurpee tanks, fertilizer, fetal tanks, centrifuge, and conveyor are all drawn above as wall-mounted pipeline)
 
-    // === FRESHLY HATCHED RED PM CLONE — standing next to cloning boss ===
-    {
+    // === FRESHLY HATCHED RED PM CLONE — only visible before recruitment, hidden after factory reset ===
+    if(!level6.cloneFollower.active && !level6.factoryReset) {
         const cloneX = 430, cloneY = 375; // Next to cloning boss (boss at ~350)
         const clt = Date.now();
         const cloneWobble = Math.sin(clt / 600) * 2; // dazed wobble
@@ -12443,6 +12482,109 @@ function drawLevel6CloningRoom() {
     if (player.x > 620) {
         drawActionLabel('LOBBY →', 655, 376, {color: '#fff', fontSize: 14});
     }
+}
+
+// === RED PM CLONE FOLLOWER — draws the clone at (x,y) in canonical PM style ===
+function drawCloneFollower(x, y, facing) {
+    const s = 2;
+    const clt = Date.now();
+    const isWalking = Math.abs(level6.cloneFollower.x - level6.cloneFollower.targetX) > 3;
+    const stride = isWalking ? Math.sin(clt / 125) * 3 : 0;
+
+    ctx.save();
+    // Subtle red aura
+    ctx.fillStyle = 'rgba(255,50,50,0.06)';
+    ctx.beginPath(); ctx.arc(x, y - 12, 24, 0, Math.PI * 2); ctx.fill();
+
+    // Hood
+    ctx.fillStyle = '#cc2222';
+    ctx.beginPath();
+    ctx.moveTo(x - 6*s, y - 5*s);
+    ctx.lineTo(x - 6*s, y - 12*s);
+    ctx.lineTo(x - 5*s, y - 14*s);
+    ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
+    ctx.lineTo(x + 6*s, y - 12*s);
+    ctx.lineTo(x + 6*s, y - 5*s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#aa1a1a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y - 16*s); ctx.lineTo(x, y - 5*s); ctx.stroke();
+
+    // Face
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+    // Normal eyes (not dazed — recruited)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 3*s, y - 10*s, 2*s, 2*s);
+    ctx.fillRect(x + s, y - 10*s, 2*s, 2*s);
+    // Slight smile
+    ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
+
+    // Torso
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+
+    // Arms with walking swing
+    ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
+    ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
+
+    // Legs with walking stride
+    ctx.fillRect(x - 5*s - stride, y + 6*s, 4*s, 7*s);
+    ctx.fillRect(x + s + stride, y + 6*s, 4*s, 7*s);
+
+    // White shoes
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 5*s - stride, y + 13*s, 4*s, 3*s);
+    ctx.fillRect(x + s + stride, y + 13*s, 4*s, 3*s);
+
+    ctx.restore();
+
+    // "CLONE" tag
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 18, y - 70, 36, 12);
+    ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
+    ctx.fillText('CLONE', x, y - 61);
+}
+
+// === CLONE FOLLOWER AI — updates clone position to trail behind player ===
+function updateCloneFollower() {
+    const cf = level6.cloneFollower;
+    if(!cf.active) return;
+
+    const employeeRooms = ['employeeLobby', 'cloningRoom', 'l6Furnace', 'employeeHallway', 'employeePipeRoom'];
+    if(!employeeRooms.includes(level6.room)) return;
+
+    // When clone is in a different room than player, handle room transitions
+    if(cf.room !== level6.room) {
+        cf.room = level6.room;
+        if(level6.lastExitEdge === 'right') {
+            cf.x = 660;
+            cf.targetX = 660;
+        } else {
+            cf.x = 40;
+            cf.targetX = 40;
+        }
+    }
+
+    // Set target position — trail behind player at followDist
+    if(player.facing === 'right' || player.x > cf.x + 10) {
+        cf.targetX = player.x - cf.followDist;
+        cf.facing = 'right';
+    } else if(player.facing === 'left' || player.x < cf.x - 10) {
+        cf.targetX = player.x + cf.followDist;
+        cf.facing = 'left';
+    }
+
+    // Clamp target within room bounds
+    cf.targetX = Math.max(25, Math.min(660, cf.targetX));
+
+    // Smoothly walk toward target
+    const dx = cf.targetX - cf.x;
+    if(Math.abs(dx) > 3) {
+        cf.x += Math.sign(dx) * Math.min(Math.abs(dx) * 0.08, 2.5);
+        cf.facing = dx > 0 ? 'right' : 'left';
+    }
+
+    cf.y = 380;
 }
 
 // === Level 6 Furnace Room — dark industrial furnace with evidence of CEO's escape ===
@@ -12560,6 +12702,8 @@ function drawL6FurnaceRoom() {
     ctx.textAlign = 'center';
     ctx.fillText('INCINERATOR', fx, fy + 55);
 
+    // === EVIDENCE ITEMS — hidden after factory reset ===
+    if(!level6.factoryReset) {
     // === DISCARDED RED JUMPSUIT on floor in front of furnace ===
     const jsX = fx - 30, jsY = 388;
     // Crumpled jumpsuit body — irregularly shaped heap
@@ -12763,6 +12907,8 @@ function drawL6FurnaceRoom() {
         ctx.fill();
     }
 
+    } // end if(!level6.factoryReset) — evidence items
+
     // Left door — wooden door to hallway (same style as Level 5)
     const ldX = 55, ldY = 340, ldW = 50, ldH = 60;
     ctx.fillStyle = '#654321';
@@ -12813,8 +12959,8 @@ function drawL6FurnaceRoom() {
         ctx.fillText('CLONING \u2192', 660, 366);
     }
 
-    // Ambient label
-    if(player.x > 200 && player.x < 500) {
+    // Ambient label — only show when evidence is present
+    if(!level6.factoryReset && player.x > 200 && player.x < 500) {
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.fillRect(160, 264, 380, 26);
         ctx.fillStyle = 'rgba(255,200,150,0.9)';
@@ -18306,11 +18452,19 @@ function drawScene() {
         } else if(level6.room === 'cloningRoom') {
             drawLevel6CloningRoom();
 
+            // Draw clone follower in cloning room
+            if(level6.cloneFollower.active && level6.cloneFollower.room === 'cloningRoom') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'l6Furnace') {
             drawL6FurnaceRoom();
 
+            // Draw clone follower in furnace room
+            if(level6.cloneFollower.active && level6.cloneFollower.room === 'l6Furnace') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'employeeHallway') {
@@ -18534,11 +18688,19 @@ function drawScene() {
                 ctx.fillText('FURNACE \u2192', 650, 326);
             }
 
+            // Draw clone follower in employee hallway
+            if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeeHallway') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'employeePipeRoom') {
             drawLevel6EmployeePipeRoom();
 
+            // Draw clone follower in employee pipe room
+            if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeePipeRoom') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'underbellyHallway') {
@@ -18740,6 +18902,62 @@ function drawScene() {
                         const isLastLine = level6.ceoDialogueLine >= dlgLines.length - 1;
                         ctx.fillStyle = '#ffd700';
                         ctx.fillText(isLastLine ? '[ ACTION ]' : '[ ACTION ] \u25ba', dlgX + dlgW - 16, dlgY + 136);
+                    }
+                }
+                ctx.restore();
+            }
+
+            // === RED PM DIALOGUE OVERLAY — typewriter dialogue in employee lobby ===
+            if(level6.redPMDialogue && level6.room === 'employeeLobby') {
+                const redDlgLines = ["What is this place?", "Can I follow you?"];
+                const currentRedLine = redDlgLines[level6.redPMDialogueLine] || '';
+                const redCharsShown = Math.min(Math.floor(level6.redPMDialogueChars), currentRedLine.length);
+                const redDisplayText = currentRedLine.substring(0, redCharsShown);
+                const redIsTyping = redCharsShown < currentRedLine.length;
+
+                const rdlgX = -GX, rdlgY = 305, rdlgW = CANVAS_W, rdlgH = 150;
+                ctx.save();
+                ctx.fillStyle = 'rgba(10,10,20,0.92)';
+                ctx.fillRect(rdlgX, rdlgY, rdlgW, rdlgH);
+                ctx.fillStyle = '#cc2222';
+                ctx.fillRect(rdlgX, rdlgY, rdlgW, 3);
+
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#ff4444';
+                ctx.fillText('RED PM', rdlgX + 20, rdlgY + 26);
+
+                ctx.font = '20px Arial';
+                ctx.fillStyle = '#f0f0f0';
+                const redMaxW = CANVAS_W - 50;
+                const redWords = redDisplayText.split(' ');
+                let redLineA = '', redLineB = '';
+                for(const word of redWords) {
+                    const test = redLineA ? redLineA + ' ' + word : word;
+                    if(ctx.measureText(test).width <= redMaxW) {
+                        redLineA = test;
+                    } else {
+                        redLineB = redLineB ? redLineB + ' ' + word : word;
+                    }
+                }
+                ctx.textAlign = 'left';
+                ctx.fillText(redLineA, rdlgX + 20, rdlgY + 65);
+                if(redLineB) ctx.fillText(redLineB, rdlgX + 20, rdlgY + 93);
+
+                if(redIsTyping) {
+                    if(Math.floor(Date.now() / 400) % 2 === 0) {
+                        ctx.fillStyle = '#f0f0f0';
+                        const cursorX = rdlgX + 20 + ctx.measureText(redLineB || redLineA).width + 3;
+                        const cursorY = redLineB ? rdlgY + 93 : rdlgY + 65;
+                        ctx.fillRect(cursorX, cursorY - 16, 2, 18);
+                    }
+                } else {
+                    if(Math.floor(Date.now() / 500) % 2 === 0) {
+                        ctx.font = 'bold 17px Arial';
+                        ctx.textAlign = 'right';
+                        const isLastRedLine = level6.redPMDialogueLine >= redDlgLines.length - 1;
+                        ctx.fillStyle = '#ff4444';
+                        ctx.fillText(isLastRedLine ? '[ ACTION ] Accept' : '[ ACTION ] \u25ba', rdlgX + rdlgW - 16, rdlgY + 136);
                     }
                 }
                 ctx.restore();
@@ -21709,6 +21927,39 @@ function update() {
                         player.x = 580;
                         player.y = 380;
                         level6.lastExitEdge = 'right'; // elevator is on right side of employee lobby
+
+                        // === CHECK EMPLOYEE FLOOR COMPLETION FLAG ===
+                        const bothBossesKilled = !level6.cloningBoss.alive && !level6.hallwayCloningBoss.alive;
+                        const bothKeysCollected = level6.hasKeycard && level6.cageKey.found;
+                        if(bothBossesKilled && bothKeysCollected && !level6.factoryReset) {
+                            level6.factoryReset = true;
+                            level6.employeeFloorComplete = true;
+                            // Respawn both cloning bosses
+                            level6.cloningBoss.alive = true;
+                            level6.cloningBoss.deathTime = 0;
+                            level6.cloningBoss.x = 350;
+                            level6.cloningBoss.y = 365;
+                            level6.cloningBoss.paused = false;
+                            level6.hallwayCloningBoss.alive = true;
+                            level6.hallwayCloningBoss.deathTime = 0;
+                            level6.hallwayCloningBoss.x = 350;
+                            level6.hallwayCloningBoss.y = 365;
+                            level6.hallwayCloningBoss.paused = false;
+                            level6.cloneFollower.active = false;
+                            level6.keycardOnGround = false;
+                        }
+                        // Reset Red PM dialogue state for revisits (if not completed)
+                        if(!level6.factoryReset) {
+                            level6.redPMDialogueShown = false;
+                            level6.redPMDialogue = false;
+                            level6.redPMDialogueLine = 0;
+                            level6.redPMDialogueChars = 0;
+                            level6.cloneFollower.active = false;
+                            level6.cloneFollower.x = 540;
+                            level6.cloneFollower.y = 380;
+                            level6.cloneFollower.room = 'employeeLobby';
+                            level6.cloneFollower.facing = 'left';
+                        }
                     }
                     level6.elevatorTarget = null;
                     // Fade back in
@@ -22256,6 +22507,50 @@ function update() {
             else if(level6.room === 'employeeLobby') {
                 player.y = 380;
 
+                // === RED PM DIALOGUE — trigger when player approaches, block input until done ===
+                if(!level6.factoryReset && !level6.cloneFollower.active) {
+                    if(!level6.redPMDialogueShown && !level6.redPMDialogue && Math.abs(player.x - 540) < 80) {
+                        level6.redPMDialogue = true;
+                        level6.redPMDialogueLine = 0;
+                        level6.redPMDialogueChars = 0;
+                        level6.redPMDialogueShown = true;
+                    }
+                    if(level6.redPMDialogue) {
+                        const redDlgLines = ["What is this place?", "Can I follow you?"];
+                        const currentRedLine = redDlgLines[level6.redPMDialogueLine] || '';
+                        if(level6.redPMDialogueChars < currentRedLine.length) {
+                            level6.redPMDialogueChars += 1.2;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false;
+                            keys['action'] = false;
+                            const charsShown = Math.floor(level6.redPMDialogueChars);
+                            if(charsShown < currentRedLine.length) {
+                                level6.redPMDialogueChars = currentRedLine.length;
+                            } else if(level6.redPMDialogueLine < redDlgLines.length - 1) {
+                                level6.redPMDialogueLine++;
+                                level6.redPMDialogueChars = 0;
+                            } else {
+                                level6.redPMDialogue = false;
+                                level6.redPMAccepted = true;
+                                level6.cloneFollower.active = true;
+                                level6.cloneFollower.room = 'employeeLobby';
+                                level6.cloneFollower.x = 540;
+                                level6.cloneFollower.y = 380;
+                                level6.cloneFollower.facing = player.facing;
+                            }
+                        }
+                    }
+                }
+                // Update clone follower AI
+                if(level6.cloneFollower.active) {
+                    updateCloneFollower();
+                }
+                // Block all other input during Red PM dialogue
+                if(level6.redPMDialogue) {
+                    // Skip rest of lobby logic
+                }
+                else
                 // 3D Printer UI handling
                 if(level6.lobbyPrinterUI) {
                     if(!level6.lobbyPrinterConfirming) {
@@ -22349,6 +22644,7 @@ function update() {
 
             else if(level6.room === 'cloningRoom') {
                 player.y = 380;
+                if(level6.cloneFollower.active) updateCloneFollower();
 
                 // === Cloning room 3D printer (moved from employee lobby) ===
                 const cloningPrinterX = 540;
@@ -22458,24 +22754,6 @@ function update() {
                     actionConsumed = true;
                 }
 
-                // === CAGE KEY UNLOCK (alternative to shooting lock) — checked BEFORE revolver so ACTION isn't consumed ===
-                if(!actionConsumed && level6.cageKey.found && !level6.cageKey.used && !level6.mutantPM.cageLockShot && !level6.mutantPM.cageOpen) {
-                    const pmKeyDist = Math.abs(player.x - level6.mutantPM.x);
-                    if(pmKeyDist < 80 && (keys[' '] || keys['action'])) {
-                        level6.cageKey.used = true;
-                        level6.cageKey.useTime = Date.now();
-                        keys[' '] = false;
-                        keys['action'] = false;
-                        actionConsumed = true;
-                        // 1-second delay before bars drop (gives player time to move)
-                        setTimeout(function() {
-                            level6.mutantPM.cageLockShot = true;
-                            level6.mutantPM.cageOpen = true;
-                            level6.mutantPM.barsDropTime = Date.now();
-                        }, 1000);
-                    }
-                }
-
                 // Fire ghost gun in cloning room (single-shot, consumed on fire)
                 if(!actionConsumed && level6.hasGhostGun && !(level6.hasRevolver && level6.revolverAmmo > 0) && (keys[' '] || keys['action'])) {
                     const nearKeycard = level6.keycardOnGround && Math.abs(player.x - level6.keycardX) < 50;
@@ -22518,66 +22796,12 @@ function update() {
                     }
                 }
 
-                // === PM CAGE ESCAPE LOGIC ===
-                const pm = level6.mutantPM;
-                if(pm.cageOpen && !pm.eating && !pm.escaped) {
-                    const barsDropped = pm.barsDropTime > 0 && (Date.now() - pm.barsDropTime) > 800;
-                    if(barsDropped) {
-                        // Check if anyone walks in front of cage (within PM reach)
-                        const pmReachX = 80; // reach distance from cage center
-                        const pmCenterX = pm.x;
-
-                        // Check CEO first (pursuing), then player — whichever is in range first
-                        let eatTarget = null;
-                        if(level6.ceoPursuing && ceo.state === 'hunting' && ceo.ceoVisible && Math.abs(ceo.x - pmCenterX) < pmReachX && Math.abs(ceo.y - pm.y) < 60) {
-                            eatTarget = 'ceo';
-                        } else if(Math.abs(player.x - pmCenterX) < pmReachX && Math.abs(player.y - pm.y) < 60) {
-                            eatTarget = 'player';
-                        }
-
-                        if(eatTarget) {
-                            pm.eating = true;
-                            pm.eatTarget = eatTarget;
-                            pm.eatTime = Date.now();
-                            if(eatTarget === 'ceo') {
-                                // CEO gets eaten — instant death
-                                ceo.state = 'dead';
-                                ceo.deathRoom = level6.room;
-                                ceo.eatenByMutant = true;
-                                level6.ceoDefeated = true;
-                                level6.ceoPursuing = false;
-                                // Unlock safe and spawn cash sacks at safe in CEO office
-                                level6.safeUnlocked = true;
-                                for(let s = 0; s < 6; s++) {
-                                    level6.cashSacks.push({ x: 350 + (s - 2.5) * 18, y: 200 + Math.floor(s / 3) * 20, claimed: false, reserved: false, extracted: false });
-                                }
-                                score += 5000;
-                            } else {
-                                // Player gets eaten — game over
-                                level6.moneyLives = 0;
-                                updateLives();
-                                state = 'over';
-                                menuChoice = 0;
-                            }
-                        }
-                    }
-                }
-
-                // PM gorilla escape — after eating, PM runs out
-                if(pm.eating && pm.eatTime > 0 && !pm.escaped) {
-                    const eatElapsed = (Date.now() - pm.eatTime) / 1000;
-                    if(eatElapsed > 3) {
-                        pm.escaped = true;
-                        pm.escapeTime = Date.now();
-                        pm.escapeDir = player.x > pm.x ? -1 : 1; // run away from player
-                        pm.eating = false;
-                    }
-                }
             }
 
             // === Level 6 Furnace Room (accessed from cloning room concealed door) ===
             else if(level6.room === 'l6Furnace') {
                 player.y = 380;
+                if(level6.cloneFollower.active) updateCloneFollower();
 
                 // Left door to Employee Level hallway — action-based (trigger aligned with door highlight at x<100)
                 if(player.x < 100 && (keys[' '] || keys['action'])) {
@@ -22609,6 +22833,7 @@ function update() {
             // === Employee Hallway (original Level 5 hallway revisited from Level 6) ===
             else if(level6.room === 'employeeHallway') {
                 player.y = 380;
+                if(level6.cloneFollower.active) updateCloneFollower();
 
                 // Pick up hallway boss drops — check BEFORE gun firing so ACTION collects ammo instead of shooting
                 let hallwayActionConsumed = false;
@@ -22685,6 +22910,7 @@ function update() {
             // === Employee Pipe Room (original Level 5 pipe room revisited from Level 6) ===
             else if(level6.room === 'employeePipeRoom') {
                 player.y = 380;
+                if(level6.cloneFollower.active) updateCloneFollower();
 
                 // Water fountain — drink for +1 money life (30s cooldown)
                 if((keys[' '] || keys['action']) && Math.abs(player.x - 110) < 30 && level6.moneyLives < 3) {
