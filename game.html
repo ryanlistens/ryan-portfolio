@@ -42,6 +42,8 @@
         canvas {
             display: block;
             background: #000;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
         }
         /* Mobile touch controls - overlaid directly on the game canvas */
         #controls-section {
@@ -205,6 +207,84 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
 resizeCanvas();
+
+// --- HD RENDERING QUALITY SYSTEM ---
+// Font scale factor: adjusts text sizes based on actual display size vs game coordinates
+// On mobile (375px wide displaying 700 game px), fonts need to be ~2x larger in game coords
+// On tablet (1024px wide), fonts can stay closer to designed size
+let FONT_SCALE = 1;
+let LINE_SCALE = 1;
+function updateQualityScales() {
+    const cssW = parseFloat(canvas.style.width) || GAME_W;
+    const displayRatio = cssW / GAME_W;
+    // On small screens (ratio < 0.7), scale fonts up so they remain readable
+    // On large screens (ratio > 1.2), ensure details are crisp
+    if (displayRatio < 0.7) {
+        FONT_SCALE = 1 + (0.7 - displayRatio) * 1.8; // Up to ~1.9x on tiny screens
+        LINE_SCALE = 1 + (0.7 - displayRatio) * 0.8;
+    } else if (displayRatio > 1.2) {
+        FONT_SCALE = 1;
+        LINE_SCALE = 1 + (displayRatio - 1.2) * 0.15; // Slightly thicker lines on big screens
+    } else {
+        FONT_SCALE = 1;
+        LINE_SCALE = 1;
+    }
+}
+updateQualityScales();
+window.addEventListener('resize', updateQualityScales);
+
+// Scaled font helper: ensures fonts are readable on all devices
+// bounded=true: for fixed-width UI elements (min 7px effective)
+// bounded=false: for floating labels (min 9px effective, scales more aggressively)
+function scaledFont(size, weight, family, bounded) {
+    weight = weight || '';
+    family = family || 'Arial';
+    const scaled = size * FONT_SCALE;
+    const min = bounded ? 7 : 9;
+    const effective = Math.max(min, Math.round(scaled * 10) / 10);
+    return (weight ? weight + ' ' : '') + effective + 'px ' + family;
+}
+
+// Scaled line width: ensures lines are visible on all devices
+function scaledLine(width) {
+    return Math.max(0.75, width * LINE_SCALE);
+}
+
+// HD action label helper — draws readable, styled prompt with rounded background
+function drawActionLabel(text, x, y, options) {
+    const opt = options || {};
+    const color = opt.color || '#ffd700';
+    const bgColor = opt.bg || 'rgba(0,0,0,0.82)';
+    const fontSize = opt.fontSize || 16;
+    const padding = opt.padding || 8;
+
+    ctx.font = scaledFont(fontSize, 'bold', 'Arial', false);
+    ctx.textAlign = 'center';
+    const metrics = ctx.measureText(text);
+    const tw = metrics.width;
+    const th = fontSize * FONT_SCALE;
+    const bx = x - tw / 2 - padding;
+    const by = y - th - padding / 2;
+    const bw = tw + padding * 2;
+    const bh = th + padding;
+
+    // Rounded background with subtle border
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 4);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 4);
+    ctx.stroke();
+
+    // Text with subtle drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText(text, x + 1, y + 1);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+}
 
 // Load photorealistic images
 const portraitImg = new Image();
@@ -2600,33 +2680,65 @@ function drawPipeRoomWindow(cx, wy, colorIndex) {
         }
     }
 
+    // === HD glass reflection for realism ===
+    // Subtle glass sheen — diagonal highlight across pane
+    const sheenGrad = ctx.createLinearGradient(wx, wy, wx + ww, wy + wh);
+    sheenGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    sheenGrad.addColorStop(0.3, 'rgba(255,255,255,0.06)');
+    sheenGrad.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+    sheenGrad.addColorStop(0.7, 'rgba(255,255,255,0.04)');
+    sheenGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheenGrad;
+    ctx.fillRect(wx, wy, ww, wh);
+    // Corner light catch — top-left pane
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(wx + 2, wy + 2);
+    ctx.lineTo(wx + ww * 0.35, wy + 2);
+    ctx.lineTo(wx + 2, wy + wh * 0.3);
+    ctx.closePath();
+    ctx.fill();
+
     // === Industrial steel window frame (no curtains) ===
-    // Outer steel frame
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 5;
+    // Outer steel frame with bevel effect for HD depth
+    ctx.strokeStyle = '#4a4a4a';
+    ctx.lineWidth = 6;
     ctx.strokeRect(wx, wy, ww, wh);
+    ctx.strokeStyle = '#606060';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(wx + 1, wy + 1, ww - 2, wh - 2);
     // Inner frame line
-    ctx.strokeStyle = '#666';
+    ctx.strokeStyle = '#6a6a6a';
     ctx.lineWidth = 2;
     ctx.strokeRect(wx + 3, wy + 3, ww - 6, wh - 6);
-    // Cross bars (industrial muntin)
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 3;
+    // Cross bars (industrial muntin) with highlight edge
+    ctx.strokeStyle = '#4a4a4a';
+    ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(cx, wy); ctx.lineTo(cx, wy + wh); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(wx, wy + wh * 0.5); ctx.lineTo(wx + ww, wy + wh * 0.5); ctx.stroke();
-    // Corner rivets
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, wy); ctx.lineTo(cx, wy + wh); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx, wy + wh * 0.5); ctx.lineTo(wx + ww, wy + wh * 0.5); ctx.stroke();
+    // Corner rivets with 3D bevel
     const rivetPositions = [[wx + 4, wy + 4],[wx + ww - 4, wy + 4],[wx + 4, wy + wh - 4],[wx + ww - 4, wy + wh - 4]];
     for(let rv of rivetPositions) {
+        ctx.fillStyle = '#888';
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#666';
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#777';
-        ctx.beginPath(); ctx.arc(rv[0], rv[1], 2.5, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#555';
-        ctx.beginPath(); ctx.arc(rv[0], rv[1], 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rv[0] - 0.5, rv[1] - 0.5, 1, 0, Math.PI * 2); ctx.fill();
     }
-    // Steel sill at bottom
-    ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(wx - 3, wy + wh, ww + 6, 5);
-    ctx.fillStyle = '#555';
-    ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 2);
+    // Steel sill at bottom with gradient
+    const sillGrad = ctx.createLinearGradient(wx, wy + wh, wx, wy + wh + 6);
+    sillGrad.addColorStop(0, '#5a5a5a');
+    sillGrad.addColorStop(0.5, '#4a4a4a');
+    sillGrad.addColorStop(1, '#3a3a3a');
+    ctx.fillStyle = sillGrad;
+    ctx.fillRect(wx - 3, wy + wh, ww + 6, 6);
+    ctx.fillStyle = '#606060';
+    ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 1);
 }
 
 // Draw wide parking lot bay window for pipe rooms — the shared "work" view
@@ -4985,7 +5097,7 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.fillStyle = unlocked ? '#002200' : '#002211';
         ctx.fillRect(kpSide + 2, kpY - 2, 16, 10);
         ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.font = 'bold 6px monospace';
+        ctx.font = scaledFont(6, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpSide + 10, kpY + 6);
         // Button grid
@@ -5349,29 +5461,29 @@ function drawMarkerBoard(x, y, boardLv) {
 
         // Title bar
         ctx.fillStyle = '#1a3a8a';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace', true);
         ctx.fillText('FLOW ANALYSIS', x, y - 34);
         ctx.strokeStyle = '#1a3a8a'; ctx.lineWidth = 0.8;
         ctx.beginPath(); ctx.moveTo(x - 58, y - 30); ctx.lineTo(x + 58, y - 30); ctx.stroke();
 
         // Core equation: Q = A·v (flow = area × velocity)
         ctx.fillStyle = '#111';
-        ctx.font = '8px monospace';
+        ctx.font = scaledFont(8, '', 'monospace', true);
         ctx.fillText('Q = \u03c0r\u00b2 \u00b7 v', x, y - 20);
 
         // Summed capacity formula
-        ctx.font = '7px monospace';
+        ctx.font = scaledFont(7, '', 'monospace', true);
         ctx.fillStyle = '#333';
         ctx.fillText('C\u209c = \u03a3(Q\u1d62 \u00b7 \u03b7\u1d62)', x, y - 10);
 
         // Minimum efficiency threshold in red
         ctx.fillStyle = '#b00000';
-        ctx.font = 'bold 7px monospace';
+        ctx.font = scaledFont(7, 'bold', 'monospace', true);
         ctx.fillText('\u03b7\u1d56\u1d56 \u2265 0.82 (\u00b13\u03c3)', x, y);
 
         // Per-pipe capacity bar chart — labeled R G B Y
         ctx.fillStyle = '#555';
-        ctx.font = '6px monospace';
+        ctx.font = scaledFont(6, '', 'monospace', true);
         ctx.textAlign = 'left';
         const barLabels = ['R','G','B','Y'];
         const barColors5 = ['#e74c3c','#27ae60','#005f99','#d4a017'];
@@ -5385,7 +5497,7 @@ function drawMarkerBoard(x, y, boardLv) {
             ctx.strokeRect(bx5, y + 35 - barHeights5[i], 18, barHeights5[i]);
             // Label
             ctx.fillStyle = '#333';
-            ctx.font = '6px monospace';
+            ctx.font = scaledFont(6, '', 'monospace', true);
             ctx.fillText(barLabels[i], bx5 + 6, y + 42);
         }
         // X-axis baseline
@@ -5403,36 +5515,36 @@ function drawMarkerBoard(x, y, boardLv) {
 
         // Title — deep crimson for critical-tier planning
         ctx.fillStyle = '#6a0010';
-        ctx.font = 'bold 8px monospace';
+        ctx.font = scaledFont(8, 'bold', 'monospace', true);
         ctx.fillText('SYSTEM STABILITY', x, y - 34);
         ctx.strokeStyle = '#6a0010'; ctx.lineWidth = 0.8;
         ctx.beginPath(); ctx.moveTo(x - 58, y - 30); ctx.lineTo(x + 58, y - 30); ctx.stroke();
 
         // MTBF / MTTR ratio formula
         ctx.fillStyle = '#111';
-        ctx.font = '7px monospace';
+        ctx.font = scaledFont(7, '', 'monospace', true);
         ctx.fillText('MTBF / MTTR = \u03b7\u209b', x, y - 20);
 
         // Reliability function
         ctx.fillStyle = '#003366';
-        ctx.font = '7px monospace';
+        ctx.font = scaledFont(7, '', 'monospace', true);
         ctx.fillText('R(t) = e^(-t/MTBF)', x, y - 11);
 
         // Redundancy requirement
         ctx.fillStyle = '#111';
-        ctx.font = 'bold 7px monospace';
+        ctx.font = scaledFont(7, 'bold', 'monospace', true);
         ctx.fillText('Topology: N+2 req.', x, y - 2);
 
         // Failure probability threshold
         ctx.fillStyle = '#b00000';
-        ctx.font = '7px monospace';
+        ctx.font = scaledFont(7, '', 'monospace', true);
         ctx.fillText('P(fail) < 0.001/yr', x, y + 8);
 
         // Darcy-Weisbach pressure drop (horizontal layout)
         ctx.strokeStyle = '#444'; ctx.lineWidth = 0.7;
         ctx.beginPath(); ctx.moveTo(x - 56, y + 18); ctx.lineTo(x + 56, y + 18); ctx.stroke();
         ctx.fillStyle = '#555';
-        ctx.font = '6px monospace';
+        ctx.font = scaledFont(6, '', 'monospace', true);
         ctx.textAlign = 'left';
         ctx.fillText('P\u2081', x - 56, y + 28);
         ctx.textAlign = 'right';
@@ -5543,7 +5655,7 @@ function drawLevel5PipeRoom() {
     ctx.fillRect(50, 102, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
-    ctx.font = '10px Arial';
+    ctx.font = scaledFont(10, '', 'Arial', false);
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
 
     // Four colored stripe bands on the sign (below tagline)
@@ -5765,7 +5877,7 @@ function drawLevel6EmployeePipeRoom() {
     ctx.fillRect(50, 72, 160, 1);
 
     ctx.fillStyle = '#aaaaaa';
-    ctx.font = '10px Arial';
+    ctx.font = scaledFont(10, '', 'Arial', false);
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 87);
 
     // Four colored stripe bands on the sign
@@ -6143,12 +6255,22 @@ function drawLevel5Hallway() {
 
 // SECTION 10: Level 5 Scene Drawing Functions (Part 2)
 function drawLevel5FurnaceRoom() {
-    ctx.fillStyle = '#2b2520';
+    // HD wall — dark industrial with gradient depth
+    const fWallGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    fWallGrad.addColorStop(0, '#241f1a');
+    fWallGrad.addColorStop(0.5, '#2b2520');
+    fWallGrad.addColorStop(1, '#1f1a16');
+    ctx.fillStyle = fWallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    
-    ctx.fillStyle = '#1a1815';
+
+    // HD floor — dark sooty concrete
+    const fFloorGrad = ctx.createLinearGradient(0, 400, 0, 500);
+    fFloorGrad.addColorStop(0, '#1e1a17');
+    fFloorGrad.addColorStop(0.5, '#1a1815');
+    fFloorGrad.addColorStop(1, '#151210');
+    ctx.fillStyle = fFloorGrad;
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
-    
+
     for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#0a0a08';
@@ -6156,40 +6278,95 @@ function drawLevel5FurnaceRoom() {
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
         }
     }
-    
+
     const furnace = level5.furnaceRoom.furnace;
     level5.furnaceRoom.furnace.glowPhase += 0.05;
     const glowIntensity = Math.sin(level5.furnaceRoom.furnace.glowPhase) * 0.3 + 0.7;
-    
-    const gradient = ctx.createRadialGradient(furnace.x, furnace.y, 20, furnace.x, furnace.y, 120);
-    gradient.addColorStop(0, `rgba(255,100,0,${glowIntensity * 0.6})`);
-    gradient.addColorStop(0.5, `rgba(255,50,0,${glowIntensity * 0.3})`);
-    gradient.addColorStop(1, 'rgba(255,0,0,0)');
+
+    // HD multi-layer radial glow — warm light fills the room
+    const gradient = ctx.createRadialGradient(furnace.x, furnace.y, 15, furnace.x, furnace.y, 160);
+    gradient.addColorStop(0, `rgba(255,120,20,${glowIntensity * 0.7})`);
+    gradient.addColorStop(0.3, `rgba(255,80,0,${glowIntensity * 0.4})`);
+    gradient.addColorStop(0.6, `rgba(255,40,0,${glowIntensity * 0.15})`);
+    gradient.addColorStop(1, 'rgba(200,20,0,0)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(furnace.x, furnace.y, 120, 0, Math.PI * 2);
+    ctx.arc(furnace.x, furnace.y, 160, 0, Math.PI * 2);
     ctx.fill();
-    
+    // Floor reflection of furnace glow
+    const floorGlowG = ctx.createRadialGradient(furnace.x, 400, 10, furnace.x, 420, 100);
+    floorGlowG.addColorStop(0, `rgba(255,80,0,${glowIntensity * 0.12})`);
+    floorGlowG.addColorStop(1, 'rgba(255,40,0,0)');
+    ctx.fillStyle = floorGlowG;
+    ctx.fillRect(furnace.x - 100, 400, 200, 100);
+
+    // Furnace body — HD with riveted steel casing
+    ctx.fillStyle = '#3e3e3e';
+    ctx.fillRect(furnace.x - 65, furnace.y - 45, 130, 90);
     ctx.fillStyle = '#3a3a3a';
     ctx.fillRect(furnace.x - 60, furnace.y - 40, 120, 80);
+    // Steel panel highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(furnace.x - 60, furnace.y - 40, 120, 3);
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(furnace.x - 50, furnace.y - 30, 100, 60);
-    
+    // Rivets on furnace casing
+    const rivetColor = '#555';
+    for(let ri = 0; ri < 6; ri++) {
+        ctx.fillStyle = rivetColor;
+        ctx.beginPath(); ctx.arc(furnace.x - 55 + ri * 22, furnace.y - 36, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(furnace.x - 55 + ri * 22, furnace.y + 36, 2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Fire window
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(furnace.x - 40, furnace.y - 20, 80, 40);
-    
+
     const isFlaming = Date.now() - furnace.flameTime < 2000;
     if(isFlaming) {
         const flameAlpha = Math.max(0, 1 - (Date.now() - furnace.flameTime) / 2000);
-        for(let i = 0; i < 5; i++) {
-            const flameY = furnace.y - 10 + Math.sin(frame * 0.3 + i) * 8;
-            const flameH = 30 + Math.cos(frame * 0.2 + i) * 10;
-            ctx.fillStyle = `rgba(255,${100 + i * 30},0,${flameAlpha * 0.8})`;
-            ctx.fillRect(furnace.x - 30 + i * 15, flameY, 8, flameH);
+        // HD flame rendering — layered with gradient
+        for(let i = 0; i < 6; i++) {
+            const flameY = furnace.y - 12 + Math.sin(frame * 0.3 + i * 1.3) * 10;
+            const flameH = 35 + Math.cos(frame * 0.2 + i) * 12;
+            const flameW = 10 + Math.sin(frame * 0.15 + i * 0.7) * 3;
+            // Outer flame (red-orange)
+            ctx.fillStyle = `rgba(255,${60 + i * 25},0,${flameAlpha * 0.6})`;
+            ctx.fillRect(furnace.x - 34 + i * 13, flameY, flameW, flameH);
+            // Inner flame (bright yellow-white)
+            ctx.fillStyle = `rgba(255,${200 + i * 10},${80 + i * 20},${flameAlpha * 0.5})`;
+            ctx.fillRect(furnace.x - 32 + i * 13, flameY + flameH * 0.3, flameW - 3, flameH * 0.5);
+        }
+        // Ember sparks rising
+        for(let sp = 0; sp < 4; sp++) {
+            const sparkY = furnace.y - 25 - Math.sin(frame * 0.1 + sp * 2) * 15;
+            const sparkX = furnace.x - 20 + Math.sin(frame * 0.15 + sp * 3) * 30;
+            ctx.fillStyle = `rgba(255,${150 + sp * 20},0,${flameAlpha * 0.7})`;
+            ctx.beginPath(); ctx.arc(sparkX, sparkY, 1.5, 0, Math.PI * 2); ctx.fill();
         }
     } else {
-        ctx.fillStyle = `rgba(255,100,0,${glowIntensity})`;
+        // Perpetual fire glow with flickering flames
+        const baseGlow = ctx.createLinearGradient(furnace.x - 35, furnace.y, furnace.x + 35, furnace.y);
+        baseGlow.addColorStop(0, `rgba(255,60,0,${glowIntensity * 0.8})`);
+        baseGlow.addColorStop(0.3, `rgba(255,120,0,${glowIntensity})`);
+        baseGlow.addColorStop(0.7, `rgba(255,100,0,${glowIntensity})`);
+        baseGlow.addColorStop(1, `rgba(255,50,0,${glowIntensity * 0.7})`);
+        ctx.fillStyle = baseGlow;
         ctx.fillRect(furnace.x - 35, furnace.y - 15, 70, 30);
+        // Flickering flame tips above the window
+        for(let ft = 0; ft < 6; ft++) {
+            const tipH = 5 + Math.sin(Date.now() / 150 + ft * 1.3) * 4;
+            ctx.fillStyle = `rgba(255,${80 + ft * 20},0,${0.4 + Math.sin(Date.now() / 100 + ft) * 0.2})`;
+            ctx.fillRect(furnace.x - 32 + ft * 11, furnace.y - 15 - tipH, 6, tipH);
+        }
+    }
+    // Heat shimmer above furnace chimney
+    ctx.fillStyle = `rgba(255,200,100,${0.03 + Math.sin(Date.now() / 300) * 0.01})`;
+    for(let hs = 0; hs < 3; hs++) {
+        const shimX = furnace.x - 15 + Math.sin(Date.now() / 400 + hs) * 10;
+        ctx.beginPath();
+        ctx.ellipse(shimX, furnace.y - 55 - hs * 12, 18 - hs * 3, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     // Analog number counter — padlock-style tumbler dial showing docs remaining
@@ -6246,25 +6423,14 @@ function drawLevel5FurnaceRoom() {
     ctx.fill();
 
     if(Math.abs(player.x - level5.furnaceRoom.leftDoor.x) < 50) {
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 18px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('← HALLWAY', level5.furnaceRoom.leftDoor.x + 15, level5.furnaceRoom.leftDoor.y - 10);
+        drawActionLabel('← HALLWAY', level5.furnaceRoom.leftDoor.x + 15, level5.furnaceRoom.leftDoor.y - 10, {fontSize: 18});
     }
-    
+
     if(Math.abs(player.x - furnace.x) < 90 && !player.holding && !level5.redKeyOnGround) {
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('FURNACE', furnace.x, furnace.y - 60);
+        drawActionLabel('FURNACE', furnace.x, furnace.y - 60);
     }
     if(Math.abs(player.x - furnace.x) < 90 && player.holding) {
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(furnace.x - 130, furnace.y - 76, 260, 24);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] - BURN DOC', furnace.x, furnace.y - 58);
+        drawActionLabel('[ ACTION ] - BURN DOC', furnace.x, furnace.y - 58);
     }
 
     // Draw golden key on the ground (dropped from furnace after burning red doc)
@@ -6323,12 +6489,7 @@ function drawLevel5FurnaceRoom() {
         ctx.strokeRect(rdX, rdY, rdW, rdH);
 
         if (player.x > 600) {
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(rdX + rdW/2 - 55, rdY - 20, 110, 18);
-            ctx.fillStyle = '#00ff88';
-            ctx.fillText('CLONING LAB →', rdX + rdW/2, rdY - 6);
+            drawActionLabel('CLONING LAB →', rdX + rdW/2, rdY - 6, {color: '#00ff88', fontSize: 14});
         }
     }
 }
@@ -6610,7 +6771,7 @@ function drawRecliningBoss(fx, fy) {
     for(let i = 0; i < zz.length; i++) {
         const a = Math.max(0, Math.sin((t * 0.55 + i * 0.38) * Math.PI));
         ctx.fillStyle = `rgba(140,170,255,${(a * 0.75).toFixed(2)})`;
-        ctx.font = 'bold 8px Arial';
+        ctx.font = scaledFont(8, 'bold', 'Arial', true);
         ctx.fillText(zz[i].ch, hx + zz[i].ox, hy + zz[i].oy);
     }
 }
@@ -7250,7 +7411,7 @@ function drawOfficeRoom(officeName) {
                 ctx.rect(bk.x, by + 2, bk.w, bk.h - 2);
                 ctx.clip();
                 ctx.fillStyle = 'rgba(255,255,255,0.9)';
-                ctx.font = 'bold 4px Arial';
+                ctx.font = scaledFont(4, 'bold', 'Arial', true);
                 ctx.textAlign = 'center';
                 const lines = bk.title.split('\n');
                 lines.forEach((line, li) => {
@@ -7842,12 +8003,12 @@ function drawLevel6PipeRoom() {
         // BULLET-PROOF label on door glass
         ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.fillRect(gdX + 2, gdY + 7, gdW - 4, 15);
-        ctx.fillStyle = '#88ddff'; ctx.font = 'bold 7px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#88ddff'; ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
         ctx.fillText('BULLET-PROOF GLASS', gdX + gdW / 2, gdY + 17);
         // RESTRICTED ACCESS label above door
         ctx.fillStyle = '#aa1100';
         ctx.fillRect(gdX - 5, gdY - 20, gdW + 10, 16);
-        ctx.fillStyle = '#ffe0e0'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffe0e0'; ctx.font = scaledFont(8, 'bold', 'Arial', true); ctx.textAlign = 'center';
         ctx.fillText('RESTRICTED ACCESS', gdX + gdW / 2, gdY - 8);
 
         // External conduit box on right glass wall (pipe connection point)
@@ -8081,7 +8242,7 @@ function drawLevel6PipeRoom() {
         ctx.fillStyle = '#2a2a2a';
         ctx.fillRect(prX - 28, prY + 12, 56, 9);
         ctx.fillStyle = '#f5f2ec';
-        ctx.font = 'bold 6px Arial';
+        ctx.font = scaledFont(6, 'bold', 'Arial', true);
         ctx.textAlign = 'center';
         ctx.fillText('AUTO-WRENCH', prX, prY + 19);
         // Print progress bar
@@ -8487,7 +8648,7 @@ function drawLevel6MegacomputerRoom() {
     const textBlink = Math.floor(Date.now() / 700) % 2;
     if(textBlink) {
         ctx.fillStyle = '#00ff00';
-        ctx.font = 'bold 7px monospace';
+        ctx.font = scaledFont(7, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText('Awaiting', screenX + screenW / 2, screenY + 12);
         ctx.fillText('executive', screenX + screenW / 2, screenY + 20);
@@ -10166,7 +10327,7 @@ function drawNuclearAssemblyBridge() {
             ctx.fillRect(bx - 60, by - 82 - bob, 120, 16);
             ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
             ctx.strokeRect(bx - 60, by - 82 - bob, 120, 16);
-            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(8, 'bold', 'monospace', true); ctx.textAlign = 'center';
             ctx.fillText('\u26a0 ARMED & DANGEROUS \u26a0', bx, by - 70 - bob);
 
         } else if(bcb.deathTime > 0) {
@@ -10500,7 +10661,7 @@ function drawNuclearAssemblyBridge() {
                         ctx.strokeStyle = '#4a4a28'; ctx.lineWidth = 1.5;
                         ctx.strokeRect(520 - crateW/2, targetY - crateH, crateW, crateH);
                         if (crateProg > 0.2) {
-                            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+                            ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(7, 'bold', 'monospace', true); ctx.textAlign = 'center';
                             ctx.fillText('CLASSIFIED', 520, targetY - crateH - 6);
                         }
                     }
@@ -10896,7 +11057,7 @@ function drawNuclearAssemblyBridge() {
                     ctx.fillRect(mSX - 7 + kick, mSY - mH - legOut, 7, legOut);
                     ctx.fillRect(mSX + 1 - kick, mSY - mH - legOut * 0.85, 7, legOut * 0.85);
                     if(wStuff > 0.3 && Math.floor(procElapsed * 4) % 2 === 0) {
-                        ctx.fillStyle = '#ff8800'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+                        ctx.fillStyle = '#ff8800'; ctx.font = scaledFont(8, 'bold', 'monospace', true); ctx.textAlign = 'center';
                         ctx.fillText('(MUFFLED SCREAMING)', mSX, mSY - mH - legOut - 10);
                     }
                 }
@@ -11283,24 +11444,49 @@ function drawLevel6CloningRoom() {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Back wall surface — dark steel panels
-    ctx.fillStyle = '#222';
+    // Back wall surface — dark steel panels with subtle texture gradient
+    const wallGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    wallGrad.addColorStop(0, '#1e1e1e');
+    wallGrad.addColorStop(0.3, '#242424');
+    wallGrad.addColorStop(0.7, '#222');
+    wallGrad.addColorStop(1, '#1c1c1c');
+    ctx.fillStyle = wallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, 420 + GY);
-    // Subtle panel seams on back wall
+    // Subtle panel seams on back wall with depth effect
     for(let px = -2; px < 20; px++) {
-        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+        ctx.strokeStyle = '#181818'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(px * 40, -GY); ctx.lineTo(px * 40, 400); ctx.stroke();
+        ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(px * 40 + 1, -GY); ctx.lineTo(px * 40 + 1, 400); ctx.stroke();
     }
 
-    // Industrial floor — clean, uncluttered
-    ctx.fillStyle = '#151515';
+    // Industrial floor — polished concrete with HD reflectivity
+    const floorGrad = ctx.createLinearGradient(0, 400, 0, 500);
+    floorGrad.addColorStop(0, '#181818');
+    floorGrad.addColorStop(0.4, '#141414');
+    floorGrad.addColorStop(1, '#101010');
+    ctx.fillStyle = floorGrad;
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
             ctx.strokeStyle = '#111';
             ctx.lineWidth = 1;
             ctx.strokeRect(i * 35, 400 + j * 33, 35, 33);
+            // Subtle tile highlight for wet/polished look
+            ctx.fillStyle = 'rgba(255,255,255,0.008)';
+            ctx.fillRect(i * 35 + 1, 400 + j * 33 + 1, 16, 15);
         }
+    }
+    // Floor reflection of tank glow — ambient colored light pools
+    const tankGlowColors = ['rgba(200,20,20,0.03)', 'rgba(20,160,40,0.03)', 'rgba(20,80,200,0.03)', 'rgba(200,180,10,0.03)'];
+    const tankPositions = [129, 219, 309, 399];
+    for(let gi = 0; gi < 4; gi++) {
+        const gx = tankPositions[gi];
+        const floorGlow = ctx.createRadialGradient(gx, 400, 5, gx, 420, 60);
+        floorGlow.addColorStop(0, tankGlowColors[gi]);
+        floorGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = floorGlow;
+        ctx.fillRect(gx - 60, 400, 120, 80);
     }
 
     // === HATCHERY ENTRANCE — dark tunnel opening in back wall (right side) ===
@@ -11413,11 +11599,26 @@ function drawLevel6CloningRoom() {
                 ctx.beginPath(); ctx.arc(eCx, eCy + 2, 2, 0, Math.PI*2); ctx.fill();
             }
 
-            // Glass rim rings
-            ctx.fillStyle = '#555'; ctx.fillRect(tx - 2, ty - 2, sW + 4, 4);
-            ctx.fillStyle = '#555'; ctx.fillRect(tx - 2, ty + sH - 2, sW + 4, 4);
-            // Glass sheen
-            ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(tx, ty, 4, sH);
+            // Glass rim rings with metallic bevel
+            const rimGrad = ctx.createLinearGradient(tx - 2, 0, tx + sW + 2, 0);
+            rimGrad.addColorStop(0, '#444');
+            rimGrad.addColorStop(0.3, '#666');
+            rimGrad.addColorStop(0.5, '#777');
+            rimGrad.addColorStop(0.7, '#666');
+            rimGrad.addColorStop(1, '#444');
+            ctx.fillStyle = rimGrad;
+            ctx.fillRect(tx - 2, ty - 2, sW + 4, 4);
+            ctx.fillRect(tx - 2, ty + sH - 2, sW + 4, 4);
+            // Glass sheen — HD refraction edge
+            const sheenG = ctx.createLinearGradient(tx, 0, tx + 6, 0);
+            sheenG.addColorStop(0, 'rgba(255,255,255,0.12)');
+            sheenG.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+            sheenG.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = sheenG;
+            ctx.fillRect(tx, ty, 6, sH);
+            // Right-side subtle sheen
+            ctx.fillStyle = 'rgba(255,255,255,0.03)';
+            ctx.fillRect(tx + sW - 3, ty, 3, sH);
 
             // Status light on top
             const pulse = 0.5 + Math.sin(inkT * 0.004 + slurpTanks.indexOf(tank)) * 0.4;
@@ -11426,7 +11627,7 @@ function drawLevel6CloningRoom() {
             ctx.globalAlpha = 1;
 
             // Label
-            ctx.fillStyle = '#666'; ctx.font = '6px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#666'; ctx.font = scaledFont(6, '', 'monospace', true); ctx.textAlign = 'center';
             ctx.fillText(tank.label, tx + sW/2, ty + sH + 14);
         }
 
@@ -11524,7 +11725,7 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(fertX + 15, fertY + 8, fertW - 30, 4);
 
         // FERTILIZER label
-        ctx.fillStyle = '#555'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#555'; ctx.font = scaledFont(8, 'bold', 'monospace', true); ctx.textAlign = 'center';
         ctx.fillText('NUTRIENT SUBSTRATE', fertX + fertW/2, fertY - 5);
     }
 
@@ -11853,7 +12054,7 @@ function drawLevel6CloningRoom() {
             ctx.fillStyle = '#fff';
             ctx.fillRect(posterX, posterY, posterW, posterH);
             ctx.fillStyle = '#cc0000';
-            ctx.font = 'bold 7px Arial';
+            ctx.font = scaledFont(7, 'bold', 'Arial', true);
             ctx.textAlign = 'center';
             ctx.fillText('LAB SAFETY', posterX + posterW/2, posterY + 20);
             ctx.fillText('FIRST', posterX + posterW/2, posterY + 30);
@@ -12207,7 +12408,7 @@ function drawLevel6CloningRoom() {
 
         // "CLONE" badge label
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(cx - 22, cy - 72, 44, 14);
-        ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(8, 'bold', 'Arial', true); ctx.textAlign = 'center';
         ctx.fillText('CLONE #1', cx, cy - 62);
 
         // Dripping vat ooze
@@ -12218,25 +12419,47 @@ function drawLevel6CloningRoom() {
         ctx.fill();
     }
 
-    // Direction prompts
+    // === HD ATMOSPHERIC OVERLAY — ambient particles and volumetric haze ===
+    // Floating dust motes in the air (lit by tank glow)
+    for(let dm = 0; dm < 8; dm++) {
+        const dustPhase = ((t / 8000 + dm * 0.125) % 1);
+        const dustX2 = 50 + dustPhase * 600;
+        const dustY2 = 100 + Math.sin(t / 3000 + dm * 1.7) * 80;
+        const tankNear = Math.floor(dm / 2);
+        const dustAlpha = 0.08 + Math.sin(t / 2000 + dm) * 0.04;
+        ctx.fillStyle = `rgba(200,200,180,${dustAlpha})`;
+        ctx.beginPath(); ctx.arc(dustX2, dustY2, 1, 0, Math.PI * 2); ctx.fill();
+    }
+    // Subtle floor fog / low-lying vapor
+    const fogAlpha = 0.03 + Math.sin(t / 4000) * 0.01;
+    const fogGrad = ctx.createLinearGradient(0, 380, 0, 420);
+    fogGrad.addColorStop(0, `rgba(100,120,100,0)`);
+    fogGrad.addColorStop(0.5, `rgba(80,100,80,${fogAlpha})`);
+    fogGrad.addColorStop(1, `rgba(60,80,60,0)`);
+    ctx.fillStyle = fogGrad;
+    ctx.fillRect(-GX, 380, CANVAS_W, 40);
+
+    // Direction prompts — HD labels
     if (player.x > 620) {
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(610, 360, 90, 20);
-        ctx.fillStyle = '#fff';
-        ctx.fillText('LOBBY →', 655, 376);
+        drawActionLabel('LOBBY →', 655, 376, {color: '#fff', fontSize: 14});
     }
 }
 
 // === Level 6 Furnace Room — dark industrial furnace with evidence of CEO's escape ===
 function drawL6FurnaceRoom() {
-    // Dark industrial walls
-    ctx.fillStyle = '#2b2520';
+    // HD dark industrial walls with gradient
+    const l6fWallGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    l6fWallGrad.addColorStop(0, '#241f1a');
+    l6fWallGrad.addColorStop(0.5, '#2b2520');
+    l6fWallGrad.addColorStop(1, '#1f1a16');
+    ctx.fillStyle = l6fWallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Dark floor tiles
-    ctx.fillStyle = '#1a1815';
+    // HD dark floor with polished concrete gradient
+    const l6fFloorGrad = ctx.createLinearGradient(0, 400, 0, 500);
+    l6fFloorGrad.addColorStop(0, '#1e1a17');
+    l6fFloorGrad.addColorStop(1, '#141210');
+    ctx.fillStyle = l6fFloorGrad;
     ctx.fillRect(-GX, 400, CANVAS_W, CANVAS_H);
     for(let i = -4; i < 24; i++) {
         for(let j = 0; j < 3; j++) {
@@ -12248,35 +12471,70 @@ function drawL6FurnaceRoom() {
 
     // === FURNACE (center-right, prominent) ===
     const fx = 420, fy = 340;
-    // Radial heat glow
+    // HD multi-layer radial heat glow
     const glowPhase = Math.sin(Date.now() / 800) * 0.3 + 0.7;
-    const gradient = ctx.createRadialGradient(fx, fy, 20, fx, fy, 140);
-    gradient.addColorStop(0, `rgba(255,100,0,${glowPhase * 0.5})`);
-    gradient.addColorStop(0.5, `rgba(255,50,0,${glowPhase * 0.2})`);
-    gradient.addColorStop(1, 'rgba(255,0,0,0)');
+    const gradient = ctx.createRadialGradient(fx, fy, 15, fx, fy, 170);
+    gradient.addColorStop(0, `rgba(255,120,20,${glowPhase * 0.6})`);
+    gradient.addColorStop(0.3, `rgba(255,80,0,${glowPhase * 0.35})`);
+    gradient.addColorStop(0.6, `rgba(255,40,0,${glowPhase * 0.15})`);
+    gradient.addColorStop(1, 'rgba(200,20,0,0)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(fx, fy, 140, 0, Math.PI * 2);
+    ctx.arc(fx, fy, 170, 0, Math.PI * 2);
     ctx.fill();
+    // Floor reflection
+    const l6fFloorGlow = ctx.createRadialGradient(fx, 400, 10, fx, 425, 100);
+    l6fFloorGlow.addColorStop(0, `rgba(255,80,0,${glowPhase * 0.1})`);
+    l6fFloorGlow.addColorStop(1, 'rgba(255,40,0,0)');
+    ctx.fillStyle = l6fFloorGlow;
+    ctx.fillRect(fx - 100, 400, 200, 80);
 
-    // Furnace body (industrial steel)
+    // Furnace body — HD riveted steel casing
+    ctx.fillStyle = '#3e3e3e';
+    ctx.fillRect(fx - 68, fy - 48, 136, 96);
     ctx.fillStyle = '#3a3a3a';
     ctx.fillRect(fx - 65, fy - 45, 130, 90);
+    // Steel highlight edge
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(fx - 65, fy - 45, 130, 3);
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(fx - 55, fy - 35, 110, 70);
+    // HD rivets
+    for(let ri = 0; ri < 6; ri++) {
+        ctx.fillStyle = '#555';
+        ctx.beginPath(); ctx.arc(fx - 60 + ri * 24, fy - 41, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(fx - 60 + ri * 24, fy + 41, 2, 0, Math.PI * 2); ctx.fill();
+    }
     // Fire window
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(fx - 42, fy - 22, 84, 44);
-    // Perpetual glow inside
-    ctx.fillStyle = `rgba(255,100,0,${glowPhase})`;
+    // Perpetual glow inside — HD gradient
+    const fireGrad = ctx.createLinearGradient(fx - 38, fy, fx + 38, fy);
+    fireGrad.addColorStop(0, `rgba(255,60,0,${glowPhase * 0.8})`);
+    fireGrad.addColorStop(0.3, `rgba(255,120,0,${glowPhase})`);
+    fireGrad.addColorStop(0.7, `rgba(255,100,0,${glowPhase})`);
+    fireGrad.addColorStop(1, `rgba(255,50,0,${glowPhase * 0.7})`);
+    ctx.fillStyle = fireGrad;
     ctx.fillRect(fx - 38, fy - 18, 76, 36);
-    // Flickering flames
+    // HD flickering flames with inner core
     for(let i = 0; i < 6; i++) {
         const flameX = fx - 30 + i * 12;
-        const flameH = 20 + Math.sin(Date.now() / 150 + i * 1.3) * 10;
-        const flameY = fy + 10 - flameH;
-        ctx.fillStyle = `rgba(255,${150 + i * 15},0,0.8)`;
-        ctx.fillRect(flameX, flameY, 6, flameH);
+        const flameH = 22 + Math.sin(Date.now() / 150 + i * 1.3) * 12;
+        const flameY = fy + 12 - flameH;
+        // Outer flame
+        ctx.fillStyle = `rgba(255,${120 + i * 15},0,0.75)`;
+        ctx.fillRect(flameX, flameY, 7, flameH);
+        // Inner bright core
+        ctx.fillStyle = `rgba(255,${220 + i * 5},${50 + i * 15},0.5)`;
+        ctx.fillRect(flameX + 1, flameY + flameH * 0.3, 4, flameH * 0.5);
+    }
+    // Heat shimmer above furnace
+    for(let hs = 0; hs < 3; hs++) {
+        const shimX = fx + Math.sin(Date.now() / 400 + hs) * 12;
+        ctx.fillStyle = `rgba(255,200,100,${0.03 + Math.sin(Date.now() / 300 + hs) * 0.01})`;
+        ctx.beginPath();
+        ctx.ellipse(shimX, fy - 55 - hs * 15, 20 - hs * 4, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
     // Chimney/exhaust pipe going up
     ctx.fillStyle = '#444';
@@ -12337,7 +12595,7 @@ function drawL6FurnaceRoom() {
     ctx.fillStyle = '#ddd';
     ctx.fillRect(jsX + 28, jsY, 6, 5);
     ctx.fillStyle = '#cc2222';
-    ctx.font = '3px Arial';
+    ctx.font = scaledFont(3, '', 'Arial', true);
     ctx.textAlign = 'center';
     ctx.fillText('PT', jsX + 31, jsY + 4);
 
@@ -12730,7 +12988,7 @@ function drawLevel6UnderbellyHallway() {
         ctx.fillStyle = '#222';
         ctx.fillRect(cr.x + 6, cr.y + cr.h * 0.25, cr.w - 12, cr.h * 0.5);
         ctx.fillStyle = '#c8b888';
-        ctx.font = 'bold 8px Arial';
+        ctx.font = scaledFont(8, 'bold', 'Arial', true);
         ctx.textAlign = 'center';
         const lines = crateLabels[ci].split('\n');
         for(let li = 0; li < lines.length; li++) {
@@ -12833,17 +13091,41 @@ function drawLevel6Underbelly() {
     const baseDim = flicker > 0 ? 0.3 + Math.random() * 0.4 : 1;
     const dimFactor = baseDim;
 
-    // Dark grimy concrete walls
-    ctx.fillStyle = `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`;
+    // Dark grimy concrete walls — HD gradient for depth
+    const ubWallGrad = ctx.createLinearGradient(0, -GY, 0, 400);
+    ubWallGrad.addColorStop(0, `rgb(${Math.floor(28 * dimFactor)},${Math.floor(24 * dimFactor)},${Math.floor(22 * dimFactor)})`);
+    ubWallGrad.addColorStop(0.5, `rgb(${Math.floor(35 * dimFactor)},${Math.floor(30 * dimFactor)},${Math.floor(28 * dimFactor)})`);
+    ubWallGrad.addColorStop(1, `rgb(${Math.floor(30 * dimFactor)},${Math.floor(26 * dimFactor)},${Math.floor(24 * dimFactor)})`);
+    ctx.fillStyle = ubWallGrad;
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Water stain streaks on walls
+    // Concrete wall texture — subtle noise-like pattern for HD realism
+    for(let row = 0; row < 12; row++) {
+        for(let col = -1; col < 12; col++) {
+            const varR = ((col * 7 + row * 13) % 5);
+            const varG = ((col * 11 + row * 3) % 4);
+            ctx.fillStyle = `rgba(${30 + varR},${25 + varG},${22 + varR},${0.06 * dimFactor})`;
+            ctx.fillRect(col * 70, -GY + row * 35, 70, 35);
+        }
+    }
+
+    // Water stain streaks on walls — HD with gradual fade
     for(let i = 0; i < 8; i++) {
         const sx = 60 + i * 85;
-        ctx.fillStyle = `rgba(20,35,20,${0.3 * dimFactor})`;
-        ctx.fillRect(sx, 30 + i * 7, 3, 180 + i * 20);
-        ctx.fillStyle = `rgba(15,30,15,${0.15 * dimFactor})`;
+        const stainLen = 180 + i * 20;
+        // Main stain with gradient fade
+        const stainGrad = ctx.createLinearGradient(0, 30 + i * 7, 0, 30 + i * 7 + stainLen);
+        stainGrad.addColorStop(0, `rgba(20,35,20,${0.35 * dimFactor})`);
+        stainGrad.addColorStop(0.6, `rgba(25,40,20,${0.25 * dimFactor})`);
+        stainGrad.addColorStop(1, `rgba(20,30,15,${0.08 * dimFactor})`);
+        ctx.fillStyle = stainGrad;
+        ctx.fillRect(sx, 30 + i * 7, 3, stainLen);
+        // Spread stain
+        ctx.fillStyle = `rgba(15,30,15,${0.12 * dimFactor})`;
         ctx.fillRect(sx + 3, 50 + i * 12, 5, 160 + i * 15);
+        // Mineral deposit edge (whitish crust at stain borders)
+        ctx.fillStyle = `rgba(180,170,150,${0.06 * dimFactor})`;
+        ctx.fillRect(sx - 1, 30 + i * 7, 1, stainLen * 0.7);
     }
 
     // Cobblestone floor — crude, uneven stones defining the floor area
@@ -12885,18 +13167,36 @@ function drawLevel6Underbelly() {
     const pipeColors = ['#666','#777','#555'];
     for(let p = 0; p < 3; p++) {
         const py = 40 + p * 28;
-        ctx.fillStyle = pipeColors[p];
+        // Pipe body with cylindrical gradient
+        const pipeGrad = ctx.createLinearGradient(0, py, 0, py + 10);
+        pipeGrad.addColorStop(0, `rgba(${parseInt(pipeColors[p].slice(1,3),16) + 30},${parseInt(pipeColors[p].slice(3,5),16) + 30},${parseInt(pipeColors[p].slice(5,7),16) + 30},${dimFactor})`);
+        pipeGrad.addColorStop(0.3, pipeColors[p]);
+        pipeGrad.addColorStop(0.7, pipeColors[p]);
+        pipeGrad.addColorStop(1, `rgba(${parseInt(pipeColors[p].slice(1,3),16) - 20},${parseInt(pipeColors[p].slice(3,5),16) - 20},${parseInt(pipeColors[p].slice(5,7),16) - 20},${dimFactor})`);
+        ctx.fillStyle = pipeGrad;
         ctx.fillRect(-GX, py, CANVAS_W, 10);
-        // Pipe highlight
-        ctx.fillStyle = `rgba(255,255,255,${0.15 * dimFactor})`;
-        ctx.fillRect(-GX, py, CANVAS_W, 3);
+        // Pipe specular highlight
+        ctx.fillStyle = `rgba(255,255,255,${0.18 * dimFactor})`;
+        ctx.fillRect(-GX, py + 1, CANVAS_W, 2);
         // Pipe shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(-GX, py + 8, CANVAS_W, 2);
-        // Rust patches
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(-GX, py + 9, CANVAS_W, 3);
+        // Rust patches with texture variation
         ctx.fillStyle = `rgba(139,90,43,${0.4 * dimFactor})`;
         ctx.fillRect(120 + p * 180, py + 2, 25, 6);
         ctx.fillRect(350 + p * 90, py + 1, 18, 7);
+        // Rust drip stains below patches
+        ctx.fillStyle = `rgba(120,75,30,${0.15 * dimFactor})`;
+        ctx.fillRect(125 + p * 180, py + 10, 2, 20 + p * 8);
+        ctx.fillRect(355 + p * 90, py + 10, 2, 15 + p * 5);
+        // Pipe joint flanges every ~200px
+        for(let j = 0; j < 4; j++) {
+            const jx = 50 + j * 180 + p * 30;
+            ctx.fillStyle = `rgba(80,80,80,${0.7 * dimFactor})`;
+            ctx.fillRect(jx, py - 1, 8, 12);
+            ctx.fillStyle = `rgba(100,100,100,${0.5 * dimFactor})`;
+            ctx.fillRect(jx + 1, py, 6, 10);
+        }
     }
     // Dripping water from pipes
     const drips = level6.barrelDrip.drips;
@@ -12923,20 +13223,51 @@ function drawLevel6Underbelly() {
     ctx.fillRect(lightX - 30, lightY, 60, 8);
     // Fluorescent tube
     if(flicker <= 0 || Math.random() > 0.3) {
-        ctx.fillStyle = `rgba(255,255,200,${0.8 * dimFactor})`;
+        // Tube glow halo
+        ctx.fillStyle = `rgba(255,255,200,${0.15 * dimFactor})`;
+        ctx.fillRect(lightX - 28, lightY + 6, 56, 8);
+        // Tube body
+        ctx.fillStyle = `rgba(255,255,200,${0.85 * dimFactor})`;
         ctx.fillRect(lightX - 25, lightY + 8, 50, 4);
-        // Light cone
-        ctx.fillStyle = `rgba(255,255,200,${0.06 * dimFactor})`;
+        // Tube specular
+        ctx.fillStyle = `rgba(255,255,255,${0.3 * dimFactor})`;
+        ctx.fillRect(lightX - 20, lightY + 8, 40, 1);
+        // Light cone — HD multi-layer volumetric
+        const coneGrad = ctx.createLinearGradient(0, lightY + 12, 0, 400);
+        coneGrad.addColorStop(0, `rgba(255,255,200,${0.1 * dimFactor})`);
+        coneGrad.addColorStop(0.3, `rgba(255,255,200,${0.06 * dimFactor})`);
+        coneGrad.addColorStop(0.7, `rgba(255,255,180,${0.03 * dimFactor})`);
+        coneGrad.addColorStop(1, `rgba(255,255,180,${0.01 * dimFactor})`);
+        ctx.fillStyle = coneGrad;
         ctx.beginPath();
         ctx.moveTo(lightX - 25, lightY + 12);
-        ctx.lineTo(lightX - 80, 400);
-        ctx.lineTo(lightX + 80, 400);
+        ctx.lineTo(lightX - 90, 400);
+        ctx.lineTo(lightX + 90, 400);
         ctx.lineTo(lightX + 25, lightY + 12);
         ctx.closePath();
         ctx.fill();
+        // Inner bright cone
+        ctx.fillStyle = `rgba(255,255,220,${0.04 * dimFactor})`;
+        ctx.beginPath();
+        ctx.moveTo(lightX - 15, lightY + 12);
+        ctx.lineTo(lightX - 50, 400);
+        ctx.lineTo(lightX + 50, 400);
+        ctx.lineTo(lightX + 15, lightY + 12);
+        ctx.closePath();
+        ctx.fill();
+        // Dust motes in light beam
+        for(let dm = 0; dm < 5; dm++) {
+            const dustPhase = (t / 3000 + dm * 0.2) % 1;
+            const dustY = lightY + 30 + dustPhase * 340;
+            const dustX = lightX + Math.sin(t / 2000 + dm * 1.5) * (20 + dustPhase * 30);
+            ctx.fillStyle = `rgba(255,255,200,${(0.15 - dustPhase * 0.1) * dimFactor})`;
+            ctx.beginPath(); ctx.arc(dustX, dustY, 1, 0, Math.PI * 2); ctx.fill();
+        }
     } else {
-        // Off state — dark tube
+        // Off state — dark tube with faint afterglow
         ctx.fillStyle = '#333';
+        ctx.fillRect(lightX - 25, lightY + 8, 50, 4);
+        ctx.fillStyle = 'rgba(255,255,200,0.02)';
         ctx.fillRect(lightX - 25, lightY + 8, 50, 4);
     }
 
@@ -12986,9 +13317,9 @@ function drawLevel6Underbelly() {
     }
     ctx.fillStyle = '#111';
     ctx.beginPath(); ctx.arc(brlX, brlY - 10, 5, 0, Math.PI * 2); ctx.fill();
-    // "RADIOACTIVE" label on barrel
+    // "RADIOACTIVE" label on barrel — HD scaled
     ctx.fillStyle = `rgba(255,215,0,${0.7 + Math.sin(t / 400) * 0.2})`;
-    ctx.font = 'bold 7px Arial';
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
     ctx.textAlign = 'center';
     ctx.fillText('RADIOACTIVE', brlX, brlY + 28);
 
@@ -13060,7 +13391,7 @@ function drawLevel6Underbelly() {
     }
     // "DRAIN" label etched into floor
     ctx.fillStyle = `rgba(80,80,70,${0.5 * dimFactor})`;
-    ctx.font = 'bold 8px Arial';
+    ctx.font = scaledFont(8, 'bold', 'Arial', true);
     ctx.textAlign = 'center';
     ctx.fillText('DRAIN', sewX, sewY + 18);
 
@@ -13199,7 +13530,7 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = '#ddd';
     ctx.fillRect(mx + 10, my - 20 + breathe, 8, 6);
     ctx.fillStyle = '#333';
-    ctx.font = '4px Arial';
+    ctx.font = scaledFont(4, '', 'Arial', true);
     ctx.textAlign = 'center';
     ctx.fillText('PT', mx + 14, my - 15 + breathe);
 
@@ -13366,7 +13697,7 @@ function drawLevel6Underbelly() {
     ctx.textAlign = 'center';
     ctx.fillText('DANGER', cageX + cageW + 25, cageY + 42);
     ctx.fillStyle = '#ffcc00';
-    ctx.font = '7px Arial';
+    ctx.font = scaledFont(7, '', 'Arial', true);
     ctx.fillText('DO NOT FEED', cageX + cageW + 25, cageY + 55);
 
     // === PM EATING ANIMATION ===
@@ -14144,7 +14475,7 @@ function drawLevel6CEOOffice() {
             ctx.ellipse(sx, sy, 5, 5, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 6px Arial';
+            ctx.font = scaledFont(6, 'bold', 'Arial', true);
             ctx.textAlign = 'center';
             ctx.fillText('$', sx, sy + 3);
         };
@@ -14547,7 +14878,7 @@ function drawLevel6CEOOffice() {
 
         // Terminal-style text
         ctx.fillStyle = '#0a0a0a';
-        ctx.font = 'bold 6px monospace';
+        ctx.font = scaledFont(6, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText('SYSTEM', monX + 16, monY + 10);
         ctx.fillText('READY', monX + 16, monY + 17);
@@ -14662,7 +14993,7 @@ function drawLevel6CEOOffice() {
     ctx.arc(trophyCenterX, cabinetY + 22, 10, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#0a0a0a';
-    ctx.font = 'bold 6px Arial';
+    ctx.font = scaledFont(6, 'bold', 'Arial', true);
     ctx.textAlign = 'center';
     ctx.fillText('CEO', trophyCenterX, cabinetY + 25);
 
@@ -14948,7 +15279,7 @@ function drawLevel6CEOOffice() {
 
         // Stenciled text
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.font = 'bold 5px monospace';
+        ctx.font = scaledFont(5, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText('PIPE', missileX, missileY + 30);
         ctx.fillText('TECH', missileX, missileY + 36);
@@ -15029,7 +15360,7 @@ function drawLevel6CEOOffice() {
         }
     }
     ctx.fillStyle = '#f5f2ec';
-    ctx.font = 'bold 4px Arial';
+    ctx.font = scaledFont(4, 'bold', 'Arial', true);
     ctx.textAlign = 'center';
     ctx.fillText('PIPETECH', tvX + 13, tvY + 17);
     // Colored stripes under sign (matching level 5)
@@ -15179,7 +15510,7 @@ function drawLevel6CEOOffice() {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(tvX, tvY, tvW, 9);
     ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 5px monospace';
+    ctx.font = scaledFont(5, 'bold', 'monospace', true);
     ctx.textAlign = 'left';
     ctx.fillText('CAM 1  PIPE ROOM', tvX + 2, tvY + 7);
     // Timestamp
@@ -15519,7 +15850,7 @@ function drawLevel6CEOOffice() {
         ctx.fillRect(bbx - 8, bby - 2, 16, 4);
         // Label
         ctx.fillStyle = '#ff6600';
-        ctx.font = 'bold 5px monospace';
+        ctx.font = scaledFont(5, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText('BLACK BOX', bbx, bby + 14);
 
@@ -16783,7 +17114,7 @@ function drawCEO(x, y, facing) {
             // Dollar sign
             if(alive) {
                 ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 8px Arial';
+                ctx.font = scaledFont(8, 'bold', 'Arial', true);
                 ctx.textAlign = 'center';
                 ctx.fillText('$', ix + iconW * 0.5, iy + iconH * 0.72);
             }
@@ -17041,7 +17372,7 @@ function drawHolsterButton() {
     }
 
     // Swap arrow hint at bottom
-    ctx.fillStyle = '#888'; ctx.font = '8px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#888'; ctx.font = scaledFont(8, '', 'Arial', true); ctx.textAlign = 'center';
     ctx.fillText('\u21c4 swap', cx, btnY + btnH - 4);
 }
 
@@ -17111,7 +17442,7 @@ function drawHolsterUI() {
         ctx.fillText(w.name, sx + 56, sy + 28);
 
         // Ammo count
-        ctx.fillStyle = '#aaa'; ctx.font = '10px Arial';
+        ctx.fillStyle = '#aaa'; ctx.font = scaledFont(10, '', 'Arial', false);
         ctx.fillText('AMMO: ' + w.ammo, sx + 56, sy + 46);
 
         // Ammo pips
@@ -17123,7 +17454,7 @@ function drawHolsterUI() {
     }
 
     // Close hint
-    ctx.fillStyle = '#888'; ctx.font = '10px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#888'; ctx.font = scaledFont(10, '', 'Arial', false); ctx.textAlign = 'center';
     ctx.fillText('tap weapon to equip  •  tap holster to close', uiX + totalW / 2, uiY + slotH + 32);
 }
 
@@ -17434,6 +17765,9 @@ function drawScene() {
     // Clear full expanded canvas and translate to center game area
     ctx.save();
     ctx.scale(dpr, dpr);
+    // HD quality: enable high-quality image smoothing for photorealistic assets
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.translate(GX, GY);
@@ -18479,7 +18813,7 @@ function drawScene() {
             ctx.fillRect(ceo.x - 45, ceo.y - 70, 90, 16);
             ctx.strokeStyle = '#ff2222'; ctx.lineWidth = 1;
             ctx.strokeRect(ceo.x - 45, ceo.y - 70, 90, 16);
-            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(8, 'bold', 'monospace', true); ctx.textAlign = 'center';
             ctx.fillText('\u26a0 CEO PURSUIT \u26a0', ceo.x, ceo.y - 58);
         }
         // Dead pursuing CEO (non-bridge death)
@@ -19188,7 +19522,7 @@ function drawScene() {
                 ctx.shadowBlur = 0;
             }
             // "BLACK BOX" label
-            ctx.fillStyle = '#ff6666'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(7, 'bold', 'monospace', true); ctx.textAlign = 'center';
             ctx.fillText('BLACK BOX', bbX + bbW/2, bbY + bbH - 6);
 
             // Fedora silhouette resting on rubble — slightly larger
@@ -19676,7 +20010,7 @@ function drawScene() {
     ctx.fillRect(50, 102, 160, 1);
 
     ctx.fillStyle = '#d0d0d0';
-    ctx.font = '10px Arial';
+    ctx.font = scaledFont(10, '', 'Arial', false);
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 130, 117);
 
     // Four colored stripe bands on the sign (below tagline)
