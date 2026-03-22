@@ -961,17 +961,20 @@ function initLevel(lv) {
         level6.keycardY = 0;
         level6.cloningDoorUnlocked = false; // concealed door to furnace room
         level6.cloningDoorOpen = 0; // slide animation 0-1
-        // Red PM clone follower — spawns in employee lobby, follows player on employee floor
+        // Red PM clone follower — spawns in cloning room, follows player on employee floor
         level6.cloneFollower = {
             active: false,       // becomes true when clone is recruited via dialogue
-            room: 'employeeLobby', // tracks which room the clone is in
-            x: 540,              // clone position (starts near elevator)
-            y: 380,
+            room: 'cloningRoom', // tracks which room the clone is in
+            x: 430,              // clone position (starts next to cloning boss)
+            y: 375,
             facing: 'left',
             targetX: 540,        // where clone wants to walk to (trails player)
             followDist: 45       // how far behind player to trail
         };
-        // Red PM dialogue state — typewriter dialogue when first entering employee lobby
+        // Red PM clone awakening — triggered when cloning boss is killed
+        level6.cloneAwakened = false;
+        level6.cloneAwakenTime = 0;
+        // Red PM dialogue state — typewriter dialogue after clone awakens in cloning room
         level6.redPMDialogue = false;
         level6.redPMDialogueLine = 0;
         level6.redPMDialogueChars = 0;
@@ -11463,24 +11466,9 @@ function drawLevel6EmployeeLobby() {
 
     // (3D printer moved to employee pipe room)
 
-    // === RED PM in employee lobby — waiting near elevator or following ===
-    if(!level6.factoryReset) {
-        const cf = level6.cloneFollower;
-        if(cf.active && cf.room === 'employeeLobby') {
-            drawCloneFollower(cf.x, cf.y, cf.facing);
-        } else if(!cf.active) {
-            // Draw Red PM standing near elevator, waiting for dialogue
-            drawCloneFollower(540, 380, 'left');
-            // Speech bubble hint if player is nearby and dialogue hasn't started
-            if(!level6.redPMDialogue && !level6.redPMDialogueShown && Math.abs(player.x - 540) < 120) {
-                ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                ctx.fillRect(490, 310, 100, 20);
-                ctx.fillStyle = '#ff6666';
-                ctx.font = scaledFont(10, 'bold', 'Arial', false);
-                ctx.textAlign = 'center';
-                ctx.fillText('...?', 540, 324);
-            }
-        }
+    // === RED PM clone follower in employee lobby (only when following, no longer spawns here) ===
+    if(!level6.factoryReset && level6.cloneFollower.active && level6.cloneFollower.room === 'employeeLobby') {
+        drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
     }
 
     // Direction prompts
@@ -12375,21 +12363,23 @@ function drawLevel6CloningRoom() {
 
     // (Slurpee tanks, fertilizer, fetal tanks, centrifuge, and conveyor are all drawn above as wall-mounted pipeline)
 
-    // === FRESHLY HATCHED RED PM CLONE — only visible before recruitment, hidden after factory reset ===
+    // === RED PM CLONE — dazed next to boss, awakens when boss is killed ===
     if(!level6.cloneFollower.active && !level6.factoryReset) {
         const cloneX = 430, cloneY = 375; // Next to cloning boss (boss at ~350)
         const clt = Date.now();
-        const cloneWobble = Math.sin(clt / 600) * 2; // dazed wobble
+        const awakened = level6.cloneAwakened;
+        const cloneWobble = awakened ? 0 : Math.sin(clt / 600) * 2; // dazed wobble (stops when awakened)
 
-        // Wet sheen aura (just emerged from vat)
-        ctx.fillStyle = 'rgba(255,50,50,0.08)';
-        ctx.beginPath(); ctx.arc(cloneX, cloneY - 20, 28, 0, Math.PI * 2); ctx.fill();
+        // Wet sheen aura (just emerged from vat) — fades after awakening
+        if(!awakened) {
+            ctx.fillStyle = 'rgba(255,50,50,0.08)';
+            ctx.beginPath(); ctx.arc(cloneX, cloneY - 20, 28, 0, Math.PI * 2); ctx.fill();
+        }
 
-        // Simple red PM clone — hooded jumpsuit, dazed from hatching
         const cx = cloneX, cy = cloneY;
         const s2 = 2;
 
-        // Red hooded jumpsuit hood (same style as regular PM) — slightly askew from hatching
+        // Red hooded jumpsuit hood — slightly askew when dazed, straight when awakened
         ctx.save();
         ctx.translate(cx + cloneWobble * 0.5, 0);
         ctx.fillStyle = '#cc2222';
@@ -12411,29 +12401,56 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = '#f5d5a8';
         ctx.fillRect(cx - 4*s2, cy - 13*s2, 8*s2, 8*s2);
 
-        // Eyes — dazed (spiral/dizzy)
-        ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
-        for(const [ex2, ey2] of [[-3*s2, cy - 11*s2],[2*s2, cy - 11*s2]]) {
-            ctx.beginPath(); ctx.arc(cx + ex2, ey2, 3, 0, Math.PI * 2); ctx.stroke();
-            ctx.beginPath(); ctx.arc(cx + ex2, ey2, 1, 0, Math.PI * 2); ctx.stroke();
+        if(awakened) {
+            // Eyes — alert, natural (small solid dots, looking toward player)
+            ctx.fillStyle = '#333';
+            const lookDir = player.x < cx ? -1 : 1;
+            ctx.fillRect(cx - 3*s2 + lookDir, cy - 11*s2, 3, 3);
+            ctx.fillRect(cx + 2*s2 + lookDir, cy - 11*s2, 3, 3);
+            // Eyebrows — slightly raised (surprised/curious)
+            ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(cx - 4*s2, cy - 12*s2 - 1); ctx.lineTo(cx - 1*s2, cy - 12*s2 - 2);
+            ctx.moveTo(cx + 4*s2, cy - 12*s2 - 1); ctx.lineTo(cx + 1*s2, cy - 12*s2 - 2);
+            ctx.stroke();
+            // Mouth — slightly open, alert expression
+            ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(cx, cy - 7*s2, 2, 0.3, Math.PI - 0.3); ctx.stroke();
+        } else {
+            // Eyes — dazed (spiral/dizzy)
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+            for(const [ex2, ey2] of [[-3*s2, cy - 11*s2],[2*s2, cy - 11*s2]]) {
+                ctx.beginPath(); ctx.arc(cx + ex2, ey2, 3, 0, Math.PI * 2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(cx + ex2, ey2, 1, 0, Math.PI * 2); ctx.stroke();
+            }
+            // Mouth — slack, dazed
+            ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(cx, cy - 7*s2, 3, 0.4, Math.PI - 0.4); ctx.stroke();
         }
-        // Mouth — slack, dazed
-        ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(cx, cy - 7*s2, 3, 0.4, Math.PI - 0.4); ctx.stroke();
 
-        // Red jumpsuit torso — slightly wet/glistening
+        // Red jumpsuit torso — slightly wet/glistening when dazed
         ctx.fillStyle = '#cc2222';
         ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 11*s2);
-        ctx.fillStyle = 'rgba(255,120,120,0.18)'; // wet sheen highlight
-        ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 5);
+        if(!awakened) {
+            ctx.fillStyle = 'rgba(255,120,120,0.18)'; // wet sheen highlight
+            ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 5);
+        }
 
-        // Arms slightly raised (just climbed out of vat)
+        // Arms — raised when dazed, at sides when awakened
         ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - 8*s2, cy - 3*s2 + cloneWobble, 2*s2, 7*s2);
-        ctx.fillRect(cx + 6*s2, cy - 3*s2 - cloneWobble, 2*s2, 7*s2);
-        ctx.fillStyle = '#f5d5a8'; // hands
-        ctx.fillRect(cx - 8*s2, cy + 3*s2 + cloneWobble, 2*s2, 2*s2);
-        ctx.fillRect(cx + 6*s2, cy + 3*s2 - cloneWobble, 2*s2, 2*s2);
+        if(awakened) {
+            ctx.fillRect(cx - 8*s2, cy - 3*s2, 2*s2, 8*s2);
+            ctx.fillRect(cx + 6*s2, cy - 3*s2, 2*s2, 8*s2);
+            ctx.fillStyle = '#f5d5a8'; // hands
+            ctx.fillRect(cx - 8*s2, cy + 5*s2, 2*s2, 2*s2);
+            ctx.fillRect(cx + 6*s2, cy + 5*s2, 2*s2, 2*s2);
+        } else {
+            ctx.fillRect(cx - 8*s2, cy - 3*s2 + cloneWobble, 2*s2, 7*s2);
+            ctx.fillRect(cx + 6*s2, cy - 3*s2 - cloneWobble, 2*s2, 7*s2);
+            ctx.fillStyle = '#f5d5a8'; // hands
+            ctx.fillRect(cx - 8*s2, cy + 3*s2 + cloneWobble, 2*s2, 2*s2);
+            ctx.fillRect(cx + 6*s2, cy + 3*s2 - cloneWobble, 2*s2, 2*s2);
+        }
 
         // Legs — red jumpsuit color
         ctx.fillStyle = '#cc2222';
@@ -12449,12 +12466,24 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = '#ff4444'; ctx.font = scaledFont(8, 'bold', 'Arial', true); ctx.textAlign = 'center';
         ctx.fillText('CLONE #1', cx, cy - 62);
 
-        // Dripping vat ooze
-        const oozePct = ((clt * 0.0004) % 1);
-        ctx.fillStyle = `rgba(255,80,80,${0.5 - oozePct * 0.4})`;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy - 8 + oozePct * 40, 4, 12 * oozePct, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if(awakened) {
+            // Speech bubble hint — approach to talk
+            if(!level6.redPMDialogue && !level6.redPMDialogueShown && Math.abs(player.x - cx) < 120) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(cx - 25, cy - 88, 50, 14);
+                ctx.fillStyle = '#ff6666';
+                ctx.font = scaledFont(9, 'bold', 'Arial', false);
+                ctx.textAlign = 'center';
+                ctx.fillText('...?', cx, cy - 78);
+            }
+        } else {
+            // Dripping vat ooze
+            const oozePct = ((clt * 0.0004) % 1);
+            ctx.fillStyle = `rgba(255,80,80,${0.5 - oozePct * 0.4})`;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 8 + oozePct * 40, 4, 12 * oozePct, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     // === HD ATMOSPHERIC OVERLAY — ambient particles and volumetric haze ===
@@ -18906,8 +18935,8 @@ function drawScene() {
                 ctx.restore();
             }
 
-            // === RED PM DIALOGUE OVERLAY — typewriter dialogue in employee lobby ===
-            if(level6.redPMDialogue && level6.room === 'employeeLobby') {
+            // === RED PM DIALOGUE OVERLAY — typewriter dialogue in cloning room (or employee lobby for revisits) ===
+            if(level6.redPMDialogue && (level6.room === 'cloningRoom' || level6.room === 'employeeLobby')) {
                 const redDlgLines = ["What is this place?", "Can I follow you?"];
                 const currentRedLine = redDlgLines[level6.redPMDialogueLine] || '';
                 const redCharsShown = Math.min(Math.floor(level6.redPMDialogueChars), currentRedLine.length);
@@ -21945,6 +21974,7 @@ function update() {
                             level6.hallwayCloningBoss.y = 365;
                             level6.hallwayCloningBoss.paused = false;
                             level6.cloneFollower.active = false;
+                            level6.cloneAwakened = false;
                             level6.keycardOnGround = false;
                         }
                         // Reset Red PM dialogue state for revisits (if not completed)
@@ -21953,10 +21983,11 @@ function update() {
                             level6.redPMDialogue = false;
                             level6.redPMDialogueLine = 0;
                             level6.redPMDialogueChars = 0;
+                            level6.cloneAwakened = false;
                             level6.cloneFollower.active = false;
-                            level6.cloneFollower.x = 540;
-                            level6.cloneFollower.y = 380;
-                            level6.cloneFollower.room = 'employeeLobby';
+                            level6.cloneFollower.x = 430;
+                            level6.cloneFollower.y = 375;
+                            level6.cloneFollower.room = 'cloningRoom';
                             level6.cloneFollower.facing = 'left';
                         }
                     }
@@ -22506,50 +22537,11 @@ function update() {
             else if(level6.room === 'employeeLobby') {
                 player.y = 380;
 
-                // === RED PM DIALOGUE — trigger when player approaches, block input until done ===
-                if(!level6.factoryReset && !level6.cloneFollower.active) {
-                    if(!level6.redPMDialogueShown && !level6.redPMDialogue && Math.abs(player.x - 540) < 80) {
-                        level6.redPMDialogue = true;
-                        level6.redPMDialogueLine = 0;
-                        level6.redPMDialogueChars = 0;
-                        level6.redPMDialogueShown = true;
-                    }
-                    if(level6.redPMDialogue) {
-                        const redDlgLines = ["What is this place?", "Can I follow you?"];
-                        const currentRedLine = redDlgLines[level6.redPMDialogueLine] || '';
-                        if(level6.redPMDialogueChars < currentRedLine.length) {
-                            level6.redPMDialogueChars += 1.2;
-                        }
-                        if(keys[' '] || keys['action']) {
-                            keys[' '] = false;
-                            keys['action'] = false;
-                            const charsShown = Math.floor(level6.redPMDialogueChars);
-                            if(charsShown < currentRedLine.length) {
-                                level6.redPMDialogueChars = currentRedLine.length;
-                            } else if(level6.redPMDialogueLine < redDlgLines.length - 1) {
-                                level6.redPMDialogueLine++;
-                                level6.redPMDialogueChars = 0;
-                            } else {
-                                level6.redPMDialogue = false;
-                                level6.redPMAccepted = true;
-                                level6.cloneFollower.active = true;
-                                level6.cloneFollower.room = 'employeeLobby';
-                                level6.cloneFollower.x = 540;
-                                level6.cloneFollower.y = 380;
-                                level6.cloneFollower.facing = player.facing;
-                            }
-                        }
-                    }
-                }
-                // Update clone follower AI
+                // Update clone follower AI (dialogue now triggers in cloning room)
                 if(level6.cloneFollower.active) {
                     updateCloneFollower();
                 }
-                // Block all other input during Red PM dialogue
-                if(level6.redPMDialogue) {
-                    // Skip rest of lobby logic
-                }
-                else {
+                {
                     // Elevator interaction on right side
                     if(player.x > 560 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
                         level6.elevatorUI = true;
@@ -22627,6 +22619,11 @@ function update() {
                             level6.keycardX = cb.x;
                             level6.keycardY = 385;
                             score += 2000;
+                            // Awaken the Red PM clone — boss death shakes him out of trance
+                            if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
+                                level6.cloneAwakened = true;
+                                level6.cloneAwakenTime = Date.now();
+                            }
                             break;
                         }
                     }
@@ -22635,8 +22632,47 @@ function update() {
                 // Track whether action was consumed this frame
                 let actionConsumed = false;
 
+                // === RED PM CLONE DIALOGUE — triggered after boss kill, player approaches awakened clone ===
+                const cloneDialogueX = 430; // clone position
+                if(level6.cloneAwakened && !level6.cloneFollower.active && !level6.factoryReset) {
+                    if(!level6.redPMDialogueShown && !level6.redPMDialogue && Math.abs(player.x - cloneDialogueX) < 80 && (keys[' '] || keys['action'])) {
+                        level6.redPMDialogue = true;
+                        level6.redPMDialogueLine = 0;
+                        level6.redPMDialogueChars = 0;
+                        level6.redPMDialogueShown = true;
+                        keys[' '] = false; keys['action'] = false;
+                        actionConsumed = true;
+                    }
+                    if(level6.redPMDialogue) {
+                        const redDlgLines = ["What is this place?", "Can I follow you?"];
+                        const currentRedLine = redDlgLines[level6.redPMDialogueLine] || '';
+                        if(level6.redPMDialogueChars < currentRedLine.length) {
+                            level6.redPMDialogueChars += 1.2;
+                        }
+                        if(keys[' '] || keys['action']) {
+                            keys[' '] = false; keys['action'] = false;
+                            const charsShown = Math.floor(level6.redPMDialogueChars);
+                            if(charsShown < currentRedLine.length) {
+                                level6.redPMDialogueChars = currentRedLine.length;
+                            } else if(level6.redPMDialogueLine < redDlgLines.length - 1) {
+                                level6.redPMDialogueLine++;
+                                level6.redPMDialogueChars = 0;
+                            } else {
+                                level6.redPMDialogue = false;
+                                level6.redPMAccepted = true;
+                                level6.cloneFollower.active = true;
+                                level6.cloneFollower.room = 'cloningRoom';
+                                level6.cloneFollower.x = cloneDialogueX;
+                                level6.cloneFollower.y = 375;
+                                level6.cloneFollower.facing = player.facing;
+                            }
+                        }
+                        actionConsumed = true;
+                    }
+                }
+
                 // Keycard pickup
-                if(level6.keycardOnGround && !level6.hasKeycard && Math.abs(player.x - level6.keycardX) < 50 && (keys[' '] || keys['action'])) {
+                if(!actionConsumed && level6.keycardOnGround && !level6.hasKeycard && Math.abs(player.x - level6.keycardX) < 50 && (keys[' '] || keys['action'])) {
                     level6.hasKeycard = true;
                     level6.keycardOnGround = false;
                     keys[' '] = false;
