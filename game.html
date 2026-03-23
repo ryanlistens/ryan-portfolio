@@ -155,6 +155,25 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Polyfill for CanvasRenderingContext2D.roundRect (Safari <16, older browsers)
+if (!ctx.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (typeof r === 'number') r = [r, r, r, r];
+        else if (!Array.isArray(r)) r = [0, 0, 0, 0];
+        const [tl, tr, br, bl] = r;
+        this.moveTo(x + tl, y);
+        this.lineTo(x + w - tr, y);
+        this.arcTo(x + w, y, x + w, y + tr, tr);
+        this.lineTo(x + w, y + h - br);
+        this.arcTo(x + w, y + h, x + w - br, y + h, br);
+        this.lineTo(x + bl, y + h);
+        this.arcTo(x, y + h, x, y + h - bl, bl);
+        this.lineTo(x, y + tl);
+        this.arcTo(x, y, x + tl, y, tl);
+        this.closePath();
+    };
+}
+
 // Game area is always 700x500; canvas expands to fill the full viewport
 const GAME_W = 700, GAME_H = 500;
 let CANVAS_W = 700, CANVAS_H = 500, GX = 0, GY = 0;
@@ -592,7 +611,7 @@ let bossDoor = { state: 'closed', openPct: 0 };
 let boss = {
     active: false,
     x: 750,
-    y: 344,
+    y: 348,
     needsColor: null,
     walking: false,
     spawnTime: 0,
@@ -828,7 +847,7 @@ function initLevel(lv) {
     
     boss.active = false;
     boss.x = 690;
-    boss.y = 344;
+    boss.y = 348;
     boss.needsColor = null;
     boss.walking = false;
     boss.spawnTime = 0;
@@ -949,11 +968,11 @@ function initLevel(lv) {
         level6.bladeDoorBridgeLeft = { openPct: 0, state: 'closed' }; // bridge room left door
         level6.elevatorTarget = null; // which floor elevator is going to
         // Employee Level / Cloning Room state
-        level6.cloningBoss = { x: 350, y: 365, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0 };
+        level6.cloningBoss = { x: 350, y: 369, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0 };
         // Employee hallway cloning boss - patrols hallway past cloning room
-        level6.hallwayCloningBoss = { x: 350, y: 365, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0, shootTimer: 0, lastShot: 0 };
+        level6.hallwayCloningBoss = { x: 350, y: 369, facing: 'left', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0, shootTimer: 0, lastShot: 0 };
         // Assembly bridge cloning boss - armed and dangerous, patrols the bridge catwalk
-        level6.bridgeCloningBoss = { x: 350, y: 140, facing: 'right', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0, shootTimer: 0, lastShot: 0 };
+        level6.bridgeCloningBoss = { x: 350, y: 137, facing: 'right', alive: true, walkDir: 1, walkTimer: 0, pauseTimer: 0, paused: false, deathTime: 0, shootTimer: 0, lastShot: 0 };
         level6.bridgeDrops = [];
         level6.hasKeycard = false;
         level6.keycardOnGround = false;
@@ -969,7 +988,10 @@ function initLevel(lv) {
             y: 375,
             facing: 'left',
             targetX: 540,        // where clone wants to walk to (trails player)
-            followDist: 45       // how far behind player to trail
+            followDist: 45,      // how far behind player to trail
+            armed: false,        // true when given ghost gun (post-factoryReset enlistment)
+            shootTimer: 0,       // timer for armed clone shooting at CEO
+            lastShot: 0          // timestamp of last shot
         };
         // Red PM clone awakening — triggered when cloning boss is killed
         level6.cloneAwakened = false;
@@ -1162,7 +1184,7 @@ function spawnBoss() {
     if(!boss.active) {
         boss.active = true;
         boss.x = 690;
-        boss.y = 344;
+        boss.y = 348;
         boss.needsColor = COLORS[Math.floor(Math.random() * 4)].name;
         boss.walking = true;
         boss.spawnTime = 0;
@@ -1296,6 +1318,7 @@ function drawHeldDoc(x, y, colorName) {
 function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
     const isWalking = Date.now() - player.lastMove < 150;
+    const mpArmSwing = (isWalking && !holding && !hasGun) ? Math.sin(frame * 0.25) * 3 : 0;
 
     // Shadow — at foot level (y+36 = shoe bottom)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -1338,14 +1361,14 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+            // Normal hanging arms with walking swing
+            ctx.fillRect(x - 9*s, y + mpArmSwing, 2*s, 7*s);
+            ctx.fillRect(x + 7*s, y - mpArmSwing, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s, y + 6*s + mpArmSwing, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y + 6*s - mpArmSwing, 2*s, 2*s);
         }
-        
+
         ctx.fillStyle = '#a4c2db';
         const legL = isWalking ? Math.sin(frame * 0.25) * 5 : 0;
         ctx.fillRect(x - 5*s, y + 8*s + legL * 0.4, 4*s, 8*s + Math.max(0, legL * 0.6));
@@ -1374,30 +1397,27 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
 
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
+        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#800020';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+            // Normal hanging arms with walking swing
+            ctx.fillRect(x - 9*s, y + mpArmSwing, 2*s, 7*s);
+            ctx.fillRect(x + 7*s, y - mpArmSwing, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s, y + 6*s + mpArmSwing, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y + 6*s - mpArmSwing, 2*s, 2*s);
         }
-        
+
         ctx.fillStyle = '#a4c2db';
         const legR = isWalking ? Math.sin(frame * 0.25) * 5 : 0;
         ctx.fillRect(x - 5*s, y + 8*s + legR * 0.4, 4*s, 8*s + Math.max(0, legR * 0.6));
@@ -1427,28 +1447,25 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
 
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
+        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#800020';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+            // Normal hanging arms with walking swing
+            ctx.fillRect(x - 9*s, y + mpArmSwing, 2*s, 7*s);
+            ctx.fillRect(x + 7*s, y - mpArmSwing, 2*s, 7*s);
             ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s, y + 6*s + mpArmSwing, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y + 6*s - mpArmSwing, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#a4c2db';
@@ -1474,6 +1491,9 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 
     const skinColor = '#f5c89a';
 
+    // Arm swing for walking (only when not holding doc or weapon)
+    const bmArmSwing = (isWalking && !holding && !hasGun) ? Math.sin(frame * 0.25) * 3 : 0;
+
     if(facing === 'left') {
         ctx.fillStyle = skinColor;
         ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
@@ -1492,28 +1512,24 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
 
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
+        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide left arm (will be drawn by gun function), show right arm hanging
             ctx.fillRect(x + 7*s, y, 2*s, 7*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+            ctx.fillRect(x - 9*s, y + bmArmSwing, 2*s, 7*s);
+            ctx.fillRect(x + 7*s, y - bmArmSwing, 2*s, 7*s);
             ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s, y + 6*s + bmArmSwing, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y + 6*s - bmArmSwing, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#1a1a1a';
@@ -1544,28 +1560,24 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
 
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
+        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+            ctx.fillRect(x - 9*s, y + bmArmSwing, 2*s, 7*s);
+            ctx.fillRect(x + 7*s, y - bmArmSwing, 2*s, 7*s);
             ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s, y + 6*s + bmArmSwing, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y + 6*s - bmArmSwing, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#1a1a1a';
@@ -1597,28 +1609,24 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
 
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
+        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            // Raised arms to carry doc
             ctx.fillRect(x - 9*s, y - 14*s, 2*s, 14*s);
             ctx.fillRect(x + 7*s, y - 14*s, 2*s, 14*s);
-            // Hands at doc level
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // Gun-holding: hide right arm (will be drawn by gun function), show left arm hanging
             ctx.fillRect(x - 9*s, y, 2*s, 7*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            // Normal hanging arms
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
+            ctx.fillRect(x - 9*s, y + bmArmSwing, 2*s, 7*s);
+            ctx.fillRect(x + 7*s, y - bmArmSwing, 2*s, 7*s);
             ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s, y + 6*s + bmArmSwing, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y + 6*s - bmArmSwing, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#1a1a1a';
@@ -1905,10 +1913,10 @@ function drawNPC(npc) {
         x = npc.x;
     }
 
-    // Shadow stays on ground (uses npc.x, not animated x)
+    // Shadow at foot level — relative to NPC y position (feet at y + 16*s = y + 32)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(npc.x, 400 - 2, 10, 3, 0, 0, Math.PI * 2); // always at floor
+    ctx.ellipse(npc.x, y + 34, 10, 3, 0, 0, Math.PI * 2); // below shoes
     ctx.fill();
 
     // Sprite outline — dark drop shadow on all parts so NPCs don't blend into walls
@@ -5967,9 +5975,9 @@ function drawLevel6EmployeePipeRoom() {
     ctx.fillStyle = '#444';
     ctx.fillRect(comp.x - 5, comp.y, 10, 3);
 
-    // Ghost gun 3D printer — replaces tool cabinet (like level 4, but prints ghost gun instead of wrench)
+    // Ghost gun 3D printer — replaces tool cabinet (matching level 4 layout: x=50 with clean spacing from water cooler at x=110)
     {
-        const prX = 65, prY = 360;
+        const prX = 50, prY = 360;
         drawTableDesk(prX, prY, 60);
         const savedPrinting = ghostGun.printing, savedProgress = ghostGun.printProgress, savedHeart = ghostGun.printingHeart;
         if(level6.lobbyPrinting) {
@@ -12528,37 +12536,8 @@ function drawLevel6CloningRoom() {
         ctx.fillRect(bx + 8, by + 26 - bob - legOffset, 4, 3);
 
     } else if (cb.deathTime > 0) {
-        // Dead boss — collapsed on ground (larger, lab coat visible)
-        const bx = cb.x, by = 392;
-        // Body on ground
-        ctx.fillStyle = '#f5f5f5'; // lab coat
-        ctx.fillRect(bx - 18, by - 2, 36, 8);
-        // Head
-        ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx - 10, by - 8, 16, 10);
-        // Hard hat knocked off (rounded helmet on ground)
-        ctx.fillStyle = '#f0f0f0';
-        ctx.beginPath();
-        ctx.arc(bx + 23, by - 2, 7, Math.PI, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(bx + 14, by - 2, 18, 2);
-        // X eyes
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx - 2, by - 2);
-        ctx.moveTo(bx - 2, by - 6); ctx.lineTo(bx - 6, by - 2);
-        ctx.moveTo(bx + 2, by - 6); ctx.lineTo(bx + 6, by - 2);
-        ctx.moveTo(bx + 6, by - 6); ctx.lineTo(bx + 2, by - 2);
-        ctx.stroke();
-        // Red shirt visible
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(bx - 6, by, 12, 4);
-        // Black tie askew (horizontal — lying along collapsed body)
-        ctx.fillStyle = '#111';
-        ctx.fillRect(bx - 4, by + 1, 8, 2);
+        // Dead cloning boss — proper horizontal body lying on ground
+        drawDeadCloningBoss(cb.x, 392);
     }
 
     // === DROPPED KEYCARD ===
@@ -12599,7 +12578,7 @@ function drawLevel6CloningRoom() {
     // (Slurpee tanks, fertilizer, fetal tanks, centrifuge, and conveyor are all drawn above as wall-mounted pipeline)
 
     // === RED PM CLONE — dazed next to boss, awakens when boss is killed ===
-    if(!level6.cloneFollower.active && !level6.factoryReset) {
+    if(!level6.cloneFollower.active) {
         const cloneX = 430, cloneY = 375; // Next to cloning boss (boss at ~350)
         const clt = Date.now();
         const awakened = level6.cloneAwakened;
@@ -12711,6 +12690,15 @@ function drawLevel6CloningRoom() {
                 ctx.textAlign = 'center';
                 ctx.fillText('...?', cx, cy - 78);
             }
+            // Ghost gun enlistment prompt — after factoryReset, player has ghost gun, clone not yet enlisted
+            if(level6.factoryReset && level6.hasGhostGun && Math.abs(player.x - cx) < 80) {
+                ctx.fillStyle = 'rgba(0,0,0,0.82)';
+                ctx.fillRect(cx - 110, cy - 92, 220, 24);
+                ctx.fillStyle = '#00ccff';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('[ ACTION ] - GIVE GHOST GUN', cx, cy - 74);
+            }
         } else {
             // Dripping vat ooze
             const oozePct = ((clt * 0.0004) % 1);
@@ -12812,25 +12800,53 @@ function drawCloneFollower(x, y, facing) {
     ctx.fillStyle = '#cc2222';
     ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
 
-    // Arms with walking swing
-    ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
-    ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
+    // Arms with walking swing (shoulder bridges fill gap when arms swing outward)
+    const armSwing = isWalking ? Math.sin(clt / 125) * 3 : 0;
+    ctx.fillRect(x - 8*s, y - 3*s + armSwing, 2*s, 7*s);
+    if(armSwing > 0) {
+        ctx.fillRect(x - 6*s, y - 3*s, armSwing, 3*s);
+    }
+    ctx.fillRect(x + 6*s, y - 3*s - armSwing, 2*s, 7*s);
+    if(armSwing > 0) {
+        ctx.fillRect(x + 6*s, y - 3*s, armSwing, 3*s);
+    }
+    // Hands
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(x - 8*s, y + 4*s + armSwing, 2*s, 2*s);
+    ctx.fillRect(x + 6*s, y + 4*s - armSwing, 2*s, 2*s);
+    ctx.fillStyle = '#cc2222';
 
-    // Legs with walking stride
-    ctx.fillRect(x - 5*s - stride, y + 6*s, 4*s, 7*s);
-    ctx.fillRect(x + s + stride, y + 6*s, 4*s, 7*s);
+    // Legs with walking stride (vertical offsets like standard PMs)
+    const legSwing = isWalking ? Math.sin(clt / 125) * 5 : 0;
+    ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+    ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
 
-    // White shoes
+    // White shoes (follow leg swing)
     ctx.fillStyle = '#fff';
-    ctx.fillRect(x - 5*s - stride, y + 13*s, 4*s, 3*s);
-    ctx.fillRect(x + s + stride, y + 13*s, 4*s, 3*s);
+    ctx.fillRect(x - 5*s, y + 13*s + legSwing, 4*s, 3*s);
+    ctx.fillRect(x + s, y + 13*s - legSwing, 4*s, 3*s);
 
     ctx.restore();
 
-    // "CLONE" tag
+    // Ghost gun in hand when armed
+    if(level6.cloneFollower.armed) {
+        const gunDir = facing === 'left' ? -1 : 1;
+        const gunX = x + gunDir * 12;
+        const gunY = y - 2;
+        // Spectral blue ghost gun
+        ctx.fillStyle = '#4af';
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(gunX - 5 * gunDir, gunY - 2, 10 * gunDir, 4);
+        ctx.fillStyle = '#2af';
+        ctx.fillRect(gunX, gunY + 1, 3 * gunDir, 6);
+        ctx.globalAlpha = 1;
+    }
+
+    // "CLONE" tag (or "ARMED" when armed)
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 18, y - 70, 36, 12);
-    ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
-    ctx.fillText('CLONE', x, y - 61);
+    ctx.fillStyle = level6.cloneFollower.armed ? '#4af' : '#ff6666';
+    ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
+    ctx.fillText(level6.cloneFollower.armed ? 'ARMED' : 'CLONE', x, y - 61);
 }
 
 // === CLONE FOLLOWER AI — updates clone position to trail behind player ===
@@ -12838,18 +12854,43 @@ function updateCloneFollower() {
     const cf = level6.cloneFollower;
     if(!cf.active) return;
 
+    // Armed clone follows everywhere; unarmed clone only follows on employee floor
     const employeeRooms = ['employeeLobby', 'cloningRoom', 'l6Furnace', 'employeeHallway', 'employeePipeRoom'];
-    if(!employeeRooms.includes(level6.room)) return;
+    const allRooms = ['employeeLobby', 'cloningRoom', 'l6Furnace', 'employeeHallway', 'employeePipeRoom', 'pipeRoom', 'megacomputer', 'nuclearBridge', 'entryway', 'ceoOffice', 'underbellyHallway', 'underbelly'];
+    const validRooms = cf.armed ? allRooms : employeeRooms;
+    if(!validRooms.includes(level6.room)) return;
+
+    // Armed clone shoots at CEO when in same room
+    if(cf.armed && level6.room === 'ceoOffice' && ceo.state !== 'dead' && !level6.ceoPursuing) {
+        cf.shootTimer++;
+        if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
+            const angle = Math.atan2(ceo.y - cf.y, ceo.x - cf.x);
+            bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
+            cf.lastShot = Date.now();
+            cf.shootTimer = 0;
+            muzzleFlashes.push({ x: cf.x + Math.cos(angle) * 12, y: cf.y - 25, life: 6, facing: Math.cos(angle) > 0 ? 'right' : 'left' });
+        }
+    }
+
+    // Armed clone returns to work after CEO is killed
+    if(cf.armed && level6.ceoDefeated) {
+        cf.active = false;
+        cf.armed = false;
+        return;
+    }
 
     // When clone is in a different room than player, handle room transitions
+    // Clone enters from the same side the player entered (opposite of lastExitEdge)
     if(cf.room !== level6.room) {
         cf.room = level6.room;
         if(level6.lastExitEdge === 'right') {
-            cf.x = 660;
-            cf.targetX = 660;
-        } else {
+            // Player exited right and entered new room on the left — clone follows from left
             cf.x = 40;
             cf.targetX = 40;
+        } else {
+            // Player exited left and entered new room on the right — clone follows from right
+            cf.x = 660;
+            cf.targetX = 660;
         }
     }
 
@@ -17707,6 +17748,102 @@ function drawPortraitUI() {
 
 
 
+function drawDeadCloningBoss(x, y) {
+    // Proper horizontal dead pose — body lying flat, head left, feet right
+    // Shadow pool
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, 34, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Small blood pool under torso
+    ctx.fillStyle = '#6b0000';
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.ellipse(x - 2, y + 2, 28, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Back leg (behind body) — dark pants
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(x + 8, y - 4, 20, 6);
+    ctx.fillRect(x + 26, y - 5, 16, 6);
+    // Back boot
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x + 40, y - 6, 8, 6);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(x + 40, y - 6, 3, 4); // steel toe
+
+    // Torso lying flat — red shirt
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(x - 14, y - 10, 26, 14);
+    // Shirt collar
+    ctx.fillStyle = '#b01e1e';
+    ctx.fillRect(x - 14, y - 10, 26, 3);
+
+    // Black tie (horizontal along body)
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - 6, y - 5, 16, 3);
+    // Tie knot
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x - 7, y - 6, 4, 4);
+
+    // Near arm along body (red sleeve + skin hand)
+    ctx.fillStyle = '#cc2222';
+    ctx.fillRect(x - 8, y - 12, 16, 4);
+    ctx.fillStyle = '#f5d5a8';
+    ctx.fillRect(x + 6, y - 13, 5, 4);
+
+    // Far arm underneath (barely visible)
+    ctx.fillStyle = '#aa1a1a';
+    ctx.fillRect(x - 6, y + 2, 14, 3);
+
+    // Neck
+    ctx.fillStyle = '#f5d5a8';
+    ctx.fillRect(x - 16, y - 6, 5, 6);
+
+    // Head lying flat
+    ctx.fillStyle = '#f5d5a8';
+    ctx.fillRect(x - 28, y - 12, 14, 14);
+
+    // X eyes (dead)
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 24, y - 8); ctx.lineTo(x - 20, y - 4);
+    ctx.moveTo(x - 20, y - 8); ctx.lineTo(x - 24, y - 4);
+    ctx.moveTo(x - 18, y - 8); ctx.lineTo(x - 14, y - 4);
+    ctx.moveTo(x - 14, y - 8); ctx.lineTo(x - 18, y - 4);
+    ctx.stroke();
+
+    // Mouth — slack
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x - 21, y + 1, 3, 0.3, Math.PI - 0.3);
+    ctx.stroke();
+
+    // Front leg (on top) — dark pants
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(x + 8, y - 2, 20, 6);
+    ctx.fillRect(x + 26, y - 3, 16, 6);
+    // Front boot
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x + 40, y - 3, 8, 6);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(x + 40, y - 3, 3, 4); // steel toe
+
+    // Hard hat knocked off to the side
+    ctx.fillStyle = '#f0f0f0';
+    ctx.beginPath();
+    ctx.arc(x - 36, y + 2, 8, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    // Brim
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(x - 46, y + 2, 20, 2);
+}
+
 function drawMuteIndicator() {
     // Position at top-right of canvas, just below HUD — outside game area in landscape
     const btnX = -GX + CANVAS_W - 90;
@@ -18717,24 +18854,40 @@ function drawScene() {
                 }
             }
 
+            // Draw armed clone follower in pipe room
+            if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'pipeRoom') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             // Draw player in pipe room
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'megacomputer') {
             drawLevel6MegacomputerRoom();
 
+            // Draw armed clone follower in megacomputer room
+            if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'megacomputer') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             // Draw player in megacomputer room
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'nuclearBridge') {
             drawNuclearAssemblyBridge();
 
+            // Draw armed clone follower on bridge
+            if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'nuclearBridge') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             // Draw player on bridge
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'entryway') {
             drawLevel6Entryway();
 
+            // Draw armed clone follower in entryway
+            if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'entryway') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
+            }
             // Draw player in entryway
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
@@ -18887,37 +19040,8 @@ function drawScene() {
                 }
 
             } else if(hallCB && hallCB.deathTime > 0) {
-                // Dead boss — collapsed on ground
-                const bx = hallCB.x, by = 392;
-                // Body on ground
-                ctx.fillStyle = '#f5f5f5'; // lab coat
-                ctx.fillRect(bx - 18, by - 2, 36, 8);
-                // Head
-                ctx.fillStyle = '#f5d5a8';
-                ctx.fillRect(bx - 10, by - 8, 16, 10);
-                // Hard hat knocked off (rounded helmet on ground)
-                ctx.fillStyle = '#f0f0f0';
-                ctx.beginPath();
-                ctx.arc(bx + 23, by - 2, 7, Math.PI, 0);
-                ctx.closePath();
-                ctx.fill();
-                ctx.fillStyle = '#e0e0e0';
-                ctx.fillRect(bx + 14, by - 2, 18, 2);
-                // X eyes
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx - 2, by - 2);
-                ctx.moveTo(bx - 2, by - 6); ctx.lineTo(bx - 6, by - 2);
-                ctx.moveTo(bx + 2, by - 6); ctx.lineTo(bx + 6, by - 2);
-                ctx.moveTo(bx + 6, by - 6); ctx.lineTo(bx + 2, by - 2);
-                ctx.stroke();
-                // Red shirt visible
-                ctx.fillStyle = '#cc2222';
-                ctx.fillRect(bx - 6, by, 12, 4);
-                // Black tie askew (horizontal — lying along collapsed body)
-                ctx.fillStyle = '#111';
-                ctx.fillRect(bx - 4, by + 1, 8, 2);
+                // Dead hallway boss — proper horizontal body lying on ground
+                drawDeadCloningBoss(hallCB.x, 392);
             }
 
             // Draw hallway boss drops
@@ -19117,6 +19241,11 @@ function drawScene() {
                     drawCashSack(npc.x, riseY);
                     ctx.globalAlpha = 1;
                 }
+            }
+
+            // Draw armed clone follower in CEO office
+            if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'ceoOffice') {
+                drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
 
             // Draw player in CEO office (unless in UI mode, but always during exit sequence)
@@ -20103,25 +20232,25 @@ function drawScene() {
                     level6.newCEONPCEntries = [];
                     // NPCs file in from both sides — 4 PMs + Mullet Pro (same as victory exit sequence)
                     const pmColors = [COLORS[0], COLORS[1], COLORS[2], COLORS[3]];
-                    const npcTargets = [250, 310, 390, 450]; // final x positions for PMs
+                    const npcTargets = [220, 290, 410, 480]; // final x positions for PMs — wider spread to flank center
                     const npcSides = [-80, 780, -80, 780]; // start from off-screen
+                    // Mullet Pro enters first (drawn behind PMs) from left
+                    level6.newCEONPCEntries.push({
+                        x: -80, targetX: 350,
+                        color: null, arrived: false,
+                        startTime: ceoTime,
+                        isMulletPro: true,
+                        facing: 'right'
+                    });
                     for(let i = 0; i < 4; i++) {
                         level6.newCEONPCEntries.push({
                             x: npcSides[i], targetX: npcTargets[i],
                             color: pmColors[i], arrived: false,
-                            startTime: ceoTime + i * 400, // staggered entry
+                            startTime: ceoTime + (i + 1) * 400, // staggered entry after Mullet Pro
                             isMulletPro: false,
                             facing: npcSides[i] < 0 ? 'right' : 'left'
                         });
                     }
-                    // Mullet Pro enters last from the left
-                    level6.newCEONPCEntries.push({
-                        x: -80, targetX: 350,
-                        color: null, arrived: false,
-                        startTime: ceoTime + 4 * 400,
-                        isMulletPro: true,
-                        facing: 'right'
-                    });
                     level6.newCEOCelebStartTime = ceoTime;
                 }
 
@@ -22510,6 +22639,7 @@ function update() {
             // Room transitions
             if(level6.room === 'pipeRoom') {
                 player.y = 380;
+                if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
 
                 // === Wrench gun 3D printer (wall between server room and supercomputer) ===
                 const pipeRoomPrinterX = 500;
@@ -22687,6 +22817,7 @@ function update() {
 
             else if(level6.room === 'megacomputer') {
                 player.y = 380;
+                if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
 
                 if(player.x < 40 && level6.bladeDoorMega.openPct > 0.7) {
                     level6.room = 'pipeRoom';
@@ -22751,6 +22882,7 @@ function update() {
 
             else if(level6.room === 'nuclearBridge') {
                 player.y = 140;
+                if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
 
                 // Left exit — back to megacomputer room
                 if(player.x < 40 && level6.bladeDoorBridgeLeft.openPct > 0.7) {
@@ -22905,15 +23037,15 @@ function update() {
                 // Track whether action was consumed this frame
                 let actionConsumed = false;
 
-                // === RED PM CLONE DIALOGUE — triggered after boss kill, player approaches awakened clone ===
+                // === RED PM CLONE DIALOGUE — auto-triggers after boss kill when player approaches awakened clone ===
                 const cloneDialogueX = 430; // clone position
                 if(level6.cloneAwakened && !level6.cloneFollower.active && !level6.factoryReset) {
-                    if(!level6.redPMDialogueShown && !level6.redPMDialogue && Math.abs(player.x - cloneDialogueX) < 80 && (keys[' '] || keys['action'])) {
+                    // Auto-trigger dialogue when player gets near awakened clone (no action press needed)
+                    if(!level6.redPMDialogueShown && !level6.redPMDialogue && Math.abs(player.x - cloneDialogueX) < 100) {
                         level6.redPMDialogue = true;
                         level6.redPMDialogueLine = 0;
                         level6.redPMDialogueChars = 0;
                         level6.redPMDialogueShown = true;
-                        keys[' '] = false; keys['action'] = false;
                         actionConsumed = true;
                     }
                     if(level6.redPMDialogue) {
@@ -22950,6 +23082,22 @@ function update() {
                     level6.keycardOnGround = false;
                     keys[' '] = false;
                     keys['action'] = false;
+                    actionConsumed = true;
+                }
+
+                // === ARMED CLONE ENLISTMENT — give ghost gun to Red PM clone after factoryReset ===
+                if(!actionConsumed && level6.factoryReset && level6.hasGhostGun && !level6.cloneFollower.active
+                    && Math.abs(player.x - 430) < 80 && (keys[' '] || keys['action'])) {
+                    keys[' '] = false; keys['action'] = false;
+                    level6.hasGhostGun = false;
+                    level6.cloneFollower.active = true;
+                    level6.cloneFollower.armed = true;
+                    level6.cloneFollower.room = 'cloningRoom';
+                    level6.cloneFollower.x = 430;
+                    level6.cloneFollower.y = 375;
+                    level6.cloneFollower.facing = player.facing;
+                    level6.cloneFollower.shootTimer = 0;
+                    level6.cloneFollower.lastShot = 0;
                     actionConsumed = true;
                 }
 
@@ -23411,6 +23559,7 @@ function update() {
 
             else if(level6.room === 'entryway') {
                 player.y = 400;
+                if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
 
 
                 // Elevator interaction — use the entryway elevator to go back
@@ -23473,6 +23622,7 @@ function update() {
             } 
         
             else if(level6.room === 'ceoOffice') {
+                if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
                 // CEO entry dialogue — block all other input until dismissed
                 if(level6.ceoDialogue) {
                     const dlgLines = level6.ceoDialogueType === 'boss'
