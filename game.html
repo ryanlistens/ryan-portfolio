@@ -6062,12 +6062,18 @@ function drawLevel6EmployeePipeRoom() {
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
         // RED PM is now a clone in the cloning room — pipe stays, NPC absent (unless factory reset)
-        if(npc.color.name !== 'RED' || level6.factoryReset) {
+        // After factory reset, Red PM returns to work; skip drawing if Red PM is armed & following
+        if(npc.color.name !== 'RED' || (level6.factoryReset && !(level6.cloneFollower.active && level6.cloneFollower.armed))) {
             const isMelting = acidBursts.some(ab => ab.npc === npc);
             if (!isMelting) {
                 drawStepLadder(npc.x, npc.y, npc.color);
                 drawNPC(npc);
             }
+        }
+        // Ghost gun enlistment prompt — after factoryReset, player has ghost gun, Red PM working on pipe
+        if(npc.color.name === 'RED' && level6.factoryReset && level6.hasGhostGun && !level6.cloneFollower.active
+            && Math.abs(player.x - npc.x) < 80) {
+            drawActionLabel('[ ACTION ] - GIVE GHOST GUN', npc.x, npc.y - 74, {fontSize: 14, color: '#00ccff'});
         }
     }
 
@@ -11615,7 +11621,7 @@ function drawLevel6EmployeeLobby() {
     // (3D printer moved to employee pipe room)
 
     // === RED PM clone follower in employee lobby (only when following, no longer spawns here) ===
-    if(!level6.factoryReset && level6.cloneFollower.active && level6.cloneFollower.room === 'employeeLobby') {
+    if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeeLobby') {
         drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
     }
 
@@ -12566,7 +12572,8 @@ function drawLevel6CloningRoom() {
     // (Slurpee tanks, fertilizer, fetal tanks, centrifuge, and conveyor are all drawn above as wall-mounted pipeline)
 
     // === RED PM CLONE — dazed next to boss, awakens when boss is killed ===
-    if(!level6.cloneFollower.active) {
+    // After factoryReset, Red PM works in pipe room instead — don't draw clone here
+    if(!level6.cloneFollower.active && !level6.factoryReset) {
         const cloneX = 430, cloneY = 375; // Next to cloning boss (boss at ~350)
         const clt = Date.now();
         const awakened = level6.cloneAwakened;
@@ -13607,7 +13614,7 @@ function drawLevel6Underbelly() {
     ctx.beginPath(); ctx.ellipse(600, 425, 20, 3, 0, 0, Math.PI * 2); ctx.fill();
 
     // === LEAKY OVERHEAD PIPES (running horizontally across ceiling) ===
-    const pipeColors = ['#666','#777','#555'];
+    const pipeColors = ['#666666','#777777','#555555'];
     for(let p = 0; p < 3; p++) {
         const py = 40 + p * 28;
         // Pipe body with cylindrical gradient
@@ -19159,43 +19166,39 @@ function drawScene() {
             }
 
 
+            // Draw Mullet Pro FIRST (behind PMs) so he doesn't walk on their heads
             for(let npc of level6.exitingNPCs) {
-                if(npc.isMulletPro) {
-                    // Arms raised when carrying sack — same pose as holding a doc
-                    drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack);
-                } else {
-                    const tempNPC = {
-                        x: npc.x,
-                        y: npc.y,
-                        color: npc.color,
-                        state: npc.hasSack ? 'happy' : 'happy',
-                        needsDoc: false
-                    };
-                    drawNPC(tempNPC);
-                }
-                // Draw cash sack
+                if(!npc.isMulletPro) continue;
+                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack);
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    if(npc.isMulletPro) {
-                        // Raised hands are at y-32 (s=2, hands at y-16*s).
-                        // Sack bottom aligns with hands: sackY+14=y-32 → sackY=y-46
-                        drawCashSack(npc.x, npc.y - 46 + bob);
-                    } else {
-                        // PM hanging-arm hand is at y+12 (y+6*s). Sack knot at hand level:
-                        // sackY-5=y+12 → sackY=y+17. Draw offset to one side.
-                        const sackSide = npc.facing === 'left' ? -1 : 1;
-                        drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
-                    }
+                    drawCashSack(npc.x, npc.y - 46 + bob);
                 }
                 // Draw extracting animation at safe
                 if(npc.extracting) {
                     const extractT = Math.min(1, (Date.now() - npc.extractStart) / 800);
-                    // Sack rising out of safe
-                    const safeTopY = 140 + 30; // Top of safe opening
+                    const safeTopY = 140 + 30;
                     const riseY = safeTopY - extractT * 40;
                     ctx.globalAlpha = 0.5 + extractT * 0.5;
                     drawCashSack(npc.x, riseY);
                     ctx.globalAlpha = 1;
+                }
+            }
+            // Draw PMs AFTER (in front of Mullet Pro) so he passes behind them
+            for(let npc of level6.exitingNPCs) {
+                if(npc.isMulletPro) continue;
+                const tempNPC = {
+                    x: npc.x,
+                    y: npc.y,
+                    color: npc.color,
+                    state: 'happy',
+                    needsDoc: false
+                };
+                drawNPC(tempNPC);
+                if(npc.hasSack) {
+                    const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
+                    const sackSide = npc.facing === 'left' ? -1 : 1;
+                    drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
                 }
             }
 
@@ -23283,6 +23286,23 @@ function update() {
                     }
                 }
 
+                // === ARMED CLONE ENLISTMENT — give ghost gun to Red PM working on red pipe ===
+                if(level6.factoryReset && level6.hasGhostGun && !level6.cloneFollower.active && !level6.lobbyPrinterUI) {
+                    const redPMX = 280; // Red PM's pipe station x
+                    if(Math.abs(player.x - redPMX) < 80 && (keys[' '] || keys['action'])) {
+                        keys[' '] = false; keys['action'] = false;
+                        level6.hasGhostGun = false;
+                        level6.cloneFollower.active = true;
+                        level6.cloneFollower.armed = true;
+                        level6.cloneFollower.room = 'employeePipeRoom';
+                        level6.cloneFollower.x = redPMX;
+                        level6.cloneFollower.y = 375;
+                        level6.cloneFollower.facing = player.facing;
+                        level6.cloneFollower.shootTimer = 0;
+                        level6.cloneFollower.lastShot = 0;
+                    }
+                }
+
                 // Right — back to Employee hallway (auto)
                 if(!level6.lobbyPrinterUI && player.x > 660) {
                     level6.room = 'employeeHallway';
@@ -24802,6 +24822,11 @@ if (keys[' '] || keys['action']) {
                             level6.keycardX = cb.x;
                             level6.keycardY = 385;
                             score += 2000;
+                            // Awaken the Red PM clone — boss death shakes him out of trance
+                            if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
+                                level6.cloneAwakened = true;
+                                level6.cloneAwakenTime = Date.now();
+                            }
                             wb.going = false;
                             { const dx=wb.originX-wb.x, dy=wb.originY-wb.y, dn=Math.sqrt(dx*dx+dy*dy)||1; wb.vx=dx/dn*9; wb.vy=dy/dn*9; }
                         }
