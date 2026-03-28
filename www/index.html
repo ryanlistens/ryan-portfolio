@@ -1080,10 +1080,11 @@ function initLevel(lv) {
         // Marble Room — security checkpoint to CEO
         level6.marbleRoom = { lightsOn: true, lightSwitchShot: false, elevatorUnlocked: false, printerLocked: false, emergencyLights: false };
         level6.marbleGuards = [
-            { color: 'red',    x: 110, y: 355, facing: 'right', alive: true, health: 3, walkDir:  1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
-            { color: 'blue',   x: 250, y: 355, facing: 'left',  alive: true, health: 3, walkDir: -1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
-            { color: 'green',  x: 400, y: 355, facing: 'right', alive: true, health: 3, walkDir:  1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
-            { color: 'yellow', x: 550, y: 355, facing: 'left',  alive: true, health: 3, walkDir: -1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 }
+            // Each guard: static when lights on. L-shaped beat patrol when lights off. Red guard tries to restore power.
+            { color: 'red',    x: 105, y: 370, facing: 'right', alive: true, health: 3, state: 'static', beatLeft: 50,  beatRight: 175, patrolDir: 1, patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
+            { color: 'blue',   x: 245, y: 370, facing: 'left',  alive: true, health: 3, state: 'static', beatLeft: 185, beatRight: 320, patrolDir:-1, patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
+            { color: 'green',  x: 395, y: 370, facing: 'right', alive: true, health: 3, state: 'static', beatLeft: 330, beatRight: 465, patrolDir: 1, patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
+            { color: 'yellow', x: 540, y: 370, facing: 'left',  alive: true, health: 3, state: 'static', beatLeft: 475, beatRight: 610, patrolDir:-1, patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 }
         ];
         level6.marblePrinter = { ui: false, printing: false, progress: 0, item: null, choice: 0 };
         level6.hasEyeball = false;
@@ -11622,8 +11623,8 @@ function drawLevel6MarbleRoom() {
         ctx.fillText('DISABLED', lsX, lsBaseY + 32);
     }
 
-    // ── PANORAMIC WINDOW (right wall, overlooking warehouse + nuclear plant) ──
-    drawMarbleWindowScene(560, 110, 120, 200);
+    // ── PANORAMIC WINDOW (back wall, overlooking warehouse + nuclear plant) ──
+    drawMarbleWindowScene(420, 100, 130, 210);
 
     // ── 3D PRINTER (right side) ───────────────────────────────────────────────
     const printerX = 595, printerY = 375;
@@ -11694,28 +11695,6 @@ function drawLevel6MarbleRoom() {
         ctx.globalAlpha = 1;
     }
 
-    // ── GUARD FLASHLIGHT CONES (lights-off mode) ──────────────────────────────
-    if(!mr.lightsOn && !emergency) {
-        for(const g of guards) {
-            if(!g.alive) continue;
-            const coneLen = 220, coneAngle = Math.PI / 5; // 36° half-angle
-            const gDir = g.facing === 'right' ? 0 : Math.PI;
-            ctx.save();
-            ctx.translate(g.x, g.y - 20);
-            ctx.rotate(gDir);
-            const coneGrad = ctx.createLinearGradient(0, 0, coneLen, 0);
-            coneGrad.addColorStop(0, 'rgba(255,240,180,0.28)');
-            coneGrad.addColorStop(1, 'rgba(255,240,180,0)');
-            ctx.fillStyle = coneGrad;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(coneLen, -Math.tan(coneAngle) * coneLen);
-            ctx.lineTo(coneLen,  Math.tan(coneAngle) * coneLen);
-            ctx.closePath(); ctx.fill();
-            ctx.restore();
-        }
-    }
-
     // ── GUARDS ────────────────────────────────────────────────────────────────
     for(const g of guards) {
         if(!g.alive) {
@@ -11755,6 +11734,54 @@ function drawLevel6MarbleRoom() {
         ctx.fillStyle = '#ffd700';
         ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(255,200,0,0.4)'; ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ── DARKNESS OVERLAY + FLASHLIGHT CONES (deep contrast when lights off) ──
+    if(!mr.lightsOn && !emergency) {
+        // Heavy darkness over entire scene — room is nearly pitch black
+        ctx.fillStyle = 'rgba(0,0,0,0.78)';
+        ctx.fillRect(0, ceilY, 700, CANVAS_H);
+
+        // Each alive guard's flashlight cone punches through the darkness
+        const CONE_LEN = 220, CONE_ANG = Math.PI / 6; // 30° half-angle matches detection
+        for(const g of guards) {
+            if(!g.alive) continue;
+            ctx.save();
+            const originX = g.x + (g.facing === 'right' ? 22 : -22);
+            const originY = g.y - 30;
+            ctx.translate(originX, originY);
+            ctx.rotate(g.facing === 'right' ? 0 : Math.PI);
+            // Inner bright core
+            const coneGrad = ctx.createLinearGradient(0, 0, CONE_LEN, 0);
+            coneGrad.addColorStop(0,   'rgba(255,248,200,0.60)');
+            coneGrad.addColorStop(0.35,'rgba(255,242,175,0.38)');
+            coneGrad.addColorStop(0.7, 'rgba(255,235,150,0.18)');
+            coneGrad.addColorStop(1,   'rgba(255,228,130,0)');
+            ctx.fillStyle = coneGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(CONE_LEN, -Math.tan(CONE_ANG) * CONE_LEN);
+            ctx.lineTo(CONE_LEN,  Math.tan(CONE_ANG) * CONE_LEN);
+            ctx.closePath(); ctx.fill();
+            // Soft penumbra halo around core for realistic spill
+            const haloGrad = ctx.createLinearGradient(0, 0, CONE_LEN * 0.9, 0);
+            haloGrad.addColorStop(0,   'rgba(255,240,180,0.18)');
+            haloGrad.addColorStop(1,   'rgba(255,240,180,0)');
+            ctx.fillStyle = haloGrad;
+            const haloAng = CONE_ANG * 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(CONE_LEN * 0.9, -Math.tan(haloAng) * CONE_LEN * 0.9);
+            ctx.lineTo(CONE_LEN * 0.9,  Math.tan(haloAng) * CONE_LEN * 0.9);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+        }
+
+        // Dim red light near console (emergency power indicator glow)
+        const cg = ctx.createRadialGradient(350, 140, 0, 350, 140, 55);
+        cg.addColorStop(0, 'rgba(180,20,0,0.18)');
+        cg.addColorStop(1, 'rgba(180,20,0,0)');
+        ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(350, 140, 55, 0, Math.PI*2); ctx.fill();
     }
 
     // Retina scanner interaction prompts
@@ -23569,66 +23596,95 @@ function update() {
             }
 
             else if(level6.room === 'marbleRoom') {
-                // 2D navigation
-                player.y = Math.max(195, Math.min(385, player.y));
-                player.x = Math.max(40, Math.min(635, player.x));
+                // Side-scrolling — fixed y like bridge
+                player.y = 370;
+                player.x = Math.max(40, Math.min(652, player.x));
 
                 const mr = level6.marbleRoom;
                 const guards = level6.marbleGuards;
-                const floorY = 390;
-                const allGuardsDead = guards.every(g => !g.alive);
+                const CONSOLE_X = 350; // light switch x on console
+
+                // ── TRIGGER GUARD STATE WHEN LIGHTS CHANGE ────────────────────
+                const lightsOff = !mr.lightsOn;
+                for(const g of guards) {
+                    if(!g.alive) continue;
+                    if(mr.lightsOn) {
+                        // Lights on: all static
+                        g.state = 'static';
+                    } else if(g.state === 'static') {
+                        // Lights just went off — activate
+                        if(g.color === 'red' && !mr.lightSwitchShot) {
+                            // Red guard tries to restore power (only when cord pulled, not shot)
+                            g.state = 'toConsole';
+                        } else {
+                            g.state = 'patrol';
+                        }
+                    }
+                }
 
                 // ── GUARD AI ──────────────────────────────────────────────────
                 for(const g of guards) {
                     if(!g.alive) continue;
-                    g.walkTimer++;
-                    // Patrol
-                    if(g.walkTimer % 120 === 0) g.walkDir *= -1;
-                    const patrolMinX = 60, patrolMaxX = 560;
-                    g.x += g.walkDir * 1.2;
-                    if(g.x < patrolMinX) { g.x = patrolMinX; g.walkDir = 1; }
-                    if(g.x > patrolMaxX) { g.x = patrolMaxX; g.walkDir = -1; }
-                    g.facing = g.walkDir > 0 ? 'right' : 'left';
 
-                    // Detection
-                    const dx = player.x - g.x, dy = player.y - g.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    let detected = false;
-                    if(mr.lightsOn) {
-                        // Lights on: detect within range if roughly in front
-                        if(dist < 200 && Math.abs(dy) < 80 && ((g.facing === 'right' && dx > 0) || (g.facing === 'left' && dx < 0))) detected = true;
-                    } else {
-                        // Lights off: flashlight cone detection
-                        const coneLen = 220, halfAngle = Math.PI / 5;
-                        const gAngle = g.facing === 'right' ? 0 : Math.PI;
-                        const toPlayerAngle = Math.atan2(dy, dx);
-                        let angleDiff = toPlayerAngle - gAngle;
-                        while(angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                        while(angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                        if(dist < coneLen && Math.abs(angleDiff) < halfAngle) detected = true;
-                    }
-
-                    if(detected) {
-                        g.alert = true; g.alertTimer = 90;
+                    if(g.state === 'patrol') {
+                        // L-shaped beat patrol between beatLeft and beatRight
+                        if(g.patrolPause > 0) {
+                            g.patrolPause--;
+                        } else {
+                            g.x += g.patrolDir * 1.4;
+                            g.facing = g.patrolDir > 0 ? 'right' : 'left';
+                            if(g.x >= g.beatRight) { g.x = g.beatRight; g.patrolDir = -1; g.patrolPause = 55; }
+                            if(g.x <= g.beatLeft)  { g.x = g.beatLeft;  g.patrolDir =  1; g.patrolPause = 55; }
+                        }
+                    } else if(g.state === 'toConsole') {
+                        // Red guard walks toward console to restore lights
+                        const dx = CONSOLE_X - g.x;
                         g.facing = dx > 0 ? 'right' : 'left';
-                        // 3-shot burst: fire if cooldown expired
-                        if(g.shootCooldown <= 0 && g.shootBurst === 0) {
+                        g.x += Math.sign(dx) * 1.2;
+                        if(Math.abs(dx) < 12 && !mr.lightSwitchShot) {
+                            // Restored — lights back on
+                            mr.lightsOn = true;
+                            g.state = 'static';
+                            // Re-center all patrolling guards
+                            for(const og of guards) {
+                                if(og.alive && og.state === 'patrol') og.state = 'static';
+                            }
+                        }
+                    }
+                    // static: no movement
+
+                    if(g.shootCooldown > 0) g.shootCooldown--;
+
+                    // ── CONE DETECTION (lights off only) ──────────────────────
+                    if(lightsOff) {
+                        const CONE_LEN = 200, HALF_ANG = Math.PI / 6; // 30°
+                        const originX = g.x + (g.facing === 'right' ? 30 : -30);
+                        const originY = g.y - 22;
+                        const toPlayerX = player.x - originX;
+                        const toPlayerY = (player.y - 20) - originY;
+                        const dist = Math.sqrt(toPlayerX * toPlayerX + toPlayerY * toPlayerY);
+                        const gAngle = g.facing === 'right' ? 0 : Math.PI;
+                        const playerAngle = Math.atan2(toPlayerY, toPlayerX);
+                        let diff = playerAngle - gAngle;
+                        while(diff > Math.PI)  diff -= 2 * Math.PI;
+                        while(diff < -Math.PI) diff += 2 * Math.PI;
+                        const inCone = dist < CONE_LEN && Math.abs(diff) < HALF_ANG;
+
+                        if(inCone && g.shootCooldown <= 0 && g.shootBurst === 0) {
+                            g.alert = true;
                             g.shootBurst = 3; g.shootBurstTimer = 0;
                         }
-                    } else if(g.alertTimer > 0) {
-                        g.alertTimer--;
-                        if(g.alertTimer <= 0) g.alert = false;
                     }
-                    if(g.shootCooldown > 0) g.shootCooldown--;
+                    if(!lightsOff) g.alert = false;
 
                     // Fire burst
                     if(g.shootBurst > 0) {
                         g.shootBurstTimer++;
-                        if(g.shootBurstTimer % 8 === 0) {
-                            const vx = g.facing === 'right' ? 10 : -10;
-                            level6.marbleBullets.push({ x: g.x + vx * 7, y: g.y - 22, vx: vx, vy: 0 });
+                        if(g.shootBurstTimer % 7 === 0) {
+                            const vx = g.facing === 'right' ? 11 : -11;
+                            level6.marbleBullets.push({ x: g.x + (vx > 0 ? 32 : -32), y: g.y - 22, vx, vy: 0 });
                             g.shootBurst--;
-                            if(g.shootBurst === 0) g.shootCooldown = 150;
+                            if(g.shootBurst === 0) { g.alert = false; g.shootCooldown = 180; }
                         }
                     }
                 }
@@ -23636,10 +23692,9 @@ function update() {
                 // ── MOVE + COLLIDE GUARD BULLETS ──────────────────────────────
                 for(let bi = level6.marbleBullets.length - 1; bi >= 0; bi--) {
                     const b = level6.marbleBullets[bi];
-                    b.x += b.vx; b.y += b.vy;
-                    if(b.x < 0 || b.x > 700 || b.y < 0 || b.y > 450) { level6.marbleBullets.splice(bi, 1); continue; }
-                    // Hit player
-                    if(Math.abs(b.x - player.x) < 20 && Math.abs(b.y - (player.y - 20)) < 30) {
+                    b.x += b.vx;
+                    if(b.x < -10 || b.x > 710) { level6.marbleBullets.splice(bi, 1); continue; }
+                    if(Math.abs(b.x - player.x) < 18 && Math.abs(b.y - (player.y - 18)) < 24) {
                         level6.marbleBullets.splice(bi, 1);
                         level6.moneyLives = Math.max(0, level6.moneyLives - 1);
                         level6.damageFlash = 1;
@@ -23650,23 +23705,45 @@ function update() {
                 for(let bi = bullets.length - 1; bi >= 0; bi--) {
                     const b = bullets[bi];
                     if(b.fromCEO) continue;
+                    let hit = false;
                     for(const g of guards) {
                         if(!g.alive) continue;
-                        if(Math.abs(b.x - g.x) < 25 && Math.abs(b.y - (g.y - 30)) < 40) {
+                        if(Math.abs(b.x - g.x) < 26 && Math.abs(b.y - (g.y - 28)) < 42) {
                             bullets.splice(bi, 1);
                             g.health--;
-                            if(g.health <= 0) {
-                                g.alive = false; g.deathTime = Date.now();
-                            }
+                            if(g.health <= 0) { g.alive = false; g.deathTime = Date.now(); g.state = 'dead'; }
+                            hit = true; break;
+                        }
+                    }
+                }
+
+                // ── SHOOT LIGHT PANEL (bullet hits console area) ──────────────
+                if(!mr.lightSwitchShot) {
+                    for(let bi = bullets.length - 1; bi >= 0; bi--) {
+                        const b = bullets[bi];
+                        if(b.fromCEO) continue;
+                        if(Math.abs(b.x - CONSOLE_X) < 20 && b.y > 80 && b.y < 220) {
+                            bullets.splice(bi, 1);
+                            mr.lightSwitchShot = true;
+                            mr.lightsOn = false;
+                            // Red guard can no longer restore — switches to patrol
+                            const red = guards.find(g => g.color === 'red' && g.alive);
+                            if(red && red.state === 'toConsole') red.state = 'patrol';
                             break;
                         }
                     }
                 }
 
+                // ── PULL LIGHT CORD (player action near console) ──────────────
+                if(!mr.lightSwitchShot && Math.abs(player.x - CONSOLE_X) < 45 && (keys[' '] || keys['action'])) {
+                    mr.lightsOn = !mr.lightsOn;
+                    keys[' '] = false; keys['action'] = false;
+                }
+
                 // ── EYEBALL PICKUP ────────────────────────────────────────────
                 const redGuard = guards.find(g => g.color === 'red');
                 if(redGuard && !redGuard.alive && !redGuard.eyeballTaken && !level6.hasEyeball) {
-                    if(Math.abs(player.x - redGuard.x) < 50 && Math.abs(player.y - (floorY - 12)) < 60 && (keys[' '] || keys['action'])) {
+                    if(Math.abs(player.x - redGuard.x) < 50 && (keys[' '] || keys['action'])) {
                         level6.hasEyeball = true;
                         redGuard.eyeballTaken = true;
                         keys[' '] = false; keys['action'] = false;
@@ -23674,115 +23751,76 @@ function update() {
                 }
 
                 // ── RETINA SCANNER ────────────────────────────────────────────
-                if(!mr.elevatorUnlocked && allGuardsDead && level6.hasEyeball) {
-                    if(Math.abs(player.x - 628) < 40 && Math.abs(player.y - 285) < 60 && (keys[' '] || keys['action'])) {
-                        mr.elevatorUnlocked = true;
-                        keys[' '] = false; keys['action'] = false;
-                    }
+                if(!mr.elevatorUnlocked && level6.hasEyeball && Math.abs(player.x - 628) < 40 && (keys[' '] || keys['action'])) {
+                    mr.elevatorUnlocked = true;
+                    keys[' '] = false; keys['action'] = false;
                 }
 
-                // ── ELEVATOR (to CEO entryway — only when unlocked) ───────────
-                if(mr.elevatorUnlocked && player.x > 625 && !level6.marbleElevatorTransition) {
-                    if(keys[' '] || keys['action']) {
-                        level6.marbleElevatorTransition = true;
-                        level6.marbleElevatorFadeAlpha = 0;
-                        level6.marbleElevatorTarget = 'entryway';
-                        keys[' '] = false; keys['action'] = false;
-                    }
+                // ── ELEVATOR (unlocked, far right) ────────────────────────────
+                if(mr.elevatorUnlocked && player.x > 635 && !level6.marbleElevatorTransition && (keys[' '] || keys['action'])) {
+                    level6.marbleElevatorTransition = true;
+                    level6.marbleElevatorFadeAlpha = 0;
+                    level6.marbleElevatorTarget = 'entryway';
+                    keys[' '] = false; keys['action'] = false;
                 }
 
                 // ── LEFT EXIT (back to bridge) ────────────────────────────────
-                if(player.x < 48) {
+                if(player.x < 42) {
                     level6.room = 'nuclearBridge';
                     player.x = 650; player.y = 140;
                     level6.lastExitEdge = 'right';
                 }
 
-                // ── LIGHT SWITCH interaction ──────────────────────────────────
-                const lsX = 350, lsBaseY = 175;
-                if(!mr.lightSwitchShot && Math.abs(player.x - lsX) < 40 && Math.abs(player.y - (lsBaseY + 40)) < 55 && (keys[' '] || keys['action'])) {
-                    mr.lightsOn = !mr.lightsOn;
-                    keys[' '] = false; keys['action'] = false;
-                }
-                // Shooting light switch (bullet hits it)
-                if(!mr.lightSwitchShot) {
-                    for(let bi = bullets.length - 1; bi >= 0; bi--) {
-                        const b = bullets[bi];
-                        if(!b.fromCEO && Math.abs(b.x - lsX) < 15 && b.y > lsBaseY - 5 && b.y < lsBaseY + 50) {
-                            bullets.splice(bi, 1);
-                            mr.lightSwitchShot = true;
-                            mr.lightsOn = false;
-                            break;
-                        }
-                    }
-                }
-
                 // ── MARBLE ROOM PRINTER ───────────────────────────────────────
                 const printerX = 595;
-                if(!mr.printerLocked && Math.abs(player.x - printerX) < 55 && player.y > 300 && (keys[' '] || keys['action'])) {
+                if(!mr.printerLocked && Math.abs(player.x - printerX) < 52 && (keys[' '] || keys['action'])) {
                     level6.marblePrinter.ui = !level6.marblePrinter.ui;
                     keys[' '] = false; keys['action'] = false;
                 }
                 if(level6.marblePrinter.ui && !level6.marblePrinter.printing) {
-                    if(keys['ArrowLeft'] || keys['left']) {
-                        level6.marblePrinter.choice = Math.max(0, level6.marblePrinter.choice - 1);
-                        keys['ArrowLeft'] = false; keys['left'] = false;
-                    }
-                    if(keys['ArrowRight'] || keys['right']) {
-                        level6.marblePrinter.choice = Math.min(2, level6.marblePrinter.choice + 1);
-                        keys['ArrowRight'] = false; keys['right'] = false;
-                    }
-                    if((keys[' '] || keys['action']) && !level6.marblePrinter.printing) {
-                        level6.marblePrinter.printing = true;
-                        level6.marblePrinter.progress = 0;
-                        level6.marblePrinter.item = ['rifle', 'armor', 'ammo'][level6.marblePrinter.choice];
-                        keys[' '] = false; keys['action'] = false;
+                    if(keys['ArrowLeft'] || keys['left'])  { level6.marblePrinter.choice = Math.max(0, level6.marblePrinter.choice - 1); keys['ArrowLeft'] = keys['left'] = false; }
+                    if(keys['ArrowRight'] || keys['right']){ level6.marblePrinter.choice = Math.min(2, level6.marblePrinter.choice + 1); keys['ArrowRight'] = keys['right'] = false; }
+                    if(keys[' '] || keys['action']) {
+                        level6.marblePrinter.printing = true; level6.marblePrinter.progress = 0;
+                        level6.marblePrinter.item = ['rifle','armor','ammo'][level6.marblePrinter.choice];
+                        keys[' '] = keys['action'] = false;
                     }
                 }
                 if(level6.marblePrinter.printing) {
                     level6.marblePrinter.progress += 0.008;
                     if(level6.marblePrinter.progress >= 1) {
-                        level6.marblePrinter.printing = false;
-                        level6.marblePrinter.ui = false;
-                        level6.marblePrinter.progress = 0;
-                        if(level6.marblePrinter.item === 'rifle') {
-                            level6.hasThreeShotRifle = true;
-                            level6.threeShotRifleAmmo = Math.min(level6.threeShotRifleAmmo + 9, 27);
-                        } else if(level6.marblePrinter.item === 'armor') {
-                            level6.moneyLives = Math.min(level6.moneyLives + 1, 4);
-                        } else if(level6.marblePrinter.item === 'ammo') {
-                            level6.threeShotRifleAmmo = Math.min(level6.threeShotRifleAmmo + 3, 27);
-                        }
+                        level6.marblePrinter.printing = false; level6.marblePrinter.ui = false; level6.marblePrinter.progress = 0;
+                        if(level6.marblePrinter.item === 'rifle')  { level6.hasThreeShotRifle = true; level6.threeShotRifleAmmo = Math.min(level6.threeShotRifleAmmo + 9, 27); }
+                        if(level6.marblePrinter.item === 'armor')  { level6.moneyLives = Math.min(level6.moneyLives + 1, 4); }
+                        if(level6.marblePrinter.item === 'ammo')   { level6.threeShotRifleAmmo = Math.min(level6.threeShotRifleAmmo + 3, 27); }
                         level6.marblePrinter.item = null;
                     }
                 }
 
-                // ── FIRE 3-SHOT RIFLE ─────────────────────────────────────────
-                if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0 && (keys[' '] || keys['action'])) {
-                    if(!level6.marblePrinter.ui) {
-                        keys[' '] = false; keys['action'] = false;
+                // ── FIRE WEAPONS ──────────────────────────────────────────────
+                if((keys[' '] || keys['action']) && !level6.marblePrinter.ui) {
+                    let fired = false;
+                    if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo >= 3) {
+                        keys[' '] = keys['action'] = false;
                         const vx = player.facing === 'left' ? -12 : 12;
-                        for(let s = 0; s < 3; s++) {
-                            setTimeout(() => {
-                                bullets.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, vx: vx, vy: 0, fromCEO: false });
-                            }, s * 80);
-                        }
+                        for(let s = 0; s < 3; s++) setTimeout(() => { bullets.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, vx, vy: 0, fromCEO: false }); }, s * 80);
                         level6.threeShotRifleAmmo -= 3;
-                        player.shootTimer = 20;
-                    }
-                } else if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
-                    if(!level6.marblePrinter.ui) {
-                        keys[' '] = false; keys['action'] = false;
+                        muzzleFlashes.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, life: 6, facing: vx > 0 ? 'right' : 'left' });
+                        player.shootTimer = 20; fired = true;
+                    } else if(level6.hasRevolver && level6.revolverAmmo > 0) {
+                        keys[' '] = keys['action'] = false;
                         const vx = player.facing === 'left' ? -12 : 12;
-                        bullets.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, vx: vx, vy: 0, fromCEO: false });
+                        bullets.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, vx, vy: 0, fromCEO: false });
                         level6.revolverAmmo--;
                         muzzleFlashes.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, life: 6, facing: vx > 0 ? 'right' : 'left' });
-                        player.shootTimer = 20;
+                        player.shootTimer = 20; fired = true;
                     }
                 }
 
-                // ── RETINA SCANNER PROMPT ─────────────────────────────────────
-                // (drawn in drawLevel6MarbleRoom, interaction handled above)
+                // ── POST-CEO EMERGENCY STATE ──────────────────────────────────
+                if(level6.ceoDefeated && !mr.emergencyLights) {
+                    mr.emergencyLights = true; mr.printerLocked = true;
+                }
             }
 
             else if(level6.room === 'employeeLobby') {
