@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Skeleton Horde">
-    <link rel="apple-touch-icon" href="/assets/mullet_icon_glowing.png">
+    <link rel="apple-touch-icon" href="/assets/mullet_icon_black_bg.png">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Libre+Baskerville&family=Press+Start+2P&display=swap" rel="stylesheet" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
@@ -1347,9 +1347,9 @@ function drawHeldDoc(x, y, colorName) {
     ctx.fillText(col.name, x, y - 50);
 }
 
-function drawMulletPro(x, y, facing, holding = false, hasGun = false) {
+function drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
     const s = 2;
-    const isWalking = Date.now() - player.lastMove < 150;
+    const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
     const mpStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
     const mpLegBob = mpStride * 0.67; // Y-alternation: ±2px, no horizontal spread
 
@@ -5866,7 +5866,7 @@ function drawLevel5PipeRoom() {
     // Acid burst dissolve effects
     for(let ab of acidBursts) { drawAcidBurst(ab); }
 
-    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc);
+    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
 
     if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
         drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
@@ -6099,7 +6099,7 @@ function drawLevel6EmployeePipeRoom() {
     for(let ab of acidBursts) { drawAcidBurst(ab); }
 
     // Mullet Pro — walking between doc printer and pipe managers
-    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc);
+    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
     if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
         drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
     }
@@ -11970,124 +11970,247 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.save();
     ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
 
-    // Sky
-    const sky = ctx.createLinearGradient(wx, wy, wx, wy + wh * 0.55);
-    sky.addColorStop(0, '#5bacd4'); sky.addColorStop(1, '#9fd6ee');
-    ctx.fillStyle = sky; ctx.fillRect(wx, wy, ww, wh);
+    // ── Zone heights (panoramic letterbox layout) ─────────────────────────────
+    const skyH   = wh * 0.46;   // top: exterior sky through bay opening
+    const groundH= wh * 0.14;   // mid: ground/horizon
+    const bayH   = wh * 0.40;   // bot: interior loading bay floor
 
-    // Clouds
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    for(let ci = 0; ci < 3; ci++) {
-        const cx = wx + ((t / (11000 + ci * 3000) + ci * 0.4) % 1.3 - 0.15) * ww;
-        const cy = wy + 12 + ci * 10;
-        ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + 10, cy - 3, 6, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx - 6, cy + 2, 5, 0, Math.PI*2); ctx.fill();
+    // ── SKY ───────────────────────────────────────────────────────────────────
+    const skyGrad = ctx.createLinearGradient(wx, wy, wx, wy + skyH);
+    skyGrad.addColorStop(0, '#3a7ab8');
+    skyGrad.addColorStop(0.6, '#6eb3d8');
+    skyGrad.addColorStop(1, '#b8d8ea');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(wx, wy, ww, skyH + groundH);
+
+    // ── CLOUDS (slow drift) ───────────────────────────────────────────────────
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    const cloudSeeds = [{ox:0.08,sp:14000,sz:18,y:0.10},{ox:0.38,sp:19000,sz:13,y:0.06},
+                        {ox:0.62,sp:11500,sz:16,y:0.14},{ox:0.85,sp:16000,sz:11,y:0.08}];
+    for(const cs of cloudSeeds) {
+        const cx = wx + ((cs.ox + t/cs.sp) % 1.2 - 0.1) * ww;
+        const cy = wy + cs.y * skyH;
+        const r = cs.sz;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + r*0.9, cy - r*0.3, r*0.72, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx - r*0.7, cy + r*0.1, r*0.55, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + r*1.7, cy + r*0.2, r*0.45, 0, Math.PI*2); ctx.fill();
     }
 
-    // Horizon ground
-    const horizY = wy + wh * 0.55;
-    ctx.fillStyle = '#4a5a30'; ctx.fillRect(wx, horizY, ww, wh - (horizY - wy));
-
-    // Long runway (straight ahead, center)
-    ctx.fillStyle = '#555';
-    ctx.beginPath();
-    ctx.moveTo(wx + ww * 0.35, horizY);
-    ctx.lineTo(wx + ww * 0.65, horizY);
-    ctx.lineTo(wx + ww * 0.75, wy + wh);
-    ctx.lineTo(wx + ww * 0.25, wy + wh);
-    ctx.closePath(); ctx.fill();
-    // Runway center line
-    ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 1; ctx.setLineDash([4, 6]);
-    ctx.beginPath(); ctx.moveTo(wx + ww * 0.5, horizY); ctx.lineTo(wx + ww * 0.5, wy + wh); ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Nuclear power plant (end of runway, center back)
-    const plantX = wx + ww * 0.5, plantY = horizY - 2;
-    // Containment building (cylinder silhouette)
-    ctx.fillStyle = '#8a8a8a';
-    ctx.fillRect(plantX - 14, plantY - 38, 28, 38);
-    ctx.beginPath(); ctx.arc(plantX, plantY - 38, 14, Math.PI, 0); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#6a6a6a';
-    ctx.fillRect(plantX - 16, plantY - 10, 32, 10);
-    // Cooling tower (cone/hyperboloid shape)
-    ctx.fillStyle = '#9a9a9a';
-    ctx.beginPath();
-    ctx.moveTo(plantX - 8, plantY - 38);
-    ctx.bezierCurveTo(plantX - 12, plantY - 58, plantX - 9, plantY - 72, plantX - 4, plantY - 80);
-    ctx.lineTo(plantX + 4, plantY - 80);
-    ctx.bezierCurveTo(plantX + 9, plantY - 72, plantX + 12, plantY - 58, plantX + 8, plantY - 38);
-    ctx.closePath(); ctx.fill();
-    // Steam from tower top
-    for(let si = 0; si < 4; si++) {
-        const sAge = ((t / 2000 + si * 0.25) % 1);
-        ctx.globalAlpha = (1 - sAge) * 0.35;
-        ctx.fillStyle = '#e8e8e8';
-        const sx = plantX + Math.sin(sAge * 4 + si) * 6;
-        const sy = plantY - 80 - sAge * 30;
-        ctx.beginPath(); ctx.arc(sx, sy, 3 + sAge * 6, 0, Math.PI*2); ctx.fill();
+    // ── HORIZON: flat terrain + distant industrial silhouettes ────────────────
+    const horizY = wy + skyH;
+    ctx.fillStyle = '#4e5c38';
+    ctx.fillRect(wx, horizY, ww, groundH);
+    // terrain detail: low dark industrial treeline
+    ctx.fillStyle = '#3a4428';
+    for(let ix = 0; ix < 22; ix++) {
+        const tx = wx + ix * (ww / 22);
+        const th = 2 + Math.sin(ix * 1.7) * 3 + Math.sin(ix * 0.8) * 2;
+        ctx.fillRect(tx, horizY, ww / 24, th);
     }
-    ctx.globalAlpha = 1;
-    // PipeTech brutalist logo on containment building
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('PIPE', plantX, plantY - 22);
-    ctx.fillText('TECH', plantX, plantY - 16);
-    ctx.fillStyle = '#cc3300';
-    ctx.fillRect(plantX - 6, plantY - 27, 12, 2); // logo accent bar
 
-    // Warehouse road (horizontal, foreground)
-    ctx.fillStyle = '#4a4a4a';
-    const roadY = wy + wh * 0.78;
-    ctx.fillRect(wx, roadY, ww, wh * 0.12);
-    // Road markings
-    ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5; ctx.setLineDash([5, 8]);
-    ctx.beginPath(); ctx.moveTo(wx, roadY + wh * 0.06); ctx.lineTo(wx + ww, roadY + wh * 0.06); ctx.stroke();
-    ctx.setLineDash([]);
+    // ── NUCLEAR PLANT — centered on horizon, two iconic hyperboloid towers ────
+    const plantCX = wx + ww * 0.5;   // dead center
+    const plantBaseY = horizY + 2;
 
-    // Delivery trucks on road (enter left, exit right onto perpendicular)
-    for(let ti = 0; ti < 2; ti++) {
-        const truckPhase = ((t / 5000 + ti * 0.5) % 1);
-        const truckX = wx + truckPhase * (ww + 28) - 14;
-        const truckY = roadY + wh * 0.02;
-        if(truckX > wx - 20 && truckX < wx + ww + 20) {
-            // Cab
-            ctx.fillStyle = '#555';
-            ctx.fillRect(truckX, truckY, 22, 12);
-            ctx.fillStyle = '#333';
-            ctx.fillRect(truckX - 12, truckY, 12, 12);
-            // Cab windows
-            ctx.fillStyle = '#8ab4cc';
-            ctx.fillRect(truckX + 4, truckY + 2, 8, 5);
-            // Wheels
-            ctx.fillStyle = '#111';
-            ctx.beginPath(); ctx.arc(truckX - 8, truckY + 12, 3, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(truckX + 16, truckY + 12, 3, 0, Math.PI*2); ctx.fill();
+    // helper: draw one hyperboloid cooling tower
+    function drawCoolingTower(cx, baseY, tW, tH) {
+        const waistY = baseY - tH * 0.55;
+        const topY   = baseY - tH;
+        const towerGrad = ctx.createLinearGradient(cx - tW, topY, cx + tW, topY);
+        towerGrad.addColorStop(0,   '#b8b4aa');
+        towerGrad.addColorStop(0.35,'#e8e4dc');
+        towerGrad.addColorStop(0.65,'#d4d0c8');
+        towerGrad.addColorStop(1,   '#9a9690');
+        ctx.fillStyle = towerGrad;
+        ctx.beginPath();
+        ctx.moveTo(cx - tW,     baseY);
+        ctx.bezierCurveTo(cx - tW*0.55, waistY + tH*0.1, cx - tW*0.42, waistY, cx - tW*0.44, topY);
+        ctx.lineTo(cx + tW*0.44, topY);
+        ctx.bezierCurveTo(cx + tW*0.42, waistY, cx + tW*0.55, waistY + tH*0.1, cx + tW, baseY);
+        ctx.closePath(); ctx.fill();
+        // vertical stripe detail on tower
+        ctx.strokeStyle = 'rgba(90,85,78,0.25)'; ctx.lineWidth = 0.8;
+        for(let si = -2; si <= 2; si++) {
+            const sx = cx + si * tW * 0.18;
+            ctx.beginPath();
+            ctx.moveTo(sx, baseY);
+            ctx.bezierCurveTo(sx + si*0.5, waistY + tH*0.1, sx + si*0.3, waistY, sx + si*0.3, topY);
+            ctx.stroke();
+        }
+        // top rim opening
+        ctx.strokeStyle = 'rgba(80,75,68,0.5)'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(cx, topY, tW*0.44, tW*0.12, 0, 0, Math.PI*2); ctx.stroke();
+        // base band
+        ctx.fillStyle = 'rgba(60,55,50,0.35)';
+        ctx.fillRect(cx - tW, baseY - 3, tW*2, 3);
+    }
+
+    // Two large cooling towers flanking center
+    drawCoolingTower(plantCX - 48, plantBaseY, 32, wh * 0.75);
+    drawCoolingTower(plantCX + 52, plantBaseY, 38, wh * 0.88);
+
+    // Containment dome (between towers, slightly behind = smaller)
+    const domeX = plantCX + 4, domeBaseY = plantBaseY, domeR = 15;
+    ctx.fillStyle = '#ccc8bc';
+    ctx.beginPath();
+    ctx.arc(domeX, domeBaseY - domeR, domeR, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#b8b4a8';
+    ctx.fillRect(domeX - domeR, domeBaseY - domeR - 1, domeR*2, 6);
+    ctx.fillStyle = '#a8a49a';
+    ctx.fillRect(domeX - domeR - 4, domeBaseY - domeR + 4, domeR*2 + 8, 4);
+    // PipeTech label on dome
+    ctx.fillStyle = '#cc2200'; ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('PIPE', domeX, domeBaseY - domeR + 2);
+    ctx.fillText('TECH', domeX, domeBaseY - domeR + 8);
+
+    // Industrial support buildings around base
+    const bldgs = [{x:-85,w:22,h:12},{x:-65,w:14,h:18},{x:28,w:20,h:14},{x:62,w:16,h:10}];
+    ctx.fillStyle = '#8a8880';
+    for(const b of bldgs) {
+        ctx.fillRect(plantCX + b.x, plantBaseY - b.h, b.w, b.h);
+        ctx.fillStyle = '#6a6860';
+        ctx.fillRect(plantCX + b.x, plantBaseY - b.h, b.w, 2); // roof
+        ctx.fillStyle = '#8a8880';
+    }
+    // Electrical towers/pylons
+    ctx.strokeStyle = '#606058'; ctx.lineWidth = 0.8;
+    for(const px of [-115, 115]) {
+        const pBase = plantBaseY, pTop = plantBaseY - 22;
+        ctx.beginPath(); ctx.moveTo(plantCX+px-4, pBase); ctx.lineTo(plantCX+px, pTop); ctx.lineTo(plantCX+px+4, pBase); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(plantCX+px-8, pTop+8); ctx.lineTo(plantCX+px+8, pTop+8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(plantCX+px-6, pTop+14); ctx.lineTo(plantCX+px+6, pTop+14); ctx.stroke();
+    }
+
+    // ── STEAM PLUMES (animated, large dramatic) ───────────────────────────────
+    const towerTops = [
+        {x: plantCX - 48, topY: plantBaseY - wh * 0.75},
+        {x: plantCX + 52, topY: plantBaseY - wh * 0.88}
+    ];
+    for(const tt of towerTops) {
+        for(let si = 0; si < 8; si++) {
+            const sAge  = ((t / 3200 + si * 0.125) % 1);
+            const sEase = 1 - Math.pow(1 - sAge, 2); // ease out
+            const sAlpha= Math.max(0, (1 - sAge * 1.2)) * 0.55;
+            const sx    = tt.x + Math.sin(sAge * 5 + si * 0.8) * (8 + si * 1.5);
+            const sy    = tt.topY - sEase * (wh * 0.72);
+            const sr    = 4 + sEase * 22 + si * 0.8;
+            ctx.globalAlpha = sAlpha;
+            ctx.fillStyle = si < 4 ? '#f0f0f0' : '#e0dcd8';
+            ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI*2); ctx.fill();
         }
     }
+    ctx.globalAlpha = 1;
 
-    // Occasional plane in sky
-    const planePhase = (t / 18000) % 1;
-    const planeX = wx + planePhase * (ww + 40) - 20;
-    const planeY = wy + 18;
-    if(planeX > wx - 20 && planeX < wx + ww + 20) {
-        ctx.fillStyle = '#ddd';
-        ctx.fillRect(planeX, planeY, 18, 4);
-        ctx.fillRect(planeX + 4, planeY - 3, 10, 3); // tail fin
-        ctx.fillRect(planeX - 2, planeY + 1, 22, 1); // wing
+    // ── BAY DOOR FRAME (opening cutouts at left + right edges) ───────────────
+    const bayFloorY = wy + skyH + groundH;  // top of bay interior
+    const bayDoorW  = ww * 0.12;            // door column width on each side
+    // Left bay door column (where trucks enter)
+    ctx.fillStyle = '#3a3832';
+    ctx.fillRect(wx, bayFloorY, bayDoorW, bayH);
+    // Right bay door column (where trucks exit)
+    ctx.fillRect(wx + ww - bayDoorW, bayFloorY, bayDoorW, bayH);
+    // Door frame highlight / reveal molding
+    ctx.strokeStyle = '#5a5650'; ctx.lineWidth = 2;
+    ctx.strokeRect(wx + bayDoorW - 1, bayFloorY, ww - bayDoorW*2 + 2, bayH);
+    // Overhead bay door track (top of opening)
+    ctx.fillStyle = '#4a4844';
+    ctx.fillRect(wx + bayDoorW, bayFloorY, ww - bayDoorW*2, 5);
+    // Arrow indicators on columns: ← enter  exit →
+    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('←', wx + bayDoorW * 0.5, bayFloorY + bayH * 0.38);
+    ctx.fillText('→', wx + ww - bayDoorW * 0.5, bayFloorY + bayH * 0.38);
+
+    // ── LOADING BAY FLOOR ─────────────────────────────────────────────────────
+    const bayFloorGrad = ctx.createLinearGradient(wx, bayFloorY, wx, wy + wh);
+    bayFloorGrad.addColorStop(0, '#5a5854');
+    bayFloorGrad.addColorStop(1, '#3e3c38');
+    ctx.fillStyle = bayFloorGrad;
+    ctx.fillRect(wx + bayDoorW, bayFloorY + 5, ww - bayDoorW*2, bayH - 5);
+    // Floor lane stripes
+    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1.2; ctx.setLineDash([8, 10]);
+    for(let li = 0; li < 2; li++) {
+        const ly = bayFloorY + 5 + (li + 1) * ((bayH - 5) / 3);
+        ctx.beginPath(); ctx.moveTo(wx + bayDoorW, ly); ctx.lineTo(wx + ww - bayDoorW, ly); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Floor grid
+    ctx.strokeStyle = 'rgba(80,78,72,0.6)'; ctx.lineWidth = 0.5;
+    for(let gx = wx + bayDoorW; gx < wx + ww - bayDoorW; gx += 28) {
+        ctx.beginPath(); ctx.moveTo(gx, bayFloorY + 5); ctx.lineTo(gx, wy + wh); ctx.stroke();
     }
 
-    // Window frame
+    // ── DELIVERY TRUCKS traversing the bay (enter from left, exit right) ──────
+    // Truck dimensions in the narrow window
+    const TW = 68, TH = 22;
+    const truckLaneY = bayFloorY + (bayH - TH) * 0.55;
+    const bayLeft  = wx + bayDoorW;
+    const bayRight = wx + ww - bayDoorW;
+    const travelW  = bayRight - bayLeft;
+
+    for(let ti = 0; ti < 2; ti++) {
+        const phase  = ((t / 5800 + ti * 0.52) % 1);
+        const truckX = bayLeft + phase * (travelW + TW) - TW;
+
+        // Only draw when in visible bay area
+        if(truckX + TW < bayLeft - 5 || truckX > bayRight + 5) continue;
+
+        ctx.save();
+        ctx.beginPath(); ctx.rect(bayLeft, bayFloorY + 5, travelW, bayH - 5); ctx.clip();
+
+        // Shadow under truck
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(truckX + TW/2, truckLaneY + TH, TW*0.55, 3, 0, 0, Math.PI*2); ctx.fill();
+
+        // Trailer
+        const trailerX = truckX + 20;
+        ctx.fillStyle = '#cc3300';
+        ctx.fillRect(trailerX, truckLaneY, TW - 20, TH - 4);
+        // Trailer side ribbing
+        ctx.strokeStyle = 'rgba(180,0,0,0.5)'; ctx.lineWidth = 0.8;
+        for(let ri = 0; ri < 4; ri++) ctx.strokeRect(trailerX + 3 + ri * 11, truckLaneY + 2, 9, TH - 8);
+        // Cab
+        const cabGrad = ctx.createLinearGradient(truckX, truckLaneY, truckX + 20, truckLaneY);
+        cabGrad.addColorStop(0, '#882200'); cabGrad.addColorStop(1, '#aa3300');
+        ctx.fillStyle = cabGrad;
+        ctx.fillRect(truckX, truckLaneY, 22, TH - 4);
+        // Cab windshield
+        ctx.fillStyle = '#8ab8d0';
+        ctx.fillRect(truckX + 3, truckLaneY + 3, 14, 8);
+        ctx.fillStyle = 'rgba(200,230,255,0.5)';
+        ctx.fillRect(truckX + 4, truckLaneY + 3, 4, 4); // glint
+        // Front bumper
+        ctx.fillStyle = '#555';
+        ctx.fillRect(truckX - 2, truckLaneY + TH - 8, 5, 4);
+        // Headlight
+        ctx.fillStyle = '#ffe060';
+        ctx.fillRect(truckX - 1, truckLaneY + 4, 3, 5);
+        // Wheels (4 wheels)
+        const wheelPositions = [truckX + 5, truckX + 16, trailerX + 10, trailerX + TW - 24];
+        ctx.fillStyle = '#1a1a1a';
+        for(const wx2 of wheelPositions) {
+            ctx.beginPath(); ctx.arc(wx2, truckLaneY + TH - 2, 4.5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(wx2, truckLaneY + TH - 2, 2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#1a1a1a';
+        }
+        ctx.restore();
+    }
+
+    // ── WINDOW FRAME + GLASS GLOSS ────────────────────────────────────────────
     ctx.restore();
-    ctx.strokeStyle = '#5a5a50'; ctx.lineWidth = 4;
+    // Dark steel window surround
+    ctx.fillStyle = '#2a2826';
+    ctx.fillRect(wx - 4, wy - 4, ww + 8, 4);       // top rail
+    ctx.fillRect(wx - 4, wy + wh, ww + 8, 4);       // bottom sill
+    ctx.fillRect(wx - 4, wy - 4, 4, wh + 8);        // left rail
+    ctx.fillRect(wx + ww, wy - 4, 4, wh + 8);       // right rail
+    // Mullion dividers (4 panes — already drawn in caller, but add subtle shadow)
+    ctx.strokeStyle = '#1e1c1a'; ctx.lineWidth = 3;
     ctx.strokeRect(wx, wy, ww, wh);
-    // Cross bar
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(wx + ww / 2, wy); ctx.lineTo(wx + ww / 2, wy + wh); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(wx, wy + wh / 2); ctx.lineTo(wx + ww, wy + wh / 2); ctx.stroke();
-    // Glass highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    ctx.fillRect(wx + 2, wy + 2, ww / 2 - 4, wh / 2 - 4);
+    // Glass gloss — top-left quadrant subtle highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(wx + 2, wy + 2, ww * 0.48, wh * 0.42);
 }
 
 function drawLevel6EmployeeLobby() {
@@ -13527,19 +13650,16 @@ function updateCloneFollower() {
         return;
     }
 
-    // When clone is in a different room than player, handle room transitions
-    // Clone enters from the same side the player entered (opposite of lastExitEdge)
+    // When clone is in a different room than player, snap directly behind player
     if(cf.room !== level6.room) {
         cf.room = level6.room;
-        if(level6.lastExitEdge === 'right') {
-            // Player exited right and entered new room on the left — clone follows from left
-            cf.x = 40;
-            cf.targetX = 40;
-        } else {
-            // Player exited left and entered new room on the right — clone follows from right
-            cf.x = 660;
-            cf.targetX = 660;
-        }
+        // Place clone directly behind player based on their current facing
+        const behindOff = player.facing === 'right' ? -cf.followDist :
+                          player.facing === 'left'  ?  cf.followDist : 0;
+        cf.x = Math.max(25, Math.min(660, player.x + behindOff));
+        cf.targetX = cf.x;
+        cf.y = player.y;
+        cf.facing = player.facing;
     }
 
     // Set target position — trail behind player at followDist
@@ -19808,7 +19928,7 @@ function drawScene() {
             // Draw Mullet Pro FIRST (behind PMs) so he doesn't walk on their heads
             for(let npc of level6.exitingNPCs) {
                 if(!npc.isMulletPro) continue;
-                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack);
+                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward');
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
                     drawCashSack(npc.x, npc.y - 46 + bob);
@@ -20922,7 +21042,7 @@ function drawScene() {
                     // Draw using proper game character functions
                     if(npc.isMulletPro) {
                         // holding=true uses the existing raised-arm carrying pose
-                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived);
+                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived, false, !npc.arrived);
                     } else {
                         const tempNPC = {
                             x: npc.x, y: ny,
@@ -22641,8 +22761,14 @@ function update() {
                         ceo.ceoVisible = true;
                         const exitEdge = level6.lastExitEdge || 'left';
                         if(level6.room === 'entryway') {
-                            // CEO always comes from the office door below
-                            ceo.x = 350; ceo.y = 480;
+                            // CEO enters from whichever side the player came through
+                            if(exitEdge === 'right') {
+                                // Player came from marble room elevator (right side)
+                                ceo.x = 690; ceo.y = player.y;
+                            } else {
+                                // Player came from CEO office (bottom door)
+                                ceo.x = 350; ceo.y = 490;
+                            }
                         } else if(level6.room === 'nuclearBridge') {
                             ceo.y = 140;
                             ceo.x = exitEdge === 'right' ? -20 : 720;
@@ -23050,7 +23176,7 @@ function update() {
                     level6.marbleElevatorTransition = false;
                     if(level6.marbleElevatorTarget === 'marbleRoom') {
                         level6.room = 'marbleRoom';
-                        player.x = 620; player.y = 300;
+                        player.x = 510; player.y = 310;
                         level6.lastExitEdge = 'right';
                         // Trigger emergency state if returning after CEO defeat
                         if(level6.ceoDefeated && !level6.marbleRoom.emergencyLights) {
@@ -23561,7 +23687,7 @@ function update() {
                 // Right door — "No Admittance" white door to marble security room
                 if(player.x > 645 && !level6.marbleElevatorTransition && (keys[' '] || keys['action'])) {
                     level6.room = 'marbleRoom';
-                    player.x = 60; player.y = 360;
+                    player.x = 95; player.y = 330;
                     level6.lastExitEdge = 'left';
                     keys[' '] = false; keys['action'] = false;
                     if(level6.ceoDefeated && level6.marbleRoom && !level6.marbleRoom.emergencyLights) {
