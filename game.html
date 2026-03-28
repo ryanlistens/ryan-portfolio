@@ -1078,32 +1078,14 @@ function initLevel(lv) {
         level6.pipeRoomPrinting = false;
         level6.pipeRoomPrintProgress = 0;
         // Marble Room — security checkpoint to CEO
-        level6.marbleRoom = { lightsOn: true, lightSwitchShot: false, elevatorUnlocked: false, printerLocked: false, emergencyLights: false };
-        level6.marbleGuards = [
-            // 2D room: static when lights on; L-beat patrol when lights off. Red guard walks to console to restore power.
-            // L-shaped beats: each guard has 3 waypoints forming an L; they ping-pong A→B→C→B→A
-            { color: 'red',    x: 140, y: 310, facing: 'right', alive: true, health: 3, state: 'static',
-              wp: [{x:80,y:310},{x:280,y:310},{x:280,y:420}], wpIdx:0, wpDir:1,
-              patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
-            { color: 'blue',   x: 350, y: 270, facing: 'left',  alive: true, health: 3, state: 'static',
-              wp: [{x:140,y:240},{x:140,y:420},{x:390,y:420}], wpIdx:2, wpDir:-1,
-              patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
-            { color: 'green',  x: 390, y: 310, facing: 'right', alive: true, health: 3, state: 'static',
-              wp: [{x:320,y:420},{x:320,y:240},{x:520,y:240}], wpIdx:0, wpDir:1,
-              patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
-            { color: 'yellow', x: 490, y: 360, facing: 'left',  alive: true, health: 3, state: 'static',
-              wp: [{x:520,y:240},{x:520,y:430},{x:440,y:430}], wpIdx:2, wpDir:-1,
-              patrolPause: 0, deathTime: 0, eyeballTaken: false, alert: false, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 }
-        ];
+        level6.marbleRoom = { printerLocked: false, emergencyLights: false };
         level6.marblePrinter = { ui: false, printing: false, progress: 0, item: null, choice: 0 };
-        level6.hasEyeball = false;
         level6.hasThreeShotRifle = false;
         level6.threeShotRifleAmmo = 0;
         level6.marbleElevatorTransition = false;
         level6.marbleElevatorFadeAlpha = 0;
         level6.marbleElevatorFadeIn = false;
         level6.marbleElevatorTarget = null; // 'marbleRoom' or 'entryway'
-        level6.marbleBullets = []; // bullets fired by guards
 
         // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
         // This matters when the player skips directly to level 6 without playing level 5
@@ -11524,413 +11506,153 @@ function drawNuclearAssemblyBridge() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // MARBLE SECURITY ROOM — CEO checkpoint. 4 giant guards, retina scanner, elevator.
 // ═══════════════════════════════════════════════════════════════════════════════
+// MARBLE SECURITY ROOM — CEO checkpoint. 1D side-scrolling anteroom.
+// Dark luxury marble. Window panorama. Armory printer. CEO elevator.
+// ═══════════════════════════════════════════════════════════════════
 function drawLevel6MarbleRoom() {
     const t = Date.now();
     const mr = level6.marbleRoom;
-    const guards = level6.marbleGuards;
     const emergency = mr.emergencyLights;
-    const lit = mr.lightsOn && !emergency;
+    const FLOOR_Y = 380;
+    const ELV_X = 548, ELV_Y = 118, ELV_W = 130, ELV_H = FLOOR_Y - ELV_Y;
+    const PRINTER_X = 370, PRINTER_Y = FLOOR_Y;
 
-    // ── BASE: near-black marble (Nero Marquina) ──────────────────────────────
-    ctx.fillStyle = emergency ? '#130202' : lit ? '#0d0b09' : '#060504';
-    ctx.fillRect(0, 0, 700, 500);
-    // ── MARBLE TILE FLOOR (dark Italian black marble, large tiles) ──────────────
-    if(lit) {
-        // Large 80×80 tile grid — very dark seams on near-black surface
-        ctx.strokeStyle = 'rgba(28,24,18,0.95)'; ctx.lineWidth = 1;
-        for(let tx = 0; tx <= 700; tx += 80) { ctx.beginPath(); ctx.moveTo(tx, 182); ctx.lineTo(tx, 500); ctx.stroke(); }
-        for(let ty = 182; ty <= 500; ty += 80) { ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(700, ty); ctx.stroke(); }
-        // Cream veining — elegant diagonal bezier strands
-        ctx.lineWidth = 0.9;
-        const veins = [
-            [30,182, 80,270, 40,360, 60,500],
-            [150,185,130,280,190,370,160,500],
-            [280,182,320,265,250,358,290,500],
-            [410,190,385,275,440,365,400,500],
-            [540,182,580,270,520,360,555,500],
-            [650,185,670,280,635,368,655,500],
-        ];
-        for(const [sx,sy,c1x,c1y,c2x,c2y,ex,ey] of veins) {
-            ctx.strokeStyle = 'rgba(205,192,160,0.28)';
-            ctx.beginPath(); ctx.moveTo(sx,sy); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,ex,ey); ctx.stroke();
-            // branch
-            const mx=(sx+ex)/2, my=(sy+ey)/2;
-            ctx.strokeStyle = 'rgba(190,178,148,0.18)'; ctx.lineWidth=0.5;
-            ctx.beginPath(); ctx.moveTo(mx,my); ctx.bezierCurveTo(mx+28,my+25,mx+14,my+70,mx+35,my+110); ctx.stroke();
-            ctx.lineWidth=0.9;
-        }
-        // Gold accent veins (delicate)
-        ctx.strokeStyle = 'rgba(168,130,28,0.18)'; ctx.lineWidth=0.5;
-        for(let gv=0;gv<4;gv++){
-            const gvx=90+gv*160;
-            ctx.beginPath(); ctx.moveTo(gvx,182); ctx.bezierCurveTo(gvx+22,262,gvx-16,342,gvx+12,500); ctx.stroke();
-        }
-        ctx.lineWidth=1;
-    }
-
-    // ── BACK WALL (dark charcoal, architectural) ─────────────────────────────
-    ctx.fillStyle = emergency ? '#1a0202' : lit ? '#161412' : '#0a0908';
-    ctx.fillRect(0, 0, 700, 182);
+    // ── BACKGROUND WALL (dark near-black marble) ─────────────────────────────
+    ctx.fillStyle = emergency ? '#130202' : '#0d0b09';
+    ctx.fillRect(0, 0, 700, FLOOR_Y);
 
     // ── PANORAMIC WINDOW ─────────────────────────────────────────────────────
-    // Outer housing (dark brushed steel)
-    ctx.fillStyle = '#121008';
-    ctx.fillRect(16, 2, 668, 126);
-    drawMarbleWindowScene(22, 6, 656, 116);
-    // Horizontal crossbar
-    ctx.fillStyle = '#121008'; ctx.fillRect(16, 60, 668, 4);
+    const winX=80, winY=30, winW=462, winH=174;
+    ctx.fillStyle='#090806'; ctx.fillRect(winX-7, winY-7, winW+14, winH+14);
+    drawMarbleWindowScene(winX, winY, winW, winH);
+    // Horizontal crossbar at mid-height
+    ctx.fillStyle='#090806'; ctx.fillRect(winX, winY+Math.round(winH/2)-2, winW, 4);
     // 4 vertical mullions
-    for(let m=1;m<4;m++) { ctx.fillStyle='#121008'; ctx.fillRect(16+m*167, 2, 4, 126); }
-    // Window sill — polished gold accent strip
-    ctx.fillStyle = '#1e1a12'; ctx.fillRect(12, 128, 676, 10);
-    ctx.fillStyle = '#4a3a0a'; ctx.fillRect(12, 128, 676, 2);
-    ctx.fillStyle = '#8a6c16'; ctx.fillRect(12, 129, 676, 1);
+    for(let m=1;m<4;m++) { ctx.fillStyle='#090806'; ctx.fillRect(winX+Math.round(m*winW/4)-2, winY, 4, winH); }
+    // Sill — dark with thin gold accent strip
+    ctx.fillStyle='#1a1610'; ctx.fillRect(winX-9, winY+winH, winW+18, 12);
+    ctx.fillStyle='#4e3e0c'; ctx.fillRect(winX-9, winY+winH, winW+18, 2);
+    ctx.fillStyle='#8c6c18'; ctx.fillRect(winX-9, winY+winH+1, winW+18, 1);
 
-    // ── WAINSCOTING BELOW WINDOW ─────────────────────────────────────────────
-    ctx.fillStyle = emergency ? '#190202' : lit ? '#141210' : '#090807';
-    ctx.fillRect(0, 138, 700, 44);
-    // Gold wainscoting rail
-    ctx.fillStyle = '#2e2408'; ctx.fillRect(0, 178, 700, 4);
-    ctx.fillStyle = '#5e4a10'; ctx.fillRect(0, 179, 700, 1.5);
+    // ── WAINSCOTING (below window, above floor, between doors) ───────────────
+    ctx.fillStyle='#0f0d0a'; ctx.fillRect(68, FLOOR_Y-22, ELV_X-68, 22);
+    ctx.fillStyle='#3e3009'; ctx.fillRect(68, FLOOR_Y-22, ELV_X-68, 2);
+    ctx.fillStyle='#7a5e14'; ctx.fillRect(68, FLOOR_Y-21, ELV_X-68, 1);
 
-    // ── LEFT SECURITY DOOR ───────────────────────────────────────────────────
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 138, 66, 336); // void opening
-    // Heavy steel frame
-    ctx.fillStyle = '#181614'; ctx.fillRect(0, 134, 74, 6); // lintel
-    ctx.fillStyle = '#181614'; ctx.fillRect(66, 138, 8, 334); // right jamb
-    ctx.fillStyle = '#181614'; ctx.fillRect(0, 468, 74, 6); // sill
-    // Gold frame accent
-    ctx.fillStyle = '#3e3008'; ctx.fillRect(66, 138, 1.5, 334);
-    // Door leaf (heavy brushed steel, partially open)
-    const dg = ctx.createLinearGradient(2, 0, 24, 0);
-    dg.addColorStop(0,'#181614'); dg.addColorStop(0.6,'#201e1a'); dg.addColorStop(1,'#141210');
-    ctx.fillStyle = dg; ctx.fillRect(2, 140, 22, 326);
-    // Inset panels on door
-    ctx.fillStyle = '#100e0c';
-    ctx.fillRect(4, 152, 18, 90); // upper panel
-    ctx.fillRect(4, 258, 18, 90); // lower panel
-    ctx.strokeStyle = 'rgba(70,60,40,0.45)'; ctx.lineWidth=0.8;
-    ctx.strokeRect(4,152,18,90); ctx.strokeRect(4,258,18,90);
-    // Lock bolt
-    ctx.fillStyle = '#2a2410'; ctx.fillRect(20, 300, 5, 20);
-    ctx.fillStyle = '#7a6418'; ctx.fillRect(21, 306, 2, 8);
+    // ── FLOOR (black marble — large tiles + veining) ──────────────────────────
+    ctx.fillStyle='#090706'; ctx.fillRect(0, FLOOR_Y, 700, 500-FLOOR_Y);
+    // Tile seam grid
+    ctx.strokeStyle='rgba(20,16,12,0.95)'; ctx.lineWidth=0.8;
+    for(let tx=0;tx<=700;tx+=80) { ctx.beginPath();ctx.moveTo(tx,FLOOR_Y);ctx.lineTo(tx,500);ctx.stroke(); }
+    for(let ty=FLOOR_Y+50;ty<=500;ty+=55) { ctx.beginPath();ctx.moveTo(0,ty);ctx.lineTo(700,ty);ctx.stroke(); }
+    // Cream veining on floor
+    ctx.strokeStyle='rgba(198,182,148,0.22)'; ctx.lineWidth=0.8;
+    for(const [x1,y1,x2,y2,x3,y3,x4,y4] of [
+        [30,FLOOR_Y+18,130,FLOOR_Y+32,220,FLOOR_Y+20,360,FLOOR_Y+36],
+        [90,FLOOR_Y+68,210,FLOOR_Y+80,340,FLOOR_Y+62,490,FLOOR_Y+76],
+        [180,FLOOR_Y+115,300,FLOOR_Y+128,430,FLOOR_Y+110,580,FLOOR_Y+124]
+    ]) { ctx.beginPath();ctx.moveTo(x1,y1);ctx.bezierCurveTo(x2,y2,x3,y3,x4,y4);ctx.stroke(); }
+
+    // ── LEFT DOORWAY (exit to bridge) ────────────────────────────────────────
+    ctx.fillStyle='#000'; ctx.fillRect(0,0,68,FLOOR_Y);
+    // Right jamb of door frame
+    ctx.fillStyle='#1a1815'; ctx.fillRect(66,0,7,FLOOR_Y);
+    ctx.fillStyle='#362a08'; ctx.fillRect(66,0,1.5,FLOOR_Y);
     // EXIT sign
-    ctx.fillStyle = '#00aa30'; ctx.fillRect(2, 132, 58, 12);
-    ctx.fillStyle = '#fff'; ctx.font='bold 8px monospace'; ctx.textAlign='center';
-    ctx.fillText('EXIT', 31, 141);
+    ctx.fillStyle='#009928'; ctx.fillRect(2,22,60,14);
+    ctx.fillStyle='#fff'; ctx.font='bold 9px monospace'; ctx.textAlign='center';
+    ctx.fillText('EXIT',32,33);
 
-    // ── RIGHT WALL PANEL ─────────────────────────────────────────────────────
-    const elvX=548, elvY=152, elvW=130, elvH=175;
-    ctx.fillStyle = emergency ? '#160202' : lit ? '#131110' : '#090807';
-    ctx.fillRect(536, 138, 164, 362);
-    ctx.fillStyle = '#2e2408'; ctx.fillRect(536, 178, 164, 4);
-    ctx.fillStyle = '#5e4a10'; ctx.fillRect(536, 179, 164, 1.5);
+    // ── RIGHT WALL (behind elevator) ─────────────────────────────────────────
+    ctx.fillStyle='#0d0b09'; ctx.fillRect(ELV_X+ELV_W,0,700-(ELV_X+ELV_W),FLOOR_Y);
 
-    // ── CEO ELEVATOR ─────────────────────────────────────────────────────────
-    ctx.fillStyle = '#0e0c0a'; ctx.fillRect(elvX-10, elvY-30, elvW+20, elvH+36);
+    // ── CEO PRIVATE ELEVATOR ─────────────────────────────────────────────────
+    // Housing recess
+    ctx.fillStyle='#070605'; ctx.fillRect(ELV_X-10,ELV_Y-10,ELV_W+20,ELV_H+10);
     // Gold frame gradient
-    const gfg = ctx.createLinearGradient(elvX-2, 0, elvX+elvW+2, 0);
-    gfg.addColorStop(0,'#5a4010'); gfg.addColorStop(0.28,'#c09030');
-    gfg.addColorStop(0.5,'#e0b840'); gfg.addColorStop(0.72,'#c09030'); gfg.addColorStop(1,'#5a4010');
-    ctx.fillStyle=gfg; ctx.fillRect(elvX-3, elvY-3, elvW+6, elvH+6);
-    // Door panels (brushed silver)
-    const eg=ctx.createLinearGradient(elvX,0,elvX+elvW,0);
-    eg.addColorStop(0,'#7a7a7a'); eg.addColorStop(0.1,'#b8b8b8');
-    eg.addColorStop(0.5,'#d4d4d4'); eg.addColorStop(0.9,'#b0b0b0'); eg.addColorStop(1,'#727272');
-    ctx.fillStyle=eg; ctx.fillRect(elvX, elvY, elvW, elvH);
-    // Horizontal seams
-    ctx.strokeStyle='rgba(70,70,70,0.5)'; ctx.lineWidth=0.8;
-    for(let ps=1;ps<5;ps++){ctx.beginPath();ctx.moveTo(elvX+4,elvY+ps*(elvH/5));ctx.lineTo(elvX+elvW-4,elvY+ps*(elvH/5));ctx.stroke();}
-    // Center seam
-    ctx.strokeStyle='rgba(50,50,50,0.7)'; ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(elvX+elvW/2,elvY+6);ctx.lineTo(elvX+elvW/2,elvY+elvH-6);ctx.stroke();
-    // Engraved letters
-    ctx.fillStyle='#c09030'; ctx.font='bold 15px serif'; ctx.textAlign='center';
-    ctx.fillText('PI', elvX+elvW/4, elvY+elvH/2+6);
-    ctx.fillText('PE', elvX+3*elvW/4, elvY+elvH/2+6);
-    // Floor indicator
-    ctx.fillStyle='#080806'; ctx.fillRect(elvX+elvW/2-26, elvY-26, 52, 20);
-    ctx.strokeStyle='#4a4030'; ctx.lineWidth=1; ctx.strokeRect(elvX+elvW/2-26, elvY-26, 52, 20);
-    ctx.fillStyle='#00ff88'; ctx.font='bold 12px monospace'; ctx.textAlign='center';
-    ctx.fillText('CEO', elvX+elvW/2, elvY-11);
+    const gfg=ctx.createLinearGradient(ELV_X-3,0,ELV_X+ELV_W+3,0);
+    gfg.addColorStop(0,'#422e06');gfg.addColorStop(0.28,'#967020');
+    gfg.addColorStop(0.5,'#c89630');gfg.addColorStop(0.72,'#967020');gfg.addColorStop(1,'#422e06');
+    ctx.fillStyle=gfg; ctx.fillRect(ELV_X-3,ELV_Y-3,ELV_W+6,ELV_H+3);
+    // Brushed silver door panels
+    const eg=ctx.createLinearGradient(ELV_X,0,ELV_X+ELV_W,0);
+    eg.addColorStop(0,'#686868');eg.addColorStop(0.1,'#a8a8a8');
+    eg.addColorStop(0.5,'#cccccc');eg.addColorStop(0.9,'#a0a0a0');eg.addColorStop(1,'#606060');
+    ctx.fillStyle=eg; ctx.fillRect(ELV_X,ELV_Y,ELV_W,ELV_H);
+    // Horizontal panel seams
+    ctx.strokeStyle='rgba(60,60,60,0.48)';ctx.lineWidth=0.8;
+    for(let ps=1;ps<5;ps++){ctx.beginPath();ctx.moveTo(ELV_X+4,ELV_Y+ps*(ELV_H/5));ctx.lineTo(ELV_X+ELV_W-4,ELV_Y+ps*(ELV_H/5));ctx.stroke();}
+    // Center vertical seam
+    ctx.strokeStyle='rgba(42,42,42,0.70)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(ELV_X+ELV_W/2,ELV_Y+5);ctx.lineTo(ELV_X+ELV_W/2,ELV_Y+ELV_H-5);ctx.stroke();
+    // PI / PE engraved
+    ctx.fillStyle='#a88626';ctx.font='bold 14px serif';ctx.textAlign='center';
+    ctx.fillText('PI',ELV_X+ELV_W/4,ELV_Y+ELV_H/2+5);
+    ctx.fillText('PE',ELV_X+3*ELV_W/4,ELV_Y+ELV_H/2+5);
+    // Floor indicator LED
+    ctx.fillStyle='#050504';ctx.fillRect(ELV_X+ELV_W/2-26,ELV_Y-24,52,20);
+    ctx.strokeStyle='#302818';ctx.lineWidth=1;ctx.strokeRect(ELV_X+ELV_W/2-26,ELV_Y-24,52,20);
+    ctx.fillStyle='#00ff88';ctx.font='bold 12px monospace';ctx.textAlign='center';
+    ctx.fillText('CEO',ELV_X+ELV_W/2,ELV_Y-9);
     // Label
-    ctx.fillStyle=lit?'#5a5040':'#2a2018'; ctx.font='bold 7px monospace'; ctx.textAlign='center';
-    ctx.fillText('PRIVATE ELEVATOR', elvX+elvW/2, elvY-32);
+    ctx.fillStyle='#3a3020';ctx.font='bold 7px monospace';ctx.textAlign='center';
+    ctx.fillText('PRIVATE ELEVATOR',ELV_X+ELV_W/2,ELV_Y-30);
 
-    // ── RETINA SCANNER ───────────────────────────────────────────────────────
-    const scanX=elvX-30, scanY=elvY+elvH/2;
-    ctx.fillStyle='#100e0c'; ctx.fillRect(scanX-14,scanY-24,28,48);
-    ctx.fillStyle='#080706'; ctx.fillRect(scanX-11,scanY-20,22,40);
-    const scanC=mr.elevatorUnlocked?'#00ff44':'#ff2200';
-    ctx.fillStyle=scanC; ctx.shadowColor=scanC; ctx.shadowBlur=8;
-    ctx.beginPath();ctx.arc(scanX,scanY,7,0,Math.PI*2);ctx.fill();
-    ctx.shadowBlur=0;
-    ctx.strokeStyle=mr.elevatorUnlocked?'#00aa22':'#880000'; ctx.lineWidth=0.8;
-    for(let ir=1;ir<4;ir++){ctx.beginPath();ctx.arc(scanX,scanY,ir*2.8,0,Math.PI*2);ctx.stroke();}
-    ctx.fillStyle=mr.elevatorUnlocked?'#00ff44':'#ff6644';
-    ctx.font='bold 6px monospace'; ctx.textAlign='center';
-    ctx.fillText('RETINA',scanX,scanY+15);
-    ctx.fillText(mr.elevatorUnlocked?'OPEN':'LOCKED',scanX,scanY+23);
-
-    // ── COMMAND CONSOLE ──────────────────────────────────────────────────────
-    const consX=248, consW=204, consTop=140, consH=40;
-    ctx.fillStyle='#0c0a08'; ctx.fillRect(consX,consTop,consW,consH);
-    ctx.fillStyle='#060504'; ctx.fillRect(consX+3,consTop+3,consW-6,consH-6);
-    ctx.fillStyle='#020201'; ctx.fillRect(consX+8,consTop+4,consW-16,20);
-    for(let li=0;li<6;li++){
-        const blink=Math.sin(t*0.003+li*1.2)>0;
-        const ledC=['#ff2020','#20ff40','#ffaa00','#2080ff','#ff20ff','#ffffff'][li];
-        ctx.fillStyle=blink?ledC:'#0a0908';
-        if(blink){ctx.shadowColor=ledC;ctx.shadowBlur=4;}
-        ctx.beginPath();ctx.arc(consX+20+li*30,consTop+14,4,0,Math.PI*2);ctx.fill();
-        ctx.shadowBlur=0;
+    // ── SECURITY CONSOLE (wall-mounted, center) ──────────────────────────────
+    const cX=268, cY=FLOOR_Y-56, cW=128, cH=36;
+    ctx.fillStyle='#0b0908';ctx.fillRect(cX,cY,cW,cH);
+    ctx.fillStyle='#050403';ctx.fillRect(cX+2,cY+2,cW-4,cH-4);
+    ctx.fillStyle='#020201';ctx.fillRect(cX+5,cY+4,cW-10,16);
+    for(let li=0;li<5;li++){
+        const blink=Math.sin(t*0.003+li*1.4)>0;
+        const lc=['#ff2020','#20ff40','#ffaa00','#2080ff','#ff20ff'][li];
+        ctx.fillStyle=blink?lc:'#090808';
+        ctx.beginPath();ctx.arc(cX+14+li*22,cY+12,3,0,Math.PI*2);ctx.fill();
     }
-    ctx.fillStyle='#00cc66'; ctx.font='bold 6px monospace'; ctx.textAlign='center';
-    ctx.fillText('SECURITY COMMAND — AUTHORIZED PERSONNEL',consX+consW/2,consTop+32);
-    ctx.strokeStyle='#2e2408'; ctx.lineWidth=1; ctx.strokeRect(consX,consTop,consW,consH);
+    ctx.fillStyle='#00bb58';ctx.font='bold 5px monospace';ctx.textAlign='center';
+    ctx.fillText('SECURITY COMMAND',cX+cW/2,cY+28);
+    ctx.strokeStyle='#22180a';ctx.lineWidth=1;ctx.strokeRect(cX,cY,cW,cH);
 
-    // ── PULL-CORD ────────────────────────────────────────────────────────────
-    const lsX=consX+consW/2, lsBaseY=consTop+consH;
-    if(!mr.lightSwitchShot){
-        const swX=Math.sin(t*0.002)*3;
-        ctx.strokeStyle=lit?'#b89018':'#3a3020'; ctx.lineWidth=1.5;
-        ctx.beginPath();ctx.moveTo(lsX+swX,lsBaseY);ctx.lineTo(lsX+swX,lsBaseY+32);ctx.stroke();
-        ctx.fillStyle=lit?'#b89018':'#2e2418';
-        ctx.beginPath();ctx.arc(lsX+swX,lsBaseY+34,5,0,Math.PI*2);ctx.fill();
-    } else {
-        ctx.strokeStyle='#3a3020'; ctx.lineWidth=1.2;
-        ctx.beginPath();ctx.moveTo(lsX,lsBaseY);ctx.lineTo(lsX+8,lsBaseY+18);ctx.stroke();
-    }
+    // ── ARMORY PRINTER ────────────────────────────────────────────────────────
+    draw3DPrinter(PRINTER_X, PRINTER_Y-18);
+    ctx.fillStyle='#504030';ctx.font='bold 8px monospace';ctx.textAlign='center';
+    ctx.fillText('ARMORY',PRINTER_X,PRINTER_Y+2);
+    if(mr.printerLocked){ctx.fillStyle='#ff2020';ctx.font='bold 7px monospace';ctx.fillText('LOCKDOWN',PRINTER_X,PRINTER_Y+12);}
 
-    // ── ARMORY PRINTER ───────────────────────────────────────────────────────
-    const printerX=618, printerY=415;
-    draw3DPrinter(printerX, printerY-18);
-    ctx.fillStyle=lit?'#5a5040':'#2a2018'; ctx.font='bold 8px monospace'; ctx.textAlign='center';
-    ctx.fillText('ARMORY',printerX,printerY+2);
-    if(mr.printerLocked){ctx.fillStyle='#ff2020';ctx.font='bold 7px monospace';ctx.fillText('LOCKDOWN',printerX,printerY+12);}
-
-    // ── EMERGENCY STROBES ────────────────────────────────────────────────────
+    // ── EMERGENCY STROBES ─────────────────────────────────────────────────────
     if(emergency){
-        for(let el=0;el<5;el++){
-            const elx=70+el*140;
-            const blink=Math.sin(t*0.005+el*0.8)>0;
-            if(blink){
-                ctx.fillStyle='rgba(255,10,0,0.11)';
-                ctx.beginPath();ctx.moveTo(elx-12,182);ctx.lineTo(elx+12,182);ctx.lineTo(elx+80,490);ctx.lineTo(elx-80,490);ctx.closePath();ctx.fill();
-                ctx.fillStyle='#ff0600';
-            } else { ctx.fillStyle='#500000'; }
-            ctx.fillRect(elx-10,178,20,5);
+        for(let el=0;el<4;el++){
+            const elx=90+el*175;
+            if(Math.sin(t*0.005+el*0.9)>0){
+                ctx.fillStyle='rgba(255,8,0,0.09)'; ctx.fillRect(elx-60,0,120,FLOOR_Y);
+                ctx.fillStyle='#ff0500';
+            } else {ctx.fillStyle='#4a0000';}
+            ctx.fillRect(elx-10,0,20,7);
         }
-        ctx.fillStyle='#ff2200'; ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillStyle='#ff2200';ctx.font='bold 11px monospace';ctx.textAlign='center';
         ctx.globalAlpha=0.5+Math.sin(t*0.006)*0.3;
-        ctx.fillText('⚠ EMERGENCY LOCKDOWN ⚠',350,220);
+        ctx.fillText('\u26A0 EMERGENCY LOCKDOWN \u26A0',350,220);
         ctx.globalAlpha=1;
     }
 
-    // ── GUARDS ───────────────────────────────────────────────────────────────
-    for(const g of guards){
-        if(!g.alive){
-            if(g.deathTime>0){
-                ctx.save();ctx.translate(g.x,g.y);ctx.rotate(Math.PI/2);
-                ctx.globalAlpha=0.6; drawGuardBody(g.color,0,0,'right'); ctx.restore(); ctx.globalAlpha=1;
-                if(g.color==='red'&&!g.eyeballTaken&&!level6.hasEyeball){
-                    if(Math.abs(player.x-g.x)<55&&Math.abs(player.y-g.y)<55){
-                        ctx.fillStyle='rgba(0,0,0,0.90)';ctx.fillRect(g.x-102,g.y-50,204,22);
-                        ctx.fillStyle='#ffd700';ctx.font='bold 11px monospace';ctx.textAlign='center';
-                        ctx.fillText('[ ACTION ] - TAKE RIGHT EYEBALL',g.x,g.y-34);
-                    }
-                }
-            }
-            continue;
-        }
-        drawGuardBody(g.color,g.x,g.y,g.facing);
-        drawGuardHealthPips(g);
-        if(g.alert){ctx.fillStyle='#ff2020';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillText('!',g.x,g.y-58);}
-    }
-
-    // Guard bullets
-    for(const b of level6.marbleBullets){
-        ctx.fillStyle='#ffd700'; ctx.beginPath();ctx.arc(b.x,b.y,4,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='rgba(255,200,0,0.32)'; ctx.beginPath();ctx.arc(b.x,b.y,7,0,Math.PI*2);ctx.fill();
-    }
-
-    // ── DARKNESS + GUARD FLASHLIGHT CONES ────────────────────────────────────
-    if(!mr.lightsOn&&!emergency){
-        ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,700,500);
-        const CONE_LEN=210, CONE_ANG=Math.PI/6;
-        for(const g of guards){
-            if(!g.alive) continue;
-            ctx.save();
-            const fa=g.facing==='right'?0:g.facing==='left'?Math.PI:g.facing==='up'?-Math.PI/2:Math.PI/2;
-            ctx.translate(g.x+Math.cos(fa)*20, g.y+Math.sin(fa)*20); ctx.rotate(fa);
-            const cg2=ctx.createLinearGradient(0,0,CONE_LEN,0);
-            cg2.addColorStop(0,'rgba(255,248,200,0.65)');cg2.addColorStop(0.35,'rgba(255,242,175,0.38)');
-            cg2.addColorStop(0.75,'rgba(255,235,150,0.15)');cg2.addColorStop(1,'rgba(255,228,130,0)');
-            ctx.fillStyle=cg2; ctx.beginPath(); ctx.moveTo(0,0);
-            ctx.lineTo(CONE_LEN,-Math.tan(CONE_ANG)*CONE_LEN);
-            ctx.lineTo(CONE_LEN, Math.tan(CONE_ANG)*CONE_LEN);
-            ctx.closePath(); ctx.fill(); ctx.restore();
-        }
-    }
-
     // ── INTERACTION PROMPTS ───────────────────────────────────────────────────
-    const scanNear=Math.abs(player.x-scanX)<50&&Math.abs(player.y-scanY)<60;
-    if(!mr.elevatorUnlocked&&scanNear){
-        if(level6.hasEyeball&&guards.every(g=>!g.alive)){
-            ctx.fillStyle='rgba(0,0,0,0.90)';ctx.fillRect(scanX-110,scanY-52,220,22);
-            ctx.fillStyle='#00ff88';ctx.font='bold 10px monospace';ctx.textAlign='center';
-            ctx.fillText('[ ACTION ] - USE EYEBALL',scanX,scanY-36);
-        } else if(!level6.hasEyeball){
-            ctx.fillStyle='rgba(0,0,0,0.90)';ctx.fillRect(scanX-140,scanY-52,280,22);
-            ctx.fillStyle='#ff9966';ctx.font='bold 10px monospace';ctx.textAlign='center';
-            ctx.fillText('RETINA SCAN REQUIRED — TAKE EYEBALL',scanX,scanY-36);
-        } else {
-            ctx.fillStyle='rgba(0,0,0,0.90)';ctx.fillRect(scanX-130,scanY-52,260,22);
-            ctx.fillStyle='#ff4444';ctx.font='bold 10px monospace';ctx.textAlign='center';
-            ctx.fillText('NEUTRALIZE ALL HOSTILES FIRST',scanX,scanY-36);
-        }
-    }
-    if(mr.elevatorUnlocked&&Math.abs(player.x-(elvX+elvW/2))<70&&Math.abs(player.y-(elvY+elvH/2))<90){
-        ctx.fillStyle='rgba(0,0,0,0.90)';ctx.fillRect(elvX+elvW/2-100,elvY+elvH-20,200,22);
+    if(player.x > ELV_X-30){
+        ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(ELV_X+ELV_W/2-100,FLOOR_Y+8,200,22);
         ctx.fillStyle='#00ff88';ctx.font='bold 10px monospace';ctx.textAlign='center';
-        ctx.fillText('[ ACTION ] - CEO LEVEL',elvX+elvW/2,elvY+elvH-4);
+        ctx.fillText('[ ACTION ] - CEO LEVEL',ELV_X+ELV_W/2,FLOOR_Y+24);
     }
-    if(!mr.printerLocked&&Math.abs(player.x-printerX)<55&&Math.abs(player.y-printerY)<50&&!level6.marblePrinter.ui){
-        ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(printerX-90,printerY-52,180,22);
+    if(!mr.printerLocked && Math.abs(player.x-PRINTER_X)<72 && !level6.marblePrinter.ui){
+        ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(PRINTER_X-92,FLOOR_Y+8,184,22);
         ctx.fillStyle='#ffd700';ctx.font='bold 9px monospace';ctx.textAlign='center';
-        ctx.fillText('[ ACTION ] - ARMORY PRINTER',printerX,printerY-36);
+        ctx.fillText('[ ACTION ] - ARMORY PRINTER',PRINTER_X,FLOOR_Y+24);
     }
-    if(!mr.lightSwitchShot&&Math.abs(player.x-lsX)<40&&Math.abs(player.y-(lsBaseY+36))<50){
-        ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(lsX-100,lsBaseY+58,200,22);
-        ctx.fillStyle='#ffd700';ctx.font='bold 9px monospace';ctx.textAlign='center';
-        ctx.fillText('[ ACTION ] - PULL LIGHT CORD',lsX,lsBaseY+74);
-    }
-    if(player.x<80){
-        ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(4,440,130,22);
-        ctx.fillStyle='#c8884c';ctx.font='bold 12px Arial';ctx.textAlign='center';
-        ctx.fillText('← BRIDGE',69,455);
-    }
-    if(level6.hasEyeball){
-        ctx.fillStyle='rgba(0,0,0,0.80)';ctx.fillRect(285,474,130,20);
-        ctx.fillStyle='#fff';ctx.font='bold 10px monospace';ctx.textAlign='center';
-        ctx.fillText('👁 RETINAL KEY',350,487);
+    if(player.x < 130){
+        ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(4,FLOOR_Y+8,130,22);
+        ctx.fillStyle='#c0844a';ctx.font='bold 11px Arial';ctx.textAlign='center';
+        ctx.fillText('\u2190 BRIDGE',69,FLOOR_Y+24);
     }
 }
 
-// Draw a guard body (giant in colored camo fatigues)
-function drawGuardBody(color, x, y, facing) {
-    const t = Date.now();
-    const walkCycle = Math.sin(t / 130 + x * 0.07);
-    const legSwing = walkCycle * 8;
-    const armSwing = -walkCycle * 7;
-    const bob = Math.abs(walkCycle) * 2;
-    const dir = facing === 'right' ? 1 : -1;
-
-    // Camo color palettes
-    const camos = {
-        red:    { base: '#7a1a1a', mid: '#5a1010', dark: '#3a0808', acc: '#cc4444', skin: '#c8855a' },
-        blue:   { base: '#1a2a6a', mid: '#10205a', dark: '#081040', acc: '#4466cc', skin: '#d4935e' },
-        green:  { base: '#2a5a1a', mid: '#1a4a10', dark: '#0e2e08', acc: '#44aa44', skin: '#c07a4e' },
-        yellow: { base: '#7a6a10', mid: '#5a5008', dark: '#3a3404', acc: '#ccaa22', skin: '#cc9060' }
-    };
-    const c = camos[color] || camos.red;
-
-    // Giant scale: 1.4x normal
-    ctx.save(); ctx.translate(x, y - bob);
-
-    // Legs (giant size)
-    ctx.fillStyle = c.base;
-    ctx.fillRect(-11 - legSwing * dir, -2, 14, 28); // left leg
-    ctx.fillRect(-3 + legSwing * dir, -2, 14, 28);  // right leg
-    // Camo patches on legs
-    ctx.fillStyle = c.mid;
-    ctx.fillRect(-9 - legSwing * dir, 4, 6, 8);
-    ctx.fillRect(-1 + legSwing * dir, 10, 5, 6);
-    // Boots
-    ctx.fillStyle = '#1a1a0a';
-    ctx.fillRect(-14 - legSwing * dir, 24, 17, 8);
-    ctx.fillRect(-5 + legSwing * dir, 24, 17, 8);
-
-    // Torso (wide)
-    ctx.fillStyle = c.base;
-    ctx.fillRect(-18, -40, 36, 40);
-    // Camo pattern on torso
-    ctx.fillStyle = c.mid;
-    ctx.fillRect(-14, -36, 8, 10); ctx.fillRect(4, -28, 7, 8); ctx.fillRect(-6, -20, 6, 7);
-    ctx.fillStyle = c.dark;
-    ctx.fillRect(-2, -34, 5, 6); ctx.fillRect(8, -22, 4, 5); ctx.fillRect(-12, -18, 5, 4);
-    // Belt
-    ctx.fillStyle = '#1a1a0a'; ctx.fillRect(-18, -4, 36, 5);
-    ctx.fillStyle = '#c8a830'; ctx.fillRect(-4, -4, 8, 5); // belt buckle
-
-    // Tactical vest
-    ctx.fillStyle = '#2a2a1a';
-    ctx.fillRect(-16, -38, 32, 24);
-    ctx.strokeStyle = '#3a3a2a'; ctx.lineWidth = 1;
-    ctx.strokeRect(-14, -36, 28, 20);
-    // Vest pouches
-    ctx.fillStyle = '#3a3a22';
-    ctx.fillRect(-12, -32, 8, 7); ctx.fillRect(4, -32, 8, 7); ctx.fillRect(-4, -24, 8, 6);
-
-    // Arms with rifle
-    ctx.fillStyle = c.base;
-    const armLX = -18 + armSwing * dir * 5, armRX = 18 - armSwing * dir * 5;
-    ctx.fillRect(armLX - 5, -36, 10, 26); // left arm
-    ctx.fillRect(armRX - 5, -36, 10, 26); // right arm (holding rifle)
-    // Hands
-    ctx.fillStyle = c.skin;
-    ctx.beginPath(); ctx.arc(armLX, -11, 5, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(armRX, -11, 5, 0, Math.PI*2); ctx.fill();
-
-    // THREE-SHOT RIFLE
-    const rfDir = facing === 'right' ? 1 : -1;
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(rfDir * 14, -28, rfDir * 44, 7); // barrel
-    ctx.fillRect(rfDir * 14, -24, rfDir * 20, 14); // receiver body
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(rfDir * 22, -28, rfDir * 8, 4); // ejection port
-    // Stock
-    ctx.fillStyle = '#5a3a1a';
-    ctx.fillRect(-rfDir * 6, -28, -rfDir * 16, 14);
-    // Magazine (3-shot)
-    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(rfDir * 20, -14, rfDir * 8, 12);
-    // Muzzle
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(rfDir * 55, -27, rfDir * 5, 5);
-    // Flashlight on rifle (when lights off)
-    if(!level6.marbleRoom.lightsOn) {
-        ctx.fillStyle = '#ffffcc';
-        ctx.beginPath(); ctx.arc(rfDir * 58, -24, 3, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,180,0.6)';
-        ctx.beginPath(); ctx.arc(rfDir * 60, -24, 5, 0, Math.PI*2); ctx.fill();
-    }
-
-    // Head (giant — large)
-    ctx.fillStyle = c.skin;
-    ctx.beginPath(); ctx.ellipse(0, -52, 14, 15, 0, 0, Math.PI*2); ctx.fill();
-    // Eyes
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.ellipse(-5, -55, 4, 3, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(5, -55, 4, 3, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(-5 + dir, -55, 2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(5 + dir, -55, 2, 0, Math.PI*2); ctx.fill();
-    // Mouth — grimace
-    ctx.strokeStyle = '#5a2a10'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(-5, -45); ctx.lineTo(5, -45); ctx.stroke();
-    // Tactical helmet
-    ctx.fillStyle = c.dark;
-    ctx.beginPath(); ctx.arc(0, -56, 15, -Math.PI, 0); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = c.mid; ctx.fillRect(-16, -56, 32, 4); // brim
-    ctx.restore();
-}
-
-// Draw guard health pips (called after drawGuardBody, not inside it)
-function drawGuardHealthPips(g) {
-    for(let h = 0; h < g.health; h++) {
-        ctx.fillStyle = '#44ff44';
-        ctx.fillRect(g.x - 10 + h * 8, g.y - 78, 6, 5);
-    }
-}
 
 // Warehouse loading bay interior — panoramic window of marble security room.
 // Looking INSIDE the bay: dark ceiling + side walls + open front reveals road + nuclear plant.
@@ -11962,24 +11684,11 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.fillRect(bx-5,extTop-2,10,2);
     }
     // Cross-brace
-    ctx.fillStyle='#181410'; ctx.fillRect(wx,ceilTop+Math.round(ceilH*0.5)-1,ww,2);
-    // Hanging fluorescent fixtures
-    for(let li=0;li<4;li++){
-        const lx=wx+55+li*Math.round((ww-110)/3);
-        // Drop cable
-        ctx.strokeStyle='#0c0a08'; ctx.lineWidth=1;
-        ctx.beginPath();ctx.moveTo(lx,ceilTop);ctx.lineTo(lx,ceilTop+Math.round(ceilH*0.54));ctx.stroke();
-        // Housing
-        ctx.fillStyle='#252018'; ctx.fillRect(lx-18,ceilTop+Math.round(ceilH*0.54),36,5);
-        // Tube (flicker)
-        const flicker=Math.sin(t*0.07+li*1.9)>-0.9;
-        ctx.fillStyle=flicker?'#fdfce0':'#141210';
-        ctx.fillRect(lx-16,ceilTop+Math.round(ceilH*0.54)+1,32,3);
-        if(flicker){
-            const lp=ctx.createRadialGradient(lx,extTop,0,lx,extTop,52);
-            lp.addColorStop(0,'rgba(255,252,210,0.13)');lp.addColorStop(1,'rgba(255,252,210,0)');
-            ctx.fillStyle=lp; ctx.fillRect(lx-52,ceilTop,104,ceilH);
-        }
+    ctx.fillStyle='#141210'; ctx.fillRect(wx,ceilTop+Math.round(ceilH*0.5)-1,ww,2);
+    // Concrete ceiling texture (subtle horizontal banding — no fixtures)
+    ctx.strokeStyle='rgba(30,28,22,0.7)'; ctx.lineWidth=0.5;
+    for(let cb=0;cb<3;cb++){
+        ctx.beginPath();ctx.moveTo(wx,ceilTop+Math.round(ceilH*(0.3+cb*0.25)));ctx.lineTo(wx+ww,ceilTop+Math.round(ceilH*(0.3+cb*0.25)));ctx.stroke();
     }
 
     // ── EXTERIOR SKY (visible through bay opening between pillars) ────────────
@@ -23108,7 +22817,7 @@ function update() {
                     level6.marbleElevatorTransition = false;
                     if(level6.marbleElevatorTarget === 'marbleRoom') {
                         level6.room = 'marbleRoom';
-                        player.x = 510; player.y = 310;
+                        player.x = 530; player.y = 380;
                         level6.lastExitEdge = 'right';
                         // Trigger emergency state if returning after CEO defeat
                         if(level6.ceoDefeated && !level6.marbleRoom.emergencyLights) {
@@ -23619,7 +23328,7 @@ function update() {
                 // Right door — "No Admittance" white door to marble security room
                 if(player.x > 645 && !level6.marbleElevatorTransition && (keys[' '] || keys['action'])) {
                     level6.room = 'marbleRoom';
-                    player.x = 95; player.y = 330;
+                    player.x = 120; player.y = 380;
                     level6.lastExitEdge = 'left';
                     keys[' '] = false; keys['action'] = false;
                     if(level6.ceoDefeated && level6.marbleRoom && !level6.marbleRoom.emergencyLights) {
@@ -23675,208 +23384,37 @@ function update() {
             }
 
             else if(level6.room === 'marbleRoom') {
-                // ── 2D NAV (like CEO office) ──────────────────────────────────
+                // ── 1D SIDE-SCROLLING — walk left/right, floor locked ──────────
                 const mr = level6.marbleRoom;
-                const guards = level6.marbleGuards;
-                // Elevator + scanner positions matching draw function
-                const ELV_X = 548, ELV_Y = 152, ELV_W = 130, ELV_H = 175;
-                const SCAN_X = ELV_X - 30, SCAN_Y = ELV_Y + ELV_H/2;
-                const PRINTER_X = 618, PRINTER_Y = 415;
-                const CORD_X = 350, CORD_Y = 215; // pull cord hangpoint
+                const FLOOR_Y = 380;
+                const ELV_X = 548, ELV_W = 130;
+                const PRINTER_X = 370;
+
+                player.y = FLOOR_Y;
 
                 if(!level6.marblePrinter.ui) {
-                    const prevX = player.x, prevY = player.y;
-                    if(keys['ArrowLeft'] || keys['left'])   { player.x = Math.max(68, player.x - 5); if(player.x!==prevX){ player.facing='left';  player.lastMove=Date.now(); } }
-                    if(keys['ArrowRight'] || keys['right']) { player.x = Math.min(670, player.x + 5); if(player.x!==prevX){ player.facing='right'; player.lastMove=Date.now(); } }
-                    if(keys['ArrowUp'] || keys['up'])       { player.y = Math.max(185, player.y - 5); if(player.y!==prevY){ player.facing='up';    player.lastMove=Date.now(); } }
-                    if(keys['ArrowDown'] || keys['down'])   { player.y = Math.min(460, player.y + 5); if(player.y!==prevY){ player.facing='down';  player.lastMove=Date.now(); } }
-                    if(!keys['ArrowLeft']&&!keys['left']&&!keys['ArrowRight']&&!keys['right']&&
-                       !keys['ArrowUp']&&!keys['up']&&!keys['ArrowDown']&&!keys['down']) {
-                        if(Date.now()-player.lastMove > 200) player.facing = 'down';
-                    }
-                    // Collision: back-wall console/wainscoting
-                    if(player.y < 200) { player.x = prevX; player.y = prevY; }
-                    // Collision: elevator wall (when not unlocked or not yet entering)
-                    if(player.x > ELV_X - 10 && player.x < ELV_X + ELV_W + 10 && player.y < ELV_Y + ELV_H + 5 && !mr.elevatorUnlocked) { player.x = prevX; player.y = prevY; }
-                    // Collision: right wall beyond elevator/printer
-                    if(player.x > 660) { player.x = prevX; }
-                    // Left exit zone
-                    if(player.x < 68 && player.y > 190 && player.y < 455) {
-                        level6.room = 'nuclearBridge';
-                        player.x = 650; player.y = 140;
-                        level6.lastExitEdge = 'right';
+                    if(keys['ArrowLeft']||keys['left'])   { player.x=Math.max(70,player.x-5); player.facing='left'; player.lastMove=Date.now(); }
+                    if(keys['ArrowRight']||keys['right']) { player.x=Math.min(648,player.x+5); player.facing='right'; player.lastMove=Date.now(); }
+                    // Left exit → bridge
+                    if(player.x <= 70) {
+                        level6.room='nuclearBridge';
+                        player.x=650; player.y=140;
+                        level6.lastExitEdge='right';
                     }
                 }
 
-                // ── LIGHTS STATE MACHINE ──────────────────────────────────────
-                const lightsOff = !mr.lightsOn;
-                for(const g of guards) {
-                    if(!g.alive) continue;
-                    if(mr.lightsOn) {
-                        g.state = 'static';
-                    } else if(g.state === 'static') {
-                        if(g.color === 'red' && !mr.lightSwitchShot) {
-                            g.state = 'toConsole';
-                        } else {
-                            g.state = 'patrol';
-                        }
-                    }
+                // Elevator enter (no locking — open access)
+                if(player.x > ELV_X+ELV_W/2-40 && !level6.marbleElevatorTransition && (keys[' ']||keys['action'])) {
+                    level6.marbleElevatorTransition=true;
+                    level6.marbleElevatorFadeAlpha=0;
+                    level6.marbleElevatorTarget='entryway';
+                    keys[' ']=false; keys['action']=false;
                 }
 
-                // ── GUARD AI (2D L-shaped waypoint patrol) ────────────────────
-                const GUARD_SPEED = 1.3;
-                for(const g of guards) {
-                    if(!g.alive) continue;
-
-                    if(g.state === 'patrol') {
-                        if(g.patrolPause > 0) {
-                            g.patrolPause--;
-                        } else {
-                            // Walk toward current waypoint
-                            const wp = g.wp[g.wpIdx];
-                            const dx = wp.x - g.x, dy = wp.y - g.y;
-                            const dist = Math.sqrt(dx*dx + dy*dy);
-                            if(dist < 4) {
-                                // Reached waypoint — bounce at ends
-                                g.wpIdx += g.wpDir;
-                                if(g.wpIdx >= g.wp.length) { g.wpIdx = g.wp.length - 2; g.wpDir = -1; }
-                                if(g.wpIdx < 0)             { g.wpIdx = 1;               g.wpDir =  1; }
-                                g.patrolPause = 45;
-                            } else {
-                                g.x += (dx/dist) * GUARD_SPEED;
-                                g.y += (dy/dist) * GUARD_SPEED;
-                                // Update facing based on dominant movement direction
-                                if(Math.abs(dx) >= Math.abs(dy)) {
-                                    g.facing = dx > 0 ? 'right' : 'left';
-                                } else {
-                                    g.facing = dy > 0 ? 'down' : 'up';
-                                }
-                            }
-                        }
-                    } else if(g.state === 'toConsole') {
-                        // Red guard walks to console to restore lights
-                        const dx = CORD_X - g.x, dy = CORD_Y - g.y;
-                        const dist = Math.sqrt(dx*dx + dy*dy);
-                        if(dist < 10 && !mr.lightSwitchShot) {
-                            mr.lightsOn = true;
-                            g.state = 'static';
-                            for(const og of guards) { if(og.alive && og.state === 'patrol') og.state = 'static'; }
-                        } else {
-                            g.x += (dx/Math.max(dist,1)) * 1.1;
-                            g.y += (dy/Math.max(dist,1)) * 1.1;
-                            g.facing = Math.abs(dx) >= Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up');
-                        }
-                    }
-
-                    if(g.shootCooldown > 0) g.shootCooldown--;
-
-                    // ── CONE DETECTION (lights off, 4-directional) ────────────
-                    if(lightsOff) {
-                        const CONE_LEN = 210, HALF_ANG = Math.PI/6;
-                        const faceAngle = g.facing==='right' ? 0 : g.facing==='left' ? Math.PI :
-                                          g.facing==='up' ? -Math.PI/2 : Math.PI/2;
-                        const ox = g.x + Math.cos(faceAngle)*20;
-                        const oy = g.y + Math.sin(faceAngle)*20;
-                        const toPx = player.x - ox, toPy = player.y - oy;
-                        const dist = Math.sqrt(toPx*toPx + toPy*toPy);
-                        const playerAng = Math.atan2(toPy, toPx);
-                        let diff = playerAng - faceAngle;
-                        while(diff > Math.PI)  diff -= 2*Math.PI;
-                        while(diff < -Math.PI) diff += 2*Math.PI;
-                        if(dist < CONE_LEN && Math.abs(diff) < HALF_ANG && g.shootCooldown <= 0 && g.shootBurst === 0) {
-                            g.alert = true;
-                            g.shootBurst = 3; g.shootBurstTimer = 0;
-                        }
-                    }
-                    if(!lightsOff) g.alert = false;
-
-                    // Fire burst (toward player)
-                    if(g.shootBurst > 0) {
-                        g.shootBurstTimer++;
-                        if(g.shootBurstTimer % 7 === 0) {
-                            const px = player.x - g.x, py = player.y - g.y;
-                            const pd = Math.sqrt(px*px+py*py) || 1;
-                            level6.marbleBullets.push({ x: g.x + (px/pd)*32, y: g.y + (py/pd)*32, vx: (px/pd)*10, vy: (py/pd)*10 });
-                            g.shootBurst--;
-                            if(g.shootBurst === 0) { g.alert = false; g.shootCooldown = 180; }
-                        }
-                    }
-                }
-
-                // ── GUARD BULLETS ─────────────────────────────────────────────
-                for(let bi = level6.marbleBullets.length - 1; bi >= 0; bi--) {
-                    const b = level6.marbleBullets[bi];
-                    b.x += b.vx; b.y += b.vy;
-                    if(b.x < 0 || b.x > 700 || b.y < 0 || b.y > 500) { level6.marbleBullets.splice(bi, 1); continue; }
-                    if(Math.abs(b.x-player.x) < 20 && Math.abs(b.y-player.y) < 24) {
-                        level6.marbleBullets.splice(bi, 1);
-                        level6.moneyLives = Math.max(0, level6.moneyLives - 1);
-                        level6.damageFlash = 1;
-                    }
-                }
-
-                // ── PLAYER BULLETS HIT GUARDS ─────────────────────────────────
-                for(let bi = bullets.length - 1; bi >= 0; bi--) {
-                    if(bullets[bi].fromCEO) continue;
-                    for(const g of guards) {
-                        if(!g.alive) continue;
-                        if(Math.abs(bullets[bi].x-g.x) < 28 && Math.abs(bullets[bi].y-g.y) < 38) {
-                            bullets.splice(bi, 1);
-                            g.health--;
-                            if(g.health <= 0) { g.alive = false; g.deathTime = Date.now(); g.state = 'dead'; }
-                            break;
-                        }
-                    }
-                }
-
-                // ── SHOOT LIGHT PANEL ─────────────────────────────────────────
-                if(!mr.lightSwitchShot) {
-                    for(let bi = bullets.length - 1; bi >= 0; bi--) {
-                        if(bullets[bi].fromCEO) continue;
-                        const b = bullets[bi];
-                        if(Math.abs(b.x - CORD_X) < 80 && b.y > 130 && b.y < 200) {
-                            bullets.splice(bi, 1);
-                            mr.lightSwitchShot = true; mr.lightsOn = false;
-                            const red = guards.find(g => g.color==='red' && g.alive);
-                            if(red && red.state==='toConsole') red.state = 'patrol';
-                            break;
-                        }
-                    }
-                }
-
-                // ── PULL LIGHT CORD ───────────────────────────────────────────
-                if(!mr.lightSwitchShot && Math.abs(player.x-CORD_X) < 50 && Math.abs(player.y-CORD_Y) < 55 && (keys[' '] || keys['action'])) {
-                    mr.lightsOn = !mr.lightsOn;
-                    keys[' '] = false; keys['action'] = false;
-                }
-
-                // ── EYEBALL PICKUP ────────────────────────────────────────────
-                const redGuard = guards.find(g => g.color === 'red');
-                if(redGuard && !redGuard.alive && !redGuard.eyeballTaken && !level6.hasEyeball) {
-                    if(Math.abs(player.x-redGuard.x) < 55 && Math.abs(player.y-redGuard.y) < 55 && (keys[' '] || keys['action'])) {
-                        level6.hasEyeball = true; redGuard.eyeballTaken = true;
-                        keys[' '] = false; keys['action'] = false;
-                    }
-                }
-
-                // ── RETINA SCANNER ────────────────────────────────────────────
-                if(!mr.elevatorUnlocked && level6.hasEyeball && Math.abs(player.x-SCAN_X) < 45 && Math.abs(player.y-SCAN_Y) < 55 && (keys[' '] || keys['action'])) {
-                    mr.elevatorUnlocked = true;
-                    keys[' '] = false; keys['action'] = false;
-                }
-
-                // ── ELEVATOR ENTER ────────────────────────────────────────────
-                if(mr.elevatorUnlocked && Math.abs(player.x-(ELV_X+ELV_W/2)) < 65 && Math.abs(player.y-(ELV_Y+ELV_H/2)) < 88 && !level6.marbleElevatorTransition && (keys[' '] || keys['action'])) {
-                    level6.marbleElevatorTransition = true;
-                    level6.marbleElevatorFadeAlpha = 0;
-                    level6.marbleElevatorTarget = 'entryway';
-                    keys[' '] = false; keys['action'] = false;
-                }
-
-                // ── ARMORY PRINTER ────────────────────────────────────────────
-                if(!mr.printerLocked && Math.abs(player.x-PRINTER_X) < 55 && Math.abs(player.y-PRINTER_Y) < 52 && (keys[' '] || keys['action'])) {
-                    level6.marblePrinter.ui = !level6.marblePrinter.ui;
-                    keys[' '] = false; keys['action'] = false;
+                // Armory printer
+                if(!mr.printerLocked && Math.abs(player.x-PRINTER_X)<65 && (keys[' ']||keys['action'])) {
+                    level6.marblePrinter.ui=!level6.marblePrinter.ui;
+                    keys[' ']=false; keys['action']=false;
                 }
                 if(level6.marblePrinter.ui && !level6.marblePrinter.printing) {
                     if(keys['ArrowLeft']||keys['left'])   { level6.marblePrinter.choice=Math.max(0,level6.marblePrinter.choice-1); keys['ArrowLeft']=keys['left']=false; }
@@ -23884,8 +23422,8 @@ function update() {
                     if(keys[' ']||keys['action']) { level6.marblePrinter.printing=true; level6.marblePrinter.progress=0; level6.marblePrinter.item=['rifle','armor','ammo'][level6.marblePrinter.choice]; keys[' ']=keys['action']=false; }
                 }
                 if(level6.marblePrinter.printing) {
-                    level6.marblePrinter.progress += 0.008;
-                    if(level6.marblePrinter.progress >= 1) {
+                    level6.marblePrinter.progress+=0.008;
+                    if(level6.marblePrinter.progress>=1) {
                         level6.marblePrinter.printing=false; level6.marblePrinter.ui=false; level6.marblePrinter.progress=0;
                         if(level6.marblePrinter.item==='rifle') { level6.hasThreeShotRifle=true; level6.threeShotRifleAmmo=Math.min(level6.threeShotRifleAmmo+9,27); }
                         if(level6.marblePrinter.item==='armor') { level6.moneyLives=Math.min(level6.moneyLives+1,4); }
@@ -23894,28 +23432,28 @@ function update() {
                     }
                 }
 
-                // ── FIRE WEAPONS ──────────────────────────────────────────────
+                // Fire weapons
                 if((keys[' ']||keys['action']) && !level6.marblePrinter.ui) {
-                    if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo >= 3) {
+                    if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo>=3) {
                         keys[' ']=keys['action']=false;
-                        const ang = player.facing==='right'?0:player.facing==='left'?Math.PI:player.facing==='up'?-Math.PI/2:Math.PI/2;
-                        const vx=Math.cos(ang)*12, vy=Math.sin(ang)*12;
-                        for(let s=0;s<3;s++) setTimeout(()=>{ bullets.push({x:player.x+vx*4,y:player.y+vy*4,vx,vy,fromCEO:false}); }, s*80);
+                        const ang=player.facing==='right'?0:Math.PI;
+                        const vx=Math.cos(ang)*12, vy=0;
+                        for(let s=0;s<3;s++) setTimeout(()=>{bullets.push({x:player.x+vx*4,y:player.y+vy*4,vx,vy,fromCEO:false});},s*80);
                         level6.threeShotRifleAmmo-=3;
-                        muzzleFlashes.push({x:player.x+vx*4,y:player.y+vy*4,life:6,facing:player.facing});
+                        muzzleFlashes.push({x:player.x+vx*4,y:player.y,life:6,facing:player.facing});
                         player.shootTimer=20;
-                    } else if(level6.hasRevolver && level6.revolverAmmo > 0) {
+                    } else if(level6.hasRevolver && level6.revolverAmmo>0) {
                         keys[' ']=keys['action']=false;
-                        const ang = player.facing==='right'?0:player.facing==='left'?Math.PI:player.facing==='up'?-Math.PI/2:Math.PI/2;
-                        const vx=Math.cos(ang)*12, vy=Math.sin(ang)*12;
-                        bullets.push({x:player.x+vx*4,y:player.y+vy*4,vx,vy,fromCEO:false});
+                        const ang=player.facing==='right'?0:Math.PI;
+                        const vx=Math.cos(ang)*12;
+                        bullets.push({x:player.x+vx*4,y:player.y,vx,vy:0,fromCEO:false});
                         level6.revolverAmmo--;
-                        muzzleFlashes.push({x:player.x+vx*4,y:player.y+vy*4,life:6,facing:player.facing});
+                        muzzleFlashes.push({x:player.x+vx*4,y:player.y,life:6,facing:player.facing});
                         player.shootTimer=20;
                     }
                 }
 
-                // ── POST-CEO EMERGENCY ────────────────────────────────────────
+                // Post-CEO emergency
                 if(level6.ceoDefeated && !mr.emergencyLights) {
                     mr.emergencyLights=true; mr.printerLocked=true;
                 }
