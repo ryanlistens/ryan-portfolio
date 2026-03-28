@@ -1086,6 +1086,8 @@ function initLevel(lv) {
         level6.marbleElevatorFadeAlpha = 0;
         level6.marbleElevatorFadeIn = false;
         level6.marbleElevatorTarget = null; // 'marbleRoom' or 'entryway'
+        level6.hasPMHand = false;
+        level6.marbleDumpsterTaken = false;
 
         // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
         // This matters when the player skips directly to level 6 without playing level 5
@@ -11454,30 +11456,60 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
+    // ── RIGHT END WALL (marble room access) ──────────────────────────────────
+    {
+        const wallL = 632;
+        // Full-height wall panel — same dark industrial style as left end wall
+        ctx.fillStyle = '#111313';
+        ctx.fillRect(wallL, -GY, CANVAS_W - wallL + GX, factFloor + GY);
+        // Horizontal panel ribbing
+        ctx.strokeStyle = '#191c19'; ctx.lineWidth = 1;
+        for (let rwy = 20; rwy < factFloor; rwy += 28) {
+            ctx.beginPath(); ctx.moveTo(wallL, rwy); ctx.lineTo(CANVAS_W, rwy); ctx.stroke();
+        }
+        // Vertical ribbing
+        ctx.strokeStyle = '#171a17'; ctx.lineWidth = 2;
+        for (let rwx = wallL + 14; rwx < CANVAS_W; rwx += 18) {
+            ctx.beginPath(); ctx.moveTo(rwx, 0); ctx.lineTo(rwx, factFloor); ctx.stroke();
+        }
+        // Left edge seam
+        ctx.fillStyle = '#0e1010';
+        ctx.fillRect(wallL, -GY, 4, factFloor + GY);
+    }
+
     // Right-side white door — "No Admittance without Top Security Clearance"
     {
-        const doorX = 655, doorW = 36, doorTop = bridgePlatY - 56, doorH = 62;
+        const doorX = 638, doorW = 50;
+        const doorTop = railTopY - 4, doorH = bridgePlatY - railTopY + 12;
         // Door frame (steel)
-        ctx.fillStyle = '#5a5a5a'; ctx.fillRect(doorX - 3, doorTop - 3, doorW + 6, doorH + 3);
+        ctx.fillStyle = '#5a5a5a'; ctx.fillRect(doorX - 4, doorTop - 4, doorW + 8, doorH + 4);
         // White door face
         ctx.fillStyle = '#f0ede8'; ctx.fillRect(doorX, doorTop, doorW, doorH);
-        // Door highlight
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(doorX + 1, doorTop + 1, doorW - 2, 3);
-        // Recessed panels
+        // Door highlight (top sheen)
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(doorX + 1, doorTop + 1, doorW - 2, 4);
+        // Recessed panels — two vertical panels
         ctx.strokeStyle = '#c8c5c0'; ctx.lineWidth = 1;
-        ctx.strokeRect(doorX + 4, doorTop + 6, doorW - 8, 22);
-        ctx.strokeRect(doorX + 4, doorTop + 33, doorW - 8, 22);
-        // Door knob
+        const panH = Math.round((doorH - 20) / 2) - 4;
+        ctx.strokeRect(doorX + 5, doorTop + 8, doorW - 10, panH);
+        ctx.strokeRect(doorX + 5, doorTop + 14 + panH, doorW - 10, panH);
+        // Inner panel sheen
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(doorX + 6, doorTop + 9, doorW - 12, 3);
+        ctx.fillRect(doorX + 6, doorTop + 15 + panH, doorW - 12, 3);
+        // Door knob (left edge — opens left)
         ctx.fillStyle = '#c8a830';
-        ctx.beginPath(); ctx.arc(doorX + 6, doorTop + doorH / 2, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(doorX + 8, doorTop + Math.round(doorH * 0.55), 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#a88020';
+        ctx.beginPath(); ctx.arc(doorX + 8, doorTop + Math.round(doorH * 0.55), 2, 0, Math.PI * 2); ctx.fill();
         // Warning sign above door
         ctx.fillStyle = '#cc0000';
-        ctx.fillRect(doorX - 10, doorTop - 24, doorW + 20, 20);
+        ctx.fillRect(doorX - 4, doorTop - 22, doorW + 8, 18);
+        ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 1;
+        ctx.strokeRect(doorX - 4, doorTop - 22, doorW + 8, 18);
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('NO ADMITTANCE', doorX + doorW / 2, doorTop - 16);
-        ctx.fillText('WITHOUT TOP SECURITY', doorX + doorW / 2, doorTop - 10);
-        ctx.fillText('CLEARANCE', doorX + doorW / 2, doorTop - 4);
+        ctx.fillText('NO ADMITTANCE', doorX + doorW / 2, doorTop - 14);
+        ctx.fillText('WITHOUT TOP SEC. CLEARANCE', doorX + doorW / 2, doorTop - 7);
     }
 
     // Nav hint
@@ -11504,134 +11536,291 @@ function drawNuclearAssemblyBridge() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MARBLE SECURITY ROOM — CEO checkpoint. 4 giant guards, retina scanner, elevator.
-// ═══════════════════════════════════════════════════════════════════════════════
 // MARBLE SECURITY ROOM — CEO checkpoint. 1D side-scrolling anteroom.
-// Dark luxury marble. Window panorama. Armory printer. CEO elevator.
+// Full-wall panoramic window. Red carpet. Palm scanner elevator. PM waste dumpster.
 // ═══════════════════════════════════════════════════════════════════
 function drawLevel6MarbleRoom() {
     const t = Date.now();
     const mr = level6.marbleRoom;
     const emergency = mr.emergencyLights;
     const FLOOR_Y = 380;
-    const ELV_X = 548, ELV_Y = 118, ELV_W = 130, ELV_H = FLOOR_Y - ELV_Y;
-    const ELV_PROMPT_X = ELV_X + ELV_W/2;
+    const ELV_X = 548, ELV_Y = 60, ELV_W = 130, ELV_H = FLOOR_Y - ELV_Y;
+    const SILL_Y = FLOOR_Y - 26;   // top of wainscoting/sill band
+    // Window spans full wall height, left of elevator
+    const winX = 70, winY = 0, winW = ELV_X - 74, winH = SILL_Y;
 
     // ── BACKGROUND WALL (dark near-black marble) ─────────────────────────────
     ctx.fillStyle = emergency ? '#130202' : '#0d0b09';
     ctx.fillRect(0, 0, 700, FLOOR_Y);
 
-    // ── PANORAMIC WINDOW ─────────────────────────────────────────────────────
-    // Spans most of back wall width, from near top to ~half the wall height
-    const winX=74, winY=24, winW=468, winH=160;
-    ctx.fillStyle='#080706'; ctx.fillRect(winX-8, winY-8, winW+16, winH+16);
+    // ── FULL-WALL PANORAMIC WINDOW ────────────────────────────────────────────
+    // Thin outer frame — dark steel
+    ctx.fillStyle = '#060504';
+    ctx.fillRect(winX - 6, winY, winW + 12, winH + 6);
     drawMarbleWindowScene(winX, winY, winW, winH);
-    // Horizontal crossbar
-    ctx.fillStyle='#080706'; ctx.fillRect(winX, winY+Math.round(winH/2)-2, winW, 4);
-    // 4 vertical mullions
-    for(let m=1;m<4;m++) { ctx.fillStyle='#080706'; ctx.fillRect(winX+Math.round(m*winW/4)-2, winY, 4, winH); }
-    // Sill — dark with gold accent line
-    ctx.fillStyle='#18140e'; ctx.fillRect(winX-10, winY+winH, winW+20, 14);
-    ctx.fillStyle='#4a3a0a'; ctx.fillRect(winX-10, winY+winH, winW+20, 2);
-    ctx.fillStyle='#7e6214'; ctx.fillRect(winX-10, winY+winH+1, winW+20, 1);
+    // Structural mullions — 3 vertical dividers + 1 horizontal mid-rail
+    ctx.fillStyle = '#070605';
+    for(let m = 1; m < 4; m++) {
+        ctx.fillRect(winX + Math.round(m * winW / 4) - 2, winY, 4, winH);
+    }
+    ctx.fillRect(winX, Math.round(winH * 0.42), winW, 4);  // horizontal rail
+    // Sill — dark marble with gold accent line
+    ctx.fillStyle = '#18140e'; ctx.fillRect(winX - 6, SILL_Y, winW + 12, 26);
+    ctx.fillStyle = '#4a3a0a'; ctx.fillRect(winX - 6, SILL_Y, winW + 12, 2);
+    ctx.fillStyle = '#7e6214'; ctx.fillRect(winX - 6, SILL_Y + 1, winW + 12, 1);
 
-    // ── WALL PANEL (between window sill and wainscoting rail) ────────────────
-    const wallPanelY = winY + winH + 14;
-    ctx.fillStyle='#0c0a08'; ctx.fillRect(68, wallPanelY, ELV_X-68, FLOOR_Y - wallPanelY - 18);
-    // Wainscoting rail at floor
-    ctx.fillStyle='#38280a'; ctx.fillRect(68, FLOOR_Y-18, ELV_X-68, 18);
-    ctx.fillStyle='#3e3009'; ctx.fillRect(68, FLOOR_Y-18, ELV_X-68, 2);
-    ctx.fillStyle='#7a5e14'; ctx.fillRect(68, FLOOR_Y-17, ELV_X-68, 1);
+    // ── RIGHT WALL (behind elevator) ─────────────────────────────────────────
+    ctx.fillStyle = '#0d0b09'; ctx.fillRect(ELV_X + ELV_W, 0, 700 - (ELV_X + ELV_W), FLOOR_Y);
 
-    // ── FLOOR (black marble — large tiles + veining) ──────────────────────────
-    ctx.fillStyle='#090706'; ctx.fillRect(0, FLOOR_Y, 700, 500-FLOOR_Y);
-    // Tile seam grid
-    ctx.strokeStyle='rgba(20,16,12,0.95)'; ctx.lineWidth=0.8;
-    for(let tx=0;tx<=700;tx+=80) { ctx.beginPath();ctx.moveTo(tx,FLOOR_Y);ctx.lineTo(tx,500);ctx.stroke(); }
-    for(let ty=FLOOR_Y+50;ty<=500;ty+=55) { ctx.beginPath();ctx.moveTo(0,ty);ctx.lineTo(700,ty);ctx.stroke(); }
-    // Cream veining on floor
-    ctx.strokeStyle='rgba(198,182,148,0.22)'; ctx.lineWidth=0.8;
+    // ── FLOOR (black marble tiles + veining) ─────────────────────────────────
+    ctx.fillStyle = '#090706'; ctx.fillRect(0, FLOOR_Y, 700, 500 - FLOOR_Y);
+    ctx.strokeStyle = 'rgba(20,16,12,0.95)'; ctx.lineWidth = 0.8;
+    for(let tx = 0; tx <= 700; tx += 80) { ctx.beginPath(); ctx.moveTo(tx, FLOOR_Y); ctx.lineTo(tx, 500); ctx.stroke(); }
+    for(let ty = FLOOR_Y + 50; ty <= 500; ty += 55) { ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(700, ty); ctx.stroke(); }
+    // Cream veining
+    ctx.strokeStyle = 'rgba(198,182,148,0.22)'; ctx.lineWidth = 0.8;
     for(const [x1,y1,x2,y2,x3,y3,x4,y4] of [
         [30,FLOOR_Y+18,130,FLOOR_Y+32,220,FLOOR_Y+20,360,FLOOR_Y+36],
         [90,FLOOR_Y+68,210,FLOOR_Y+80,340,FLOOR_Y+62,490,FLOOR_Y+76],
-        [180,FLOOR_Y+115,300,FLOOR_Y+128,430,FLOOR_Y+110,580,FLOOR_Y+124]
-    ]) { ctx.beginPath();ctx.moveTo(x1,y1);ctx.bezierCurveTo(x2,y2,x3,y3,x4,y4);ctx.stroke(); }
+        [180,FLOOR_Y+110,300,FLOOR_Y+124,430,FLOOR_Y+106,560,FLOOR_Y+120]
+    ]) { ctx.beginPath(); ctx.moveTo(x1,y1); ctx.bezierCurveTo(x2,y2,x3,y3,x4,y4); ctx.stroke(); }
+
+    // ── RED CARPET — from entrance to elevator ────────────────────────────────
+    {
+        const carpX = 68, carpW = ELV_X - 68, carpY = FLOOR_Y, carpH = 52;
+        // Shadow under carpet
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(carpX + 2, carpY + 4, carpW, carpH);
+        // Carpet body — deep crimson
+        const carpGrad = ctx.createLinearGradient(carpX, carpY, carpX, carpY + carpH);
+        carpGrad.addColorStop(0, '#8b0000');
+        carpGrad.addColorStop(0.3, '#a00000');
+        carpGrad.addColorStop(0.7, '#880000');
+        carpGrad.addColorStop(1, '#700000');
+        ctx.fillStyle = carpGrad;
+        ctx.fillRect(carpX, carpY, carpW, carpH);
+        // Gold border trim — top edge
+        ctx.fillStyle = '#c8a830'; ctx.fillRect(carpX, carpY, carpW, 2);
+        ctx.fillStyle = '#f0cc50'; ctx.fillRect(carpX, carpY, carpW, 1);
+        // Gold border trim — bottom edge
+        ctx.fillStyle = '#c8a830'; ctx.fillRect(carpX, carpY + carpH - 2, carpW, 2);
+        ctx.fillStyle = '#f0cc50'; ctx.fillRect(carpX, carpY + carpH - 1, carpW, 1);
+        // Gold border trim — left edge
+        ctx.fillStyle = '#c8a830'; ctx.fillRect(carpX, carpY, 2, carpH);
+        ctx.fillStyle = '#c8a830'; ctx.fillRect(carpX + carpW - 2, carpY, 2, carpH);
+        // Pile texture — subtle vertical lines
+        ctx.strokeStyle = 'rgba(160,0,0,0.4)'; ctx.lineWidth = 0.6;
+        for(let cx2 = carpX + 8; cx2 < carpX + carpW - 4; cx2 += 6) {
+            ctx.beginPath(); ctx.moveTo(cx2, carpY + 3); ctx.lineTo(cx2, carpY + carpH - 3); ctx.stroke();
+        }
+        // Fringe at left and right ends
+        ctx.strokeStyle = '#c8a830'; ctx.lineWidth = 0.8;
+        for(let fi = 0; fi < 8; fi++) {
+            const fy = carpY + 4 + fi * 6;
+            ctx.beginPath(); ctx.moveTo(carpX, fy); ctx.lineTo(carpX - 5, fy + 3); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(carpX + carpW, fy); ctx.lineTo(carpX + carpW + 5, fy + 3); ctx.stroke();
+        }
+    }
 
     // ── LEFT DOORWAY (exit to bridge) ────────────────────────────────────────
-    ctx.fillStyle='#000'; ctx.fillRect(0,0,68,FLOOR_Y);
-    // Right jamb of door frame
-    ctx.fillStyle='#1a1815'; ctx.fillRect(66,0,7,FLOOR_Y);
-    ctx.fillStyle='#362a08'; ctx.fillRect(66,0,1.5,FLOOR_Y);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 68, FLOOR_Y);
+    // Right jamb
+    ctx.fillStyle = '#1a1815'; ctx.fillRect(64, 0, 8, FLOOR_Y);
+    ctx.fillStyle = '#362a08'; ctx.fillRect(64, 0, 2, FLOOR_Y);
     // EXIT sign
-    ctx.fillStyle='#009928'; ctx.fillRect(2,22,60,14);
-    ctx.fillStyle='#fff'; ctx.font='bold 9px monospace'; ctx.textAlign='center';
-    ctx.fillText('EXIT',32,33);
+    ctx.fillStyle = '#009928'; ctx.fillRect(2, 22, 58, 14);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('EXIT', 31, 33);
 
-    // ── RIGHT WALL (behind elevator) ─────────────────────────────────────────
-    ctx.fillStyle='#0d0b09'; ctx.fillRect(ELV_X+ELV_W,0,700-(ELV_X+ELV_W),FLOOR_Y);
+    // ── PM WASTE DUMPSTER — hand item inside ─────────────────────────────────
+    {
+        const DUMP_X = 175, DUMP_Y = FLOOR_Y - 54, DUMP_W = 62, DUMP_H = 54;
+        // Dumpster shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(DUMP_X + 4, DUMP_Y + DUMP_H, DUMP_W, 6);
+        // Dumpster body — dark industrial metal
+        const dg = ctx.createLinearGradient(DUMP_X, DUMP_Y, DUMP_X + DUMP_W, DUMP_Y);
+        dg.addColorStop(0, '#1e1c18'); dg.addColorStop(0.4, '#2c2a24'); dg.addColorStop(1, '#181612');
+        ctx.fillStyle = dg; ctx.fillRect(DUMP_X, DUMP_Y, DUMP_W, DUMP_H);
+        // Rivet bands
+        ctx.strokeStyle = '#161412'; ctx.lineWidth = 1;
+        for(let rb = DUMP_Y + 14; rb < DUMP_Y + DUMP_H; rb += 14) {
+            ctx.beginPath(); ctx.moveTo(DUMP_X, rb); ctx.lineTo(DUMP_X + DUMP_W, rb); ctx.stroke();
+        }
+        ctx.strokeStyle = '#302e28'; ctx.lineWidth = 2;
+        ctx.strokeRect(DUMP_X, DUMP_Y, DUMP_W, DUMP_H);
+        // Open lid at top (slightly ajar, reveals inside)
+        const lidG = ctx.createLinearGradient(DUMP_X, DUMP_Y - 10, DUMP_X, DUMP_Y);
+        lidG.addColorStop(0, '#252320'); lidG.addColorStop(1, '#181614');
+        ctx.fillStyle = lidG; ctx.fillRect(DUMP_X - 2, DUMP_Y - 10, DUMP_W + 4, 12);
+        ctx.strokeStyle = '#3a3830'; ctx.lineWidth = 1; ctx.strokeRect(DUMP_X - 2, DUMP_Y - 10, DUMP_W + 4, 12);
+        // Interior visible (dark opening strip at top of dumpster)
+        ctx.fillStyle = '#0a0908'; ctx.fillRect(DUMP_X + 2, DUMP_Y, DUMP_W - 4, 12);
+        // WARNING: PM WASTE label
+        ctx.fillStyle = '#e8c000';
+        ctx.fillRect(DUMP_X + 4, DUMP_Y + 16, DUMP_W - 8, 20);
+        ctx.fillStyle = '#1a1200';
+        ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('⚠ PM WASTE', DUMP_X + DUMP_W / 2, DUMP_Y + 26);
+        ctx.fillText('CLASSIFIED', DUMP_X + DUMP_W / 2, DUMP_Y + 33);
+        // Wheels
+        ctx.fillStyle = '#1a1814';
+        for(const wx2 of [DUMP_X + 8, DUMP_X + DUMP_W - 8]) {
+            ctx.beginPath(); ctx.arc(wx2, DUMP_Y + DUMP_H, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#2a2820'; ctx.lineWidth = 1; ctx.stroke();
+        }
+
+        // ── HAND inside dumpster (visible if not yet taken) ─────────────────
+        if(!level6.marbleDumpsterTaken) {
+            const handBob = Math.sin(t * 0.003) * 1.5;
+            const hx = DUMP_X + DUMP_W / 2, hy = DUMP_Y + 5 + handBob;
+            // Severed hand — right hand, palm facing viewer
+            ctx.fillStyle = '#e8c89c';
+            // Palm
+            ctx.fillRect(hx - 7, hy - 4, 14, 10);
+            // Fingers (4)
+            for(let fi = 0; fi < 4; fi++) {
+                ctx.fillRect(hx - 6 + fi * 4, hy - 10, 3, 8);
+            }
+            // Thumb (left side)
+            ctx.fillRect(hx - 11, hy - 1, 5, 4);
+            // Blood drip at wrist
+            ctx.fillStyle = '#8b0000';
+            ctx.fillRect(hx - 4, hy + 6, 8, 5);
+            // Glow pulse (radioactive tinge from dumpster)
+            const gp = 0.3 + Math.sin(t * 0.004) * 0.15;
+            ctx.fillStyle = `rgba(180,255,80,${gp * 0.25})`;
+            ctx.beginPath(); ctx.arc(hx, hy, 10, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // Action prompt near dumpster
+        if(!level6.marbleDumpsterTaken && Math.abs(player.x - DUMP_X) < 60) {
+            ctx.fillStyle = 'rgba(0,0,0,0.88)';
+            ctx.fillRect(DUMP_X - 68, FLOOR_Y + 8, 160, 22);
+            ctx.fillStyle = '#ffcc44'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] TAKE HAND', DUMP_X + 12, FLOOR_Y + 24);
+        }
+        if(level6.marbleDumpsterTaken) {
+            ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(DUMP_X + 2, DUMP_Y, DUMP_W - 4, 12);
+        }
+    }
 
     // ── CEO PRIVATE ELEVATOR ─────────────────────────────────────────────────
-    // Housing recess
-    ctx.fillStyle='#070605'; ctx.fillRect(ELV_X-10,ELV_Y-10,ELV_W+20,ELV_H+10);
+    // Recessed housing in right wall
+    ctx.fillStyle = '#060504'; ctx.fillRect(ELV_X - 12, ELV_Y - 12, ELV_W + 24, ELV_H + 12);
     // Gold frame gradient
-    const gfg=ctx.createLinearGradient(ELV_X-3,0,ELV_X+ELV_W+3,0);
-    gfg.addColorStop(0,'#422e06');gfg.addColorStop(0.28,'#967020');
-    gfg.addColorStop(0.5,'#c89630');gfg.addColorStop(0.72,'#967020');gfg.addColorStop(1,'#422e06');
-    ctx.fillStyle=gfg; ctx.fillRect(ELV_X-3,ELV_Y-3,ELV_W+6,ELV_H+3);
+    const gfg = ctx.createLinearGradient(ELV_X - 4, 0, ELV_X + ELV_W + 4, 0);
+    gfg.addColorStop(0, '#422e06'); gfg.addColorStop(0.28, '#967020');
+    gfg.addColorStop(0.5, '#c89630'); gfg.addColorStop(0.72, '#967020'); gfg.addColorStop(1, '#422e06');
+    ctx.fillStyle = gfg; ctx.fillRect(ELV_X - 4, ELV_Y - 4, ELV_W + 8, ELV_H + 4);
     // Brushed silver door panels
-    const eg=ctx.createLinearGradient(ELV_X,0,ELV_X+ELV_W,0);
-    eg.addColorStop(0,'#686868');eg.addColorStop(0.1,'#a8a8a8');
-    eg.addColorStop(0.5,'#cccccc');eg.addColorStop(0.9,'#a0a0a0');eg.addColorStop(1,'#606060');
-    ctx.fillStyle=eg; ctx.fillRect(ELV_X,ELV_Y,ELV_W,ELV_H);
+    const eg = ctx.createLinearGradient(ELV_X, 0, ELV_X + ELV_W, 0);
+    eg.addColorStop(0, '#686868'); eg.addColorStop(0.1, '#a8a8a8');
+    eg.addColorStop(0.5, '#cccccc'); eg.addColorStop(0.9, '#a0a0a0'); eg.addColorStop(1, '#606060');
+    ctx.fillStyle = eg; ctx.fillRect(ELV_X, ELV_Y, ELV_W, ELV_H);
     // Horizontal panel seams
-    ctx.strokeStyle='rgba(60,60,60,0.48)';ctx.lineWidth=0.8;
-    for(let ps=1;ps<5;ps++){ctx.beginPath();ctx.moveTo(ELV_X+4,ELV_Y+ps*(ELV_H/5));ctx.lineTo(ELV_X+ELV_W-4,ELV_Y+ps*(ELV_H/5));ctx.stroke();}
+    ctx.strokeStyle = 'rgba(60,60,60,0.48)'; ctx.lineWidth = 0.8;
+    for(let ps = 1; ps < 6; ps++) {
+        ctx.beginPath(); ctx.moveTo(ELV_X + 5, ELV_Y + ps * (ELV_H / 6));
+        ctx.lineTo(ELV_X + ELV_W - 5, ELV_Y + ps * (ELV_H / 6)); ctx.stroke();
+    }
     // Center vertical seam
-    ctx.strokeStyle='rgba(42,42,42,0.70)';ctx.lineWidth=2;
-    ctx.beginPath();ctx.moveTo(ELV_X+ELV_W/2,ELV_Y+5);ctx.lineTo(ELV_X+ELV_W/2,ELV_Y+ELV_H-5);ctx.stroke();
+    ctx.strokeStyle = 'rgba(42,42,42,0.70)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ELV_X + ELV_W / 2, ELV_Y + 6);
+    ctx.lineTo(ELV_X + ELV_W / 2, ELV_Y + ELV_H - 6); ctx.stroke();
     // PI / PE engraved
-    ctx.fillStyle='#a88626';ctx.font='bold 14px serif';ctx.textAlign='center';
-    ctx.fillText('PI',ELV_X+ELV_W/4,ELV_Y+ELV_H/2+5);
-    ctx.fillText('PE',ELV_X+3*ELV_W/4,ELV_Y+ELV_H/2+5);
-    // Floor indicator LED
-    ctx.fillStyle='#050504';ctx.fillRect(ELV_X+ELV_W/2-26,ELV_Y-24,52,20);
-    ctx.strokeStyle='#302818';ctx.lineWidth=1;ctx.strokeRect(ELV_X+ELV_W/2-26,ELV_Y-24,52,20);
-    ctx.fillStyle='#00ff88';ctx.font='bold 12px monospace';ctx.textAlign='center';
-    ctx.fillText('CEO',ELV_X+ELV_W/2,ELV_Y-9);
-    // Label
-    ctx.fillStyle='#3a3020';ctx.font='bold 7px monospace';ctx.textAlign='center';
-    ctx.fillText('PRIVATE ELEVATOR',ELV_X+ELV_W/2,ELV_Y-30);
+    ctx.fillStyle = '#a88626'; ctx.font = 'bold 16px serif'; ctx.textAlign = 'center';
+    ctx.fillText('PI', ELV_X + ELV_W / 4, ELV_Y + ELV_H / 2 + 6);
+    ctx.fillText('PE', ELV_X + 3 * ELV_W / 4, ELV_Y + ELV_H / 2 + 6);
+    // Floor indicator LED panel
+    ctx.fillStyle = '#050504'; ctx.fillRect(ELV_X + ELV_W / 2 - 28, ELV_Y - 26, 56, 22);
+    ctx.strokeStyle = '#302818'; ctx.lineWidth = 1;
+    ctx.strokeRect(ELV_X + ELV_W / 2 - 28, ELV_Y - 26, 56, 22);
+    ctx.fillStyle = '#00ff88'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('CEO', ELV_X + ELV_W / 2, ELV_Y - 9);
+    ctx.fillStyle = '#3a3020'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('PRIVATE ELEVATOR', ELV_X + ELV_W / 2, ELV_Y - 32);
+    // Gold floor inlay
+    ctx.fillStyle = '#3e3009'; ctx.fillRect(ELV_X - 14, FLOOR_Y - 5, ELV_W + 28, 5);
+    ctx.fillStyle = '#6a5010'; ctx.fillRect(ELV_X - 14, FLOOR_Y - 5, ELV_W + 28, 1);
 
-    // ── FLOOR MARKER — gold inlay line at base of elevator wall ──────────────
-    ctx.fillStyle='#3e3009'; ctx.fillRect(ELV_X-12, FLOOR_Y-4, ELV_W+24, 4);
-    ctx.fillStyle='#6a5010'; ctx.fillRect(ELV_X-12, FLOOR_Y-4, ELV_W+24, 1);
+    // ── RED HAND PALM SCANNER — left side of elevator ─────────────────────────
+    {
+        const scX = ELV_X - 36, scY = ELV_Y + Math.round(ELV_H * 0.32), scW = 28, scH = 38;
+        const hasHand = level6.hasPMHand;
+        const scanPulse = 0.6 + Math.sin(t * 0.005) * 0.3;
+        // Scanner housing
+        ctx.fillStyle = '#1a0a0a';
+        ctx.fillRect(scX - 3, scY - 3, scW + 6, scH + 6);
+        ctx.fillStyle = '#2a1010';
+        ctx.fillRect(scX, scY, scW, scH);
+        ctx.strokeStyle = hasHand ? '#ff3333' : '#661111'; ctx.lineWidth = 1;
+        ctx.strokeRect(scX, scY, scW, scH);
+        // Scanner glass (glowing panel)
+        const scanGlow = hasHand
+            ? `rgba(255,30,30,${scanPulse * 0.7})`
+            : `rgba(120,10,10,${scanPulse * 0.5})`;
+        ctx.fillStyle = scanGlow;
+        ctx.fillRect(scX + 3, scY + 3, scW - 6, scH - 18);
+        // Hand silhouette icon on scanner
+        ctx.strokeStyle = hasHand ? `rgba(255,180,180,${scanPulse})` : 'rgba(180,80,80,0.5)';
+        ctx.lineWidth = 1;
+        const hx = scX + scW / 2, hy = scY + 14;
+        // Palm outline
+        ctx.beginPath(); ctx.ellipse(hx, hy + 4, 6, 5, 0, 0, Math.PI * 2); ctx.stroke();
+        // Finger outlines
+        for(let fi = -2; fi <= 2; fi++) {
+            ctx.beginPath(); ctx.moveTo(hx + fi * 2.5, hy - 1);
+            ctx.lineTo(hx + fi * 2.5, hy - 7); ctx.stroke();
+        }
+        // Status text
+        ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = hasHand ? '#ff6666' : '#882222';
+        ctx.fillText(hasHand ? 'SCAN' : 'LOCKED', scX + scW / 2, scY + scH - 6);
+        ctx.fillText(hasHand ? 'READY' : '🔒', scX + scW / 2, scY + scH - 1);
+        // LED indicator
+        ctx.fillStyle = hasHand ? `rgba(255,0,0,${scanPulse})` : '#330000';
+        ctx.beginPath(); ctx.arc(scX + scW / 2, scY + scH - 14, 3, 0, Math.PI * 2); ctx.fill();
+        // Label above scanner
+        ctx.fillStyle = '#662222'; ctx.font = 'bold 5px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('PALM', scX + scW / 2, scY - 8);
+        ctx.fillText('SCAN', scX + scW / 2, scY - 3);
+    }
 
     // ── EMERGENCY STROBES ─────────────────────────────────────────────────────
-    if(emergency){
-        for(let el=0;el<4;el++){
-            const elx=90+el*175;
-            if(Math.sin(t*0.005+el*0.9)>0){
-                ctx.fillStyle='rgba(255,8,0,0.09)'; ctx.fillRect(elx-60,0,120,FLOOR_Y);
-                ctx.fillStyle='#ff0500';
-            } else {ctx.fillStyle='#4a0000';}
-            ctx.fillRect(elx-10,0,20,7);
+    if(emergency) {
+        for(let el = 0; el < 4; el++) {
+            const elx = 90 + el * 160;
+            if(Math.sin(t * 0.005 + el * 0.9) > 0) {
+                ctx.fillStyle = 'rgba(255,8,0,0.09)'; ctx.fillRect(elx - 60, 0, 120, FLOOR_Y);
+                ctx.fillStyle = '#ff0500';
+            } else { ctx.fillStyle = '#4a0000'; }
+            ctx.fillRect(elx - 10, 0, 20, 7);
         }
-        ctx.fillStyle='#ff2200';ctx.font='bold 11px monospace';ctx.textAlign='center';
-        ctx.globalAlpha=0.5+Math.sin(t*0.006)*0.3;
-        ctx.fillText('\u26A0 EMERGENCY LOCKDOWN \u26A0',350,220);
-        ctx.globalAlpha=1;
+        ctx.fillStyle = '#ff2200'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+        ctx.globalAlpha = 0.5 + Math.sin(t * 0.006) * 0.3;
+        ctx.fillText('\u26A0 EMERGENCY LOCKDOWN \u26A0', 350, 200);
+        ctx.globalAlpha = 1;
     }
 
     // ── INTERACTION PROMPTS ───────────────────────────────────────────────────
-    if(player.x > ELV_X-30){
-        ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(ELV_X+ELV_W/2-100,FLOOR_Y+8,200,22);
-        ctx.fillStyle='#00ff88';ctx.font='bold 10px monospace';ctx.textAlign='center';
-        ctx.fillText('[ ACTION ] - CEO LEVEL',ELV_X+ELV_W/2,FLOOR_Y+24);
+    if(player.x > ELV_X - 50) {
+        const hasHand = level6.hasPMHand;
+        ctx.fillStyle = 'rgba(0,0,0,0.88)';
+        ctx.fillRect(ELV_X + ELV_W / 2 - 110, FLOOR_Y + 8, 220, 22);
+        if(hasHand) {
+            ctx.fillStyle = '#00ff88'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - CEO LEVEL', ELV_X + ELV_W / 2, FLOOR_Y + 24);
+        } else {
+            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('\u{1FAF1} PALM SCAN REQUIRED', ELV_X + ELV_W / 2, FLOOR_Y + 24);
+        }
     }
-    if(player.x < 130){
-        ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(4,FLOOR_Y+8,130,22);
-        ctx.fillStyle='#c0844a';ctx.font='bold 11px Arial';ctx.textAlign='center';
-        ctx.fillText('\u2190 BRIDGE',69,FLOOR_Y+24);
+    if(player.x < 140) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(4, FLOOR_Y + 8, 130, 22);
+        ctx.fillStyle = '#c0844a'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('\u2190 BRIDGE', 69, FLOOR_Y + 24);
     }
 }
 
@@ -11644,14 +11833,15 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
 
     // Zone layout (top→bottom within window)
-    const ceilH  = Math.round(wh * 0.24);  // dark industrial ceiling
-    const extH   = Math.round(wh * 0.44);  // exterior opening: sky + plant + road
+    // With a tall full-height window, give more space to the exterior and bay floor
+    const ceilH  = Math.round(wh * 0.16);  // dark industrial ceiling (compact — window is tall)
+    const extH   = Math.round(wh * 0.46);  // exterior opening: sky + plant + road
     const floorH = wh - ceilH - extH;      // interior bay floor (foreground)
     const ceilTop  = wy;
     const extTop   = wy + ceilH;
     const floorTop = extTop + extH;
     // pillar width — frames the exterior view, establishes "inside a building" feel
-    const pillarW  = Math.round(ww * 0.15);
+    const pillarW  = Math.round(ww * 0.12);
 
     // ── INDUSTRIAL CEILING ───────────────────────────────────────────────────
     const cg = ctx.createLinearGradient(wx, ceilTop, wx, extTop);
@@ -23351,11 +23541,21 @@ function update() {
                     level6.lastExitEdge='right';
                 }
 
-                // Elevator enter (open access — no locking)
-                if(player.x > ELV_X+ELV_W/2-40 && !level6.marbleElevatorTransition && (keys[' ']||keys['action'])) {
-                    level6.marbleElevatorTransition=true;
-                    level6.marbleElevatorFadeAlpha=0;
-                    level6.marbleElevatorTarget='entryway';
+                // Dumpster pickup — obtain PM hand
+                const DUMP_X_MR = 175;
+                if(!level6.marbleDumpsterTaken && Math.abs(player.x - DUMP_X_MR) < 60 && (keys[' ']||keys['action'])) {
+                    level6.hasPMHand = true;
+                    level6.marbleDumpsterTaken = true;
+                    keys[' '] = false; keys['action'] = false;
+                }
+
+                // Elevator enter — requires palm scan (hasPMHand)
+                if(player.x > ELV_X+ELV_W/2-50 && !level6.marbleElevatorTransition && (keys[' ']||keys['action'])) {
+                    if(level6.hasPMHand) {
+                        level6.marbleElevatorTransition=true;
+                        level6.marbleElevatorFadeAlpha=0;
+                        level6.marbleElevatorTarget='entryway';
+                    }
                     keys[' ']=false; keys['action']=false;
                 }
 
