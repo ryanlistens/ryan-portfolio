@@ -1077,6 +1077,23 @@ function initLevel(lv) {
         level6.pipeRoomPrinterConfirming = false;
         level6.pipeRoomPrinting = false;
         level6.pipeRoomPrintProgress = 0;
+        // Marble Room — security checkpoint to CEO
+        level6.marbleRoom = { lightsOn: true, lightSwitchShot: false, elevatorUnlocked: false, printerLocked: false, emergencyLights: false };
+        level6.marbleGuards = [
+            { color: 'red',    x: 110, y: 355, facing: 'right', alive: true, health: 3, walkDir:  1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
+            { color: 'blue',   x: 250, y: 355, facing: 'left',  alive: true, health: 3, walkDir: -1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
+            { color: 'green',  x: 400, y: 355, facing: 'right', alive: true, health: 3, walkDir:  1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 },
+            { color: 'yellow', x: 550, y: 355, facing: 'left',  alive: true, health: 3, walkDir: -1, walkTimer: 0, deathTime: 0, eyeballTaken: false, alert: false, alertTimer: 0, shootBurst: 0, shootBurstTimer: 0, shootCooldown: 0 }
+        ];
+        level6.marblePrinter = { ui: false, printing: false, progress: 0, item: null, choice: 0 };
+        level6.hasEyeball = false;
+        level6.hasThreeShotRifle = false;
+        level6.threeShotRifleAmmo = 0;
+        level6.marbleElevatorTransition = false;
+        level6.marbleElevatorFadeAlpha = 0;
+        level6.marbleElevatorFadeIn = false;
+        level6.marbleElevatorTarget = null; // 'marbleRoom' or 'entryway'
+        level6.marbleBullets = []; // bullets fired by guards
 
         // Ensure level5 pipe room state is initialized (needed by drawLevel6EmployeePipeRoom)
         // This matters when the player skips directly to level 6 without playing level 5
@@ -10529,11 +10546,13 @@ function drawNuclearAssemblyBridge() {
                 const easedFall = fp * fp;
                 const startY = bridgePlatY + 20;
                 const fallY = startY + (targetY - startY) * easedFall;
-                const tumbleAngle = fp * Math.PI * 4;
+                // Syringe death: body arcs horizontally toward needle (SYR_X=300) and stays feet-down
+                const fallBx = dType === 'syringe' ? bx + (300 - bx) * easedFall : bx;
+                const tumbleAngle = dType === 'syringe' ? 0 : fp * Math.PI * 4;
                 const bodyScale = 1 - fp * 0.15;
 
                 ctx.save();
-                ctx.translate(bx, fallY);
+                ctx.translate(fallBx, fallY);
                 ctx.rotate(tumbleAngle);
                 ctx.scale(bodyScale, bodyScale);
 
@@ -10594,7 +10613,7 @@ function drawNuclearAssemblyBridge() {
                 if (fp < 0.7) {
                     ctx.fillStyle = '#ff4444'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
                     ctx.globalAlpha = 1 - fp;
-                    ctx.fillText('AAAAAAA!', bx, fallY - 24);
+                    ctx.fillText('AAAAAAA!', fallBx, fallY - 24);
                     ctx.globalAlpha = 1;
                 }
             } else {
@@ -10672,13 +10691,11 @@ function drawNuclearAssemblyBridge() {
                     ctx.globalAlpha = 1;
 
                 } else if (dType === 'syringe' && impactElapsed < 5.5) {
-                    // Body lands feet-first on syringe needle, impaled — clearly readable
-                    // Needle tip is at SYR_X at BELT_Y+16 (just below belt surface)
-                    const needleTipY = targetY + 16;  // needle pokes up through belt gap
+                    // Body lands feet-first on syringe needle, directly below needle at SYR_X=300
                     const twitch = Math.sin(impactElapsed * 9) * 4 * Math.max(0, 1 - impactElapsed / 3.5);
                     const inflate = Math.min(1, impactElapsed / 2.5);
                     ctx.save();
-                    ctx.translate(bx, targetY);
+                    ctx.translate(300, targetY); // always at SYR_X=300, directly under needle
 
                     // Needle — visible silver spike rising through body
                     ctx.fillStyle = '#aaaacc';
@@ -10745,13 +10762,13 @@ function drawNuclearAssemblyBridge() {
                     ctx.restore();
                     if (impactElapsed < 0.5) {
                         ctx.fillStyle = '#ff4444'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText('*SKEWERED*', bx, targetY - 46);
+                        ctx.fillText('*SKEWERED*', 300, targetY - 46);
                     } else if (impactElapsed < 1.5) {
                         ctx.fillStyle = '#ff4444'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText('*SQUELCH*', bx, targetY - 42);
+                        ctx.fillText('*SQUELCH*', 300, targetY - 42);
                     } else if (impactElapsed < 3.5) {
                         ctx.fillStyle = '#40ff20'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText('*BLORP BLORP*', bx, targetY - 38);
+                        ctx.fillText('*BLORP BLORP*', 300, targetY - 38);
                     }
 
                 } else if (dType === 'warhead') { if (impactElapsed < 5.1) {
@@ -11445,6 +11462,32 @@ function drawNuclearAssemblyBridge() {
         }
     }
 
+    // Right-side white door — "No Admittance without Top Security Clearance"
+    {
+        const doorX = 655, doorW = 36, doorTop = bridgePlatY - 56, doorH = 62;
+        // Door frame (steel)
+        ctx.fillStyle = '#5a5a5a'; ctx.fillRect(doorX - 3, doorTop - 3, doorW + 6, doorH + 3);
+        // White door face
+        ctx.fillStyle = '#f0ede8'; ctx.fillRect(doorX, doorTop, doorW, doorH);
+        // Door highlight
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(doorX + 1, doorTop + 1, doorW - 2, 3);
+        // Recessed panels
+        ctx.strokeStyle = '#c8c5c0'; ctx.lineWidth = 1;
+        ctx.strokeRect(doorX + 4, doorTop + 6, doorW - 8, 22);
+        ctx.strokeRect(doorX + 4, doorTop + 33, doorW - 8, 22);
+        // Door knob
+        ctx.fillStyle = '#c8a830';
+        ctx.beginPath(); ctx.arc(doorX + 6, doorTop + doorH / 2, 3, 0, Math.PI * 2); ctx.fill();
+        // Warning sign above door
+        ctx.fillStyle = '#cc0000';
+        ctx.fillRect(doorX - 10, doorTop - 24, doorW + 20, 20);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('NO ADMITTANCE', doorX + doorW / 2, doorTop - 16);
+        ctx.fillText('WITHOUT TOP SECURITY', doorX + doorW / 2, doorTop - 10);
+        ctx.fillText('CLEARANCE', doorX + doorW / 2, doorTop - 4);
+    }
+
     // Nav hint
     if(player.x < 85) {
         ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
@@ -11453,12 +11496,550 @@ function drawNuclearAssemblyBridge() {
         ctx.fillStyle = '#ff9966';
         ctx.fillText('\u2190 SUPERCOMPUTER', 88, bridgePlatY + 43);
     }
+    if(player.x > 610) {
+        ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(530, bridgePlatY + 26, 165, 24);
+        ctx.fillStyle = '#f0c060';
+        ctx.fillText('ACTION \u2192 ENTER', 612, bridgePlatY + 43);
+    }
 
   } catch(bridgeErr) {
     console.error('Bridge render error:', bridgeErr);
     ctx.fillStyle = '#ff0000'; ctx.font = '12px monospace'; ctx.textAlign = 'left';
     ctx.fillText('RENDER ERR: ' + bridgeErr.message, 10, 240);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MARBLE SECURITY ROOM — CEO checkpoint. 4 giant guards, retina scanner, elevator.
+// ═══════════════════════════════════════════════════════════════════════════════
+function drawLevel6MarbleRoom() {
+    const t = Date.now();
+    const mr = level6.marbleRoom;
+    const guards = level6.marbleGuards;
+    const emergency = mr.emergencyLights;
+
+    // ── BACKGROUND ────────────────────────────────────────────────────────────
+    const floorY = 390;
+    const ceilY = 80;
+    // Wall
+    const wallGrad = ctx.createLinearGradient(0, ceilY, 0, floorY);
+    if(emergency) {
+        wallGrad.addColorStop(0, '#2a0a0a');
+        wallGrad.addColorStop(0.5, '#1a0505');
+        wallGrad.addColorStop(1, '#110202');
+    } else if(!mr.lightsOn) {
+        wallGrad.addColorStop(0, '#111214');
+        wallGrad.addColorStop(0.5, '#0d0e10');
+        wallGrad.addColorStop(1, '#0a0b0d');
+    } else {
+        wallGrad.addColorStop(0, '#f5f2ee');
+        wallGrad.addColorStop(0.4, '#ebe7e0');
+        wallGrad.addColorStop(1, '#d8d4cc');
+    }
+    ctx.fillStyle = wallGrad;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Marble veining on walls (only when lit)
+    if(mr.lightsOn && !emergency) {
+        ctx.strokeStyle = 'rgba(180,175,165,0.25)'; ctx.lineWidth = 1;
+        for(let v = 0; v < 8; v++) {
+            const vx = 60 + v * 82;
+            ctx.beginPath();
+            ctx.moveTo(vx, ceilY);
+            ctx.bezierCurveTo(vx + 12, ceilY + 80, vx - 8, ceilY + 160, vx + 5, floorY);
+            ctx.stroke();
+        }
+    }
+
+    // Floor — white marble tiles
+    const floorGrad = ctx.createLinearGradient(0, floorY, 0, floorY + 80);
+    if(emergency) {
+        floorGrad.addColorStop(0, '#1a0404'); floorGrad.addColorStop(1, '#0d0202');
+    } else if(!mr.lightsOn) {
+        floorGrad.addColorStop(0, '#0e0f11'); floorGrad.addColorStop(1, '#080909');
+    } else {
+        floorGrad.addColorStop(0, '#e8e4dc'); floorGrad.addColorStop(1, '#ccc8c0');
+    }
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(-GX, floorY, CANVAS_W, CANVAS_H);
+
+    // Floor tile grid
+    if(mr.lightsOn && !emergency) {
+        ctx.strokeStyle = 'rgba(160,155,148,0.4)'; ctx.lineWidth = 0.5;
+        for(let tx = 0; tx < 700; tx += 50) { ctx.beginPath(); ctx.moveTo(tx, floorY); ctx.lineTo(tx, floorY + 80); ctx.stroke(); }
+        ctx.beginPath(); ctx.moveTo(-GX, floorY + 25); ctx.lineTo(CANVAS_W, floorY + 25); ctx.stroke();
+    }
+
+    // Baseboard molding
+    ctx.fillStyle = mr.lightsOn && !emergency ? '#c8c4bc' : (emergency ? '#300808' : '#161820');
+    ctx.fillRect(-GX, floorY - 6, CANVAS_W, 6);
+
+    // Crown molding at ceiling
+    ctx.fillStyle = mr.lightsOn && !emergency ? '#ddd9d0' : (emergency ? '#280606' : '#131518');
+    ctx.fillRect(-GX, ceilY, CANVAS_W, 8);
+
+    // ── COMMAND CONSOLE (top center) ──────────────────────────────────────────
+    const consX = 260, consW = 180, consTop = ceilY + 8, consH = 95;
+    ctx.fillStyle = '#2a2a2a'; ctx.fillRect(consX, consTop, consW, consH);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(consX + 4, consTop + 4, consW - 8, consH - 8);
+    // Monitor strip
+    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(consX + 10, consTop + 8, consW - 20, 40);
+    // Blinking LED indicators
+    for(let li = 0; li < 6; li++) {
+        const blink = Math.sin(t * 0.003 + li * 1.2) > 0;
+        const ledColors = ['#ff3333','#33ff33','#ffaa00','#33aaff','#ff33ff','#ffffff'];
+        ctx.fillStyle = blink ? ledColors[li] : '#111';
+        ctx.fillStyle = blink ? ledColors[li] : '#111';
+        ctx.beginPath(); ctx.arc(consX + 18 + li * 26, consTop + 28, 5, 0, Math.PI*2); ctx.fill();
+    }
+    // Console label
+    ctx.fillStyle = '#00ff88'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('SECURITY COMMAND', consX + consW / 2, consTop + 54);
+    ctx.fillStyle = '#aaa'; ctx.font = '7px monospace';
+    ctx.fillText('AUTHORIZED PERSONNEL ONLY', consX + consW / 2, consTop + 64);
+
+    // ── LIGHT SWITCH pull-cord ────────────────────────────────────────────────
+    const lsX = consX + consW / 2, lsBaseY = consTop + consH;
+    if(!mr.lightSwitchShot) {
+        // Pull cord
+        ctx.strokeStyle = mr.lightsOn ? '#ffd700' : '#888'; ctx.lineWidth = 2;
+        const swingX = Math.sin(t * 0.002) * 3;
+        ctx.beginPath(); ctx.moveTo(lsX + swingX, lsBaseY); ctx.lineTo(lsX + swingX, lsBaseY + 40); ctx.stroke();
+        // Handle
+        ctx.fillStyle = mr.lightsOn ? '#ffd700' : '#666';
+        ctx.beginPath(); ctx.arc(lsX + swingX, lsBaseY + 42, 6, 0, Math.PI*2); ctx.fill();
+        // ON/OFF label
+        ctx.fillStyle = mr.lightsOn ? '#ffd700' : '#888';
+        ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(mr.lightsOn ? 'LIGHTS ON' : 'LIGHTS OFF', lsX, lsBaseY + 58);
+    } else {
+        // Shot out — dangling wire
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(lsX, lsBaseY); ctx.lineTo(lsX + 8, lsBaseY + 20); ctx.stroke();
+        ctx.fillStyle = '#666'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('DISABLED', lsX, lsBaseY + 32);
+    }
+
+    // ── PANORAMIC WINDOW (right wall, overlooking warehouse + nuclear plant) ──
+    drawMarbleWindowScene(560, 110, 120, 200);
+
+    // ── 3D PRINTER (right side) ───────────────────────────────────────────────
+    const printerX = 595, printerY = 375;
+    draw3DPrinter(printerX, printerY - 15);
+    ctx.fillStyle = '#aaa'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('ARMORY', printerX, printerY + 5);
+    if(mr.printerLocked) {
+        ctx.fillStyle = '#ff3333'; ctx.font = 'bold 8px monospace';
+        ctx.fillText('LOCKDOWN', printerX, printerY + 15);
+    }
+
+    // ── ELEVATOR DOOR (right wall, cube-shaped) ───────────────────────────────
+    const elvX = 645, elvTop = 170, elvW = 42, elvH = 220;
+    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(elvX - 4, elvTop - 4, elvW + 8, elvH + 4);
+    // Cube-style two-panel door
+    const elvMid = elvX + elvW / 2;
+    ctx.fillStyle = '#5a5a5a'; ctx.fillRect(elvX, elvTop, elvW / 2 - 1, elvH);
+    ctx.fillStyle = '#555';    ctx.fillRect(elvMid + 1, elvTop, elvW / 2 - 1, elvH);
+    // Horizontal panel seams
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+    for(let ps = 1; ps < 4; ps++) { ctx.beginPath(); ctx.moveTo(elvX, elvTop + ps * (elvH/4)); ctx.lineTo(elvX + elvW, elvTop + ps * (elvH/4)); ctx.stroke(); }
+    // Center gap line
+    ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(elvMid, elvTop); ctx.lineTo(elvMid, elvTop + elvH); ctx.stroke();
+    // Retina scanner
+    const scanX = 628, scanY = 285;
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(scanX - 14, scanY - 20, 28, 40);
+    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(scanX - 11, scanY - 17, 22, 34);
+    if(mr.elevatorUnlocked) {
+        ctx.fillStyle = '#00ff44'; ctx.shadowColor = '#00ff44'; ctx.shadowBlur = 8;
+    } else {
+        ctx.fillStyle = '#ff2200'; ctx.shadowColor = '#ff2200'; ctx.shadowBlur = 5;
+    }
+    ctx.beginPath(); ctx.arc(scanX, scanY, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // Scanner iris lines
+    ctx.strokeStyle = mr.elevatorUnlocked ? '#00aa22' : '#660000'; ctx.lineWidth = 1;
+    for(let ir = 1; ir < 4; ir++) { ctx.beginPath(); ctx.arc(scanX, scanY, ir * 2.5, 0, Math.PI * 2); ctx.stroke(); }
+    // Labels
+    ctx.fillStyle = mr.elevatorUnlocked ? '#00ff44' : '#ff6644';
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('RETINA SCAN', scanX, scanY + 26);
+    ctx.fillText(mr.elevatorUnlocked ? 'UNLOCKED' : 'LOCKED', scanX, scanY + 35);
+    ctx.fillStyle = '#aaa'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('PRIVATE ELEVATOR', elvX + elvW / 2, elvTop - 10);
+    ctx.fillStyle = '#888'; ctx.font = '7px monospace';
+    ctx.fillText('CEO LEVEL', elvX + elvW / 2, elvTop - 2);
+
+    // Emergency floodlights
+    if(emergency) {
+        // Red emergency strip lights along ceiling
+        for(let el = 0; el < 6; el++) {
+            const elx = 60 + el * 110;
+            const blink = Math.sin(t * 0.005 + el * 0.8) > 0;
+            if(blink) {
+                ctx.fillStyle = 'rgba(255,30,0,0.18)';
+                ctx.beginPath();
+                ctx.moveTo(elx - 15, ceilY + 8); ctx.lineTo(elx + 15, ceilY + 8);
+                ctx.lineTo(elx + 60, floorY); ctx.lineTo(elx - 60, floorY);
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle = blink ? '#ff1100' : '#880000';
+            ctx.fillRect(elx - 12, ceilY + 4, 24, 6);
+        }
+        ctx.fillStyle = '#ff3300'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+        ctx.globalAlpha = 0.5 + Math.sin(t * 0.006) * 0.3;
+        ctx.fillText('⚠ EMERGENCY LOCKDOWN ⚠', 350, ceilY + 70);
+        ctx.globalAlpha = 1;
+    }
+
+    // ── GUARD FLASHLIGHT CONES (lights-off mode) ──────────────────────────────
+    if(!mr.lightsOn && !emergency) {
+        for(const g of guards) {
+            if(!g.alive) continue;
+            const coneLen = 220, coneAngle = Math.PI / 5; // 36° half-angle
+            const gDir = g.facing === 'right' ? 0 : Math.PI;
+            ctx.save();
+            ctx.translate(g.x, g.y - 20);
+            ctx.rotate(gDir);
+            const coneGrad = ctx.createLinearGradient(0, 0, coneLen, 0);
+            coneGrad.addColorStop(0, 'rgba(255,240,180,0.28)');
+            coneGrad.addColorStop(1, 'rgba(255,240,180,0)');
+            ctx.fillStyle = coneGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(coneLen, -Math.tan(coneAngle) * coneLen);
+            ctx.lineTo(coneLen,  Math.tan(coneAngle) * coneLen);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // ── GUARDS ────────────────────────────────────────────────────────────────
+    for(const g of guards) {
+        if(!g.alive) {
+            // Dead guard — body on floor
+            if(g.deathTime > 0) {
+                const de = Math.min(1, (Date.now() - g.deathTime) / 1000);
+                const bodyX = g.x, bodyY = floorY - 8;
+                ctx.save(); ctx.translate(bodyX, bodyY); ctx.rotate(Math.PI / 2);
+                ctx.globalAlpha = Math.max(0.4, 1 - de * 0.3);
+                drawGuardBody(g.color, 0, 0, 'right');
+                ctx.restore(); ctx.globalAlpha = 1;
+                // Eyeball pickup prompt for red giant
+                if(g.color === 'red' && !g.eyeballTaken && !level6.hasEyeball) {
+                    const near = Math.abs(player.x - bodyX) < 50 && Math.abs(player.y - (floorY - 12)) < 60;
+                    if(near) {
+                        const lw = 200, lh = 22;
+                        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+                        ctx.fillRect(bodyX - lw/2, bodyY - 55, lw, lh);
+                        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText('[ ACTION ] - TAKE RIGHT EYEBALL', bodyX, bodyY - 39);
+                    }
+                }
+            }
+            continue;
+        }
+        drawGuardBody(g.color, g.x, g.y, g.facing);
+        drawGuardHealthPips(g);
+        // Alert indicator
+        if(g.alert) {
+            ctx.fillStyle = '#ff3333'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('!', g.x, g.y - 75);
+        }
+    }
+
+    // Guard bullets (marbleBullets)
+    for(const b of level6.marbleBullets) {
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,200,0,0.4)'; ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Retina scanner interaction prompts
+    if(!mr.elevatorUnlocked) {
+        const nearScanner = Math.abs(player.x - 628) < 50 && Math.abs(player.y - 285) < 70;
+        if(nearScanner && level6.hasEyeball && guards.every(g => !g.alive)) {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(460, 240, 220, 22);
+            ctx.fillStyle = '#00ff88'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] - USE EYEBALL', 570, 255);
+        } else if(nearScanner && !level6.hasEyeball) {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(420, 240, 280, 22);
+            ctx.fillStyle = '#ff9966'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('RETINA SCAN REQUIRED — TAKE EYEBALL', 560, 255);
+        } else if(nearScanner && !guards.every(g => !g.alive)) {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(440, 240, 240, 22);
+            ctx.fillStyle = '#ff4444'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('NEUTRALIZE ALL HOSTILES FIRST', 560, 255);
+        }
+    } else if(player.x > 600) {
+        ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(490, 250, 175, 22);
+        ctx.fillStyle = '#00ff88'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] - CEO LEVEL', 577, 265);
+    }
+
+    // Eyeball HUD
+    if(level6.hasEyeball) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(280, 415, 140, 20);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('👁 RETINAL KEY', 350, 428);
+    }
+
+    // Printer proximity hint
+    if(!mr.printerLocked && Math.abs(player.x - 595) < 60 && player.y > 290 && !level6.marblePrinter.ui) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(510, floorY - 36, 165, 20);
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] - ARMORY PRINTER', 592, floorY - 22);
+    }
+
+    // Left exit hint
+    if(player.x < 80) {
+        ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(8, floorY - 30, 150, 22);
+        ctx.fillStyle = '#ff9966'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('\u2190 BRIDGE', 83, floorY - 14);
+    }
+}
+
+// Draw a guard body (giant in colored camo fatigues)
+function drawGuardBody(color, x, y, facing) {
+    const t = Date.now();
+    const walkCycle = Math.sin(t / 130 + x * 0.07);
+    const legSwing = walkCycle * 8;
+    const armSwing = -walkCycle * 7;
+    const bob = Math.abs(walkCycle) * 2;
+    const dir = facing === 'right' ? 1 : -1;
+
+    // Camo color palettes
+    const camos = {
+        red:    { base: '#7a1a1a', mid: '#5a1010', dark: '#3a0808', acc: '#cc4444', skin: '#c8855a' },
+        blue:   { base: '#1a2a6a', mid: '#10205a', dark: '#081040', acc: '#4466cc', skin: '#d4935e' },
+        green:  { base: '#2a5a1a', mid: '#1a4a10', dark: '#0e2e08', acc: '#44aa44', skin: '#c07a4e' },
+        yellow: { base: '#7a6a10', mid: '#5a5008', dark: '#3a3404', acc: '#ccaa22', skin: '#cc9060' }
+    };
+    const c = camos[color] || camos.red;
+
+    // Giant scale: 1.4x normal
+    ctx.save(); ctx.translate(x, y - bob);
+
+    // Legs (giant size)
+    ctx.fillStyle = c.base;
+    ctx.fillRect(-11 - legSwing * dir, -2, 14, 28); // left leg
+    ctx.fillRect(-3 + legSwing * dir, -2, 14, 28);  // right leg
+    // Camo patches on legs
+    ctx.fillStyle = c.mid;
+    ctx.fillRect(-9 - legSwing * dir, 4, 6, 8);
+    ctx.fillRect(-1 + legSwing * dir, 10, 5, 6);
+    // Boots
+    ctx.fillStyle = '#1a1a0a';
+    ctx.fillRect(-14 - legSwing * dir, 24, 17, 8);
+    ctx.fillRect(-5 + legSwing * dir, 24, 17, 8);
+
+    // Torso (wide)
+    ctx.fillStyle = c.base;
+    ctx.fillRect(-18, -40, 36, 40);
+    // Camo pattern on torso
+    ctx.fillStyle = c.mid;
+    ctx.fillRect(-14, -36, 8, 10); ctx.fillRect(4, -28, 7, 8); ctx.fillRect(-6, -20, 6, 7);
+    ctx.fillStyle = c.dark;
+    ctx.fillRect(-2, -34, 5, 6); ctx.fillRect(8, -22, 4, 5); ctx.fillRect(-12, -18, 5, 4);
+    // Belt
+    ctx.fillStyle = '#1a1a0a'; ctx.fillRect(-18, -4, 36, 5);
+    ctx.fillStyle = '#c8a830'; ctx.fillRect(-4, -4, 8, 5); // belt buckle
+
+    // Tactical vest
+    ctx.fillStyle = '#2a2a1a';
+    ctx.fillRect(-16, -38, 32, 24);
+    ctx.strokeStyle = '#3a3a2a'; ctx.lineWidth = 1;
+    ctx.strokeRect(-14, -36, 28, 20);
+    // Vest pouches
+    ctx.fillStyle = '#3a3a22';
+    ctx.fillRect(-12, -32, 8, 7); ctx.fillRect(4, -32, 8, 7); ctx.fillRect(-4, -24, 8, 6);
+
+    // Arms with rifle
+    ctx.fillStyle = c.base;
+    const armLX = -18 + armSwing * dir * 5, armRX = 18 - armSwing * dir * 5;
+    ctx.fillRect(armLX - 5, -36, 10, 26); // left arm
+    ctx.fillRect(armRX - 5, -36, 10, 26); // right arm (holding rifle)
+    // Hands
+    ctx.fillStyle = c.skin;
+    ctx.beginPath(); ctx.arc(armLX, -11, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(armRX, -11, 5, 0, Math.PI*2); ctx.fill();
+
+    // THREE-SHOT RIFLE
+    const rfDir = facing === 'right' ? 1 : -1;
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(rfDir * 14, -28, rfDir * 44, 7); // barrel
+    ctx.fillRect(rfDir * 14, -24, rfDir * 20, 14); // receiver body
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(rfDir * 22, -28, rfDir * 8, 4); // ejection port
+    // Stock
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(-rfDir * 6, -28, -rfDir * 16, 14);
+    // Magazine (3-shot)
+    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(rfDir * 20, -14, rfDir * 8, 12);
+    // Muzzle
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(rfDir * 55, -27, rfDir * 5, 5);
+    // Flashlight on rifle (when lights off)
+    if(!level6.marbleRoom.lightsOn) {
+        ctx.fillStyle = '#ffffcc';
+        ctx.beginPath(); ctx.arc(rfDir * 58, -24, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,180,0.6)';
+        ctx.beginPath(); ctx.arc(rfDir * 60, -24, 5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Head (giant — large)
+    ctx.fillStyle = c.skin;
+    ctx.beginPath(); ctx.ellipse(0, -52, 14, 15, 0, 0, Math.PI*2); ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-5, -55, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5, -55, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(-5 + dir, -55, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5 + dir, -55, 2, 0, Math.PI*2); ctx.fill();
+    // Mouth — grimace
+    ctx.strokeStyle = '#5a2a10'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-5, -45); ctx.lineTo(5, -45); ctx.stroke();
+    // Tactical helmet
+    ctx.fillStyle = c.dark;
+    ctx.beginPath(); ctx.arc(0, -56, 15, -Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = c.mid; ctx.fillRect(-16, -56, 32, 4); // brim
+    ctx.restore();
+}
+
+// Draw guard health pips (called after drawGuardBody, not inside it)
+function drawGuardHealthPips(g) {
+    for(let h = 0; h < g.health; h++) {
+        ctx.fillStyle = '#44ff44';
+        ctx.fillRect(g.x - 10 + h * 8, g.y - 78, 6, 5);
+    }
+}
+
+// Nuclear plant + truck warehouse window scene (marble room panoramic)
+function drawMarbleWindowScene(wx, wy, ww, wh) {
+    const t = Date.now();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+
+    // Sky
+    const sky = ctx.createLinearGradient(wx, wy, wx, wy + wh * 0.55);
+    sky.addColorStop(0, '#5bacd4'); sky.addColorStop(1, '#9fd6ee');
+    ctx.fillStyle = sky; ctx.fillRect(wx, wy, ww, wh);
+
+    // Clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    for(let ci = 0; ci < 3; ci++) {
+        const cx = wx + ((t / (11000 + ci * 3000) + ci * 0.4) % 1.3 - 0.15) * ww;
+        const cy = wy + 12 + ci * 10;
+        ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 10, cy - 3, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx - 6, cy + 2, 5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Horizon ground
+    const horizY = wy + wh * 0.55;
+    ctx.fillStyle = '#4a5a30'; ctx.fillRect(wx, horizY, ww, wh - (horizY - wy));
+
+    // Long runway (straight ahead, center)
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.moveTo(wx + ww * 0.35, horizY);
+    ctx.lineTo(wx + ww * 0.65, horizY);
+    ctx.lineTo(wx + ww * 0.75, wy + wh);
+    ctx.lineTo(wx + ww * 0.25, wy + wh);
+    ctx.closePath(); ctx.fill();
+    // Runway center line
+    ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 1; ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.moveTo(wx + ww * 0.5, horizY); ctx.lineTo(wx + ww * 0.5, wy + wh); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Nuclear power plant (end of runway, center back)
+    const plantX = wx + ww * 0.5, plantY = horizY - 2;
+    // Containment building (cylinder silhouette)
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(plantX - 14, plantY - 38, 28, 38);
+    ctx.beginPath(); ctx.arc(plantX, plantY - 38, 14, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(plantX - 16, plantY - 10, 32, 10);
+    // Cooling tower (cone/hyperboloid shape)
+    ctx.fillStyle = '#9a9a9a';
+    ctx.beginPath();
+    ctx.moveTo(plantX - 8, plantY - 38);
+    ctx.bezierCurveTo(plantX - 12, plantY - 58, plantX - 9, plantY - 72, plantX - 4, plantY - 80);
+    ctx.lineTo(plantX + 4, plantY - 80);
+    ctx.bezierCurveTo(plantX + 9, plantY - 72, plantX + 12, plantY - 58, plantX + 8, plantY - 38);
+    ctx.closePath(); ctx.fill();
+    // Steam from tower top
+    for(let si = 0; si < 4; si++) {
+        const sAge = ((t / 2000 + si * 0.25) % 1);
+        ctx.globalAlpha = (1 - sAge) * 0.35;
+        ctx.fillStyle = '#e8e8e8';
+        const sx = plantX + Math.sin(sAge * 4 + si) * 6;
+        const sy = plantY - 80 - sAge * 30;
+        ctx.beginPath(); ctx.arc(sx, sy, 3 + sAge * 6, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // PipeTech brutalist logo on containment building
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('PIPE', plantX, plantY - 22);
+    ctx.fillText('TECH', plantX, plantY - 16);
+    ctx.fillStyle = '#cc3300';
+    ctx.fillRect(plantX - 6, plantY - 27, 12, 2); // logo accent bar
+
+    // Warehouse road (horizontal, foreground)
+    ctx.fillStyle = '#4a4a4a';
+    const roadY = wy + wh * 0.78;
+    ctx.fillRect(wx, roadY, ww, wh * 0.12);
+    // Road markings
+    ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5; ctx.setLineDash([5, 8]);
+    ctx.beginPath(); ctx.moveTo(wx, roadY + wh * 0.06); ctx.lineTo(wx + ww, roadY + wh * 0.06); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Delivery trucks on road (enter left, exit right onto perpendicular)
+    for(let ti = 0; ti < 2; ti++) {
+        const truckPhase = ((t / 5000 + ti * 0.5) % 1);
+        const truckX = wx + truckPhase * (ww + 28) - 14;
+        const truckY = roadY + wh * 0.02;
+        if(truckX > wx - 20 && truckX < wx + ww + 20) {
+            // Cab
+            ctx.fillStyle = '#555';
+            ctx.fillRect(truckX, truckY, 22, 12);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(truckX - 12, truckY, 12, 12);
+            // Cab windows
+            ctx.fillStyle = '#8ab4cc';
+            ctx.fillRect(truckX + 4, truckY + 2, 8, 5);
+            // Wheels
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(truckX - 8, truckY + 12, 3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(truckX + 16, truckY + 12, 3, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    // Occasional plane in sky
+    const planePhase = (t / 18000) % 1;
+    const planeX = wx + planePhase * (ww + 40) - 20;
+    const planeY = wy + 18;
+    if(planeX > wx - 20 && planeX < wx + ww + 20) {
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(planeX, planeY, 18, 4);
+        ctx.fillRect(planeX + 4, planeY - 3, 10, 3); // tail fin
+        ctx.fillRect(planeX - 2, planeY + 1, 22, 1); // wing
+    }
+
+    // Window frame
+    ctx.restore();
+    ctx.strokeStyle = '#5a5a50'; ctx.lineWidth = 4;
+    ctx.strokeRect(wx, wy, ww, wh);
+    // Cross bar
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(wx + ww / 2, wy); ctx.lineTo(wx + ww / 2, wy + wh); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx, wy + wh / 2); ctx.lineTo(wx + ww, wy + wh / 2); ctx.stroke();
+    // Glass highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(wx + 2, wy + 2, ww / 2 - 4, wh / 2 - 4);
 }
 
 function drawLevel6EmployeeLobby() {
@@ -16776,9 +17357,9 @@ function drawElevatorUI() {
     ctx.fillStyle = 'rgba(0,0,0,0.85)';
     ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Elevator panel — 3 floors (descending order)
-    const opts = ['EMPLOYEE LEVEL', 'SMARTWARE LEVEL', 'CEO LEVEL'];
-    const pw = 280, ph = 320;
+    // Elevator panel — 2 floors (Smart Ware elevator: Employee ↔ Smartware only)
+    const opts = ['EMPLOYEE LEVEL', 'SMARTWARE LEVEL'];
+    const pw = 280, ph = 260;
     const px = 350 - pw / 2, py = 90;
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(px, py, pw, ph);
@@ -16796,12 +17377,10 @@ function drawElevatorUI() {
 
     // Floor options
     for (let i = 0; i < opts.length; i++) {
-        const oy = py + 50 + i * 72;
+        const oy = py + 50 + i * 88;
         const sel = level6.elevatorChoice === i;
-        // Highlight current floor dimly
-        const isCurrentFloor = (level6.room === 'pipeRoom' && i === 1) ||       // Smartware Level
-                               (level6.room === 'entryway' && i === 2) ||      // CEO Level
-                               (level6.room === 'employeeLobby' && i === 0);   // Employee Level
+        const isCurrentFloor = (level6.room === 'pipeRoom' && i === 1) ||
+                               (level6.room === 'employeeLobby' && i === 0);
         ctx.fillStyle = sel ? '#d4af37' : (isCurrentFloor ? '#2a2a1a' : '#333');
         ctx.fillRect(px + 30, oy, pw - 60, 54);
         ctx.strokeStyle = sel ? '#ffd700' : (isCurrentFloor ? '#887722' : '#555');
@@ -18853,6 +19432,11 @@ function drawScene() {
             // Draw player on bridge
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+        } else if(level6.room === 'marbleRoom') {
+            drawLevel6MarbleRoom();
+            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0) { drawAmmoCounter(player.x, player.y, level6.threeShotRifleAmmo); }
         } else if(level6.room === 'entryway') {
             drawLevel6Entryway();
 
@@ -19542,9 +20126,49 @@ function drawScene() {
             }
         }
 
+        // Marble room printer UI
+        if(level6.room === 'marbleRoom' && level6.marblePrinter.ui) {
+            const mp = level6.marblePrinter;
+            ctx.fillStyle = 'rgba(0,0,0,0.87)';
+            ctx.fillRect(-GX, 300, CANVAS_W, CANVAS_H);
+            const items = [
+                { name: '3-SHOT RIFLE', icon: '🔫', disabled: level6.hasThreeShotRifle && level6.threeShotRifleAmmo >= 27 },
+                { name: '+ ARMOR (1 LIFE)', icon: '🛡', disabled: level6.moneyLives >= 4 },
+                { name: '+ AMMO (3 ROUNDS)', icon: '📦', disabled: level6.threeShotRifleAmmo >= 27 }
+            ];
+            ctx.fillStyle = '#f5f2ec'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left';
+            ctx.fillText('ARMORY FABRICATOR:', 30, 328);
+            for(let i = 0; i < 3; i++) {
+                const itm = items[i], sel = mp.choice === i;
+                const ix = 20 + i * 220;
+                ctx.fillStyle = itm.disabled ? '#222' : (sel ? '#d4af37' : '#333');
+                ctx.fillRect(ix, 338, 205, 65);
+                ctx.strokeStyle = sel ? '#ffd700' : '#555'; ctx.lineWidth = sel ? 3 : 1;
+                ctx.strokeRect(ix, 338, 205, 65);
+                ctx.fillStyle = itm.disabled ? '#444' : '#f5f2ec';
+                ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
+                ctx.fillText(itm.name, ix + 102, 377);
+                ctx.fillStyle = itm.disabled ? '#333' : (sel ? '#000' : '#888');
+                ctx.font = '11px Arial';
+                ctx.fillText(itm.disabled ? 'N/A' : (sel ? 'ACTION: PRINT' : '◄ ► SELECT'), ix + 102, 393);
+            }
+            if(mp.printing) {
+                const pct = Math.floor(mp.progress * 100);
+                ctx.fillStyle = '#00ff88'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+                ctx.fillText(`PRINTING... ${pct}%`, 350, 420);
+                ctx.fillStyle = '#1a1a1a'; ctx.fillRect(100, 428, 500, 14);
+                ctx.fillStyle = '#00ff88'; ctx.fillRect(100, 428, 500 * mp.progress, 14);
+            }
+        }
+
         // Elevator fade-to-black transition (both fade-out and fade-in)
         if(level6.elevatorTransition || level6.elevatorFadeIn) {
             ctx.fillStyle = `rgba(0,0,0,${level6.elevatorFadeAlpha})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        }
+        // Marble room elevator fade
+        if(level6.marbleElevatorTransition || level6.marbleElevatorFadeIn) {
+            ctx.fillStyle = `rgba(0,0,0,${level6.marbleElevatorFadeAlpha})`;
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
 
@@ -22272,14 +22896,13 @@ function update() {
                     keys['ArrowUp'] = false; keys['up'] = false;
                 }
                 if(keys['ArrowDown'] || keys['down']) {
-                    level6.elevatorChoice = Math.min(2, level6.elevatorChoice + 1);
+                    level6.elevatorChoice = Math.min(1, level6.elevatorChoice + 1);
                     keys['ArrowDown'] = false; keys['down'] = false;
                 }
                 if(keys[' '] || keys['action']) {
                     keys[' '] = false; keys['action'] = false;
-                    // Determine if we're already on selected floor
+                    // Determine if we're already on selected floor (Smart Ware: 0=Employee, 1=Smartware)
                     const onFloor = (level6.elevatorChoice === 1 && level6.room === 'pipeRoom') ||
-                                    (level6.elevatorChoice === 2 && level6.room === 'entryway') ||
                                     (level6.elevatorChoice === 0 && level6.room === 'employeeLobby');
                     if (onFloor) {
                         level6.elevatorUI = false;
@@ -22300,13 +22923,7 @@ function update() {
                 if(level6.elevatorFadeAlpha >= 1) {
                     level6.elevatorTransition = false;
                     const target = level6.elevatorTarget;
-                    if (target === 2) {
-                        // CEO Level → entryway
-                        level6.room = 'entryway';
-                        player.x = 350;
-                        player.y = 400;
-                        level6.lastExitEdge = 'right'; // elevator is on right side of entryway
-                    } else if (target === 1) {
+                    if (target === 1) {
                         // Smartware Level → pipe room
                         level6.room = 'pipeRoom';
                         player.x = 80;
@@ -22375,6 +22992,38 @@ function update() {
                 if(level6.elevatorFadeAlpha <= 0) {
                     level6.elevatorFadeAlpha = 0;
                     level6.elevatorFadeIn = false;
+                }
+                return;
+            }
+            // Marble elevator transition (entryway ↔ marble room)
+            if(level6.marbleElevatorTransition) {
+                level6.marbleElevatorFadeAlpha += 0.03;
+                if(level6.marbleElevatorFadeAlpha >= 1) {
+                    level6.marbleElevatorTransition = false;
+                    if(level6.marbleElevatorTarget === 'marbleRoom') {
+                        level6.room = 'marbleRoom';
+                        player.x = 620; player.y = 300;
+                        level6.lastExitEdge = 'right';
+                        // Trigger emergency state if returning after CEO defeat
+                        if(level6.ceoDefeated && !level6.marbleRoom.emergencyLights) {
+                            level6.marbleRoom.emergencyLights = true;
+                            level6.marbleRoom.printerLocked = true;
+                        }
+                    } else {
+                        level6.room = 'entryway';
+                        player.x = 560; player.y = 400;
+                        level6.lastExitEdge = 'right';
+                    }
+                    level6.marbleElevatorTarget = null;
+                    level6.marbleElevatorFadeIn = true;
+                }
+                return;
+            }
+            if(level6.marbleElevatorFadeIn) {
+                level6.marbleElevatorFadeAlpha -= 0.04;
+                if(level6.marbleElevatorFadeAlpha <= 0) {
+                    level6.marbleElevatorFadeAlpha = 0;
+                    level6.marbleElevatorFadeIn = false;
                 }
                 return;
             }
@@ -22861,8 +23510,18 @@ function update() {
                     player.y = 380;
                     level6.lastExitEdge = 'left';
                 }
-                // Right wall — dead end (bridge terminates)
-                if(player.x > 660) player.x = 660;
+                // Right door — "No Admittance" white door to marble security room
+                if(player.x > 645 && !level6.marbleElevatorTransition && (keys[' '] || keys['action'])) {
+                    level6.room = 'marbleRoom';
+                    player.x = 60; player.y = 360;
+                    level6.lastExitEdge = 'left';
+                    keys[' '] = false; keys['action'] = false;
+                    if(level6.ceoDefeated && level6.marbleRoom && !level6.marbleRoom.emergencyLights) {
+                        level6.marbleRoom.emergencyLights = true;
+                        level6.marbleRoom.printerLocked = true;
+                    }
+                }
+                if(player.x > 680) player.x = 680;
 
                 // Pick up bridge boss ammo drops
                 if(level6.bridgeDrops && level6.bridgeDrops.length > 0) {
@@ -22907,6 +23566,223 @@ function update() {
                         player.shootTimer = 20;
                     }
                 }
+            }
+
+            else if(level6.room === 'marbleRoom') {
+                // 2D navigation
+                player.y = Math.max(195, Math.min(385, player.y));
+                player.x = Math.max(40, Math.min(635, player.x));
+
+                const mr = level6.marbleRoom;
+                const guards = level6.marbleGuards;
+                const floorY = 390;
+                const allGuardsDead = guards.every(g => !g.alive);
+
+                // ── GUARD AI ──────────────────────────────────────────────────
+                for(const g of guards) {
+                    if(!g.alive) continue;
+                    g.walkTimer++;
+                    // Patrol
+                    if(g.walkTimer % 120 === 0) g.walkDir *= -1;
+                    const patrolMinX = 60, patrolMaxX = 560;
+                    g.x += g.walkDir * 1.2;
+                    if(g.x < patrolMinX) { g.x = patrolMinX; g.walkDir = 1; }
+                    if(g.x > patrolMaxX) { g.x = patrolMaxX; g.walkDir = -1; }
+                    g.facing = g.walkDir > 0 ? 'right' : 'left';
+
+                    // Detection
+                    const dx = player.x - g.x, dy = player.y - g.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    let detected = false;
+                    if(mr.lightsOn) {
+                        // Lights on: detect within range if roughly in front
+                        if(dist < 200 && Math.abs(dy) < 80 && ((g.facing === 'right' && dx > 0) || (g.facing === 'left' && dx < 0))) detected = true;
+                    } else {
+                        // Lights off: flashlight cone detection
+                        const coneLen = 220, halfAngle = Math.PI / 5;
+                        const gAngle = g.facing === 'right' ? 0 : Math.PI;
+                        const toPlayerAngle = Math.atan2(dy, dx);
+                        let angleDiff = toPlayerAngle - gAngle;
+                        while(angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                        while(angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                        if(dist < coneLen && Math.abs(angleDiff) < halfAngle) detected = true;
+                    }
+
+                    if(detected) {
+                        g.alert = true; g.alertTimer = 90;
+                        g.facing = dx > 0 ? 'right' : 'left';
+                        // 3-shot burst: fire if cooldown expired
+                        if(g.shootCooldown <= 0 && g.shootBurst === 0) {
+                            g.shootBurst = 3; g.shootBurstTimer = 0;
+                        }
+                    } else if(g.alertTimer > 0) {
+                        g.alertTimer--;
+                        if(g.alertTimer <= 0) g.alert = false;
+                    }
+                    if(g.shootCooldown > 0) g.shootCooldown--;
+
+                    // Fire burst
+                    if(g.shootBurst > 0) {
+                        g.shootBurstTimer++;
+                        if(g.shootBurstTimer % 8 === 0) {
+                            const vx = g.facing === 'right' ? 10 : -10;
+                            level6.marbleBullets.push({ x: g.x + vx * 7, y: g.y - 22, vx: vx, vy: 0 });
+                            g.shootBurst--;
+                            if(g.shootBurst === 0) g.shootCooldown = 150;
+                        }
+                    }
+                }
+
+                // ── MOVE + COLLIDE GUARD BULLETS ──────────────────────────────
+                for(let bi = level6.marbleBullets.length - 1; bi >= 0; bi--) {
+                    const b = level6.marbleBullets[bi];
+                    b.x += b.vx; b.y += b.vy;
+                    if(b.x < 0 || b.x > 700 || b.y < 0 || b.y > 450) { level6.marbleBullets.splice(bi, 1); continue; }
+                    // Hit player
+                    if(Math.abs(b.x - player.x) < 20 && Math.abs(b.y - (player.y - 20)) < 30) {
+                        level6.marbleBullets.splice(bi, 1);
+                        level6.moneyLives = Math.max(0, level6.moneyLives - 1);
+                        level6.damageFlash = 1;
+                    }
+                }
+
+                // ── PLAYER SHOOTING GUARDS ────────────────────────────────────
+                for(let bi = bullets.length - 1; bi >= 0; bi--) {
+                    const b = bullets[bi];
+                    if(b.fromCEO) continue;
+                    for(const g of guards) {
+                        if(!g.alive) continue;
+                        if(Math.abs(b.x - g.x) < 25 && Math.abs(b.y - (g.y - 30)) < 40) {
+                            bullets.splice(bi, 1);
+                            g.health--;
+                            if(g.health <= 0) {
+                                g.alive = false; g.deathTime = Date.now();
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // ── EYEBALL PICKUP ────────────────────────────────────────────
+                const redGuard = guards.find(g => g.color === 'red');
+                if(redGuard && !redGuard.alive && !redGuard.eyeballTaken && !level6.hasEyeball) {
+                    if(Math.abs(player.x - redGuard.x) < 50 && Math.abs(player.y - (floorY - 12)) < 60 && (keys[' '] || keys['action'])) {
+                        level6.hasEyeball = true;
+                        redGuard.eyeballTaken = true;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+
+                // ── RETINA SCANNER ────────────────────────────────────────────
+                if(!mr.elevatorUnlocked && allGuardsDead && level6.hasEyeball) {
+                    if(Math.abs(player.x - 628) < 40 && Math.abs(player.y - 285) < 60 && (keys[' '] || keys['action'])) {
+                        mr.elevatorUnlocked = true;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+
+                // ── ELEVATOR (to CEO entryway — only when unlocked) ───────────
+                if(mr.elevatorUnlocked && player.x > 625 && !level6.marbleElevatorTransition) {
+                    if(keys[' '] || keys['action']) {
+                        level6.marbleElevatorTransition = true;
+                        level6.marbleElevatorFadeAlpha = 0;
+                        level6.marbleElevatorTarget = 'entryway';
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+
+                // ── LEFT EXIT (back to bridge) ────────────────────────────────
+                if(player.x < 48) {
+                    level6.room = 'nuclearBridge';
+                    player.x = 650; player.y = 140;
+                    level6.lastExitEdge = 'right';
+                }
+
+                // ── LIGHT SWITCH interaction ──────────────────────────────────
+                const lsX = 350, lsBaseY = 175;
+                if(!mr.lightSwitchShot && Math.abs(player.x - lsX) < 40 && Math.abs(player.y - (lsBaseY + 40)) < 55 && (keys[' '] || keys['action'])) {
+                    mr.lightsOn = !mr.lightsOn;
+                    keys[' '] = false; keys['action'] = false;
+                }
+                // Shooting light switch (bullet hits it)
+                if(!mr.lightSwitchShot) {
+                    for(let bi = bullets.length - 1; bi >= 0; bi--) {
+                        const b = bullets[bi];
+                        if(!b.fromCEO && Math.abs(b.x - lsX) < 15 && b.y > lsBaseY - 5 && b.y < lsBaseY + 50) {
+                            bullets.splice(bi, 1);
+                            mr.lightSwitchShot = true;
+                            mr.lightsOn = false;
+                            break;
+                        }
+                    }
+                }
+
+                // ── MARBLE ROOM PRINTER ───────────────────────────────────────
+                const printerX = 595;
+                if(!mr.printerLocked && Math.abs(player.x - printerX) < 55 && player.y > 300 && (keys[' '] || keys['action'])) {
+                    level6.marblePrinter.ui = !level6.marblePrinter.ui;
+                    keys[' '] = false; keys['action'] = false;
+                }
+                if(level6.marblePrinter.ui && !level6.marblePrinter.printing) {
+                    if(keys['ArrowLeft'] || keys['left']) {
+                        level6.marblePrinter.choice = Math.max(0, level6.marblePrinter.choice - 1);
+                        keys['ArrowLeft'] = false; keys['left'] = false;
+                    }
+                    if(keys['ArrowRight'] || keys['right']) {
+                        level6.marblePrinter.choice = Math.min(2, level6.marblePrinter.choice + 1);
+                        keys['ArrowRight'] = false; keys['right'] = false;
+                    }
+                    if((keys[' '] || keys['action']) && !level6.marblePrinter.printing) {
+                        level6.marblePrinter.printing = true;
+                        level6.marblePrinter.progress = 0;
+                        level6.marblePrinter.item = ['rifle', 'armor', 'ammo'][level6.marblePrinter.choice];
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+                if(level6.marblePrinter.printing) {
+                    level6.marblePrinter.progress += 0.008;
+                    if(level6.marblePrinter.progress >= 1) {
+                        level6.marblePrinter.printing = false;
+                        level6.marblePrinter.ui = false;
+                        level6.marblePrinter.progress = 0;
+                        if(level6.marblePrinter.item === 'rifle') {
+                            level6.hasThreeShotRifle = true;
+                            level6.threeShotRifleAmmo = Math.min(level6.threeShotRifleAmmo + 9, 27);
+                        } else if(level6.marblePrinter.item === 'armor') {
+                            level6.moneyLives = Math.min(level6.moneyLives + 1, 4);
+                        } else if(level6.marblePrinter.item === 'ammo') {
+                            level6.threeShotRifleAmmo = Math.min(level6.threeShotRifleAmmo + 3, 27);
+                        }
+                        level6.marblePrinter.item = null;
+                    }
+                }
+
+                // ── FIRE 3-SHOT RIFLE ─────────────────────────────────────────
+                if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0 && (keys[' '] || keys['action'])) {
+                    if(!level6.marblePrinter.ui) {
+                        keys[' '] = false; keys['action'] = false;
+                        const vx = player.facing === 'left' ? -12 : 12;
+                        for(let s = 0; s < 3; s++) {
+                            setTimeout(() => {
+                                bullets.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, vx: vx, vy: 0, fromCEO: false });
+                            }, s * 80);
+                        }
+                        level6.threeShotRifleAmmo -= 3;
+                        player.shootTimer = 20;
+                    }
+                } else if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    if(!level6.marblePrinter.ui) {
+                        keys[' '] = false; keys['action'] = false;
+                        const vx = player.facing === 'left' ? -12 : 12;
+                        bullets.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, vx: vx, vy: 0, fromCEO: false });
+                        level6.revolverAmmo--;
+                        muzzleFlashes.push({ x: player.x + (vx > 0 ? 44 : -44), y: player.y - 10, life: 6, facing: vx > 0 ? 'right' : 'left' });
+                        player.shootTimer = 20;
+                    }
+                }
+
+                // ── RETINA SCANNER PROMPT ─────────────────────────────────────
+                // (drawn in drawLevel6MarbleRoom, interaction handled above)
             }
 
             else if(level6.room === 'employeeLobby') {
@@ -23553,12 +24429,12 @@ function update() {
                 if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
 
 
-                // Elevator interaction — use the entryway elevator to go back
-                if(player.x > 540 && !level6.elevatorUI && (keys[' '] || keys['action'])) {
-                    level6.elevatorUI = true;
-                    level6.elevatorChoice = 0;
-                    keys[' '] = false;
-                    keys['action'] = false;
+                // CEO elevator — private elevator to marble security room
+                if(player.x > 540 && !level6.marbleElevatorTransition && !level6.marbleElevatorFadeIn && (keys[' '] || keys['action'])) {
+                    level6.marbleElevatorTransition = true;
+                    level6.marbleElevatorFadeAlpha = 0;
+                    level6.marbleElevatorTarget = 'marbleRoom';
+                    keys[' '] = false; keys['action'] = false;
                 }
 
                 if(Math.abs(player.x - 350) < 100 && (keys[' '] || keys['action'])) {
