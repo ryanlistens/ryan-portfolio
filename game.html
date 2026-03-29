@@ -8111,16 +8111,11 @@ function drawLevel6PipeRoom() {
         ctx.fillRect(gdX + gdW - 14, gdY + gdH / 2 - 14, 8, 28);
         ctx.fillStyle = '#ffd700';
         ctx.fillRect(gdX + gdW - 13, gdY + gdH / 2 - 12, 6, 24);
-        // BULLET-PROOF label on door glass
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(gdX + 2, gdY + 7, gdW - 4, 15);
-        ctx.fillStyle = '#88ddff'; ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
-        ctx.fillText('BULLET-PROOF GLASS', gdX + gdW / 2, gdY + 17);
-        // RESTRICTED ACCESS label above door
-        ctx.fillStyle = '#aa1100';
-        ctx.fillRect(gdX - 5, gdY - 20, gdW + 10, 16);
-        ctx.fillStyle = '#ffe0e0'; ctx.font = scaledFont(8, 'bold', 'Arial', true); ctx.textAlign = 'center';
-        ctx.fillText('RESTRICTED ACCESS', gdX + gdW / 2, gdY - 8);
+        // Minimal label above door only — no clutter on the glass itself
+        ctx.fillStyle = '#881100';
+        ctx.fillRect(gdX - 4, gdY - 16, gdW + 8, 12);
+        ctx.fillStyle = '#ffcccc'; ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
+        ctx.fillText('RESTRICTED', gdX + gdW / 2, gdY - 7);
 
         // External conduit box on right glass wall (pipe connection point)
         const condX = grX + grW + 2, condCY = grY + 54;
@@ -11485,14 +11480,13 @@ function drawNuclearAssemblyBridge() {
         ctx.fillRect(wallL, -GY, 85, dadoY + GY);
         // Left edge seam
         ctx.fillStyle = '#0e0c0a'; ctx.fillRect(wallL, -GY, 3, bridgePlatY + GY);
-        // Corridor floor strip at bridge platform level
-        const cflG = ctx.createLinearGradient(wallL, bridgePlatY - 4, wallL, bridgePlatY + 18);
+        // Corridor floor strip at bridge platform level — hallway ends here, open below
+        const cflG = ctx.createLinearGradient(wallL, bridgePlatY - 4, wallL, bridgePlatY + 14);
         cflG.addColorStop(0, '#302c26'); cflG.addColorStop(1, '#1c1814');
-        ctx.fillStyle = cflG; ctx.fillRect(wallL, bridgePlatY - 2, CANVAS_W - wallL + GX, 18);
-        ctx.fillStyle = '#100e0c'; ctx.fillRect(wallL, bridgePlatY + 16, CANVAS_W - wallL + GX, 4);
-        // Below bridge — dark fill
-        ctx.fillStyle = '#100e0c';
-        ctx.fillRect(wallL, bridgePlatY + 20, CANVAS_W - wallL + GX, factFloor - bridgePlatY + GY);
+        ctx.fillStyle = cflG; ctx.fillRect(wallL, bridgePlatY - 2, CANVAS_W - wallL + GX, 14);
+        // Bottom edge of hallway floor — narrow sill, then open air below bridge
+        ctx.fillStyle = '#0e0c0a'; ctx.fillRect(wallL, bridgePlatY + 12, CANVAS_W - wallL + GX, 3);
+        // NO fill below bridge — assembly process visible below
     }
 
     // Lead-lined RED security door (radiological access to marble room)
@@ -11856,6 +11850,10 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.beginPath();ctx.moveTo(wx,ceilTop+Math.round(ceilH*(0.3+cb*0.25)));ctx.lineTo(wx+ww,ceilTop+Math.round(ceilH*(0.3+cb*0.25)));ctx.stroke();
     }
 
+    // ── EXTERIOR (sky + plant + road) — clipped to exterior zone so nothing bleeds ─
+    ctx.save();
+    ctx.beginPath(); ctx.rect(wx, extTop, ww, extH); ctx.clip();
+
     // ── EXTERIOR SKY (visible through bay opening between pillars) ────────────
     const skyG=ctx.createLinearGradient(wx,extTop,wx,extTop+extH*0.60);
     skyG.addColorStop(0,'#284e80');skyG.addColorStop(0.55,'#4282b8');skyG.addColorStop(1,'#74aed0');
@@ -11873,17 +11871,14 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.strokeStyle='#c89010'; ctx.lineWidth=0.8; ctx.setLineDash([7,9]);
     ctx.beginPath();ctx.moveTo(wx,roadY+Math.round(roadH*0.5));ctx.lineTo(wx+ww,roadY+Math.round(roadH*0.5));ctx.stroke();
     ctx.setLineDash([]);
-    // Clouds — clipped to exterior sky zone so they can't bleed into ceiling
-    ctx.save();
-    ctx.beginPath(); ctx.rect(wx, extTop, ww, Math.round(extH * 0.58)); ctx.clip();
+    // Clouds — the exterior zone clip above already prevents ceiling bleed
     ctx.fillStyle='rgba(255,255,255,0.80)';
     for(const [ox,sp,sz,fy] of [[0.09,17000,10,0.05],[0.44,23000,7,0.03],[0.71,14000,9,0.09]]){
-        const cx=wx+((ox+t/sp)%1.1)*ww, cy=extTop+fy*extH;
+        const cx=wx+((ox+t/sp)%1.1)*ww, cy=extTop+Math.round(extH*0.12+fy*extH*0.5);
         ctx.beginPath();ctx.arc(cx,cy,sz,0,Math.PI*2);ctx.fill();
         ctx.beginPath();ctx.arc(cx+sz,cy-sz*0.3,sz*0.7,0,Math.PI*2);ctx.fill();
         ctx.beginPath();ctx.arc(cx-sz*0.6,cy+sz*0.1,sz*0.5,0,Math.PI*2);ctx.fill();
     }
-    ctx.restore();
     // ── NUCLEAR PLANT — large, centered, dramatic ─────────────────────────────
     const horizY=extTop+Math.round(extH*0.60);
     const plantCX=wx+Math.round(ww/2);
@@ -11946,6 +11941,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         }
     }
     ctx.globalAlpha=1;
+    ctx.restore(); // end exterior zone clip
 
     // ── BAY DOOR PILLARS (concrete walls that frame the exterior opening) ──────
     // These are the most important element for making it feel INSIDE a warehouse
@@ -11982,83 +11978,134 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.beginPath();ctx.moveTo(wx+pillarW,floorTop+Math.round(floorH*0.42));ctx.lineTo(wx+ww-pillarW,floorTop+Math.round(floorH*0.42));ctx.stroke();
     ctx.setLineDash([]);
 
-    // ── TRUCKS: road approach → bay entrance → bay floor → road departure ────
-    const TW=70, TH=18;
+    // ── TRUCKS: road approach (side-view) → turn → front-view bay drive ─────
+    const TW=68, TH=16; // side-view dimensions
     const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
     const travelW=bayRight-bayLeft;
-    const truckY=roadY+2;
-    // Draw truck body at (0,0) — caller sets transform
-    const drawTk=(tx2,ty2,sc,flipX)=>{
-        ctx.save();
-        ctx.translate(tx2+(flipX?TW*sc:0),ty2);
-        ctx.scale(flipX?-sc:sc,sc);
-        ctx.fillStyle='rgba(0,0,0,0.32)';
-        ctx.beginPath();ctx.ellipse(TW*0.5,TH+2/sc,TW*0.38,2/sc,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#c02e00';ctx.fillRect(0,0,TW-20,TH-2);
-        ctx.strokeStyle='rgba(200,50,0,0.25)';ctx.lineWidth=0.6/sc;
-        for(let ri=0;ri<4;ri++)ctx.strokeRect(3+ri*11,2,9,TH-6);
-        const cg2=ctx.createLinearGradient(TW-20,0,TW,0);
-        cg2.addColorStop(0,'#962600');cg2.addColorStop(1,'#761a00');
-        ctx.fillStyle=cg2;ctx.fillRect(TW-20,0,20,TH-2);
-        ctx.fillStyle='#527e98';ctx.fillRect(TW-16,2,12,7);
-        ctx.fillStyle='rgba(180,220,255,0.4)';ctx.fillRect(TW-5,3,3,3);
-        ctx.fillStyle='#ffe040';ctx.fillRect(TW,3,2,4);
-        ctx.fillStyle='#404038';ctx.fillRect(TW,TH-6,4,3);
+    const truckY=roadY+1;
+    const entryX=bayLeft+travelW*0.52; // x where truck turns into bay
+
+    // Side-view truck: facing LEFT (approaching bay from right side of road)
+    const drawSide=(tx2,ty2)=>{
+        ctx.fillStyle='rgba(0,0,0,0.25)';
+        ctx.beginPath();ctx.ellipse(tx2+TW*0.5,ty2+TH+1,TW*0.36,2,0,0,Math.PI*2);ctx.fill();
+        // Cab on LEFT (leading direction when driving left)
+        ctx.fillStyle='#7a2000';ctx.fillRect(tx2,ty2,22,TH-2);
+        ctx.fillStyle='#4a7290';ctx.fillRect(tx2+2,ty2+2,14,7);
+        ctx.fillStyle='rgba(180,220,255,0.35)';ctx.fillRect(tx2+3,ty2+3,5,3);
+        ctx.fillStyle='#ffe040';ctx.fillRect(tx2-2,ty2+3,2,4); // headlight left
+        // Trailer on RIGHT (trailing)
+        ctx.fillStyle='#c02e00';ctx.fillRect(tx2+22,ty2,TW-22,TH-2);
+        ctx.strokeStyle='rgba(200,50,0,0.2)';ctx.lineWidth=0.6;
+        for(let ri=0;ri<3;ri++)ctx.strokeRect(tx2+24+ri*13,ty2+2,11,TH-6);
         ctx.fillStyle='#0c0a08';
-        for(const wx3 of [8,TW-52,TW-22,TW-10]){
-            ctx.beginPath();ctx.arc(wx3,TH-1,3.5,0,Math.PI*2);ctx.fill();
-            ctx.fillStyle='#282420';ctx.beginPath();ctx.arc(wx3,TH-1,1.5,0,Math.PI*2);ctx.fill();
+        for(const wx3 of [tx2+6,tx2+17,tx2+36,tx2+TW-8]){
+            ctx.beginPath();ctx.arc(wx3,ty2+TH-1,3,0,Math.PI*2);ctx.fill();
+            ctx.fillStyle='#282420';ctx.beginPath();ctx.arc(wx3,ty2+TH-1,1.5,0,Math.PI*2);ctx.fill();
             ctx.fillStyle='#0c0a08';
         }
-        ctx.restore();
     };
+
+    // Front-view truck: truck faces viewer — used when truck is inside bay
+    const drawFront=(cx2,by2,sc)=>{
+        const fw=Math.round(32*sc), fh=Math.round(20*sc);
+        const fx2=cx2-fw/2;
+        // Shadow
+        ctx.fillStyle='rgba(0,0,0,0.3)';
+        ctx.beginPath();ctx.ellipse(cx2,by2+fh+2*sc,fw*0.42,2.5*sc,0,0,Math.PI*2);ctx.fill();
+        // Trailer (behind cab — visible above/behind as smaller rect)
+        const tw2=Math.round(fw*0.72),th2=Math.round(fh*0.6);
+        ctx.fillStyle='#a02800';ctx.fillRect(cx2-tw2/2,by2-th2*0.5,tw2,th2);
+        ctx.strokeStyle='rgba(200,50,0,0.12)';ctx.lineWidth=0.5*sc;
+        for(let ri=0;ri<2;ri++)ctx.strokeRect(cx2-tw2/2+3+ri*tw2/2,by2-th2*0.5+2,tw2/2-4,th2-4);
+        // Cab front face
+        ctx.fillStyle='#8c2200';ctx.fillRect(fx2,by2,fw,fh);
+        // Windshield
+        ctx.fillStyle='#3f6880';ctx.fillRect(fx2+Math.round(fw*0.1),by2+Math.round(fh*0.08),Math.round(fw*0.8),Math.round(fh*0.52));
+        ctx.fillStyle='rgba(180,220,255,0.28)';ctx.fillRect(fx2+Math.round(fw*0.12),by2+Math.round(fh*0.1),Math.round(fw*0.3),Math.round(fh*0.2));
+        // Grill
+        ctx.fillStyle='#241e18';ctx.fillRect(fx2+Math.round(fw*0.08),by2+Math.round(fh*0.68),Math.round(fw*0.84),Math.round(fh*0.24));
+        for(let gi=0;gi<4;gi++){ctx.fillStyle='rgba(80,60,40,0.8)';ctx.fillRect(fx2+Math.round(fw*0.1)+gi*Math.round(fw*0.2),by2+Math.round(fh*0.70),Math.round(fw*0.14),Math.round(fh*0.2));}
+        // Headlights
+        ctx.fillStyle='#ffe050';
+        ctx.fillRect(fx2+2,by2+Math.round(fh*0.58),Math.round(fw*0.18),Math.round(fh*0.22));
+        ctx.fillRect(fx2+fw-2-Math.round(fw*0.18),by2+Math.round(fh*0.58),Math.round(fw*0.18),Math.round(fh*0.22));
+        // Wheels
+        const wr=Math.round(3.5*sc);
+        ctx.fillStyle='#0c0a08';
+        ctx.beginPath();ctx.arc(fx2+Math.round(fw*0.18),by2+fh,wr,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(fx2+fw-Math.round(fw*0.18),by2+fh,wr,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#282420';
+        ctx.beginPath();ctx.arc(fx2+Math.round(fw*0.18),by2+fh,Math.round(wr*0.45),0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(fx2+fw-Math.round(fw*0.18),by2+fh,Math.round(wr*0.45),0,Math.PI*2);ctx.fill();
+    };
+
     for(let ti=0;ti<2;ti++){
-        const phase=((t/9000+ti*0.5)%1);
+        const phase=((t/10000+ti*0.5)%1);
         ctx.save();
         ctx.beginPath();ctx.rect(bayLeft,extTop,travelW,extH+floorH);ctx.clip();
-        const entryX=bayLeft+travelW*0.55; // x-position of bay entrance on road
-        if(phase<0.28){
-            // Road approach — drive right toward bay entrance
-            const p=phase/0.28;
-            const tx=bayLeft+p*(travelW*0.55+TW)-TW;
-            drawTk(tx,truckY,1,false);
-        } else if(phase<0.32){
-            // Turning — squish as truck pivots 90° into bay
-            const p=(phase-0.28)/0.04;
+
+        if(phase<0.30){
+            // Road approach: side-view truck drives from right toward bay entrance
+            const p=phase/0.30;
+            const tx=entryX+(1-p)*(travelW*0.52+TW);
+            drawSide(tx,truckY);
+        } else if(phase<0.36){
+            // Turn phase 1: truck rotates 90° — width squishes to edge-on (0)
+            const p=(phase-0.30)/0.06;
+            const scaleX=1-p;
             ctx.save();
             ctx.translate(entryX+TW*0.5,truckY+TH*0.5);
-            ctx.scale(1-p*0.88,1);
+            ctx.scale(scaleX,1);
             ctx.translate(-TW*0.5,-TH*0.5);
-            drawTk(0,0,1,false);
+            drawSide(0,0);
             ctx.restore();
-        } else if(phase<0.58){
-            // Bay interior — perspective drive toward viewer (scale grows)
-            const p=(phase-0.32)/0.26;
-            const sc=0.30+p*0.62;
-            const bx=wx+ww*0.42-TW*sc*0.5;
-            const by=floorTop+floorH*(0.04+p*0.62);
-            drawTk(bx,by,sc,false);
-        } else if(phase<0.62){
-            // Turning to exit — unsquish
-            const p=(phase-0.58)/0.04;
+        } else if(phase<0.42){
+            // Turn phase 2: front-view emerges (width grows from 0 to FW at road level)
+            const p=(phase-0.36)/0.06;
+            const FW=32, FH=20;
             ctx.save();
-            ctx.translate(wx+ww*0.42+TW*0.5,floorTop+floorH*0.66+TH*0.5);
-            ctx.scale(p*0.88,1);
-            ctx.translate(-TW*0.5,-TH*0.5);
-            drawTk(0,0,1,true);
+            ctx.translate(entryX,truckY+TH*0.5);
+            ctx.scale(p,1);
+            drawFront(0,-FH*0.5,1);
             ctx.restore();
-        } else if(phase<0.86){
-            // Bay exit — perspective reverse (scale shrinks back toward road)
-            const p=(phase-0.62)/0.24;
-            const sc=0.92-p*0.60;
-            const bx=wx+ww*0.42-TW*sc*0.5;
-            const by=floorTop+floorH*(0.66-p*0.62);
-            drawTk(bx,by,sc,true);
+        } else if(phase<0.68){
+            // Bay interior: front-view truck drives toward viewer — perspective scale up
+            const p=(phase-0.42)/0.26;
+            const sc=0.28+p*0.68;
+            const bx=entryX+(bayLeft+travelW*0.5-entryX)*p; // drift slightly to center
+            const by=floorTop+floorH*(0.02+p*0.70);
+            drawFront(bx,by,sc);
+        } else if(phase<0.74){
+            // Exit turn 1: front view squishes back to edge-on
+            const p=(phase-0.68)/0.06;
+            const sc=0.96;
+            ctx.save();
+            ctx.translate(bayLeft+travelW*0.5,floorTop+floorH*0.72+Math.round(20*sc)*0.5);
+            ctx.scale(1-p,1);
+            drawFront(0,0,sc);
+            ctx.restore();
+        } else if(phase<0.80){
+            // Exit turn 2: emerges as side-view (now facing right, departing)
+            const p=(phase-0.74)/0.06;
+            const cx2=bayLeft+travelW*0.5;
+            ctx.save();
+            ctx.translate(cx2+TW*0.5,truckY+TH*0.5);
+            ctx.scale(-(p),1); // negative = facing right
+            ctx.translate(-TW*0.5,-TH*0.5);
+            drawSide(0,0);
+            ctx.restore();
         } else {
-            // Road departure — drive right away from bay
-            const p=(phase-0.86)/0.14;
-            const tx=entryX+p*(travelW*0.5+TW);
-            drawTk(tx,truckY,1,false);
+            // Road departure: side-view truck drives right away from bay
+            const p=(phase-0.80)/0.20;
+            const tx=entryX-TW+p*(travelW*0.55+TW);
+            // Flip to face right (driving away)
+            ctx.save();
+            ctx.translate(tx+TW,truckY+TH*0.5);
+            ctx.scale(-1,1);
+            ctx.translate(-TW,-TH*0.5);
+            drawSide(0,0);
+            ctx.restore();
         }
         ctx.restore();
     }
@@ -12112,25 +12159,22 @@ function drawLevel6EmployeeLobby() {
     ctx.font = 'bold 18px Arial';
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 260, 132);
 
-    // CEO portrait below sign — ornate golden frame, no overlap with stripes
-    const pX = 260, pY = 155, pW = 100, pH = 110;
-    ctx.fillStyle = '#d4af37';
-    ctx.fillRect(pX - pW/2 - 6, pY - 6, pW + 12, pH + 12);
-    ctx.fillStyle = '#b8941e';
-    ctx.fillRect(pX - pW/2 - 4, pY - 4, pW + 8, pH + 8);
-    ctx.fillStyle = '#d4af37';
-    ctx.fillRect(pX - pW/2 - 2, pY - 2, pW + 4, pH + 4);
-    if(foundingFatherImg && foundingFatherImg.complete && foundingFatherImg.naturalWidth > 0) {
-        ctx.drawImage(foundingFatherImg, pX - pW/2, pY, pW, pH);
-    } else {
-        ctx.fillStyle = '#2b2520';
-        ctx.fillRect(pX - pW/2, pY, pW, pH);
-    }
-    // Text below portrait
-    ctx.fillStyle = '#d4af37';
-    ctx.font = 'bold 16px serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Meet your founding father.', 260, pY + pH + 22);
+    // Two framed portraits below sign — founding father (left) + CEO arms (right)
+    const drawLobbPortrait = (img, lx, ly, lw, lh, caption) => {
+        // Outer ornate frame
+        ctx.fillStyle = '#c8962a'; ctx.fillRect(lx - 7, ly - 7, lw + 14, lh + 14);
+        ctx.fillStyle = '#a07818'; ctx.fillRect(lx - 5, ly - 5, lw + 10, lh + 10);
+        ctx.fillStyle = '#d4af37'; ctx.fillRect(lx - 3, ly - 3, lw + 6, lh + 6);
+        if(img && img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, lx, ly, lw, lh);
+        } else {
+            ctx.fillStyle = '#2b2520'; ctx.fillRect(lx, ly, lw, lh);
+        }
+        ctx.fillStyle = '#b89828'; ctx.font = 'bold 11px serif'; ctx.textAlign = 'center';
+        ctx.fillText(caption, lx + lw / 2, ly + lh + 18);
+    };
+    drawLobbPortrait(foundingFatherImg,  170, 152, 88, 100, 'Founding Father');
+    drawLobbPortrait(ceoArmsImg,         282, 152, 88, 100, 'Our CEO');
 
     // 4 colored fern-style potted plants next to elevator
     const plantColors = ['#ff3333', '#33cc33', '#3388ff', '#ffcc00'];
@@ -12908,13 +12952,18 @@ function drawLevel6CloningRoom() {
         }
     }
 
-    // === PM CLONING LABEL (mounted on wall above pipeline) ===
-    ctx.fillStyle = '#444';
-    ctx.fillRect(170, -8, 150, 22);
-    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
-    ctx.strokeRect(170, -8, 150, 22);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('PM CLONING', 245, 8);
+    // === MACHINE LABELS (wall-mounted plaques above pipeline) ===
+    // Style: dark steel plaque, white bold text, consistent spacing
+    const drawMachinePlaque = (lx, ly, lw, lh, label) => {
+        ctx.fillStyle = '#3a3a3a'; ctx.fillRect(lx, ly, lw, lh);
+        ctx.fillStyle = '#222'; ctx.fillRect(lx + 1, ly + 1, lw - 2, 3); // top shadow
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5; ctx.strokeRect(lx, ly, lw, lh);
+        ctx.fillStyle = '#e8e8e8'; ctx.font = `bold ${Math.round(lh * 0.55)}px Arial`; ctx.textAlign = 'center';
+        ctx.fillText(label, lx + lw / 2, ly + lh * 0.74);
+    };
+    drawMachinePlaque(150, -10, 90, 18, 'DOC PRINTER');
+    drawMachinePlaque(248, -10, 90, 18, 'PM PRINTER');
+    drawMachinePlaque(346, -10, 90, 18, '3D PRINTER');
 
     // === CONCEALED DOOR — left wall sliding brick panel ===
     const cdX = 0, cdY = 280, cdW = 60, cdH = 120;
