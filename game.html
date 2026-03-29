@@ -11847,22 +11847,42 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.save();
     ctx.beginPath(); ctx.rect(wx, extTop, ww, extH); ctx.clip();
 
-    // ── EXTERIOR SKY (visible through bay opening between pillars) ────────────
-    const skyG=ctx.createLinearGradient(wx,extTop,wx,extTop+extH*0.60);
+    // ── EXTERIOR SKY ─────────────────────────────────────────────────────────
+    const horizY=extTop+Math.round(extH*0.64); // horizon at 64% — towers fit fully within clip
+    const skyG=ctx.createLinearGradient(wx,extTop,wx,horizY);
     skyG.addColorStop(0,'#284e80');skyG.addColorStop(0.55,'#4282b8');skyG.addColorStop(1,'#74aed0');
-    ctx.fillStyle=skyG; ctx.fillRect(wx,extTop,ww,Math.round(extH*0.60));
-    // Ground/terrain strip
-    const tg=ctx.createLinearGradient(wx,extTop+extH*0.60,wx,extTop+extH*0.78);
-    tg.addColorStop(0,'#344228');tg.addColorStop(1,'#222e18');
-    ctx.fillStyle=tg; ctx.fillRect(wx,extTop+Math.round(extH*0.60),ww,Math.round(extH*0.18));
-    // Exterior road
-    const roadY=extTop+Math.round(extH*0.70);
-    const roadH=Math.round(extH*0.17);
-    ctx.fillStyle='#38362e'; ctx.fillRect(wx,roadY,ww,roadH);
-    ctx.fillStyle='#242220'; ctx.fillRect(wx,roadY,ww,1.5); // curb top
-    ctx.fillRect(wx,roadY+roadH-1.5,ww,1.5); // curb bottom
-    ctx.strokeStyle='#c89010'; ctx.lineWidth=0.8; ctx.setLineDash([7,9]);
-    ctx.beginPath();ctx.moveTo(wx,roadY+Math.round(roadH*0.5));ctx.lineTo(wx+ww,roadY+Math.round(roadH*0.5));ctx.stroke();
+    ctx.fillStyle=skyG; ctx.fillRect(wx,extTop,ww,horizY-extTop);
+    // Ground: fills from horizon to bottom of exterior zone — no gap
+    const gndG=ctx.createLinearGradient(wx,horizY,wx,extTop+extH);
+    gndG.addColorStop(0,'#344228');gndG.addColorStop(0.4,'#2c2a20');gndG.addColorStop(1,'#3a3830');
+    ctx.fillStyle=gndG; ctx.fillRect(wx,horizY,ww,extTop+extH-horizY);
+    // Perspective road toward plant: trapezoid converging at horizon
+    const pvpCX=wx+Math.round(ww/2);
+    const pvpHW=3, pvpFW=Math.round(ww*0.09); // half-width: 3px at horizon, wider at road level
+    const roadY=extTop+Math.round(extH*0.80);
+    const pvpRG=ctx.createLinearGradient(wx,horizY,wx,roadY);
+    pvpRG.addColorStop(0,'#2c2820');pvpRG.addColorStop(1,'#3c3830');
+    ctx.fillStyle=pvpRG;
+    ctx.beginPath();
+    ctx.moveTo(pvpCX-pvpHW,horizY);ctx.lineTo(pvpCX+pvpHW,horizY);
+    ctx.lineTo(pvpCX+pvpFW,roadY);ctx.lineTo(pvpCX-pvpFW,roadY);
+    ctx.closePath();ctx.fill();
+    // Perspective road center dashes converging toward vanishing point
+    ctx.strokeStyle='rgba(200,148,16,0.45)';ctx.lineWidth=0.7;ctx.setLineDash([3,5]);
+    for(let seg=1;seg<6;seg++){
+        const ta=seg/6,tb=(seg+0.35)/6;
+        const ya=horizY+Math.round((roadY-horizY)*ta),yb=horizY+Math.round((roadY-horizY)*tb);
+        ctx.beginPath();ctx.moveTo(pvpCX,ya);ctx.lineTo(pvpCX,yb);ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Loading road: horizontal band filling to bottom of exterior zone (no gap)
+    const roadH=extTop+extH-roadY;
+    ctx.fillStyle='#3c3830';ctx.fillRect(wx,roadY,ww,roadH);
+    // Cover perspective-road/loading-road junction seam at center
+    ctx.fillStyle='#3a3630';ctx.fillRect(pvpCX-pvpFW,roadY,pvpFW*2,roadH);
+    ctx.fillStyle='#252320';ctx.fillRect(wx,roadY,ww,1.5); // top curb
+    ctx.strokeStyle='#c89010';ctx.lineWidth=0.8;ctx.setLineDash([6,8]);
+    ctx.beginPath();ctx.moveTo(wx,roadY+Math.round(roadH*0.45));ctx.lineTo(wx+ww,roadY+Math.round(roadH*0.45));ctx.stroke();
     ctx.setLineDash([]);
     // Clouds — the exterior zone clip above already prevents ceiling bleed
     ctx.fillStyle='rgba(255,255,255,0.80)';
@@ -11872,8 +11892,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.beginPath();ctx.arc(cx+sz,cy-sz*0.3,sz*0.7,0,Math.PI*2);ctx.fill();
         ctx.beginPath();ctx.arc(cx-sz*0.6,cy+sz*0.1,sz*0.5,0,Math.PI*2);ctx.fill();
     }
-    // ── NUCLEAR PLANT — large, centered, dramatic ─────────────────────────────
-    const horizY=extTop+Math.round(extH*0.60);
+    // ── NUCLEAR PLANT — centered, full towers visible in clip ────────────────
     const plantCX=wx+Math.round(ww/2);
     function drawTower(cx,baseY,tW,tH){
         const waistY=baseY-tH*0.53, topY=baseY-tH;
@@ -11895,10 +11914,10 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.beginPath();ctx.ellipse(cx,topY,tW*0.40,tW*0.09,0,0,Math.PI*2);ctx.stroke();
         ctx.fillStyle='rgba(38,36,32,0.45)'; ctx.fillRect(cx-tW,baseY-3,tW*2,3);
     }
-    drawTower(plantCX-60,horizY,42,extH*0.94);
-    drawTower(plantCX+65,horizY,50,extH*1.10);
+    drawTower(plantCX-58,horizY,34,extH*0.52); // left tower — fully within clip
+    drawTower(plantCX+62,horizY,40,extH*0.58); // right tower — fully within clip
     // Containment dome
-    const dR=19, domeCX=plantCX+2;
+    const dR=15, domeCX=plantCX+2;
     ctx.fillStyle='#b0ac9e';
     ctx.beginPath();ctx.arc(domeCX,horizY-dR,dR,Math.PI,0);ctx.closePath();ctx.fill();
     ctx.fillStyle='#928e84'; ctx.fillRect(domeCX-dR-2,horizY-dR,dR*2+4,4);
@@ -11906,11 +11925,11 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     const ptFontSz = Math.max(4, Math.round(wh * 0.020));
     ctx.fillStyle = '#cc1000'; ctx.font = `bold ${ptFontSz}px Arial`; ctx.textAlign = 'center';
     // Left tower: PIPE — centered in tower body at ~40% of tower height from base
-    const ltMidY = horizY - extH * 0.94 * 0.40;
-    ctx.fillText('PIPE', plantCX - 60, ltMidY);
-    // Right tower: TECH — centered in tower body at ~40% of tower height from base
-    const rtMidY = horizY - extH * 1.10 * 0.40;
-    ctx.fillText('TECH', plantCX + 65, rtMidY);
+    const ltMidY = horizY - extH * 0.52 * 0.42;
+    ctx.fillText('PIPE', plantCX - 58, ltMidY);
+    // Right tower: TECH
+    const rtMidY = horizY - extH * 0.58 * 0.42;
+    ctx.fillText('TECH', plantCX + 62, rtMidY);
     // Support buildings
     for(const [dx,bw,bh] of [[-90,20,14],[-66,14,20],[32,22,16],[70,18,12]]){
         ctx.fillStyle='#686460'; ctx.fillRect(plantCX+dx,horizY-bh,bw,bh);
@@ -11923,49 +11942,30 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.beginPath();ctx.moveTo(plantCX+px-8,horizY-10);ctx.lineTo(plantCX+px+8,horizY-10);ctx.stroke();
     }
     // Steam plumes
-    for(const [tc,tH2] of [[plantCX-60,extH*0.94],[plantCX+65,extH*1.10]]){
+    for(const [tc,tH2] of [[plantCX-58,extH*0.52],[plantCX+62,extH*0.58]]){
         const topYt=horizY-tH2;
         for(let si=0;si<7;si++){
             const age=((t/2600+si*0.143)%1);
             const ease=1-(1-age)*(1-age);
             ctx.globalAlpha=Math.max(0,1-age*1.2)*0.46;
             ctx.fillStyle='#eeede8';
-            ctx.beginPath();ctx.arc(tc+Math.sin(age*3.5+si)*5,topYt-ease*extH*0.52,3+ease*15,0,Math.PI*2);ctx.fill();
+            ctx.beginPath();ctx.arc(tc+Math.sin(age*3.5+si)*5,topYt-ease*extH*0.30,3+ease*12,0,Math.PI*2);ctx.fill();
         }
     }
     ctx.globalAlpha=1;
     ctx.restore(); // end exterior zone clip
 
-    // ── TRUCKS — drawn before pillars so pillars naturally occlude truck edges ──
+    // ── TRUCKS — approach from LEFT, turn into bay, exit to RIGHT ───────────
     {
-        const cabW=22, trailerW=46, TH=16; // side-view component sizes (total truck=68)
-        const FW=32, FH=20;               // front-view cab face size
+        const cabW=22, trailerW=46, TH=16;
+        const FW=32, FH=20;
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
         const travelW=bayRight-bayLeft;
-        const truckY=roadY+1;
-        const pivotX=bayLeft+6; // kingpin / turning point at bay entrance
+        const truckY=roadY+Math.round(roadH*0.18); // sit on road surface
+        const pivotX=bayLeft+10; // kingpin at bay entrance (left inner edge)
 
-        // Side-view facing LEFT: cab on left, trailer trailing right (approaching)
-        const drawSideL=(tx,ty)=>{
-            ctx.fillStyle='rgba(0,0,0,0.25)';
-            ctx.beginPath();ctx.ellipse(tx+34,ty+TH+1,24,2,0,0,Math.PI*2);ctx.fill();
-            ctx.fillStyle='#7a2000';ctx.fillRect(tx,ty,cabW,TH-2);
-            ctx.fillStyle='#4a7290';ctx.fillRect(tx+2,ty+2,14,7);
-            ctx.fillStyle='rgba(180,220,255,0.35)';ctx.fillRect(tx+3,ty+3,5,3);
-            ctx.fillStyle='#ffe040';ctx.fillRect(tx-2,ty+3,2,4);
-            ctx.fillStyle='#c02e00';ctx.fillRect(tx+cabW,ty,trailerW,TH-2);
-            ctx.strokeStyle='rgba(200,50,0,0.2)';ctx.lineWidth=0.6;
-            for(let ri=0;ri<3;ri++)ctx.strokeRect(tx+cabW+2+ri*13,ty+2,11,TH-6);
-            ctx.fillStyle='#0c0a08';
-            for(const ax of [tx+6,tx+17,tx+cabW+14,tx+cabW+trailerW-8]){
-                ctx.beginPath();ctx.arc(ax,ty+TH-1,3,0,Math.PI*2);ctx.fill();
-                ctx.fillStyle='#282420';ctx.beginPath();ctx.arc(ax,ty+TH-1,1.5,0,Math.PI*2);ctx.fill();
-                ctx.fillStyle='#0c0a08';
-            }
-        };
-
-        // Side-view facing RIGHT: trailer on left, cab on right (departing)
-        const drawSideR=(tx,ty)=>{
+        // Side-view facing RIGHT: trailer on LEFT, cab on RIGHT — approach AND departure
+        const drawTruckSide=(tx,ty)=>{
             ctx.fillStyle='rgba(0,0,0,0.25)';
             ctx.beginPath();ctx.ellipse(tx+34,ty+TH+1,24,2,0,0,Math.PI*2);ctx.fill();
             ctx.fillStyle='#c02e00';ctx.fillRect(tx,ty,trailerW,TH-2);
@@ -11974,18 +11974,18 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
             ctx.fillStyle='#7a2000';ctx.fillRect(tx+trailerW,ty,cabW,TH-2);
             ctx.fillStyle='#4a7290';ctx.fillRect(tx+trailerW+4,ty+2,14,7);
             ctx.fillStyle='rgba(180,220,255,0.35)';ctx.fillRect(tx+trailerW+14,ty+3,5,3);
-            ctx.fillStyle='#ffe040';ctx.fillRect(tx+trailerW+cabW,ty+3,2,4);
+            ctx.fillStyle='#ffe040';ctx.fillRect(tx+trailerW+cabW,ty+3,2,4); // headlight right
             ctx.fillStyle='#0c0a08';
-            for(const ax of [tx+8,tx+trailerW-8,tx+trailerW+5,tx+trailerW+cabW-4]){
+            for(const ax of [tx+8,tx+trailerW-8,tx+trailerW+5,tx+trailerW+cabW-5]){
                 ctx.beginPath();ctx.arc(ax,ty+TH-1,3,0,Math.PI*2);ctx.fill();
                 ctx.fillStyle='#282420';ctx.beginPath();ctx.arc(ax,ty+TH-1,1.5,0,Math.PI*2);ctx.fill();
                 ctx.fillStyle='#0c0a08';
             }
         };
 
-        // Front-view cab face (bay interior drive + center of L-turns)
-        const drawFront=(cx,by,sc)=>{
-            const fw=Math.round(FW*sc), fh=Math.round(FH*sc);
+        // Front-view: truck faces viewer during bay interior drive
+        const drawTruckFront=(cx,by,sc)=>{
+            const fw=Math.round(FW*sc),fh=Math.round(FH*sc);
             const fx=cx-Math.round(fw/2);
             ctx.fillStyle='rgba(0,0,0,0.3)';
             ctx.beginPath();ctx.ellipse(cx,by+fh+2*sc,fw*0.42,2.5*sc,0,0,Math.PI*2);ctx.fill();
@@ -12010,49 +12010,12 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
             ctx.beginPath();ctx.arc(fx+fw-Math.round(fw*0.18),by+fh,Math.round(wr*0.45),0,Math.PI*2);ctx.fill();
         };
 
-        // L-turn ENTRY: p=0 → full side-left (cab left of pivot, trailer right)
-        //              p=1 → L-shape: trailer horiz to right, cab front-facing at pivot
-        const drawLTurnEntry=(pvX,ty,p)=>{
-            // Trailer stays horizontal to the RIGHT of pivot throughout the turn
-            ctx.fillStyle='rgba(0,0,0,0.20)';
-            ctx.beginPath();ctx.ellipse(pvX+trailerW/2,ty+TH+1,trailerW*0.45,2,0,0,Math.PI*2);ctx.fill();
-            ctx.fillStyle='#c02e00';ctx.fillRect(pvX,ty,trailerW,TH-2);
-            ctx.strokeStyle='rgba(200,50,0,0.2)';ctx.lineWidth=0.6;
-            for(let ri=0;ri<3;ri++)ctx.strokeRect(pvX+2+ri*13,ty+2,11,TH-6);
-            ctx.fillStyle='#0c0a08';
-            for(const ax of [pvX+8,pvX+trailerW-8]){
-                ctx.beginPath();ctx.arc(ax,ty+TH-1,3,0,Math.PI*2);ctx.fill();
-                ctx.fillStyle='#282420';ctx.beginPath();ctx.arc(ax,ty+TH-1,1.5,0,Math.PI*2);ctx.fill();
-                ctx.fillStyle='#0c0a08';
-            }
-            // Cab: side-view squishes toward pivot (p 0→0.5), then front-view emerges (p 0.5→1)
-            if(p<=0.5){
-                const cw=Math.round(cabW*(1-p*2));
-                if(cw>1){
-                    ctx.fillStyle='#7a2000';ctx.fillRect(pvX-cw,ty,cw,TH-2);
-                    const ww2=Math.min(12,cw-2);if(ww2>0){ctx.fillStyle='#4a7290';ctx.fillRect(pvX-cw+2,ty+2,ww2,6);}
-                    if(cw>4){ctx.fillStyle='#ffe040';ctx.fillRect(pvX-cw-2,ty+3,2,4);}
-                }
-            } else {
-                const fp=(p-0.5)*2; // 0→1
-                const cw=Math.round(FW*fp), ch=Math.round(FH*fp);
-                if(cw>2&&ch>2){
-                    const fx=pvX-Math.round(cw/2), fy=ty+Math.round((TH-ch)/2);
-                    ctx.fillStyle='#8c2200';ctx.fillRect(fx,fy,cw,ch);
-                    if(cw>8&&ch>6){
-                        ctx.fillStyle='#3f6880';ctx.fillRect(fx+Math.round(cw*0.1),fy+Math.round(ch*0.1),Math.round(cw*0.8),Math.round(ch*0.5));
-                        ctx.fillStyle='#ffe050';
-                        ctx.fillRect(fx+1,fy+Math.round(ch*0.60),Math.round(cw*0.18),Math.round(ch*0.22));
-                        ctx.fillRect(fx+cw-1-Math.round(cw*0.18),fy+Math.round(ch*0.60),Math.round(cw*0.18),Math.round(ch*0.22));
-                    }
-                }
-            }
-        };
-
-        // L-turn EXIT: p=0 → L-shape: front cab at pivot, trailer horiz to left
-        //             p=1 → full side-right (trailer left, cab right)
-        const drawLTurnExit=(pvX,ty,p)=>{
-            // Trailer stays horizontal to the LEFT of pivot throughout
+        // L-turn: trailer always to LEFT of pvX (on the road side)
+        // p=0: side-view-right (cab RIGHT of pvX, trailer LEFT) — arrived from left
+        // p=1: L-shape (trailer LEFT horiz, cab front-facing centered on pvX)
+        // Use p=1-q for exit (reverses: L-shape → side-right departing right)
+        const drawLTurn=(pvX,ty,p)=>{
+            // Trailer: always horizontal to the LEFT of pivot
             ctx.fillStyle='rgba(0,0,0,0.20)';
             ctx.beginPath();ctx.ellipse(pvX-trailerW/2,ty+TH+1,trailerW*0.45,2,0,0,Math.PI*2);ctx.fill();
             ctx.fillStyle='#c02e00';ctx.fillRect(pvX-trailerW,ty,trailerW,TH-2);
@@ -12064,27 +12027,26 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 ctx.fillStyle='#282420';ctx.beginPath();ctx.arc(ax,ty+TH-1,1.5,0,Math.PI*2);ctx.fill();
                 ctx.fillStyle='#0c0a08';
             }
-            // Cab: front-view squishes toward pivot (p 0→0.5), side-right emerges (p 0.5→1)
+            // Cab: squishes from side-right (p 0→0.5) then emerges as front-view (p 0.5→1)
             if(p<=0.5){
-                const fp=1-p*2; // 1→0
-                const cw=Math.round(FW*fp), ch=Math.round(FH*fp);
-                if(cw>2&&ch>2){
-                    const fx=pvX-Math.round(cw/2), fy=ty+Math.round((TH-ch)/2);
-                    ctx.fillStyle='#8c2200';ctx.fillRect(fx,fy,cw,ch);
-                    if(cw>8&&ch>6){
-                        ctx.fillStyle='#3f6880';ctx.fillRect(fx+Math.round(cw*0.1),fy+Math.round(ch*0.1),Math.round(cw*0.8),Math.round(ch*0.5));
-                        ctx.fillStyle='#ffe050';
-                        ctx.fillRect(fx+1,fy+Math.round(ch*0.60),Math.round(cw*0.18),Math.round(ch*0.22));
-                        ctx.fillRect(fx+cw-1-Math.round(cw*0.18),fy+Math.round(ch*0.60),Math.round(cw*0.18),Math.round(ch*0.22));
-                    }
-                }
-            } else {
-                const sp=(p-0.5)*2; // 0→1
-                const cw=Math.round(cabW*sp);
+                const cw=Math.round(cabW*(1-p*2));
                 if(cw>1){
                     ctx.fillStyle='#7a2000';ctx.fillRect(pvX,ty,cw,TH-2);
-                    const ww2=Math.min(12,cw-4);if(ww2>0&&cw>6){ctx.fillStyle='#4a7290';ctx.fillRect(pvX+cw-ww2-2,ty+2,ww2,6);}
-                    if(sp>0.85){ctx.fillStyle='#ffe040';ctx.fillRect(pvX+cabW,ty+3,2,4);}
+                    const ww2=Math.min(12,cw-2);if(ww2>0){ctx.fillStyle='#4a7290';ctx.fillRect(pvX+2,ty+2,ww2,6);}
+                    if(p<0.08){ctx.fillStyle='#ffe040';ctx.fillRect(pvX+cabW,ty+3,2,4);}
+                }
+            } else {
+                const fp=(p-0.5)*2;
+                const cw=Math.round(FW*fp),ch=Math.round(FH*fp);
+                if(cw>2&&ch>2){
+                    const fx2=pvX-Math.round(cw/2),fy2=ty+Math.round((TH-ch)/2);
+                    ctx.fillStyle='#8c2200';ctx.fillRect(fx2,fy2,cw,ch);
+                    if(cw>8&&ch>6){
+                        ctx.fillStyle='#3f6880';ctx.fillRect(fx2+Math.round(cw*0.1),fy2+Math.round(ch*0.1),Math.round(cw*0.8),Math.round(ch*0.5));
+                        ctx.fillStyle='#ffe050';
+                        ctx.fillRect(fx2+1,fy2+Math.round(ch*0.6),Math.round(cw*0.18),Math.round(ch*0.22));
+                        ctx.fillRect(fx2+cw-1-Math.round(cw*0.18),fy2+Math.round(ch*0.6),Math.round(cw*0.18),Math.round(ch*0.22));
+                    }
                 }
             }
         };
@@ -12093,30 +12055,31 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
             const phase=((t/11000+ti*0.5)%1);
             ctx.save();
             if(phase<0.28){
-                // Road approach from right: side-left truck drives toward bay entrance
+                // Approach from LEFT: side-view-right (cab leads right) drives toward bay
                 const p=phase/0.28;
-                const tx=pivotX+(1-p)*(travelW*0.60+68);
-                drawSideL(tx-cabW,truckY);
+                // Trailer left-edge starts off-screen left, cab front-edge arrives at pivotX
+                const tx=(wx-68)+p*(pivotX-trailerW-(wx-68));
+                drawTruckSide(tx,truckY);
             } else if(phase<0.50){
-                // L-turn entry: trailer stays on road, cab pivots to front-facing
+                // L-turn ENTRY: trailer stays on road (left), cab pivots to front-facing
                 const p=(phase-0.28)/0.22;
-                drawLTurnEntry(pivotX,truckY,p);
+                drawLTurn(pivotX,truckY,p);
             } else if(phase<0.68){
                 // Bay interior: front-view grows toward viewer (perspective drive-in)
                 const p=(phase-0.50)/0.18;
-                const sc=0.32+p*0.70;
-                const bx=pivotX+travelW*0.12+p*(travelW*0.08);
+                const sc=0.30+p*0.72;
+                const bx=pivotX+travelW*0.12+p*(travelW*0.14);
                 const by=floorTop+floorH*(0.04+p*0.74);
-                drawFront(bx,by,sc);
+                drawTruckFront(bx,by,sc);
             } else if(phase<0.88){
-                // L-turn exit: cab pivots from front-facing back to side-right
-                const p=(phase-0.68)/0.20;
-                drawLTurnExit(pivotX+14,truckY,p);
+                // L-turn EXIT: front-view squishes, trailer still left, cab re-emerges side-right
+                const q=(phase-0.68)/0.20;
+                drawLTurn(pivotX,truckY,1-q); // reverse: 1→0
             } else {
-                // Road departure to right: side-right truck drives away
+                // Depart to RIGHT: side-view-right drives away
                 const p=(phase-0.88)/0.12;
-                const tx=pivotX-trailerW+p*(travelW*0.65+68);
-                drawSideR(tx,truckY);
+                const tx=pivotX-trailerW+p*(wx+ww+20-(pivotX-trailerW));
+                drawTruckSide(tx,truckY);
             }
             ctx.restore();
         }
@@ -12153,7 +12116,8 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
 
     // ── GLASS OVERLAY ────────────────────────────────────────────────────────
     ctx.restore();
-    ctx.fillStyle='rgba(255,255,255,0.025)'; ctx.fillRect(wx,wy,ww*0.5,wh*0.38);
+    // Subtle full-width glass sheen (symmetric — no half-window tint artifacts)
+    ctx.fillStyle='rgba(255,255,255,0.012)'; ctx.fillRect(wx,wy,ww,wh*0.22);
     ctx.fillStyle='rgba(0,0,0,0.20)'; ctx.fillRect(wx,wy,3,wh); ctx.fillRect(wx+ww-3,wy,3,wh);
 }
 
