@@ -11955,79 +11955,73 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.globalAlpha=1;
     ctx.restore(); // end exterior zone clip
 
-    // ── TRUCKS — approach from LEFT, turn into bay, exit to RIGHT ───────────
+    // ── TRUCKS Block 1 — ROAD PHASES (approach, turns, depart) ──────────────
+    // Block 2 (bay traverse, drawn OVER interior floor) is below the floor section.
     {
-        const cabW=22, trailerW=46, TH=16;
+        const cW=22,tW=46,TH=16,TW=12; // cab width, trailer width, profile height, overhead width
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
-        const travelW=bayRight-bayLeft;
-        const truckY=roadY+Math.round(roadH*0.62);      // near/rightmost lane
-        const entryX=bayLeft+Math.round(travelW*0.28);  // left entry lane center
-        const exitX =bayLeft+Math.round(travelW*0.72);  // right exit lane center
+        const truckY=roadY+Math.round(roadH*0.76); // near/bottom lane
+        const entryX=bayLeft+20;  // just inside left bay entrance — pivot here
+        const exitX =bayRight-20; // just inside right bay entrance
 
-        // Draw truck body at local origin; kingpin at (0,0).
-        // angle=0 → right-facing: trailer spans (-trailerW..0), cab spans (0..+cabW).
-        // angle=π/2 → down-facing; angle=-π/2 → up-facing.
-        const drawBody=()=>{
-            // Shadow
+        // SIDE PROFILE — kx=kingpin X (trailer/cab junction), bottom wheels only
+        const drawSide=(kx,ky,cabSc)=>{
+            cabSc=(cabSc===undefined)?1:cabSc;
             ctx.fillStyle='rgba(0,0,0,0.22)';
-            ctx.beginPath();ctx.ellipse(-trailerW*0.5,TH*0.5+3,trailerW*0.45,2.5,0,0,Math.PI*2);ctx.fill();
-            // Trailer body
-            ctx.fillStyle='#c02e00'; ctx.fillRect(-trailerW,-TH*0.5,trailerW,TH);
-            ctx.strokeStyle='rgba(200,50,0,0.22)'; ctx.lineWidth=0.5;
-            for(let ri=0;ri<3;ri++) ctx.strokeRect(-trailerW+2+ri*13,-TH*0.5+2,11,TH-4);
-            // Cab body
-            ctx.fillStyle='#7a2000'; ctx.fillRect(0,-TH*0.5,cabW,TH);
-            ctx.fillStyle='#4a7290'; ctx.fillRect(3,-TH*0.5+2,13,6);
-            ctx.fillStyle='rgba(180,220,255,0.30)'; ctx.fillRect(4,-TH*0.5+3,4,3);
-            // Headlight at leading edge of cab
-            ctx.fillStyle='#ffe040'; ctx.fillRect(cabW-2,-TH*0.5+3,3,4);
-            // Wheels (both sides — visible in profile and overhead)
+            ctx.beginPath();ctx.ellipse(kx-tW*0.5,ky+TH*0.5+2,tW*0.45,2.5,0,0,Math.PI*2);ctx.fill();
+            ctx.fillStyle='#c02e00';ctx.fillRect(kx-tW,ky-TH*0.5,tW,TH);
+            ctx.strokeStyle='rgba(200,50,0,0.22)';ctx.lineWidth=0.5;
+            for(let r=0;r<3;r++) ctx.strokeRect(kx-tW+2+r*14,ky-TH*0.5+2,12,TH-4);
             ctx.fillStyle='#0c0a08';
-            for(const lx of [-trailerW+8,-trailerW+28,Math.round(cabW*0.45)]){
-                ctx.beginPath();ctx.arc(lx, TH*0.5+1,3,0,Math.PI*2);ctx.fill();
-                ctx.beginPath();ctx.arc(lx,-TH*0.5-1,3,0,Math.PI*2);ctx.fill();
+            for(const ax of [kx-tW+8,kx-8]){ctx.beginPath();ctx.arc(ax,ky+TH*0.5,3,0,Math.PI*2);ctx.fill();}
+            const cw=Math.round(cW*Math.max(0,cabSc));
+            if(cw>0){
+                ctx.fillStyle='#7a2000';ctx.fillRect(kx,ky-TH*0.5,cw,TH);
+                if(cw>8){ctx.fillStyle='#4a7290';ctx.fillRect(kx+3,ky-TH*0.5+2,Math.min(13,cw-4),6);}
+                if(cw>15){ctx.fillStyle='rgba(180,220,255,0.30)';ctx.fillRect(kx+14,ky-TH*0.5+3,5,3);}
+                ctx.fillStyle='#ffe040';ctx.fillRect(kx+cw-1,ky-TH*0.5+3,2,4);
+                ctx.fillStyle='#0c0a08';ctx.beginPath();ctx.arc(kx+cW*0.5,ky+TH*0.5,3,0,Math.PI*2);ctx.fill();
             }
         };
 
-        // Place and rotate the truck: kingpin at (cx, cy), facing at angle radians.
-        const drawAt=(cx,cy,angle)=>{
-            ctx.save();
-            ctx.translate(cx,cy);
-            ctx.rotate(angle);
-            drawBody();
-            ctx.restore();
+        // OVERHEAD — drawn at local origin (kingpin=0,0), rotated by caller.
+        // +x = direction of travel. No bottom wheels — top-down roof view.
+        const drawOv=()=>{
+            const hw=TW*0.5,chw=TW*0.5+2;
+            ctx.fillStyle='rgba(0,0,0,0.18)';ctx.fillRect(-tW,hw+1,tW+cW,3);
+            ctx.fillStyle='#c02e00';ctx.fillRect(-tW,-hw,tW,TW);
+            ctx.strokeStyle='rgba(180,40,0,0.30)';ctx.lineWidth=0.5;
+            for(let r=1;r<4;r++) ctx.strokeRect(-tW+r*11,-hw+1,10,TW-2);
+            ctx.fillStyle='#7a2000';ctx.fillRect(0,-chw,cW,TW+4);
+            ctx.fillStyle='#4a7290';ctx.fillRect(cW-9,-chw+2,7,TW);
+            ctx.fillStyle='#ffe040';ctx.fillRect(cW-1,-3,2,6);
         };
+        const drawOvAt=(cx,cy,a)=>{ctx.save();ctx.translate(cx,cy);ctx.rotate(a);drawOv();ctx.restore();};
 
         for(let ti=0;ti<2;ti++){
             const phase=((t/11000+ti*0.5)%1);
             if(phase<0.22){
-                // Approach from LEFT — right-facing profile drives rightward on road
+                // Approach: side profile sweeps right toward entryX
                 const p=phase/0.22;
-                const cx=(wx-trailerW-cabW-4)+p*(entryX-(wx-trailerW-cabW-4));
-                drawAt(cx,truckY,0);
-            } else if(phase<0.38){
-                // Entry turn — rotate 0 → π/2 (right-facing → down-facing)
-                const p=(phase-0.22)/0.16;
-                drawAt(entryX,truckY, p*Math.PI*0.5);
-            } else if(phase<0.58){
-                // Bay traverse DOWN — top-down pointing down, Y increases into bay
-                const p=(phase-0.38)/0.20;
-                const cy=truckY+p*(wy+wh+TH+8-truckY);
-                drawAt(entryX,cy, Math.PI*0.5);
-            } else if(phase<0.78){
-                // Bay traverse UP on right lane — top-down pointing up, Y decreases
-                const p=(phase-0.58)/0.20;
-                const cy=(wy+wh+TH+8)*(1-p)+truckY*p;
-                drawAt(exitX,cy,-Math.PI*0.5);
+                drawSide((wx-tW-cW-8)+p*(entryX-(wx-tW-cW-8)), truckY);
+            } else if(phase<0.28){
+                // Entry turn phase 1: cab squishes (profile folds away)
+                drawSide(entryX, truckY, 1-(phase-0.22)/0.06);
+            } else if(phase<0.40){
+                // Entry turn phase 2: overhead emerges, rotates 0 → π/2
+                drawOvAt(entryX, truckY, ((phase-0.28)/0.12)*Math.PI*0.5);
+            } else if(phase<0.76){
+                // BAY TRAVERSE — handled in Block 2 (after floor), nothing here
+            } else if(phase<0.88){
+                // Exit turn phase 1: overhead rotates -π/2 → 0
+                drawOvAt(exitX, truckY, -Math.PI*0.5+((phase-0.76)/0.12)*Math.PI*0.5);
             } else if(phase<0.94){
-                // Exit turn — rotate -π/2 → 0 (up-facing → right-facing)
-                const p=(phase-0.78)/0.16;
-                drawAt(exitX,truckY,-Math.PI*0.5+p*Math.PI*0.5);
+                // Exit turn phase 2: side profile grows (cab emerges)
+                drawSide(exitX, truckY, (phase-0.88)/0.06);
             } else {
-                // Depart to RIGHT — right-facing profile drives off screen
+                // Depart: side profile sweeps right off screen
                 const p=(phase-0.94)/0.06;
-                const cx=exitX+p*(wx+ww+trailerW+cabW+8-exitX);
-                drawAt(cx,truckY,0);
+                drawSide(exitX+p*(wx+ww+tW+cW+8-exitX), truckY);
             }
         }
     }
@@ -12060,6 +12054,43 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.strokeStyle='#a88014'; ctx.lineWidth=1; ctx.setLineDash([8,11]);
     ctx.beginPath();ctx.moveTo(wx+pillarW,floorTop+Math.round(floorH*0.42));ctx.lineTo(wx+ww-pillarW,floorTop+Math.round(floorH*0.42));ctx.stroke();
     ctx.setLineDash([]);
+
+    // ── TRUCKS Block 2 — BAY TRAVERSE, drawn OVER interior floor ─────────────
+    // These phases (0.40-0.76) are skipped in Block 1 so they render on top of
+    // the concrete floor rather than being hidden beneath it.
+    {
+        const cW=22,tW=46,TW=12;
+        const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
+        const truckY=roadY+Math.round(roadH*0.76);
+        const entryX=bayLeft+20, exitX=bayRight-20;
+        // Identical overhead draw function
+        const drawOv=()=>{
+            const hw=TW*0.5,chw=TW*0.5+2;
+            ctx.fillStyle='rgba(0,0,0,0.18)';ctx.fillRect(-tW,hw+1,tW+cW,3);
+            ctx.fillStyle='#c02e00';ctx.fillRect(-tW,-hw,tW,TW);
+            ctx.strokeStyle='rgba(180,40,0,0.30)';ctx.lineWidth=0.5;
+            for(let r=1;r<4;r++) ctx.strokeRect(-tW+r*11,-hw+1,10,TW-2);
+            ctx.fillStyle='#7a2000';ctx.fillRect(0,-(chw),cW,TW+4);
+            ctx.fillStyle='#4a7290';ctx.fillRect(cW-9,-(chw)+2,7,TW);
+            ctx.fillStyle='#ffe040';ctx.fillRect(cW-1,-3,2,6);
+        };
+        for(let ti=0;ti<2;ti++){
+            const phase=((t/11000+ti*0.5)%1);
+            ctx.save();
+            if(phase>=0.40&&phase<0.58){
+                // Bay traverse DOWN: overhead pointing down, y increases
+                const p=(phase-0.40)/0.18;
+                const cy=truckY+p*(wy+wh+12-truckY);
+                ctx.translate(entryX,cy);ctx.rotate(Math.PI*0.5);drawOv();
+            } else if(phase>=0.58&&phase<0.76){
+                // Bay traverse UP: overhead pointing up, y decreases
+                const p=(phase-0.58)/0.18;
+                const cy=(wy+wh+12)*(1-p)+truckY*p;
+                ctx.translate(exitX,cy);ctx.rotate(-Math.PI*0.5);drawOv();
+            }
+            ctx.restore();
+        }
+    }
 
     // ── GLASS OVERLAY ────────────────────────────────────────────────────────
     ctx.restore();
