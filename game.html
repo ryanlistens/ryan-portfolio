@@ -570,10 +570,20 @@ const SFX = (() => {
             });
         }
     };
+    const vibPat = {
+        hurt:       25,
+        enemyDie:   [30, 15, 30],
+        bossAlert:  [40, 20, 40],
+        levelClear: [60, 30, 60, 30, 60],
+        doorOpen:   15,
+        elevator:   [20, 10, 20, 10, 20],
+        pickup:     10
+    };
     return {
         play(type) {
             if (musicMuted) return;
             try { const a = ac(); const fn = sounds[type]; if (fn) fn(a, a.currentTime); } catch(e) {}
+            try { if (vibPat[type] && navigator.vibrate) navigator.vibrate(vibPat[type]); } catch(e) {}
         }
     };
 })();
@@ -915,6 +925,10 @@ function updateLives() {
             } else {
                 h += '<span class="money">$</span>';
             }
+        }
+        // Show spent lives as faded $ for visual parity with heart display
+        for(let i = level6.moneyLives; i < 3; i++) {
+            h += '<span class="money" style="opacity:0.25">$</span>';
         }
         document.getElementById('lives').innerHTML = h;
         return;
@@ -1310,8 +1324,10 @@ function spawnBoss() {
     }
 }
 
-function createExplosion(x, y) {
-    explosions.push({x, y, radius: 0, maxRadius: 100, alpha: 1, particles: []});
+function createExplosion(x, y, color) {
+    // Default: warm fire orange; caller can pass level-specific accent
+    const c = color || (COLORS && COLORS[Math.min((level||1)-1, COLORS.length-1)] ? COLORS[Math.min((level||1)-1, COLORS.length-1)].hex : '#ff8020');
+    explosions.push({x, y, radius: 0, maxRadius: 100, alpha: 1, color: c, particles: []});
     for(let i = -4; i < 24; i++) {
         explosions[explosions.length - 1].particles.push({
             x: x,
@@ -5419,9 +5435,9 @@ function drawWaterCooler(x, y) {
     // Brand label (decorative, no text)
     ctx.fillStyle = '#3366cc';
     ctx.fillRect(x - 10, y - 38, 20, 10);
-    // Bubble animation — one bubble rises every ~30 seconds
-    const bubbleCycle = Math.floor(t / 30000);
-    const bubblePhase = (t % 30000) / 30000;
+    // Bubble animation — one bubble rises every ~1800 frames (~30s at 60fps)
+    // Frame-based to stay smooth regardless of real-time jank
+    const bubblePhase = (frame % 1800) / 1800;
     if(bubblePhase < 0.12) {
         const bPct = bubblePhase / 0.12;
         const bY = y - 60 - bPct * 14;
@@ -12112,7 +12128,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
 
     // ── INTERIOR BAY FLOOR (foreground concrete) ──────────────────────────────
     const fg=ctx.createLinearGradient(wx,floorTop,wx,wy+wh);
-    fg.addColorStop(0,'#363430');fg.addColorStop(1,'#222018');
+    fg.addColorStop(0,'#282624');fg.addColorStop(1,'#181610');
     ctx.fillStyle=fg; ctx.fillRect(wx+pillarW,floorTop,ww-pillarW*2,floorH);
     ctx.fillStyle='#181410'; ctx.fillRect(wx,floorTop,pillarW,floorH);
     ctx.fillRect(wx+ww-pillarW,floorTop,pillarW,floorH);
@@ -19331,8 +19347,8 @@ function drawScene() {
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
         } else if(state === 'gameover') {
-            // Level 5: Didn't burn 6 documents in time
-            ctx.fillStyle = '#e74c3c';
+            // Level 5: Didn't burn 6 documents in time — orange vs red for YOU'RE FIRED
+            ctx.fillStyle = '#ff6b35';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("GAME OVER", 350, 180);
@@ -21510,9 +21526,11 @@ function drawScene() {
         ctx.fill();
         
         for(let p of exp.particles) {
-            ctx.fillStyle = `rgba(100,100,100,${p.life})`;
-            ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = exp.color || '#ff8020';
+            ctx.fillRect(Math.round(p.x - 2), Math.round(p.y - 2), 4, 4);
         }
+        ctx.globalAlpha = 1;
     }
     
     // (CEO pursuit rendering is handled in the per-room draw block above)
