@@ -36,7 +36,7 @@
             padding: 6px 16px;
             background: #1a1a1a;
             color: #f5f2ec;
-            font-size: 16px;
+            font-size: clamp(14px, 4vw, 20px);
             font-weight: bold;
             letter-spacing: 0.5px;
             flex-shrink: 0;
@@ -117,12 +117,15 @@
         @media (max-width: 600px) {
             #controls-section { display: block; }
         }
+        @media (prefers-reduced-motion: reduce) {
+            .control-btn, #action-btn { transition: none !important; }
+        }
         /* Landscape tweaks */
         @media (orientation: landscape) {
             #hud { padding: 6px 16px; font-size: 18px; }
-            #dpad-container { grid-template: repeat(3, 44px) / repeat(3, 44px); gap: 2px; }
-            .control-btn { font-size: 17px; border-radius: 8px; }
-            #action-btn { width: 68px; height: 68px; font-size: 13px; }
+            #dpad-container { grid-template: repeat(3, 50px) / repeat(3, 50px); gap: 2px; }
+            .control-btn { font-size: 18px; border-radius: 8px; }
+            #action-btn { width: 80px; height: 80px; font-size: 14px; }
             #controls-section { padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
         }
     </style>
@@ -197,7 +200,7 @@ function resizeCanvas() {
 
     if (isLandscape) {
         // Landscape: match viewport ratio exactly for true edge-to-edge fullscreen
-        CANVAS_H = GAME_H + 40;
+        CANVAS_H = GAME_H;
         CANVAS_W = Math.max(GAME_W, Math.round(CANVAS_H * viewRatio));
     } else {
         // Portrait: expand canvas height to match viewport ratio — fills the full screen
@@ -485,6 +488,105 @@ function toggleMute() {
         }
     }
 }
+
+// ── SOUND EFFECTS — Web Audio API procedural synthesis ─────────────────────
+const SFX = (() => {
+    let _ac = null;
+    const ac = () => {
+        if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+        if (_ac.state === 'suspended') _ac.resume();
+        return _ac;
+    };
+    const osc = (a, type, freq) => { const o = a.createOscillator(); o.type = type; o.frequency.value = freq; return o; };
+    const gain = (a, val) => { const g = a.createGain(); g.gain.value = val; return g; };
+    const noise = (a, dur) => {
+        const buf = a.createBuffer(1, Math.ceil(a.sampleRate * dur), a.sampleRate);
+        const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const src = a.createBufferSource(); src.buffer = buf; return src;
+    };
+    const sounds = {
+        shoot: (a, t) => {
+            const o = osc(a, 'square', 660), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.setValueAtTime(660, t); o.frequency.exponentialRampToValueAtTime(110, t + 0.07);
+            g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+            o.start(t); o.stop(t + 0.08);
+        },
+        wrench: (a, t) => {
+            const o = osc(a, 'triangle', 300), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.12);
+            g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            o.start(t); o.stop(t + 0.14);
+        },
+        hurt: (a, t) => {
+            const o = osc(a, 'sawtooth', 320), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.setValueAtTime(320, t); o.frequency.exponentialRampToValueAtTime(80, t + 0.28);
+            g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+            o.start(t); o.stop(t + 0.3);
+        },
+        enemyDie: (a, t) => {
+            [0, 0.05].forEach((dt, i) => {
+                const o = osc(a, 'sine', [260, 180][i]), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                o.frequency.exponentialRampToValueAtTime([80, 40][i], t + dt + 0.18);
+                g.gain.setValueAtTime(0.4, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.22);
+                o.start(t + dt); o.stop(t + dt + 0.25);
+            });
+        },
+        pickup: (a, t) => {
+            [523, 659, 784].forEach((freq, i) => {
+                const dt = i * 0.06, o = osc(a, 'triangle', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.15, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.1);
+                o.start(t + dt); o.stop(t + dt + 0.12);
+            });
+        },
+        levelClear: (a, t) => {
+            [392, 523, 659, 784].forEach((freq, i) => {
+                const dt = i * 0.13, o = osc(a, 'square', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.14, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.2);
+                o.start(t + dt); o.stop(t + dt + 0.22);
+            });
+        },
+        elevator: (a, t) => {
+            const o = osc(a, 'sawtooth', 60), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            g.gain.linearRampToValueAtTime(0.12, t + 0.15); g.gain.setValueAtTime(0.12, t + 0.7); g.gain.linearRampToValueAtTime(0, t + 0.9);
+            o.start(t); o.stop(t + 1.0);
+        },
+        doorOpen: (a, t) => {
+            const n = noise(a, 0.5), g = gain(a, 0), f = a.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.setValueAtTime(200, t); f.frequency.exponentialRampToValueAtTime(80, t + 0.4); f.Q.value = 1.5;
+            n.connect(f); f.connect(g); g.connect(a.destination);
+            g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+            n.start(t); n.stop(t + 0.5);
+        },
+        menuTick: (a, t) => {
+            const o = osc(a, 'square', 480), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+            o.start(t); o.stop(t + 0.04);
+        },
+        bossAlert: (a, t) => {
+            [0, 0.25].forEach((dt, i) => {
+                const o = osc(a, 'sawtooth', [220, 165][i]), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.18, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.35);
+                o.start(t + dt); o.stop(t + dt + 0.4);
+            });
+        }
+    };
+    const vibPat = {
+        hurt:       25,
+        enemyDie:   [30, 15, 30],
+        bossAlert:  [40, 20, 40],
+        levelClear: [60, 30, 60, 30, 60],
+        doorOpen:   15,
+        elevator:   [20, 10, 20, 10, 20],
+        pickup:     10
+    };
+    return {
+        play(type) {
+            if (musicMuted) return;
+            try { const a = ac(); const fn = sounds[type]; if (fn) fn(a, a.currentTime); } catch(e) {}
+            try { if (vibPat[type] && navigator.vibrate) navigator.vibrate(vibPat[type]); } catch(e) {}
+        }
+    };
+})();
 
 // Handle RT Presents screen interactions - must be called directly in user gesture handlers
 function handleRTPresentsInteraction() {
@@ -823,6 +925,10 @@ function updateLives() {
             } else {
                 h += '<span class="money">$</span>';
             }
+        }
+        // Show spent lives as faded $ for visual parity with heart display
+        for(let i = level6.moneyLives; i < 3; i++) {
+            h += '<span class="money" style="opacity:0.25">$</span>';
         }
         document.getElementById('lives').innerHTML = h;
         return;
@@ -1218,8 +1324,10 @@ function spawnBoss() {
     }
 }
 
-function createExplosion(x, y) {
-    explosions.push({x, y, radius: 0, maxRadius: 100, alpha: 1, particles: []});
+function createExplosion(x, y, color) {
+    // Default: warm fire orange; caller can pass level-specific accent
+    const c = color || (COLORS && COLORS[Math.min((level||1)-1, COLORS.length-1)] ? COLORS[Math.min((level||1)-1, COLORS.length-1)].hex : '#ff8020');
+    explosions.push({x, y, radius: 0, maxRadius: 100, alpha: 1, color: c, particles: []});
     for(let i = -4; i < 24; i++) {
         explosions[explosions.length - 1].particles.push({
             x: x,
@@ -1793,8 +1901,8 @@ function drawBoss(x, y, facing) {
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
         const legL = boss.walking ? Math.sin(frame * 0.25) * 5 : 0;
-        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s + Math.max(0, legL));
-        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s + Math.max(0, -legL));
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s + legL);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s - legL);
 
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 5*s, y + 24*s + legL, 4*s, 2*s);
@@ -1892,7 +2000,7 @@ function drawNPC(npc) {
         if(pct >= 0.66) {
             // About to burst - jumping up and down frantically
             isJumping = true;
-            y += -Math.abs(Math.sin(Date.now() / 80)) * 16;
+            y += (Math.cos(Date.now() / 60) - 1) * 7;
         } else if(pct > 0) {
             // Pipe starting to swell - pacing back and forth
             isPacing = true;
@@ -1938,7 +2046,9 @@ function drawNPC(npc) {
     ctx.shadowOffsetY = 1;
 
     // Draw wrench BEHIND the PM (on the pipe) before drawing sprite
+    // Fade in wrench over first ~10 frames to avoid hard pop on state transition
     if(npc.state === 'fixing') {
+        ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
         // Animate fix timer and trigger climb-down when done
         if(npc.fixStartTime) {
             npc.fixAnim += 0.02;
@@ -1997,6 +2107,7 @@ function drawNPC(npc) {
             ctx.stroke();
         }
         ctx.restore();
+        ctx.globalAlpha = 1;
     }
 
     if(isClimbing || npc.state === 'fixing') {
@@ -5120,8 +5231,8 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.lineTo(x + w / 2, y + bladeTopH);
         ctx.stroke();
         // Cyan LED strip at seam edge
-        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.shadowColor = unlocked ? '#00ff88' : '#00ccff';
+        ctx.fillStyle = unlocked ? '#00ff88' : '#ff8c00';
+        ctx.shadowColor = unlocked ? '#00ff88' : '#ff8c00';
         ctx.shadowBlur = 4;
         ctx.fillRect(x + 4, y + bladeTopH - 2, w - 8, 2);
         ctx.shadowBlur = 0;
@@ -5148,8 +5259,8 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.lineTo(x + w / 2, botY + bladeBotH);
         ctx.stroke();
         // Cyan LED strip at seam edge
-        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.shadowColor = unlocked ? '#00ff88' : '#00ccff';
+        ctx.fillStyle = unlocked ? '#00ff88' : '#ff8c00';
+        ctx.shadowColor = unlocked ? '#00ff88' : '#ff8c00';
         ctx.shadowBlur = 4;
         ctx.fillRect(x + 4, botY, w - 8, 2);
         ctx.shadowBlur = 0;
@@ -5165,9 +5276,9 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.fillStyle = '#111';
         ctx.fillRect(kpSide, kpY - 4, 20, 40);
         // Screen
-        ctx.fillStyle = unlocked ? '#002200' : '#002211';
+        ctx.fillStyle = unlocked ? '#002200' : '#1a0a00';
         ctx.fillRect(kpSide + 2, kpY - 2, 16, 10);
-        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
+        ctx.fillStyle = unlocked ? '#00ff88' : '#ff8c00';
         ctx.font = scaledFont(6, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpSide + 10, kpY + 6);
@@ -5175,7 +5286,7 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         for (let r = 0; r < 3; r++) {
             for (let c = 0; c < 3; c++) {
                 const bOn = Math.sin(t / 300 + r * 2 + c) > 0.3;
-                ctx.fillStyle = unlocked ? (bOn ? '#00ff88' : '#003311') : (bOn ? '#00ccff' : '#004455');
+                ctx.fillStyle = unlocked ? (bOn ? '#00ff88' : '#003311') : (bOn ? '#ff8c00' : '#3a1e00');
                 ctx.fillRect(kpSide + 2 + c * 6, kpY + 12 + r * 8, 4, 6);
             }
         }
@@ -5324,9 +5435,9 @@ function drawWaterCooler(x, y) {
     // Brand label (decorative, no text)
     ctx.fillStyle = '#3366cc';
     ctx.fillRect(x - 10, y - 38, 20, 10);
-    // Bubble animation — one bubble rises every ~30 seconds
-    const bubbleCycle = Math.floor(t / 30000);
-    const bubblePhase = (t % 30000) / 30000;
+    // Bubble animation — one bubble rises every ~1800 frames (~30s at 60fps)
+    // Frame-based to stay smooth regardless of real-time jank
+    const bubblePhase = (frame % 1800) / 1800;
     if(bubblePhase < 0.12) {
         const bPct = bubblePhase / 0.12;
         const bY = y - 60 - bPct * 14;
@@ -12017,7 +12128,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
 
     // ── INTERIOR BAY FLOOR (foreground concrete) ──────────────────────────────
     const fg=ctx.createLinearGradient(wx,floorTop,wx,wy+wh);
-    fg.addColorStop(0,'#363430');fg.addColorStop(1,'#222018');
+    fg.addColorStop(0,'#282624');fg.addColorStop(1,'#181610');
     ctx.fillStyle=fg; ctx.fillRect(wx+pillarW,floorTop,ww-pillarW*2,floorH);
     ctx.fillStyle='#181410'; ctx.fillRect(wx,floorTop,pillarW,floorH);
     ctx.fillRect(wx+ww-pillarW,floorTop,pillarW,floorH);
@@ -12031,7 +12142,6 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     // These phases (0.40-0.76) are skipped in Block 1 so they render on top of
     // the concrete floor rather than being hidden beneath it.
     {
-        const cW=22,tW=46,TW=12;
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
         const cW=28, tW=56, TW=20; // must match Block 1
         const truckY=floorTop-Math.round(TW*0.5);
@@ -16987,6 +17097,23 @@ function drawEmailUI(officeName) {
     }
     ctx.restore();
 
+    // Scroll indicator — only shown when content overflows
+    const emailContentH = lines.length * 32;
+    const emailViewH = 290;
+    const emailMaxScroll = Math.max(0, emailContentH - emailViewH + 32);
+    if(emailMaxScroll > 0) {
+        const trackH = 288, trackY = 159;
+        const thumbH = Math.max(24, Math.round(trackH * emailViewH / emailContentH));
+        const scrollPct = Math.min(1, level5.emailScrollOffset / emailMaxScroll);
+        const thumbY = trackY + Math.round(scrollPct * (trackH - thumbH));
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(686, trackY, 6, trackH);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.roundRect(687, thumbY, 4, thumbH, 2);
+        ctx.fill();
+    }
+
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
     ctx.fillRect(-GX, 450, CANVAS_W, CANVAS_H);
@@ -19062,17 +19189,23 @@ function drawScene() {
             textGrad.addColorStop(0.5, '#f7931e');
             textGrad.addColorStop(1, '#ffd700');
 
-            ctx.font = 'bold 84px Arial';
+            // Scale title font down if it would overflow the game area
+            let titleSize = 84;
+            ctx.font = `bold ${titleSize}px Arial`;
+            while(ctx.measureText('MULLET PRO').width > GAME_W - 40 && titleSize > 40) {
+                titleSize -= 4;
+                ctx.font = `bold ${titleSize}px Arial`;
+            }
             ctx.textAlign = 'center';
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 10;
+            ctx.lineWidth = Math.round(titleSize / 8);
             ctx.strokeText('MULLET PRO', 350, 250);
             ctx.fillStyle = textGrad;
             ctx.fillText('MULLET PRO', 350, 250);
         }
 
-        // Blinking call-to-action overlay with retro arcade font
-        if(Math.floor(frame / 30) % 2 === 0) {
+        // Blinking call-to-action overlay with retro arcade font (~0.5Hz)
+        if(Math.floor(frame / 45) % 2 === 0) {
             // Semi-transparent black bar behind text for better readability
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(-GX, 430, CANVAS_W, CANVAS_H);
@@ -19214,8 +19347,8 @@ function drawScene() {
             ctx.textAlign = 'center';
             ctx.fillText("YOU'RE FIRED!", 350, 180);
         } else if(state === 'gameover') {
-            // Level 5: Didn't burn 6 documents in time
-            ctx.fillStyle = '#e74c3c';
+            // Level 5: Didn't burn 6 documents in time — orange vs red for YOU'RE FIRED
+            ctx.fillStyle = '#ff6b35';
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("GAME OVER", 350, 180);
@@ -21393,9 +21526,11 @@ function drawScene() {
         ctx.fill();
         
         for(let p of exp.particles) {
-            ctx.fillStyle = `rgba(100,100,100,${p.life})`;
-            ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = exp.color || '#ff8020';
+            ctx.fillRect(Math.round(p.x - 2), Math.round(p.y - 2), 4, 4);
         }
+        ctx.globalAlpha = 1;
     }
     
     // (CEO pursuit rendering is handled in the per-room draw block above)
@@ -21703,11 +21838,11 @@ function update() {
         const maxChoice = state === 'victory' ? 0 : 1;
 
         if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
-            menuChoice = 0;
+            SFX.play('menuTick'); menuChoice = 0;
             keys.upProcessed = true;
         }
         if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-            menuChoice = Math.min(1, maxChoice);
+            SFX.play('menuTick'); menuChoice = Math.min(1, maxChoice);
             keys.downProcessed = true;
         }
         if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
@@ -22214,7 +22349,7 @@ function update() {
                 const wasRed = player.holding === 'RED';
                 player.holding = null;
                 furnace.flameTime = Date.now();
-                level5.docsCollected++;
+                SFX.play('pickup'); level5.docsCollected++;
 
                 // Drop golden key on first RED doc burn
                 if(wasRed && !level5.redKeyEverDropped) {
@@ -22932,7 +23067,7 @@ function update() {
                     } else {
                         // All floor changes use dissolve fade
                         level6.elevatorUI = false;
-                        level6.elevatorTransition = true;
+                        SFX.play('elevator'); level6.elevatorTransition = true;
                         level6.elevatorFadeAlpha = 0;
                         level6.elevatorTarget = level6.elevatorChoice;
                     }
@@ -23413,7 +23548,7 @@ function update() {
                                 sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 22 });
                             }
                             level6.moneyLives--;
-                            level6.damageFlash = 1;
+                            SFX.play('hurt'); level6.damageFlash = 1;
                             updateLives();
                             if (level6.moneyLives <= 0) { state = 'over'; menuChoice = 0; }
                         }
@@ -23483,7 +23618,7 @@ function update() {
                     if(level6.radiationTimer >= 120) {
                         if(level6.moneyLives > 0) {
                             level6.moneyLives--;
-                            level6.damageFlash = 1;
+                            SFX.play('hurt'); level6.damageFlash = 1;
                             updateLives();
                         }
                         level6.radiationTimer = 0;
@@ -23617,7 +23752,7 @@ function update() {
                 // Palm scan — activate brickwall when player has hand and presses action near wall
                 const BRICK_X_MR = 520;
                 if(!level6.marbleBrickOpening && player.x > BRICK_X_MR - 80 && level6.hasPMHand && (keys[' ']||keys['action'])) {
-                    level6.marbleBrickOpening = true;
+                    SFX.play('doorOpen'); level6.marbleBrickOpening = true;
                     keys[' '] = false; keys['action'] = false;
                 }
 
@@ -23742,10 +23877,10 @@ function update() {
                                 level6.keycardX = cb.x;
                                 level6.keycardY = 385;
                             }
-                            score += 2000;
+                            SFX.play('enemyDie'); score += 2000;
                             // Awaken the Red PM clone — boss death shakes him out of trance
                             if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
-                                level6.cloneAwakened = true;
+                                SFX.play('bossAlert'); level6.cloneAwakened = true;
                                 level6.cloneAwakenTime = Date.now();
                             }
                             break;
@@ -24156,7 +24291,7 @@ function update() {
                                 sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 22 });
                             }
                             level6.moneyLives--;
-                            level6.damageFlash = 1;
+                            SFX.play('hurt'); level6.damageFlash = 1;
                             updateLives();
                             if (level6.moneyLives <= 0) { state = 'over'; menuChoice = 0; }
                         }
@@ -24192,7 +24327,7 @@ function update() {
                 // === PM HAND PICKUP from dumpster ===
                 const UDMP_X = 110;
                 if(!level6.marbleDumpsterTaken && Math.abs(player.x - UDMP_X) < 70 && (keys[' ']||keys['action'])) {
-                    level6.hasPMHand = true;
+                    SFX.play('pickup'); level6.hasPMHand = true;
                     level6.marbleDumpsterTaken = true;
                     keys[' '] = false; keys['action'] = false;
                 }
@@ -24889,7 +25024,7 @@ if (keys[' '] || keys['action']) {
             
                 if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
                     level6.moneyLives--;
-                    level6.damageFlash = 1;
+                    SFX.play('hurt'); level6.damageFlash = 1;
                     updateLives();
                     bulletImpact(bullets[i].x, bullets[i].y);
                     bullets.splice(i, 1);
@@ -24917,7 +25052,7 @@ if (keys[' '] || keys['action']) {
                         score += 2000;
                         // Awaken the Red PM clone — boss death shakes him out of trance
                         if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
-                            level6.cloneAwakened = true;
+                            SFX.play('bossAlert'); level6.cloneAwakened = true;
                             level6.cloneAwakenTime = Date.now();
                         }
                         continue;
@@ -25641,10 +25776,10 @@ if (keys[' '] || keys['action']) {
                                 level6.keycardX = cb.x;
                                 level6.keycardY = 385;
                             }
-                            score += 2000;
+                            SFX.play('enemyDie'); score += 2000;
                             // Awaken the Red PM clone — boss death shakes him out of trance
                             if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
-                                level6.cloneAwakened = true;
+                                SFX.play('bossAlert'); level6.cloneAwakened = true;
                                 level6.cloneAwakenTime = Date.now();
                             }
                             wb.going = false;
@@ -26244,12 +26379,14 @@ if (keys[' '] || keys['action']) {
 
 // SECTION 14: Game Loop and Event Handlers
 function winGame() {
+    SFX.play('levelClear');
     state = 'win';
     menuChoice = 0;
     playMusic('menu'); // Play menu music on win
 }
 
 function nextLevel() {
+    SFX.play('levelClear');
     if(level < 4) {
         level++;
         timer = level === 4 ? 120 : 60; // Level 4 gets 120 seconds
@@ -26279,7 +26416,11 @@ function gameLoop() {
     }
 
     frame++;
-    if(player.shootTimer > 0) player.shootTimer--;
+    if(player.shootTimer > 0) {
+        if(!player._stPrev) SFX.play('shoot');
+        player.shootTimer--;
+    }
+    player._stPrev = player.shootTimer > 0;
     const now = Date.now();
     counter += now - lastTime;
     lastTime = now;
@@ -26388,6 +26529,9 @@ function handleMuteClick(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = CANVAS_W / rect.width;
     const scaleY = CANVAS_H / rect.height;
+    // Recompute offsets fresh — avoids stale values after orientation change
+    const freshGX = Math.floor((CANVAS_W - GAME_W) / 2);
+    const freshGY = Math.floor((CANVAS_H - GAME_H) / 2);
 
     let clientX, clientY;
     if(e.type.startsWith('touch')) {
@@ -26405,12 +26549,12 @@ function handleMuteClick(e) {
         clientY = e.clientY;
     }
 
-    const x = (clientX - rect.left) * scaleX - GX;
-    const y = (clientY - rect.top) * scaleY - GY;
+    const x = (clientX - rect.left) * scaleX - freshGX;
+    const y = (clientY - rect.top) * scaleY - freshGY;
 
     // Mute button position matches drawMuteIndicator: top-right of canvas
-    const muteBtnX = -GX + CANVAS_W - 90;
-    const muteBtnY = -GY + 5;
+    const muteBtnX = -freshGX + CANVAS_W - 90;
+    const muteBtnY = -freshGY + 5;
     if(x >= muteBtnX && x <= muteBtnX + 80 && y >= muteBtnY && y <= muteBtnY + 50) {
         toggleMute();
         if(e.cancelable) e.preventDefault();
@@ -26428,6 +26572,27 @@ function handleMuteClick(e) {
        x >= holsterBtnX && x <= holsterBtnX + holsterBtnW && y >= holsterBtnY && y <= holsterBtnY + holsterBtnH) {
         level6.pistolHolstered = !level6.pistolHolstered;
         if(e.cancelable) e.preventDefault();
+        return;
+    }
+
+    // End/result screen menu option taps — large hit areas for thumb use
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+        const yOffset = (state === 'theend' || state === 'victory' || state === 'gameover' || state === 'fired') ? 350 : 320;
+        const maxChoice = state === 'victory' ? 0 : 1;
+        if(Math.abs(x - 350) < 220) {
+            if(Math.abs(y - yOffset) < 30) {
+                menuChoice = 0;
+                keys['action'] = true;
+                if(e.cancelable) e.preventDefault();
+                return;
+            }
+            if(maxChoice > 0 && Math.abs(y - (yOffset + 50)) < 30) {
+                menuChoice = 1;
+                keys['action'] = true;
+                if(e.cancelable) e.preventDefault();
+                return;
+            }
+        }
     }
 }
 
@@ -26448,7 +26613,7 @@ function dpadDirFromPoint(clientX, clientY) {
     const ry = (clientY - r.top) / r.height;    // 0..1
     // Center dead zone (avoids accidental input)
     const cx = Math.abs(rx - 0.5), cy = Math.abs(ry - 0.5);
-    if (cx < 0.12 && cy < 0.12) return null;
+    if (cx < 0.08 && cy < 0.08) return null;
     // Which axis is dominant?
     const dx = rx - 0.5, dy = ry - 0.5;
     if (Math.abs(dx) > Math.abs(dy)) {
