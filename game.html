@@ -486,6 +486,95 @@ function toggleMute() {
     }
 }
 
+// ── SOUND EFFECTS — Web Audio API procedural synthesis ─────────────────────
+const SFX = (() => {
+    let _ac = null;
+    const ac = () => {
+        if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+        if (_ac.state === 'suspended') _ac.resume();
+        return _ac;
+    };
+    const osc = (a, type, freq) => { const o = a.createOscillator(); o.type = type; o.frequency.value = freq; return o; };
+    const gain = (a, val) => { const g = a.createGain(); g.gain.value = val; return g; };
+    const noise = (a, dur) => {
+        const buf = a.createBuffer(1, Math.ceil(a.sampleRate * dur), a.sampleRate);
+        const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const src = a.createBufferSource(); src.buffer = buf; return src;
+    };
+    const sounds = {
+        shoot: (a, t) => {
+            const o = osc(a, 'square', 660), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.setValueAtTime(660, t); o.frequency.exponentialRampToValueAtTime(110, t + 0.07);
+            g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+            o.start(t); o.stop(t + 0.08);
+        },
+        wrench: (a, t) => {
+            const o = osc(a, 'triangle', 300), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.12);
+            g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            o.start(t); o.stop(t + 0.14);
+        },
+        hurt: (a, t) => {
+            const o = osc(a, 'sawtooth', 320), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.setValueAtTime(320, t); o.frequency.exponentialRampToValueAtTime(80, t + 0.28);
+            g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+            o.start(t); o.stop(t + 0.3);
+        },
+        enemyDie: (a, t) => {
+            [0, 0.05].forEach((dt, i) => {
+                const o = osc(a, 'sine', [260, 180][i]), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                o.frequency.exponentialRampToValueAtTime([80, 40][i], t + dt + 0.18);
+                g.gain.setValueAtTime(0.4, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.22);
+                o.start(t + dt); o.stop(t + dt + 0.25);
+            });
+        },
+        pickup: (a, t) => {
+            [523, 659, 784].forEach((freq, i) => {
+                const dt = i * 0.06, o = osc(a, 'triangle', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.15, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.1);
+                o.start(t + dt); o.stop(t + dt + 0.12);
+            });
+        },
+        levelClear: (a, t) => {
+            [392, 523, 659, 784].forEach((freq, i) => {
+                const dt = i * 0.13, o = osc(a, 'square', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.14, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.2);
+                o.start(t + dt); o.stop(t + dt + 0.22);
+            });
+        },
+        elevator: (a, t) => {
+            const o = osc(a, 'sawtooth', 60), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            g.gain.linearRampToValueAtTime(0.12, t + 0.15); g.gain.setValueAtTime(0.12, t + 0.7); g.gain.linearRampToValueAtTime(0, t + 0.9);
+            o.start(t); o.stop(t + 1.0);
+        },
+        doorOpen: (a, t) => {
+            const n = noise(a, 0.5), g = gain(a, 0), f = a.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.setValueAtTime(200, t); f.frequency.exponentialRampToValueAtTime(80, t + 0.4); f.Q.value = 1.5;
+            n.connect(f); f.connect(g); g.connect(a.destination);
+            g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+            n.start(t); n.stop(t + 0.5);
+        },
+        menuTick: (a, t) => {
+            const o = osc(a, 'square', 480), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+            o.start(t); o.stop(t + 0.04);
+        },
+        bossAlert: (a, t) => {
+            [0, 0.25].forEach((dt, i) => {
+                const o = osc(a, 'sawtooth', [220, 165][i]), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.18, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.35);
+                o.start(t + dt); o.stop(t + dt + 0.4);
+            });
+        }
+    };
+    return {
+        play(type) {
+            if (musicMuted) return;
+            try { const a = ac(); const fn = sounds[type]; if (fn) fn(a, a.currentTime); } catch(e) {}
+        }
+    };
+})();
+
 // Handle RT Presents screen interactions - must be called directly in user gesture handlers
 function handleRTPresentsInteraction() {
     if(state === 'rtPresents') {
@@ -12031,7 +12120,6 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     // These phases (0.40-0.76) are skipped in Block 1 so they render on top of
     // the concrete floor rather than being hidden beneath it.
     {
-        const cW=22,tW=46,TW=12;
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
         const cW=28, tW=56, TW=20; // must match Block 1
         const truckY=floorTop-Math.round(TW*0.5);
@@ -21703,11 +21791,11 @@ function update() {
         const maxChoice = state === 'victory' ? 0 : 1;
 
         if((keys['ArrowUp'] || keys['up']) && !keys.upProcessed) {
-            menuChoice = 0;
+            SFX.play('menuTick'); menuChoice = 0;
             keys.upProcessed = true;
         }
         if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-            menuChoice = Math.min(1, maxChoice);
+            SFX.play('menuTick'); menuChoice = Math.min(1, maxChoice);
             keys.downProcessed = true;
         }
         if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
@@ -22214,7 +22302,7 @@ function update() {
                 const wasRed = player.holding === 'RED';
                 player.holding = null;
                 furnace.flameTime = Date.now();
-                level5.docsCollected++;
+                SFX.play('pickup'); level5.docsCollected++;
 
                 // Drop golden key on first RED doc burn
                 if(wasRed && !level5.redKeyEverDropped) {
@@ -22932,7 +23020,7 @@ function update() {
                     } else {
                         // All floor changes use dissolve fade
                         level6.elevatorUI = false;
-                        level6.elevatorTransition = true;
+                        SFX.play('elevator'); level6.elevatorTransition = true;
                         level6.elevatorFadeAlpha = 0;
                         level6.elevatorTarget = level6.elevatorChoice;
                     }
@@ -23413,7 +23501,7 @@ function update() {
                                 sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 22 });
                             }
                             level6.moneyLives--;
-                            level6.damageFlash = 1;
+                            SFX.play('hurt'); level6.damageFlash = 1;
                             updateLives();
                             if (level6.moneyLives <= 0) { state = 'over'; menuChoice = 0; }
                         }
@@ -23483,7 +23571,7 @@ function update() {
                     if(level6.radiationTimer >= 120) {
                         if(level6.moneyLives > 0) {
                             level6.moneyLives--;
-                            level6.damageFlash = 1;
+                            SFX.play('hurt'); level6.damageFlash = 1;
                             updateLives();
                         }
                         level6.radiationTimer = 0;
@@ -23617,7 +23705,7 @@ function update() {
                 // Palm scan — activate brickwall when player has hand and presses action near wall
                 const BRICK_X_MR = 520;
                 if(!level6.marbleBrickOpening && player.x > BRICK_X_MR - 80 && level6.hasPMHand && (keys[' ']||keys['action'])) {
-                    level6.marbleBrickOpening = true;
+                    SFX.play('doorOpen'); level6.marbleBrickOpening = true;
                     keys[' '] = false; keys['action'] = false;
                 }
 
@@ -23742,10 +23830,10 @@ function update() {
                                 level6.keycardX = cb.x;
                                 level6.keycardY = 385;
                             }
-                            score += 2000;
+                            SFX.play('enemyDie'); score += 2000;
                             // Awaken the Red PM clone — boss death shakes him out of trance
                             if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
-                                level6.cloneAwakened = true;
+                                SFX.play('bossAlert'); level6.cloneAwakened = true;
                                 level6.cloneAwakenTime = Date.now();
                             }
                             break;
@@ -24156,7 +24244,7 @@ function update() {
                                 sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 22 });
                             }
                             level6.moneyLives--;
-                            level6.damageFlash = 1;
+                            SFX.play('hurt'); level6.damageFlash = 1;
                             updateLives();
                             if (level6.moneyLives <= 0) { state = 'over'; menuChoice = 0; }
                         }
@@ -24192,7 +24280,7 @@ function update() {
                 // === PM HAND PICKUP from dumpster ===
                 const UDMP_X = 110;
                 if(!level6.marbleDumpsterTaken && Math.abs(player.x - UDMP_X) < 70 && (keys[' ']||keys['action'])) {
-                    level6.hasPMHand = true;
+                    SFX.play('pickup'); level6.hasPMHand = true;
                     level6.marbleDumpsterTaken = true;
                     keys[' '] = false; keys['action'] = false;
                 }
@@ -24889,7 +24977,7 @@ if (keys[' '] || keys['action']) {
             
                 if(bullets[i].fromCEO && Math.abs(bullets[i].x - player.x) < 30 && Math.abs(bullets[i].y - player.y) < 30) {
                     level6.moneyLives--;
-                    level6.damageFlash = 1;
+                    SFX.play('hurt'); level6.damageFlash = 1;
                     updateLives();
                     bulletImpact(bullets[i].x, bullets[i].y);
                     bullets.splice(i, 1);
@@ -24917,7 +25005,7 @@ if (keys[' '] || keys['action']) {
                         score += 2000;
                         // Awaken the Red PM clone — boss death shakes him out of trance
                         if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
-                            level6.cloneAwakened = true;
+                            SFX.play('bossAlert'); level6.cloneAwakened = true;
                             level6.cloneAwakenTime = Date.now();
                         }
                         continue;
@@ -25641,10 +25729,10 @@ if (keys[' '] || keys['action']) {
                                 level6.keycardX = cb.x;
                                 level6.keycardY = 385;
                             }
-                            score += 2000;
+                            SFX.play('enemyDie'); score += 2000;
                             // Awaken the Red PM clone — boss death shakes him out of trance
                             if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
-                                level6.cloneAwakened = true;
+                                SFX.play('bossAlert'); level6.cloneAwakened = true;
                                 level6.cloneAwakenTime = Date.now();
                             }
                             wb.going = false;
@@ -26244,12 +26332,14 @@ if (keys[' '] || keys['action']) {
 
 // SECTION 14: Game Loop and Event Handlers
 function winGame() {
+    SFX.play('levelClear');
     state = 'win';
     menuChoice = 0;
     playMusic('menu'); // Play menu music on win
 }
 
 function nextLevel() {
+    SFX.play('levelClear');
     if(level < 4) {
         level++;
         timer = level === 4 ? 120 : 60; // Level 4 gets 120 seconds
@@ -26279,7 +26369,11 @@ function gameLoop() {
     }
 
     frame++;
-    if(player.shootTimer > 0) player.shootTimer--;
+    if(player.shootTimer > 0) {
+        if(!player._stPrev) SFX.play('shoot');
+        player.shootTimer--;
+    }
+    player._stPrev = player.shootTimer > 0;
     const now = Date.now();
     counter += now - lastTime;
     lastTime = now;
