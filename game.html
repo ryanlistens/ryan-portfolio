@@ -120,9 +120,9 @@
         /* Landscape tweaks */
         @media (orientation: landscape) {
             #hud { padding: 6px 16px; font-size: 18px; }
-            #dpad-container { grid-template: repeat(3, 44px) / repeat(3, 44px); gap: 2px; }
-            .control-btn { font-size: 17px; border-radius: 8px; }
-            #action-btn { width: 68px; height: 68px; font-size: 13px; }
+            #dpad-container { grid-template: repeat(3, 50px) / repeat(3, 50px); gap: 2px; }
+            .control-btn { font-size: 18px; border-radius: 8px; }
+            #action-btn { width: 80px; height: 80px; font-size: 14px; }
             #controls-section { padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
         }
     </style>
@@ -1882,8 +1882,8 @@ function drawBoss(x, y, facing) {
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
         const legL = boss.walking ? Math.sin(frame * 0.25) * 5 : 0;
-        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s + Math.max(0, legL));
-        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s + Math.max(0, -legL));
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s + legL);
+        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s - legL);
 
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 5*s, y + 24*s + legL, 4*s, 2*s);
@@ -1981,7 +1981,7 @@ function drawNPC(npc) {
         if(pct >= 0.66) {
             // About to burst - jumping up and down frantically
             isJumping = true;
-            y += -Math.abs(Math.sin(Date.now() / 80)) * 16;
+            y += (Math.cos(Date.now() / 60) - 1) * 7;
         } else if(pct > 0) {
             // Pipe starting to swell - pacing back and forth
             isPacing = true;
@@ -26482,6 +26482,9 @@ function handleMuteClick(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = CANVAS_W / rect.width;
     const scaleY = CANVAS_H / rect.height;
+    // Recompute offsets fresh — avoids stale values after orientation change
+    const freshGX = Math.floor((CANVAS_W - GAME_W) / 2);
+    const freshGY = Math.floor((CANVAS_H - GAME_H) / 2);
 
     let clientX, clientY;
     if(e.type.startsWith('touch')) {
@@ -26499,12 +26502,12 @@ function handleMuteClick(e) {
         clientY = e.clientY;
     }
 
-    const x = (clientX - rect.left) * scaleX - GX;
-    const y = (clientY - rect.top) * scaleY - GY;
+    const x = (clientX - rect.left) * scaleX - freshGX;
+    const y = (clientY - rect.top) * scaleY - freshGY;
 
     // Mute button position matches drawMuteIndicator: top-right of canvas
-    const muteBtnX = -GX + CANVAS_W - 90;
-    const muteBtnY = -GY + 5;
+    const muteBtnX = -freshGX + CANVAS_W - 90;
+    const muteBtnY = -freshGY + 5;
     if(x >= muteBtnX && x <= muteBtnX + 80 && y >= muteBtnY && y <= muteBtnY + 50) {
         toggleMute();
         if(e.cancelable) e.preventDefault();
@@ -26522,6 +26525,27 @@ function handleMuteClick(e) {
        x >= holsterBtnX && x <= holsterBtnX + holsterBtnW && y >= holsterBtnY && y <= holsterBtnY + holsterBtnH) {
         level6.pistolHolstered = !level6.pistolHolstered;
         if(e.cancelable) e.preventDefault();
+        return;
+    }
+
+    // End/result screen menu option taps — large hit areas for thumb use
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+        const yOffset = (state === 'theend' || state === 'victory' || state === 'gameover' || state === 'fired') ? 350 : 320;
+        const maxChoice = state === 'victory' ? 0 : 1;
+        if(Math.abs(x - 350) < 220) {
+            if(Math.abs(y - yOffset) < 30) {
+                menuChoice = 0;
+                keys['action'] = true;
+                if(e.cancelable) e.preventDefault();
+                return;
+            }
+            if(maxChoice > 0 && Math.abs(y - (yOffset + 50)) < 30) {
+                menuChoice = 1;
+                keys['action'] = true;
+                if(e.cancelable) e.preventDefault();
+                return;
+            }
+        }
     }
 }
 
@@ -26542,7 +26566,7 @@ function dpadDirFromPoint(clientX, clientY) {
     const ry = (clientY - r.top) / r.height;    // 0..1
     // Center dead zone (avoids accidental input)
     const cx = Math.abs(rx - 0.5), cy = Math.abs(ry - 0.5);
-    if (cx < 0.12 && cy < 0.12) return null;
+    if (cx < 0.08 && cy < 0.08) return null;
     // Which axis is dominant?
     const dx = rx - 0.5, dy = ry - 0.5;
     if (Math.abs(dx) > Math.abs(dy)) {
