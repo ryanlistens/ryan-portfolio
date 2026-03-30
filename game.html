@@ -36,7 +36,7 @@
             padding: 6px 16px;
             background: #1a1a1a;
             color: #f5f2ec;
-            font-size: 16px;
+            font-size: clamp(14px, 4vw, 20px);
             font-weight: bold;
             letter-spacing: 0.5px;
             flex-shrink: 0;
@@ -116,6 +116,9 @@
         }
         @media (max-width: 600px) {
             #controls-section { display: block; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .control-btn, #action-btn { transition: none !important; }
         }
         /* Landscape tweaks */
         @media (orientation: landscape) {
@@ -197,7 +200,7 @@ function resizeCanvas() {
 
     if (isLandscape) {
         // Landscape: match viewport ratio exactly for true edge-to-edge fullscreen
-        CANVAS_H = GAME_H + 40;
+        CANVAS_H = GAME_H;
         CANVAS_W = Math.max(GAME_W, Math.round(CANVAS_H * viewRatio));
     } else {
         // Portrait: expand canvas height to match viewport ratio — fills the full screen
@@ -2027,7 +2030,9 @@ function drawNPC(npc) {
     ctx.shadowOffsetY = 1;
 
     // Draw wrench BEHIND the PM (on the pipe) before drawing sprite
+    // Fade in wrench over first ~10 frames to avoid hard pop on state transition
     if(npc.state === 'fixing') {
+        ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
         // Animate fix timer and trigger climb-down when done
         if(npc.fixStartTime) {
             npc.fixAnim += 0.02;
@@ -2086,6 +2091,7 @@ function drawNPC(npc) {
             ctx.stroke();
         }
         ctx.restore();
+        ctx.globalAlpha = 1;
     }
 
     if(isClimbing || npc.state === 'fixing') {
@@ -5209,8 +5215,8 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.lineTo(x + w / 2, y + bladeTopH);
         ctx.stroke();
         // Cyan LED strip at seam edge
-        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.shadowColor = unlocked ? '#00ff88' : '#00ccff';
+        ctx.fillStyle = unlocked ? '#00ff88' : '#ff8c00';
+        ctx.shadowColor = unlocked ? '#00ff88' : '#ff8c00';
         ctx.shadowBlur = 4;
         ctx.fillRect(x + 4, y + bladeTopH - 2, w - 8, 2);
         ctx.shadowBlur = 0;
@@ -5237,8 +5243,8 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.lineTo(x + w / 2, botY + bladeBotH);
         ctx.stroke();
         // Cyan LED strip at seam edge
-        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
-        ctx.shadowColor = unlocked ? '#00ff88' : '#00ccff';
+        ctx.fillStyle = unlocked ? '#00ff88' : '#ff8c00';
+        ctx.shadowColor = unlocked ? '#00ff88' : '#ff8c00';
         ctx.shadowBlur = 4;
         ctx.fillRect(x + 4, botY, w - 8, 2);
         ctx.shadowBlur = 0;
@@ -5254,9 +5260,9 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         ctx.fillStyle = '#111';
         ctx.fillRect(kpSide, kpY - 4, 20, 40);
         // Screen
-        ctx.fillStyle = unlocked ? '#002200' : '#002211';
+        ctx.fillStyle = unlocked ? '#002200' : '#1a0a00';
         ctx.fillRect(kpSide + 2, kpY - 2, 16, 10);
-        ctx.fillStyle = unlocked ? '#00ff88' : '#00ccff';
+        ctx.fillStyle = unlocked ? '#00ff88' : '#ff8c00';
         ctx.font = scaledFont(6, 'bold', 'monospace', true);
         ctx.textAlign = 'center';
         ctx.fillText(unlocked ? 'OPEN' : 'LOCK', kpSide + 10, kpY + 6);
@@ -5264,7 +5270,7 @@ function drawDeathStarBlastDoor(x, y, w, h, side, openPct, showKeypad, unlocked)
         for (let r = 0; r < 3; r++) {
             for (let c = 0; c < 3; c++) {
                 const bOn = Math.sin(t / 300 + r * 2 + c) > 0.3;
-                ctx.fillStyle = unlocked ? (bOn ? '#00ff88' : '#003311') : (bOn ? '#00ccff' : '#004455');
+                ctx.fillStyle = unlocked ? (bOn ? '#00ff88' : '#003311') : (bOn ? '#ff8c00' : '#3a1e00');
                 ctx.fillRect(kpSide + 2 + c * 6, kpY + 12 + r * 8, 4, 6);
             }
         }
@@ -17075,6 +17081,23 @@ function drawEmailUI(officeName) {
     }
     ctx.restore();
 
+    // Scroll indicator — only shown when content overflows
+    const emailContentH = lines.length * 32;
+    const emailViewH = 290;
+    const emailMaxScroll = Math.max(0, emailContentH - emailViewH + 32);
+    if(emailMaxScroll > 0) {
+        const trackH = 288, trackY = 159;
+        const thumbH = Math.max(24, Math.round(trackH * emailViewH / emailContentH));
+        const scrollPct = Math.min(1, level5.emailScrollOffset / emailMaxScroll);
+        const thumbY = trackY + Math.round(scrollPct * (trackH - thumbH));
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(686, trackY, 6, trackH);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.roundRect(687, thumbY, 4, thumbH, 2);
+        ctx.fill();
+    }
+
     // Instruction bar at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
     ctx.fillRect(-GX, 450, CANVAS_W, CANVAS_H);
@@ -19150,17 +19173,23 @@ function drawScene() {
             textGrad.addColorStop(0.5, '#f7931e');
             textGrad.addColorStop(1, '#ffd700');
 
-            ctx.font = 'bold 84px Arial';
+            // Scale title font down if it would overflow the game area
+            let titleSize = 84;
+            ctx.font = `bold ${titleSize}px Arial`;
+            while(ctx.measureText('MULLET PRO').width > GAME_W - 40 && titleSize > 40) {
+                titleSize -= 4;
+                ctx.font = `bold ${titleSize}px Arial`;
+            }
             ctx.textAlign = 'center';
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 10;
+            ctx.lineWidth = Math.round(titleSize / 8);
             ctx.strokeText('MULLET PRO', 350, 250);
             ctx.fillStyle = textGrad;
             ctx.fillText('MULLET PRO', 350, 250);
         }
 
-        // Blinking call-to-action overlay with retro arcade font
-        if(Math.floor(frame / 30) % 2 === 0) {
+        // Blinking call-to-action overlay with retro arcade font (~0.5Hz)
+        if(Math.floor(frame / 45) % 2 === 0) {
             // Semi-transparent black bar behind text for better readability
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(-GX, 430, CANVAS_W, CANVAS_H);
