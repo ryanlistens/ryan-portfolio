@@ -581,7 +581,6 @@ const SFX = (() => {
     };
     return {
         play(type) {
-            if (musicMuted) return;
             try { const a = ac(); const fn = sounds[type]; if (fn) fn(a, a.currentTime); } catch(e) {}
             try { if (vibPat[type] && navigator.vibrate) navigator.vibrate(vibPat[type]); } catch(e) {}
         }
@@ -11991,7 +11990,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.fillStyle='#3c3830';ctx.fillRect(wx,roadY,ww,roadH);
     // Cover perspective-road/loading-road junction seam at center
     ctx.fillStyle='#3a3630';ctx.fillRect(pvpCX-pvpFW,roadY,pvpFW*2,roadH);
-    ctx.fillStyle='#252320';ctx.fillRect(wx,roadY,ww,1.5); // top curb
+    // (top curb line removed — was creating false "two roads" visual seam)
     ctx.strokeStyle='#c89010';ctx.lineWidth=0.8;ctx.setLineDash([6,8]);
     ctx.beginPath();ctx.moveTo(wx,roadY+Math.round(roadH*0.45));ctx.lineTo(wx+ww,roadY+Math.round(roadH*0.45));ctx.stroke();
     ctx.setLineDash([]);
@@ -12158,7 +12157,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         };
         // Clip to interior bay floor — no bleed into exterior zone
         ctx.save();
-        ctx.beginPath(); ctx.rect(bayLeft, floorTop, bayRight-bayLeft, floorH); ctx.clip();
+        ctx.beginPath(); ctx.rect(bayLeft, floorTop - TW, bayRight-bayLeft, floorH + TW); ctx.clip();
         for(let ti=0;ti<2;ti++){
             const phase=((t/11000+ti*0.5)%1);
             if(phase>=0.36&&phase<0.57){
@@ -12223,6 +12222,25 @@ function drawLevel6EmployeeLobby() {
     ctx.font = 'bold 18px Arial';
     ctx.fillText('GLOBAL LEADER IN PIPE DREAMS', 260, 132);
 
+
+    // Founding father portrait — centered above plants, ornate golden frame
+    const pX = 260, pY = 150, pW = 100, pH = 110;
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(pX - pW/2 - 6, pY - 6, pW + 12, pH + 12);
+    ctx.fillStyle = '#b8941e';
+    ctx.fillRect(pX - pW/2 - 4, pY - 4, pW + 8, pH + 8);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(pX - pW/2 - 2, pY - 2, pW + 4, pH + 4);
+    if(foundingFatherImg && foundingFatherImg.complete && foundingFatherImg.naturalWidth > 0) {
+        ctx.drawImage(foundingFatherImg, pX - pW/2, pY, pW, pH);
+    } else {
+        ctx.fillStyle = '#2b2520';
+        ctx.fillRect(pX - pW/2, pY, pW, pH);
+    }
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 16px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Meet your founding father.', 260, pY + pH + 22);
 
     // 4 colored fern-style potted plants next to elevator
     const plantColors = ['#ff3333', '#33cc33', '#3388ff', '#ffcc00'];
@@ -13009,9 +13027,7 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = '#e8e8e8'; ctx.font = `bold ${Math.round(lh * 0.55)}px Arial`; ctx.textAlign = 'center';
         ctx.fillText(label, lx + lw / 2, ly + lh * 0.74);
     };
-    drawMachinePlaque(150, -10, 90, 18, 'DOC PRINTER');
     drawMachinePlaque(248, -10, 90, 18, 'PM PRINTER');
-    drawMachinePlaque(346, -10, 90, 18, '3D PRINTER');
 
     // === CONCEALED DOOR — left wall sliding brick panel ===
     const cdX = 0, cdY = 280, cdW = 60, cdH = 120;
@@ -19839,6 +19855,10 @@ function drawScene() {
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'employeePipeRoom') {
             drawLevel6EmployeePipeRoom();
+            // Defensive reset — guard against any ctx state leak from pipe room draw chain
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.setLineDash([]);
 
             // Draw clone follower in employee pipe room
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeePipeRoom') {
