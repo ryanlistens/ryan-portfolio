@@ -659,6 +659,22 @@ const SFX = (() => {
             n.connect(f); f.connect(g2); g2.connect(a.destination);
             g2.gain.setValueAtTime(0.38, t + 0.44); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.74);
             n.start(t + 0.44); n.stop(t + 0.8);
+        },
+        skeletonRattle: (a, t) => {
+            // Rapid bone-click burst — 6 pitched clicks with pitch slide, plus high noise spray
+            for(let i=0;i<6;i++){
+                const o=osc(a,'sawtooth',200+i*35), g=gain(a,0);
+                const ts=t+i*0.045;
+                o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0,ts); g.gain.linearRampToValueAtTime(0.13,ts+0.01); g.gain.exponentialRampToValueAtTime(0.001,ts+0.07);
+                o.frequency.setValueAtTime(200+i*35,ts); o.frequency.exponentialRampToValueAtTime(80+i*15,ts+0.06);
+                o.start(ts); o.stop(ts+0.1);
+            }
+            const n=noise(a,0.25), f=a.createBiquadFilter(), g3=gain(a,0);
+            f.type='bandpass'; f.frequency.value=3200; f.Q.value=2.5;
+            n.connect(f); f.connect(g3); g3.connect(a.destination);
+            g3.gain.setValueAtTime(0.18,t); g3.gain.exponentialRampToValueAtTime(0.001,t+0.38);
+            n.start(t); n.stop(t+0.42);
         }
     };
     const vibPat = {
@@ -674,7 +690,8 @@ const SFX = (() => {
         mutantGrowl:  [40, 15, 40, 15, 40],
         furnaceBurn:  [30, 10, 20],
         detectiveSting: [15, 10, 15, 10, 25],
-        bridgeFall:   [10, 5, 50]
+        bridgeFall:   [10, 5, 50],
+        skeletonRattle: [20, 10, 20, 10, 20]
     };
     return {
         unlock() { try { const a = ac(); if (a.state === 'suspended') a.resume(); } catch(e) {} },
@@ -23634,6 +23651,7 @@ function update() {
 
                 // === SKELETON HORDE — spawns from underbelly hallway after entering detective mode ===
                 if (level6.hasDetectiveHat && !level6.skeletonHorde.triggered) {
+                    SFX.play('skeletonRattle');
                     level6.skeletonHorde.triggered = true;
                     for (let i = 0; i < 6; i++) {
                         level6.skeletonHorde.skeletons.push({
@@ -24152,6 +24170,7 @@ function update() {
                 // Pick up cage key from discarded suit
                 const jsX = 420 - 30; // fx - 30 from drawing code
                 if(!level6.cageKey.found && Math.abs(player.x - (jsX + 18)) < 40 && Math.abs(player.y - 388) < 40 && (keys[' '] || keys['action'])) {
+                    SFX.play('pickup');
                     level6.cageKey.found = true;
                     keys[' '] = false;
                     keys['action'] = false;
@@ -24357,6 +24376,7 @@ function update() {
 
                 // === SKELETON HORDE 2 — spawns from underbelly room when player enters hallway ===
                 if (!level6.skeletonHorde2.triggered) {
+                    SFX.play('skeletonRattle');
                     level6.skeletonHorde2.triggered = true;
                     for (let i = 0; i < 6; i++) {
                         level6.skeletonHorde2.skeletons.push({
@@ -24465,6 +24485,7 @@ function update() {
                 if(!underbellyActionConsumed && level6.cageKey.found && !level6.cageKey.used && !level6.mutantPM.cageLockShot && !level6.mutantPM.cageOpen) {
                     const pmKeyDist = Math.abs(player.x - level6.mutantPM.x);
                     if(pmKeyDist < 80 && (keys[' '] || keys['action'])) {
+                        SFX.play('doorOpen');
                         level6.cageKey.used = true;
                         level6.cageKey.useTime = Date.now();
                         keys[' '] = false;
@@ -24472,6 +24493,7 @@ function update() {
                         underbellyActionConsumed = true;
                         // 1-second delay before bars drop (gives player time to move)
                         setTimeout(function() {
+                            SFX.play('explode');
                             level6.mutantPM.cageLockShot = true;
                             level6.mutantPM.cageOpen = true;
                             level6.mutantPM.barsDropTime = Date.now();
@@ -24683,18 +24705,21 @@ function update() {
 
                             if(level6.itemSelection === 0 && !level6.hasRevolver) {
                                 // Take revolver
+                                SFX.play('pickup');
                                 level6.hasRevolver = true;
                                 level6.revolverAmmo = 6;
                                 level6.selectingItem = false;
                                 level6.safeUI = false;
                             } else if(level6.itemSelection === 1 && level6.moneyLives < 3) {
                                 // Take $ life
+                                SFX.play('pickup');
                                 level6.moneyLives++;
                                 updateLives();
                                 level6.selectingItem = false;
                                 level6.safeUI = false;
                             } else if(level6.itemSelection === 2) {
                                 // Take bullets (unlimited, adds 6 bullets)
+                                SFX.play('pickup');
                                 level6.revolverAmmo = Math.min(level6.revolverAmmo + 6, 99);
                                 level6.selectingItem = false;
                                 level6.safeUI = false;
@@ -24897,6 +24922,7 @@ if (keys[' '] || keys['action']) {
 
     // 1. CEO Interaction (Giving Drink)
     if (ceo.state === 'offering' && Math.abs(player.x - ceo.x) < 60 && Math.abs(player.y - ceo.y) < 60) {
+        SFX.play('pickup');
         level6.moneyLives++;
         updateLives();
         ceo.hasDrink = true;
@@ -24945,6 +24971,7 @@ if (keys[' '] || keys['action']) {
     }
 
     if (level6.safeUnlocked && nearSafe && !level6.craterActive) {
+        SFX.play('doorOpen');
         level6.safeUI = true;
         level6.selectingItem = true;
         level6.itemSelection = 0;
