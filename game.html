@@ -12172,44 +12172,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.globalAlpha=1;
     ctx.restore(); // end exterior zone clip
 
-    // ── TRUCKS — top-down view throughout; no profile/squish switching ───────
-    // Block 2 (below floor section) draws the bay traverse phases over concrete.
-    {
-        const cW=28, tW=56, TW=20; // bigger: TW fills ~half of one road lane
-        const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
-        const truckY=floorTop-Math.round(TW*0.5); // bottom lane: straddles road/bay boundary
-        const entryX=bayLeft+tW+14;  // trailer clears left pillar for full 90° sweep
-        const exitX =bayRight-tW-14; // same clearance on right
-
-        const drawOv=()=>{
-            const hw=TW*0.5, chw=hw+3;
-            ctx.fillStyle='rgba(0,0,0,0.20)'; ctx.fillRect(-tW,hw+2,tW+cW,4);
-            ctx.fillStyle='#c02e00'; ctx.fillRect(-tW,-hw,tW,TW);
-            ctx.strokeStyle='rgba(180,40,0,0.28)'; ctx.lineWidth=0.7;
-            for(let r=1;r<5;r++) ctx.strokeRect(-tW+r*12,-hw+2,10,TW-4);
-            ctx.fillStyle='#7a2000'; ctx.fillRect(0,-chw,cW,TW+6);
-            ctx.fillStyle='#4a7290'; ctx.fillRect(cW-12,-chw+2,10,TW+2);
-            ctx.fillStyle='#ffe040'; ctx.fillRect(cW-1,-4,2,8);
-        };
-        const drawOvAt=(cx,cy,a)=>{ctx.save();ctx.translate(cx,cy);ctx.rotate(a);drawOv();ctx.restore();};
-
-        // Block 1: approach and depart only — horizontal movement, drawn before pillars
-        // Turn phases moved to Block 2 so the floor never covers the rotating cab
-        for(let ti=0;ti<2;ti++){
-            const phase=((t/11000+ti*0.5)%1);
-            if(phase<0.20){
-                // Approach: sweeps in from off-screen left
-                const p=phase/0.20;
-                drawOvAt((wx-tW-cW-8)+p*(entryX-(wx-tW-cW-8)), truckY, 0);
-            } else if(phase>=0.94){
-                // Depart: sweeps off-screen right
-                const p=(phase-0.94)/0.06;
-                drawOvAt(exitX+p*(wx+ww+tW+cW+8-exitX), truckY, 0);
-            }
-        }
-    }
-
-    // ── BAY DOOR PILLARS — drawn AFTER trucks so pillars naturally occlude truck edges ──
+    // ── BAY DOOR PILLARS ─────────────────────────────────────────────────────
     const lpg=ctx.createLinearGradient(wx,0,wx+pillarW,0);
     lpg.addColorStop(0,'#100e0c');lpg.addColorStop(0.65,'#201e18');lpg.addColorStop(1,'#181612');
     ctx.fillStyle=lpg; ctx.fillRect(wx,extTop,pillarW,extH+floorH);
@@ -12238,14 +12201,16 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.beginPath();ctx.moveTo(wx+pillarW,floorTop+Math.round(floorH*0.42));ctx.lineTo(wx+ww-pillarW,floorTop+Math.round(floorH*0.42));ctx.stroke();
     ctx.setLineDash([]);
 
-    // ── TRUCKS Block 2 — BAY TRAVERSE, drawn OVER interior floor ─────────────
-    // These phases (0.40-0.76) are skipped in Block 1 so they render on top of
-    // the concrete floor rather than being hidden beneath it.
+    // ── TRUCKS — drawn over floor; lower road Y keeps turn radius below nuclear plant terrain ─
+    // truckY = roadY+tW+4 ensures the trailer tip during a 90° turn reaches roadY+4 at most,
+    // staying clear of the nuclear plant scenery. No clip needed.
     {
+        const cW=28, tW=56, TW=20;
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
-        const cW=28, tW=56, TW=20; // must match Block 1
-        const truckY=floorTop-Math.round(TW*0.5);
-        const entryX=bayLeft+tW+14, exitX=bayRight-tW-14;
+        const truckY=roadY+tW+4; // lower road position — trailer tip during turn = roadY+4
+        const entryX=bayLeft+tW+14;
+        const exitX =bayRight-tW-14;
+
         const drawOv=()=>{
             const hw=TW*0.5, chw=hw+3;
             ctx.fillStyle='rgba(0,0,0,0.20)'; ctx.fillRect(-tW,hw+2,tW+cW,4);
@@ -12256,21 +12221,19 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
             ctx.fillStyle='#4a7290'; ctx.fillRect(cW-12,-chw+2,10,TW+2);
             ctx.fillStyle='#ffe040'; ctx.fillRect(cW-1,-4,2,8);
         };
-        // Block 2: turns + bay traverse — drawn AFTER floor.
-        // Turn phases use road-level clip (roadY downward) so the trailer's tail-swing
-        // above the road is hidden — looks like the rear of the truck disappearing into
-        // the bay entrance. Traverse phases use the tighter bay clip.
-        const turnClipTop = extTop + Math.round(extH * 0.80) - 2; // roadY − 2px margin
+        const drawOvAt=(cx,cy,a)=>{ctx.save();ctx.translate(cx,cy);ctx.rotate(a);drawOv();ctx.restore();};
+
         for(let ti=0;ti<2;ti++){
             const phase=((t/11000+ti*0.5)%1);
-            if(phase>=0.20&&phase<0.36){
-                // Entry turn: road+bay clip hides tail swing into terrain/sky
-                ctx.save();
-                ctx.beginPath(); ctx.rect(wx, turnClipTop, ww, wy+wh-turnClipTop); ctx.clip();
+            if(phase<0.20){
+                // Approach: sweeps in from off-screen left at lower road position
+                const p=phase/0.20;
+                drawOvAt((wx-tW-cW-8)+p*(entryX-(wx-tW-cW-8)), truckY, 0);
+            } else if(phase>=0.20&&phase<0.36){
+                // Entry turn — trailer tip stays at roadY+4, no clip needed
                 ctx.save();ctx.translate(entryX,truckY);ctx.rotate(((phase-0.20)/0.16)*Math.PI*0.5);drawOv();ctx.restore();
-                ctx.restore();
             } else if(phase>=0.36&&phase<0.57){
-                // Bay traverse entry side — tight bay clip
+                // Bay traverse entry side
                 ctx.save();
                 ctx.beginPath(); ctx.rect(bayLeft, floorTop-tW-14, bayRight-bayLeft, floorH+tW+cW+18); ctx.clip();
                 const p=(phase-0.36)/0.21;
@@ -12278,7 +12241,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 ctx.save();ctx.translate(entryX,cy);ctx.rotate(Math.PI*0.5);drawOv();ctx.restore();
                 ctx.restore();
             } else if(phase>=0.57&&phase<0.78){
-                // Bay traverse exit side — tight bay clip
+                // Bay traverse exit side
                 ctx.save();
                 ctx.beginPath(); ctx.rect(bayLeft, floorTop-tW-14, bayRight-bayLeft, floorH+tW+cW+18); ctx.clip();
                 const p=(phase-0.57)/0.21;
@@ -12286,11 +12249,12 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 ctx.save();ctx.translate(exitX,cy);ctx.rotate(-Math.PI*0.5);drawOv();ctx.restore();
                 ctx.restore();
             } else if(phase>=0.78&&phase<0.94){
-                // Exit turn: road+bay clip hides tail swing into terrain/sky
-                ctx.save();
-                ctx.beginPath(); ctx.rect(wx, turnClipTop, ww, wy+wh-turnClipTop); ctx.clip();
+                // Exit turn — trailer tip stays at roadY+4, no clip needed
                 ctx.save();ctx.translate(exitX,truckY);ctx.rotate(-Math.PI*0.5+((phase-0.78)/0.16)*Math.PI*0.5);drawOv();ctx.restore();
-                ctx.restore();
+            } else if(phase>=0.94){
+                // Depart: sweeps off-screen right
+                const p=(phase-0.94)/0.06;
+                drawOvAt(exitX+p*(wx+ww+tW+cW+8-exitX), truckY, 0);
             }
         }
     }
