@@ -388,27 +388,22 @@ pipeTechFamilyImg.src = 'images/5429AEDC-F23D-4E0F-99DB-E365E2AA2585.png'; // Pi
 
 // Audio/Music System
 const levelMusic = {
-    menu: new Audio('music/menu.mp3'),
-    level1: new Audio('music/level1.mp3'),
-    level2: new Audio('music/level2.mp3'),
-    level3: new Audio('music/level3.mp3'),
-    level4: new Audio('music/level4.mp3'),
-    level5: new Audio('music/level5.mp3'),
-    level6: new Audio('music/level6.mp3'),
-    blewit: new Audio('music/blewit.mp3'),
-    blue: new Audio('music/blue.mp3'),
-    yellow: new Audio('music/yellow.mp3'),
-    green: new Audio('music/green.mp3'),
-    red: new Audio('music/red.mp3'),
-    newceo: new Audio('music/newceo.mp3')
+    menu:   new Audio('music/menu.mp3'),   // KEEP — intro/title
+    level5: new Audio('music/level5.mp3'), // KEEP — most potent level track
+    newceo: new Audio('music/newceo.mp3'), // KEEP — win screen
+    // Remaining tracks silenced for now (original sound design pass in progress)
+    level1: null, level2: null, level3: null, level4: null,
+    level6: null, blewit: null,
+    blue: null, yellow: null, green: null, red: null
 };
 
-// Set all music to loop and preload
+// Set all music to loop and preload (skip null entries)
 Object.values(levelMusic).forEach(audio => {
+    if(!audio) return;
     audio.loop = true;
-    audio.volume = 0.5; // 50% volume by default
-    audio.preload = 'auto'; // Preload audio for immediate playback
-    audio.load(); // Start loading immediately
+    audio.volume = 0.5;
+    audio.preload = 'auto';
+    audio.load();
 });
 
 let currentMusic = null;
@@ -420,8 +415,15 @@ let holsterOpen = false; // Leather holster inventory UI state
 let pendingMusicKey = null; // Track music that should play after user interaction
 
 function playMusic(musicKey) {
-    // Already playing this track — don't restart (prevents double-call issues)
-    if(currentMusic === levelMusic[musicKey] && !currentMusic.paused) return;
+    const track = levelMusic[musicKey] || null;
+    // Null track — stop whatever is playing and go silent
+    if(!track) {
+        if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; currentMusic = null; }
+        pendingMusicKey = null;
+        return;
+    }
+    // Already playing this track — don't restart
+    if(currentMusic === track && !currentMusic.paused) return;
 
     // Stop current music
     if(currentMusic) {
@@ -430,20 +432,15 @@ function playMusic(musicKey) {
     }
 
     // Play new music if not muted
-    if(!musicMuted && levelMusic[musicKey]) {
-        currentMusic = levelMusic[musicKey];
-        // Set pending immediately so resumePendingMusic can retry from user gesture
+    if(!musicMuted && track) {
+        currentMusic = track;
         pendingMusicKey = musicKey;
-
         currentMusic.play().then(() => {
-            // Playback started successfully — clear pending
             if(pendingMusicKey === musicKey) pendingMusicKey = null;
         }).catch(err => {
             console.log('Audio playback prevented:', err);
-            // pendingMusicKey already set — will be retried on next user interaction
         });
     } else {
-        // Store pending music key if muted
         pendingMusicKey = musicKey;
     }
 }
@@ -664,11 +661,30 @@ const SFX = (() => {
             n.start(t); n.stop(t + 0.3);
         },
         detectiveSting: (a, t) => {
-            // Punchy jazz sting — ascending quartet hit
-            [[0,'square',392],[0.07,'triangle',523],[0.16,'square',659],[0.27,'triangle',880]].forEach(([dt,tp,freq]) => {
-                const o = osc(a, tp, freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
-                g.gain.setValueAtTime(0.17, t+dt); g.gain.exponentialRampToValueAtTime(0.001, t+dt+0.22);
-                o.start(t+dt); o.stop(t+dt+0.25);
+            // Dragnet-style brass sting: three punchy G stabs then a sustained low Eb resolve
+            // Brass character: sawtooth core with lowpass shaping + noise transient for attack bite
+            const notes = [[0, 392, 0.18, 0.13],[0.17, 392, 0.18, 0.13],[0.34, 392, 0.18, 0.13],[0.55, 311, 0.38, 0.22]];
+            notes.forEach(([dt, freq, dur, vol]) => {
+                const ts = t + dt;
+                // Sawtooth body
+                const o = osc(a, 'sawtooth', freq), gO = gain(a, 0);
+                const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800; f.Q.value = 0.7;
+                o.connect(f); f.connect(gO); gO.connect(a.destination);
+                gO.gain.setValueAtTime(0, ts); gO.gain.linearRampToValueAtTime(vol, ts + 0.008);
+                gO.gain.exponentialRampToValueAtTime(0.001, ts + dur);
+                o.start(ts); o.stop(ts + dur + 0.02);
+                // Square sub for body
+                const o2 = osc(a, 'square', freq * 0.5), gO2 = gain(a, 0);
+                o2.connect(gO2); gO2.connect(a.destination);
+                gO2.gain.setValueAtTime(0, ts); gO2.gain.linearRampToValueAtTime(vol * 0.35, ts + 0.008);
+                gO2.gain.exponentialRampToValueAtTime(0.001, ts + dur * 0.7);
+                o2.start(ts); o2.stop(ts + dur);
+                // Noise click for brass attack bite
+                const n = noise(a, 0.1), gN = gain(a, 0), fN = a.createBiquadFilter();
+                fN.type = 'bandpass'; fN.frequency.value = 2400; fN.Q.value = 2;
+                n.connect(fN); fN.connect(gN); gN.connect(a.destination);
+                gN.gain.setValueAtTime(vol * 0.5, ts); gN.gain.exponentialRampToValueAtTime(0.001, ts + 0.04);
+                n.start(ts); n.stop(ts + 0.05);
             });
         },
         bridgeFall: (a, t) => {
