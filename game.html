@@ -12162,50 +12162,59 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.beginPath(); ctx.rect(wx, extTop, ww, extH); ctx.clip();
 
     // ── EXTERIOR SKY ─────────────────────────────────────────────────────────
-    const horizY=extTop+Math.round(extH*0.64); // horizon at 64% — towers fit fully within clip
+    const horizY=extTop+Math.round(extH*0.50); // horizon at 50% — balanced sky/ground split
     const skyG=ctx.createLinearGradient(wx,extTop,wx,horizY);
     skyG.addColorStop(0,'#284e80');skyG.addColorStop(0.55,'#4282b8');skyG.addColorStop(1,'#74aed0');
     ctx.fillStyle=skyG; ctx.fillRect(wx,extTop,ww,horizY-extTop);
-    // Ground: fills from horizon to bottom of exterior zone — no gap
-    const gndG=ctx.createLinearGradient(wx,horizY,wx,extTop+extH);
-    gndG.addColorStop(0,'#344228');gndG.addColorStop(0.4,'#2c2a20');gndG.addColorStop(1,'#3a3830');
-    ctx.fillStyle=gndG; ctx.fillRect(wx,horizY,ww,extTop+extH-horizY);
-    // Perspective road toward plant: trapezoid converging at horizon
+
+    // Lower-half layout: ground → perspective road → main road → loading zone
+    // mainRoadTop is where the horizontal truck road begins (T-intersects with perspective road)
+    const mainRoadTop=extTop+Math.round(extH*0.76);
+    const mainRoadH=Math.round(extH*0.13);   // ~26px — two clear lanes
+    const lzTop=mainRoadTop+mainRoadH;         // loading zone apron
+    const lzH=extTop+extH-lzTop;              // ~18px thin strip
+
+    // Ground fill from horizon to main road
+    const gndG=ctx.createLinearGradient(wx,horizY,wx,mainRoadTop);
+    gndG.addColorStop(0,'#344228');gndG.addColorStop(0.5,'#2c2a20');gndG.addColorStop(1,'#3a3830');
+    ctx.fillStyle=gndG; ctx.fillRect(wx,horizY,ww,mainRoadTop-horizY);
+
+    // Perspective road to plant — very wide at T-junction, shrinks to a point at horizon
+    // The plant is ~quarter-mile down this road; the wide convergence sells the distance
     const pvpCX=wx+Math.round(ww/2);
-    const pvpHW=3, pvpFW=Math.round(ww*0.09); // half-width: 3px at horizon, wider at road level
-    const roadY=extTop+Math.round(extH*0.80);
-    const pvpRG=ctx.createLinearGradient(wx,horizY,wx,roadY);
-    pvpRG.addColorStop(0,'#2c2820');pvpRG.addColorStop(1,'#3c3830');
+    const pvpFW=Math.round(ww*0.28); // wide at main road for dramatic depth
+    const pvpHW=3;                   // nearly invisible dot at horizon
+    const pvpRG=ctx.createLinearGradient(wx,horizY,wx,mainRoadTop);
+    pvpRG.addColorStop(0,'#2c2820');pvpRG.addColorStop(1,'#3e3a34');
     ctx.fillStyle=pvpRG;
     ctx.beginPath();
     ctx.moveTo(pvpCX-pvpHW,horizY);ctx.lineTo(pvpCX+pvpHW,horizY);
-    ctx.lineTo(pvpCX+pvpFW,roadY);ctx.lineTo(pvpCX-pvpFW,roadY);
+    ctx.lineTo(pvpCX+pvpFW,mainRoadTop);ctx.lineTo(pvpCX-pvpFW,mainRoadTop);
     ctx.closePath();ctx.fill();
-    // Perspective road center dashes converging toward vanishing point
-    ctx.strokeStyle='rgba(200,148,16,0.45)';ctx.lineWidth=0.7;ctx.setLineDash([3,5]);
-    for(let seg=1;seg<6;seg++){
-        const ta=seg/6,tb=(seg+0.35)/6;
-        const ya=horizY+Math.round((roadY-horizY)*ta),yb=horizY+Math.round((roadY-horizY)*tb);
+    // Perspective road center dashes (converging toward horizon)
+    ctx.strokeStyle='rgba(200,148,16,0.40)';ctx.lineWidth=0.7;ctx.setLineDash([3,5]);
+    for(let seg=1;seg<9;seg++){
+        const ta=seg/9,tb=(seg+0.35)/9;
+        const ya=horizY+Math.round((mainRoadTop-horizY)*ta),yb=horizY+Math.round((mainRoadTop-horizY)*tb);
         ctx.beginPath();ctx.moveTo(pvpCX,ya);ctx.lineTo(pvpCX,yb);ctx.stroke();
     }
     ctx.setLineDash([]);
-    // Two-lane area between plant road and warehouse floor
-    const roadH=extTop+extH-roadY;
-    const laneDiv=roadY+Math.round(roadH*0.45); // divider between top lane and bottom lane
-    // Top lane: regular road surface (trucks use this lane)
-    ctx.fillStyle='#3c3830';ctx.fillRect(wx,roadY,ww,laneDiv-roadY);
-    ctx.fillStyle='#3a3630';ctx.fillRect(pvpCX-pvpFW,roadY,pvpFW*2,laneDiv-roadY); // blend with perspective road
-    // Center dashes between the two lanes
-    ctx.strokeStyle='#c89010';ctx.lineWidth=0.8;ctx.setLineDash([6,8]);
-    ctx.beginPath();ctx.moveTo(wx,laneDiv);ctx.lineTo(wx+ww,laneDiv);ctx.stroke();
+    // T-junction shoulder lines where perspective road meets main road
+    ctx.strokeStyle='rgba(200,160,30,0.45)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pvpCX-pvpFW,mainRoadTop);ctx.lineTo(wx,mainRoadTop);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pvpCX+pvpFW,mainRoadTop);ctx.lineTo(wx+ww,mainRoadTop);ctx.stroke();
+
+    // Main horizontal road — trucks enter from left/right on this road
+    ctx.fillStyle='#3c3830';ctx.fillRect(wx,mainRoadTop,ww,mainRoadH);
+    const mainRoadMid=mainRoadTop+Math.round(mainRoadH*0.5);
+    ctx.strokeStyle='rgba(220,165,20,0.55)';ctx.lineWidth=0.8;ctx.setLineDash([8,10]);
+    ctx.beginPath();ctx.moveTo(wx,mainRoadMid);ctx.lineTo(wx+ww,mainRoadMid);ctx.stroke();
     ctx.setLineDash([]);
-    // Bottom lane: loading zone apron — concrete pad with hazard stripes
-    const lzTop=laneDiv+1;
-    const lzH=extTop+extH-lzTop;
+
+    // Loading zone apron — thin concrete strip between main road and warehouse floor
     ctx.fillStyle='#484440';ctx.fillRect(wx,lzTop,ww,lzH);
-    // Yellow curb stripe at top of loading zone
-    ctx.fillStyle='#c89010';ctx.fillRect(wx,lzTop,ww,2);
-    // Diagonal hazard stripes across loading zone
+    ctx.fillStyle='#c89010';ctx.fillRect(wx,lzTop,ww,2); // yellow curb stripe
+    // Hazard stripes (/) on loading zone
     ctx.save();
     ctx.beginPath();ctx.rect(wx,lzTop+2,ww,lzH-2);ctx.clip();
     ctx.strokeStyle='rgba(200,148,16,0.22)';ctx.lineWidth=5;ctx.setLineDash([]);
@@ -12244,35 +12253,34 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.beginPath();ctx.ellipse(cx,topY,tW*0.40,tW*0.09,0,0,Math.PI*2);ctx.stroke();
         ctx.fillStyle='rgba(38,36,32,0.45)'; ctx.fillRect(cx-tW,baseY-3,tW*2,3);
     }
-    drawTower(plantCX-58,horizY,34,extH*0.52); // left tower — fully within clip
-    drawTower(plantCX+62,horizY,40,extH*0.58); // right tower — fully within clip
+    // Towers smaller — plant is far away (quarter-mile down the road)
+    drawTower(plantCX-38,horizY,22,extH*0.34); // left tower
+    drawTower(plantCX+42,horizY,26,extH*0.38); // right tower
     // Containment dome
-    const dR=15, domeCX=plantCX+2;
+    const dR=10, domeCX=plantCX+2;
     ctx.fillStyle='#b0ac9e';
     ctx.beginPath();ctx.arc(domeCX,horizY-dR,dR,Math.PI,0);ctx.closePath();ctx.fill();
-    ctx.fillStyle='#928e84'; ctx.fillRect(domeCX-dR-2,horizY-dR,dR*2+4,4);
-    // PipeTech lettering on towers — "PIPE" on left tower, "TECH" on right tower
-    const ptFontSz = Math.max(4, Math.round(wh * 0.020));
+    ctx.fillStyle='#928e84'; ctx.fillRect(domeCX-dR-2,horizY-dR,dR*2+4,3);
+    // PipeTech lettering on towers
+    const ptFontSz = Math.max(3, Math.round(wh * 0.014));
     ctx.fillStyle = '#cc1000'; ctx.font = `bold ${ptFontSz}px Arial`; ctx.textAlign = 'center';
-    // Left tower: PIPE — centered in tower body at ~40% of tower height from base
-    const ltMidY = horizY - extH * 0.52 * 0.42;
-    ctx.fillText('PIPE', plantCX - 58, ltMidY);
-    // Right tower: TECH
-    const rtMidY = horizY - extH * 0.58 * 0.42;
-    ctx.fillText('TECH', plantCX + 62, rtMidY);
-    // Support buildings
-    for(const [dx,bw,bh] of [[-90,20,14],[-66,14,20],[32,22,16],[70,18,12]]){
+    const ltMidY = horizY - extH * 0.34 * 0.42;
+    ctx.fillText('PIPE', plantCX - 38, ltMidY);
+    const rtMidY = horizY - extH * 0.38 * 0.42;
+    ctx.fillText('TECH', plantCX + 42, rtMidY);
+    // Support buildings (smaller, reflecting distance)
+    for(const [dx,bw,bh] of [[-62,14,10],[-46,10,14],[22,16,11],[48,13,9]]){
         ctx.fillStyle='#686460'; ctx.fillRect(plantCX+dx,horizY-bh,bw,bh);
         ctx.fillStyle='#484440'; ctx.fillRect(plantCX+dx,horizY-bh,bw,2);
     }
-    // Pylons
+    // Pylons (closer to plant, smaller)
     ctx.strokeStyle='#505048'; ctx.lineWidth=0.8;
-    for(const px of [-120,124]){
-        ctx.beginPath();ctx.moveTo(plantCX+px-4,horizY);ctx.lineTo(plantCX+px,horizY-24);ctx.lineTo(plantCX+px+4,horizY);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(plantCX+px-8,horizY-10);ctx.lineTo(plantCX+px+8,horizY-10);ctx.stroke();
+    for(const px of [-80,82]){
+        ctx.beginPath();ctx.moveTo(plantCX+px-3,horizY);ctx.lineTo(plantCX+px,horizY-16);ctx.lineTo(plantCX+px+3,horizY);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(plantCX+px-6,horizY-8);ctx.lineTo(plantCX+px+6,horizY-8);ctx.stroke();
     }
-    // Steam plumes
-    for(const [tc,tH2] of [[plantCX-58,extH*0.52],[plantCX+62,extH*0.58]]){
+    // Steam plumes (scaled to smaller towers)
+    for(const [tc,tH2] of [[plantCX-38,extH*0.34],[plantCX+42,extH*0.38]]){
         const topYt=horizY-tH2;
         for(let si=0;si<7;si++){
             const age=((t/2600+si*0.143)%1);
@@ -12289,7 +12297,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     {
         const cW=28, tW=28, TW=20;
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
-        const truckY=roadY+Math.round((floorTop-roadY)*0.75); // right lane; tip during turn = roadY+2
+        const truckY=mainRoadTop+Math.round(mainRoadH*0.72); // right lane of main road
         const entryX=bayLeft+tW+14;
         const exitX =bayRight-tW-14;
         const drawOv=()=>{
@@ -12348,7 +12356,7 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     {
         const cW=28, tW=28, TW=20; // must match approach block above
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
-        const truckY=roadY+Math.round((floorTop-roadY)*0.75); // must match approach block
+        const truckY=mainRoadTop+Math.round(mainRoadH*0.72); // must match approach block
         const entryX=bayLeft+tW+14;
         const exitX =bayRight-tW-14;
         const drawOv=()=>{
@@ -12368,14 +12376,14 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 ctx.save();ctx.translate(entryX,truckY);ctx.rotate(((phase-0.20)/0.16)*Math.PI*0.5);drawOv();ctx.restore();
             } else if(phase>=0.36&&phase<0.57){
                 ctx.save();
-                ctx.beginPath(); ctx.rect(bayLeft, roadY-4, bayRight-bayLeft, wy+wh-roadY+4); ctx.clip();
+                ctx.beginPath(); ctx.rect(bayLeft, mainRoadTop-4, bayRight-bayLeft, wy+wh-mainRoadTop+4); ctx.clip();
                 const p=(phase-0.36)/0.21;
                 const cy=truckY+p*(wy+wh+14-truckY);
                 ctx.save();ctx.translate(entryX,cy);ctx.rotate(Math.PI*0.5);drawOv();ctx.restore();
                 ctx.restore();
             } else if(phase>=0.57&&phase<0.78){
                 ctx.save();
-                ctx.beginPath(); ctx.rect(bayLeft, roadY-4, bayRight-bayLeft, wy+wh-roadY+4); ctx.clip();
+                ctx.beginPath(); ctx.rect(bayLeft, mainRoadTop-4, bayRight-bayLeft, wy+wh-mainRoadTop+4); ctx.clip();
                 const p=(phase-0.57)/0.21;
                 const cy=(wy+wh+14)*(1-p)+truckY*p;
                 ctx.save();ctx.translate(exitX,cy);ctx.rotate(-Math.PI*0.5);drawOv();ctx.restore();
