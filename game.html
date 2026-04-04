@@ -546,9 +546,21 @@ const SFX = (() => {
             });
         },
         elevator: (a, t) => {
-            const o = osc(a, 'sawtooth', 60), g = gain(a, 0); o.connect(g); g.connect(a.destination);
-            g.gain.linearRampToValueAtTime(0.12, t + 0.15); g.gain.setValueAtTime(0.12, t + 0.7); g.gain.linearRampToValueAtTime(0, t + 0.9);
-            o.start(t); o.stop(t + 1.0);
+            // Elevator bell — clean two-tone ding (fundamental + minor third above)
+            for(const [freq, delay, vol] of [[880, 0, 0.28],[1047, 0.08, 0.18]]) {
+                const o = osc(a, 'sine', freq), g = gain(a, 0);
+                // Add gentle overtone for bell body
+                const o2 = osc(a, 'sine', freq * 2.756), g2 = gain(a, 0);
+                o.connect(g); g.connect(a.destination);
+                o2.connect(g2); g2.connect(a.destination);
+                const ts = t + delay;
+                g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(vol, ts + 0.005);
+                g.gain.exponentialRampToValueAtTime(0.001, ts + 1.4);
+                g2.gain.setValueAtTime(0, ts); g2.gain.linearRampToValueAtTime(vol * 0.4, ts + 0.005);
+                g2.gain.exponentialRampToValueAtTime(0.001, ts + 0.6);
+                o.start(ts); o.stop(ts + 1.5);
+                o2.start(ts); o2.stop(ts + 0.7);
+            }
         },
         doorOpen: (a, t) => {
             const n = noise(a, 0.5), g = gain(a, 0), f = a.createBiquadFilter();
@@ -13738,6 +13750,7 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(ceo.y - cf.y, ceo.x - cf.x);
+            SFX.play('shoot');
             bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
@@ -13750,6 +13763,7 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(cb.y - cf.y, cb.x - cf.x);
+            SFX.play('shoot');
             bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
@@ -13762,6 +13776,7 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(hcb.y - cf.y, hcb.x - cf.x);
+            SFX.play('shoot');
             bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
@@ -23949,6 +23964,7 @@ function update() {
 
                 // Elevator enter — once brickwall fully open
                 if((level6.marbleBrickSlide || 0) >= 1 && player.x > BRICK_X_MR - 30 && !level6.marbleElevatorTransition && (keys[' ']||keys['action'])) {
+                    SFX.play('elevator');
                     level6.marbleElevatorTransition = true;
                     level6.marbleElevatorFadeAlpha = 0;
                     level6.marbleElevatorTarget = 'entryway';
@@ -24645,6 +24661,7 @@ function update() {
 
                 // CEO elevator — private elevator to marble security room
                 if(player.x > 540 && !level6.marbleElevatorTransition && !level6.marbleElevatorFadeIn && (keys[' '] || keys['action'])) {
+                    SFX.play('elevator');
                     level6.marbleElevatorTransition = true;
                     level6.marbleElevatorFadeAlpha = 0;
                     level6.marbleElevatorTarget = 'marbleRoom';
