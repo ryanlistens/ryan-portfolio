@@ -543,21 +543,29 @@ const SFX = (() => {
             });
         },
         elevator: (a, t) => {
-            // Elevator bell — clean two-tone ding (fundamental + minor third above)
-            for(const [freq, delay, vol] of [[880, 0, 0.28],[1047, 0.08, 0.18]]) {
-                const o = osc(a, 'sine', freq), g = gain(a, 0);
-                // Add gentle overtone for bell body
-                const o2 = osc(a, 'sine', freq * 2.756), g2 = gain(a, 0);
-                o.connect(g); g.connect(a.destination);
-                o2.connect(g2); g2.connect(a.destination);
-                const ts = t + delay;
-                g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(vol, ts + 0.005);
-                g.gain.exponentialRampToValueAtTime(0.001, ts + 1.4);
-                g2.gain.setValueAtTime(0, ts); g2.gain.linearRampToValueAtTime(vol * 0.4, ts + 0.005);
-                g2.gain.exponentialRampToValueAtTime(0.001, ts + 0.6);
-                o.start(ts); o.stop(ts + 1.5);
-                o2.start(ts); o2.stop(ts + 0.7);
-            }
+            // Single clean elevator bell — fast strike, long metallic decay
+            const o1 = osc(a, 'sine', 1174), g1 = gain(a, 0); o1.connect(g1); g1.connect(a.destination);
+            g1.gain.setValueAtTime(0, t); g1.gain.linearRampToValueAtTime(0.32, t + 0.003);
+            g1.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+            o1.start(t); o1.stop(t + 1.9);
+            // Inharmonic overtone for metallic shimmer
+            const o2 = osc(a, 'sine', 1174 * 2.756), g2 = gain(a, 0); o2.connect(g2); g2.connect(a.destination);
+            g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.10, t + 0.003);
+            g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+            o2.start(t); o2.stop(t + 0.45);
+        },
+        hydraulic: (a, t) => {
+            // Pneumatic cylinder — filtered noise whoosh + low mechanical thunk
+            const n = noise(a, 0.35), g = gain(a, 0), f = a.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 550; f.Q.value = 1.8;
+            n.connect(f); f.connect(g); g.connect(a.destination);
+            g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22, t + 0.04);
+            g.gain.linearRampToValueAtTime(0.14, t + 0.28); g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+            n.start(t); n.stop(t + 0.55);
+            const o = osc(a, 'sine', 72), gO = gain(a, 0); o.connect(gO); gO.connect(a.destination);
+            gO.gain.setValueAtTime(0, t); gO.gain.linearRampToValueAtTime(0.28, t + 0.008);
+            gO.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+            o.start(t); o.stop(t + 0.18);
         },
         doorOpen: (a, t) => {
             const n = noise(a, 0.5), g = gain(a, 0), f = a.createBiquadFilter();
@@ -661,9 +669,8 @@ const SFX = (() => {
             n.start(t); n.stop(t + 0.3);
         },
         detectiveSting: (a, t) => {
-            // Dragnet-style brass sting: three punchy G stabs then a sustained low Eb resolve
-            // Brass character: sawtooth core with lowpass shaping + noise transient for attack bite
-            const notes = [[0, 392, 0.18, 0.13],[0.17, 392, 0.18, 0.13],[0.34, 392, 0.18, 0.13],[0.55, 311, 0.38, 0.22]];
+            // Dragnet brass sting: C – G – C – Bb (low brass horn, staccato then sustained)
+            const notes = [[0, 131, 0.17, 0.15],[0.22, 196, 0.15, 0.13],[0.42, 262, 0.17, 0.15],[0.62, 233, 0.55, 0.20]];
             notes.forEach(([dt, freq, dur, vol]) => {
                 const ts = t + dt;
                 // Sawtooth body
@@ -9721,9 +9728,9 @@ function drawNuclearAssemblyBridge() {
             if(!level6._asmLastKey) level6._asmLastKey = -1;
             if(asmKey !== level6._asmLastKey) {
                 level6._asmLastKey = asmKey;
-                if(asmStep === 1) SFX.play('elevator');       // syringe descends
+                if(asmStep === 1) SFX.play('hydraulic');      // syringe descends
                 else if(asmStep === 2) SFX.play('pipeBurst'); // pressurized goo injection
-                else if(asmStep === 3) SFX.play('elevator');  // syringe ascends
+                else if(asmStep === 3) SFX.play('hydraulic'); // syringe ascends
                 else if(asmStep === 4) SFX.play('docPrint');  // belt advances missile
                 else if(asmStep === 5) SFX.play('pickup');    // crate loads into truck
                 else if(asmStep === 6) SFX.play('doorOpen');  // truck departs
@@ -12175,14 +12182,20 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         ctx.beginPath();ctx.moveTo(pvpCX,ya);ctx.lineTo(pvpCX,yb);ctx.stroke();
     }
     ctx.setLineDash([]);
-    // Loading road: horizontal band filling to bottom of exterior zone (no gap)
+    // Loading zone apron — concrete pad, not a public road
     const roadH=extTop+extH-roadY;
-    ctx.fillStyle='#3c3830';ctx.fillRect(wx,roadY,ww,roadH);
-    // Cover perspective-road/loading-road junction seam at center
-    ctx.fillStyle='#3a3630';ctx.fillRect(pvpCX-pvpFW,roadY,pvpFW*2,roadH);
-    // (top curb line removed — was creating false "two roads" visual seam)
-    ctx.strokeStyle='#c89010';ctx.lineWidth=0.8;ctx.setLineDash([6,8]);
-    ctx.beginPath();ctx.moveTo(wx,roadY+Math.round(roadH*0.45));ctx.lineTo(wx+ww,roadY+Math.round(roadH*0.45));ctx.stroke();
+    ctx.fillStyle='#484440';ctx.fillRect(wx,roadY,ww,roadH); // lighter concrete vs asphalt
+    ctx.fillStyle='#3a3630';ctx.fillRect(pvpCX-pvpFW,roadY,pvpFW*2,roadH); // blend with perspective road
+    // Yellow curb stripe at top (dock boundary)
+    ctx.fillStyle='#c89010';ctx.fillRect(wx,roadY,ww,2);
+    // Yellow diagonal hazard stripes across the apron (loading zone paint)
+    ctx.save();
+    ctx.beginPath();ctx.rect(wx,roadY+2,ww,roadH-2);ctx.clip();
+    ctx.strokeStyle='rgba(200,148,16,0.22)';ctx.lineWidth=5;ctx.setLineDash([]);
+    for(let sx=wx-roadH*2;sx<wx+ww+roadH;sx+=22){
+        ctx.beginPath();ctx.moveTo(sx,roadY+roadH);ctx.lineTo(sx+roadH,roadY+2);ctx.stroke();
+    }
+    ctx.restore();
     ctx.setLineDash([]);
     // Clouds — the exterior zone clip above already prevents ceiling bleed
     ctx.fillStyle='rgba(255,255,255,0.80)';
@@ -13766,11 +13779,13 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(ceo.y - cf.y, ceo.x - cf.x);
+            const gunRight = cf.facing !== 'left';
+            const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
             SFX.play('shoot');
-            bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
+            bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
-            muzzleFlashes.push({ x: cf.x + Math.cos(angle) * 12, y: cf.y - 25, life: 6, facing: Math.cos(angle) > 0 ? 'right' : 'left' });
+            muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
         }
     }
     // Armed clone shoots at cloning boss in cloningRoom
@@ -13779,11 +13794,13 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(cb.y - cf.y, cb.x - cf.x);
+            const gunRight = cf.facing !== 'left';
+            const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
             SFX.play('shoot');
-            bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
+            bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
-            muzzleFlashes.push({ x: cf.x + Math.cos(angle) * 12, y: cf.y - 25, life: 6, facing: Math.cos(angle) > 0 ? 'right' : 'left' });
+            muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
         }
     }
     // Armed clone shoots at hallway cloning boss
@@ -13792,11 +13809,13 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(hcb.y - cf.y, hcb.x - cf.x);
+            const gunRight = cf.facing !== 'left';
+            const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
             SFX.play('shoot');
-            bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
+            bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
-            muzzleFlashes.push({ x: cf.x + Math.cos(angle) * 12, y: cf.y - 25, life: 6, facing: Math.cos(angle) > 0 ? 'right' : 'left' });
+            muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
         }
     }
 
