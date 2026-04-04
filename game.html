@@ -388,27 +388,22 @@ pipeTechFamilyImg.src = 'images/5429AEDC-F23D-4E0F-99DB-E365E2AA2585.png'; // Pi
 
 // Audio/Music System
 const levelMusic = {
-    menu: new Audio('music/menu.mp3'),
-    level1: new Audio('music/level1.mp3'),
-    level2: new Audio('music/level2.mp3'),
-    level3: new Audio('music/level3.mp3'),
-    level4: new Audio('music/level4.mp3'),
-    level5: new Audio('music/level5.mp3'),
-    level6: new Audio('music/level6.mp3'),
-    blewit: new Audio('music/blewit.mp3'),
-    blue: new Audio('music/blue.mp3'),
-    yellow: new Audio('music/yellow.mp3'),
-    green: new Audio('music/green.mp3'),
-    red: new Audio('music/red.mp3'),
-    newceo: new Audio('music/newceo.mp3')
+    menu:   new Audio('music/menu.mp3'),   // KEEP — intro/title
+    level5: new Audio('music/level5.mp3'), // KEEP — most potent level track
+    newceo: new Audio('music/newceo.mp3'), // KEEP — win screen
+    // Remaining tracks silenced for now (original sound design pass in progress)
+    level1: null, level2: null, level3: null, level4: null,
+    level6: null, blewit: null,
+    blue: null, yellow: null, green: null, red: null
 };
 
-// Set all music to loop and preload
+// Set all music to loop and preload (skip null entries)
 Object.values(levelMusic).forEach(audio => {
+    if(!audio) return;
     audio.loop = true;
-    audio.volume = 0.5; // 50% volume by default
-    audio.preload = 'auto'; // Preload audio for immediate playback
-    audio.load(); // Start loading immediately
+    audio.volume = 0.5;
+    audio.preload = 'auto';
+    audio.load();
 });
 
 let currentMusic = null;
@@ -420,8 +415,15 @@ let holsterOpen = false; // Leather holster inventory UI state
 let pendingMusicKey = null; // Track music that should play after user interaction
 
 function playMusic(musicKey) {
-    // Already playing this track — don't restart (prevents double-call issues)
-    if(currentMusic === levelMusic[musicKey] && !currentMusic.paused) return;
+    const track = levelMusic[musicKey] || null;
+    // Null track — stop whatever is playing and go silent
+    if(!track) {
+        if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; currentMusic = null; }
+        pendingMusicKey = null;
+        return;
+    }
+    // Already playing this track — don't restart
+    if(currentMusic === track && !currentMusic.paused) return;
 
     // Stop current music
     if(currentMusic) {
@@ -430,20 +432,15 @@ function playMusic(musicKey) {
     }
 
     // Play new music if not muted
-    if(!musicMuted && levelMusic[musicKey]) {
-        currentMusic = levelMusic[musicKey];
-        // Set pending immediately so resumePendingMusic can retry from user gesture
+    if(!musicMuted && track) {
+        currentMusic = track;
         pendingMusicKey = musicKey;
-
         currentMusic.play().then(() => {
-            // Playback started successfully — clear pending
             if(pendingMusicKey === musicKey) pendingMusicKey = null;
         }).catch(err => {
             console.log('Audio playback prevented:', err);
-            // pendingMusicKey already set — will be retried on next user interaction
         });
     } else {
-        // Store pending music key if muted
         pendingMusicKey = musicKey;
     }
 }
@@ -546,9 +543,21 @@ const SFX = (() => {
             });
         },
         elevator: (a, t) => {
-            const o = osc(a, 'sawtooth', 60), g = gain(a, 0); o.connect(g); g.connect(a.destination);
-            g.gain.linearRampToValueAtTime(0.12, t + 0.15); g.gain.setValueAtTime(0.12, t + 0.7); g.gain.linearRampToValueAtTime(0, t + 0.9);
-            o.start(t); o.stop(t + 1.0);
+            // Elevator bell — clean two-tone ding (fundamental + minor third above)
+            for(const [freq, delay, vol] of [[880, 0, 0.28],[1047, 0.08, 0.18]]) {
+                const o = osc(a, 'sine', freq), g = gain(a, 0);
+                // Add gentle overtone for bell body
+                const o2 = osc(a, 'sine', freq * 2.756), g2 = gain(a, 0);
+                o.connect(g); g.connect(a.destination);
+                o2.connect(g2); g2.connect(a.destination);
+                const ts = t + delay;
+                g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(vol, ts + 0.005);
+                g.gain.exponentialRampToValueAtTime(0.001, ts + 1.4);
+                g2.gain.setValueAtTime(0, ts); g2.gain.linearRampToValueAtTime(vol * 0.4, ts + 0.005);
+                g2.gain.exponentialRampToValueAtTime(0.001, ts + 0.6);
+                o.start(ts); o.stop(ts + 1.5);
+                o2.start(ts); o2.stop(ts + 0.7);
+            }
         },
         doorOpen: (a, t) => {
             const n = noise(a, 0.5), g = gain(a, 0), f = a.createBiquadFilter();
@@ -570,15 +579,26 @@ const SFX = (() => {
             });
         },
         pipeBurst: (a, t) => {
-            // Pressurized hiss burst + low thump
-            const n = noise(a, 0.8), g = gain(a, 0), f = a.createBiquadFilter();
-            f.type = 'bandpass'; f.frequency.setValueAtTime(1800, t); f.frequency.exponentialRampToValueAtTime(300, t + 0.35); f.Q.value = 0.8;
-            n.connect(f); f.connect(g); g.connect(a.destination);
-            g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
-            n.start(t); n.stop(t + 0.8);
-            const o = osc(a, 'sine', 65), g2 = gain(a, 0); o.connect(g2); g2.connect(a.destination);
-            g2.gain.setValueAtTime(0.4, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-            o.start(t); o.stop(t + 0.25);
+            // Heavy industrial pipe rupture — loud broadband whoosh + deep resonant thump + steam hiss tail
+            // Initial crack/bang: full-spectrum noise surge
+            const n1 = noise(a, 1.0), g1 = gain(a, 0), f1 = a.createBiquadFilter();
+            f1.type = 'lowpass'; f1.frequency.value = 2200; f1.Q.value = 0.5;
+            n1.connect(f1); f1.connect(g1); g1.connect(a.destination);
+            g1.gain.setValueAtTime(0, t); g1.gain.linearRampToValueAtTime(0.9, t + 0.008);
+            g1.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+            n1.start(t); n1.stop(t + 0.22);
+            // Deep resonant thump (pipe wall vibration)
+            const o1 = osc(a, 'sine', 55), g2 = gain(a, 0); o1.connect(g2); g2.connect(a.destination);
+            g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.7, t + 0.01);
+            g2.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+            o1.frequency.exponentialRampToValueAtTime(28, t + 0.30);
+            o1.start(t); o1.stop(t + 0.38);
+            // Escaping steam hiss — high noise tail
+            const n2 = noise(a, 0.5), g3 = gain(a, 0), f2 = a.createBiquadFilter();
+            f2.type = 'bandpass'; f2.frequency.value = 3800; f2.Q.value = 1.2;
+            n2.connect(f2); f2.connect(g3); g3.connect(a.destination);
+            g3.gain.setValueAtTime(0.3, t + 0.05); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+            n2.start(t + 0.05); n2.stop(t + 1.0);
         },
         explode: (a, t) => {
             // Deep boom with noise tail
@@ -641,11 +661,30 @@ const SFX = (() => {
             n.start(t); n.stop(t + 0.3);
         },
         detectiveSting: (a, t) => {
-            // Punchy jazz sting — ascending quartet hit
-            [[0,'square',392],[0.07,'triangle',523],[0.16,'square',659],[0.27,'triangle',880]].forEach(([dt,tp,freq]) => {
-                const o = osc(a, tp, freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
-                g.gain.setValueAtTime(0.17, t+dt); g.gain.exponentialRampToValueAtTime(0.001, t+dt+0.22);
-                o.start(t+dt); o.stop(t+dt+0.25);
+            // Dragnet-style brass sting: three punchy G stabs then a sustained low Eb resolve
+            // Brass character: sawtooth core with lowpass shaping + noise transient for attack bite
+            const notes = [[0, 392, 0.18, 0.13],[0.17, 392, 0.18, 0.13],[0.34, 392, 0.18, 0.13],[0.55, 311, 0.38, 0.22]];
+            notes.forEach(([dt, freq, dur, vol]) => {
+                const ts = t + dt;
+                // Sawtooth body
+                const o = osc(a, 'sawtooth', freq), gO = gain(a, 0);
+                const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800; f.Q.value = 0.7;
+                o.connect(f); f.connect(gO); gO.connect(a.destination);
+                gO.gain.setValueAtTime(0, ts); gO.gain.linearRampToValueAtTime(vol, ts + 0.008);
+                gO.gain.exponentialRampToValueAtTime(0.001, ts + dur);
+                o.start(ts); o.stop(ts + dur + 0.02);
+                // Square sub for body
+                const o2 = osc(a, 'square', freq * 0.5), gO2 = gain(a, 0);
+                o2.connect(gO2); gO2.connect(a.destination);
+                gO2.gain.setValueAtTime(0, ts); gO2.gain.linearRampToValueAtTime(vol * 0.35, ts + 0.008);
+                gO2.gain.exponentialRampToValueAtTime(0.001, ts + dur * 0.7);
+                o2.start(ts); o2.stop(ts + dur);
+                // Noise click for brass attack bite
+                const n = noise(a, 0.1), gN = gain(a, 0), fN = a.createBiquadFilter();
+                fN.type = 'bandpass'; fN.frequency.value = 2400; fN.Q.value = 2;
+                n.connect(fN); fN.connect(gN); gN.connect(a.destination);
+                gN.gain.setValueAtTime(vol * 0.5, ts); gN.gain.exponentialRampToValueAtTime(0.001, ts + 0.04);
+                n.start(ts); n.stop(ts + 0.05);
             });
         },
         bridgeFall: (a, t) => {
@@ -2368,18 +2407,20 @@ function drawNPC(npc) {
             ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
         } else {
             // Static pose — arms (left arm extended up when stressed to connect worried hand)
-            if(npc.state === 'stressed') {
-                ctx.fillRect(x - 8*s, y - 5*s, 2*s, 9*s);
-            } else {
-                ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+            if(!npc.skipArms) {
+                if(npc.state === 'stressed') {
+                    ctx.fillRect(x - 8*s, y - 5*s, 2*s, 9*s);
+                } else {
+                    ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);
+                }
+                ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
+                // Hands at cuffs
+                ctx.fillStyle = '#f5c89a';
+                if(npc.state !== 'stressed') {
+                    ctx.fillRect(x - 8*s, y + 4*s, 2*s, 2*s);
+                }
+                ctx.fillRect(x + 6*s, y + 4*s, 2*s, 2*s);
             }
-            ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);
-            // Hands at cuffs
-            ctx.fillStyle = '#f5c89a';
-            if(npc.state !== 'stressed') {
-                ctx.fillRect(x - 8*s, y + 4*s, 2*s, 2*s);
-            }
-            ctx.fillRect(x + 6*s, y + 4*s, 2*s, 2*s);
             // Legs
             ctx.fillStyle = npc.color.hex;
             ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
@@ -9664,6 +9705,31 @@ function drawNuclearAssemblyBridge() {
             ? (cycleT - missilePhaseBoundary - CRATE_LOAD_MS) / TRUCK_SWAP_MS : 0;
         const isSwapping = truckSwapProg > 0;
 
+        // ── ASSEMBLY SFX — fire once each time we enter a new phase ─────────
+        {
+            // Encode current assembly step as an integer for easy change detection
+            let asmStep;
+            if(!inMissileCycle && isSwapping)        asmStep = 6; // truck swap
+            else if(!inMissileCycle && isLoadingCrate) asmStep = 5; // crate loading
+            else if(mPhase >= 0.76)  asmStep = 4; // missile on belt
+            else if(mPhase >= 0.64)  asmStep = 3; // syringe raises / cap seals
+            else if(mPhase >= 0.36)  asmStep = 2; // goo injecting
+            else if(mPhase >= 0.22)  asmStep = 1; // syringe lowers
+            else                     asmStep = 0; // goo fills syringe
+            // Include missile index so each missile fires sounds independently
+            const asmKey = missilesDone * 10 + asmStep;
+            if(!level6._asmLastKey) level6._asmLastKey = -1;
+            if(asmKey !== level6._asmLastKey) {
+                level6._asmLastKey = asmKey;
+                if(asmStep === 1) SFX.play('elevator');       // syringe descends
+                else if(asmStep === 2) SFX.play('pipeBurst'); // pressurized goo injection
+                else if(asmStep === 3) SFX.play('elevator');  // syringe ascends
+                else if(asmStep === 4) SFX.play('docPrint');  // belt advances missile
+                else if(asmStep === 5) SFX.play('pickup');    // crate loads into truck
+                else if(asmStep === 6) SFX.play('doorOpen');  // truck departs
+            }
+        }
+
         // Key x-positions (TANK_X moved to 135 so it clears the left wall at x=100)
         const TANK_X = 135, SYR_X = 300, CRATE_X = 520, DOCK_X = 640;
         const mW = 12, mH = 28;
@@ -12189,6 +12255,36 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.globalAlpha=1;
     ctx.restore(); // end exterior zone clip
 
+    // ── TRUCKS — approach/depart (before pillars so pillars occlude truck edges) ─
+    {
+        const cW=28, tW=28, TW=20;
+        const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
+        const truckY=roadY+Math.round((floorTop-roadY)*0.75); // right lane; tip during turn = roadY+2
+        const entryX=bayLeft+tW+14;
+        const exitX =bayRight-tW-14;
+        const drawOv=()=>{
+            const hw=TW*0.5, chw=hw+3;
+            ctx.fillStyle='rgba(0,0,0,0.20)'; ctx.fillRect(-tW,hw+2,tW+cW,4);
+            ctx.fillStyle='#c02e00'; ctx.fillRect(-tW,-hw,tW,TW);
+            ctx.strokeStyle='rgba(180,40,0,0.28)'; ctx.lineWidth=0.7;
+            for(let r=1;r<3;r++) ctx.strokeRect(-tW+r*10,-hw+2,8,TW-4);
+            ctx.fillStyle='#7a2000'; ctx.fillRect(0,-chw,cW,TW+6);
+            ctx.fillStyle='#4a7290'; ctx.fillRect(cW-12,-chw+2,10,TW+2);
+            ctx.fillStyle='#ffe040'; ctx.fillRect(cW-1,-4,2,8);
+        };
+        const drawOvAt=(cx,cy,a)=>{ctx.save();ctx.translate(cx,cy);ctx.rotate(a);drawOv();ctx.restore();};
+        for(let ti=0;ti<2;ti++){
+            const phase=((t/11000+ti*0.5)%1);
+            if(phase<0.20){
+                const p=phase/0.20;
+                drawOvAt((wx-tW-cW-8)+p*(entryX-(wx-tW-cW-8)), truckY, 0);
+            } else if(phase>=0.94){
+                const p=(phase-0.94)/0.06;
+                drawOvAt(exitX+p*(wx+ww+tW+cW+8-exitX), truckY, 0);
+            }
+        }
+    }
+
     // ── BAY DOOR PILLARS ─────────────────────────────────────────────────────
     const lpg=ctx.createLinearGradient(wx,0,wx+pillarW,0);
     lpg.addColorStop(0,'#100e0c');lpg.addColorStop(0.65,'#201e18');lpg.addColorStop(1,'#181612');
@@ -12218,60 +12314,45 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.beginPath();ctx.moveTo(wx+pillarW,floorTop+Math.round(floorH*0.42));ctx.lineTo(wx+ww-pillarW,floorTop+Math.round(floorH*0.42));ctx.stroke();
     ctx.setLineDash([]);
 
-    // ── TRUCKS — drawn over floor; lower road Y keeps turn radius below nuclear plant terrain ─
-    // truckY = roadY+tW+4 ensures the trailer tip during a 90° turn reaches roadY+4 at most,
-    // staying clear of the nuclear plant scenery. No clip needed.
+    // ── TRUCKS — turns and bay traverse (drawn over floor) ───────────────────
     {
-        const cW=28, tW=56, TW=20;
+        const cW=28, tW=28, TW=20; // must match approach block above
         const bayLeft=wx+pillarW, bayRight=wx+ww-pillarW;
-        const truckY=roadY+tW+4; // lower road position — trailer tip during turn = roadY+4
+        const truckY=roadY+Math.round((floorTop-roadY)*0.75); // must match approach block
         const entryX=bayLeft+tW+14;
         const exitX =bayRight-tW-14;
-
         const drawOv=()=>{
             const hw=TW*0.5, chw=hw+3;
             ctx.fillStyle='rgba(0,0,0,0.20)'; ctx.fillRect(-tW,hw+2,tW+cW,4);
             ctx.fillStyle='#c02e00'; ctx.fillRect(-tW,-hw,tW,TW);
             ctx.strokeStyle='rgba(180,40,0,0.28)'; ctx.lineWidth=0.7;
-            for(let r=1;r<5;r++) ctx.strokeRect(-tW+r*12,-hw+2,10,TW-4);
+            for(let r=1;r<3;r++) ctx.strokeRect(-tW+r*10,-hw+2,8,TW-4);
             ctx.fillStyle='#7a2000'; ctx.fillRect(0,-chw,cW,TW+6);
             ctx.fillStyle='#4a7290'; ctx.fillRect(cW-12,-chw+2,10,TW+2);
             ctx.fillStyle='#ffe040'; ctx.fillRect(cW-1,-4,2,8);
         };
-        const drawOvAt=(cx,cy,a)=>{ctx.save();ctx.translate(cx,cy);ctx.rotate(a);drawOv();ctx.restore();};
-
         for(let ti=0;ti<2;ti++){
             const phase=((t/11000+ti*0.5)%1);
-            if(phase<0.20){
-                // Approach: sweeps in from off-screen left at lower road position
-                const p=phase/0.20;
-                drawOvAt((wx-tW-cW-8)+p*(entryX-(wx-tW-cW-8)), truckY, 0);
-            } else if(phase>=0.20&&phase<0.36){
-                // Entry turn — trailer tip stays at roadY+4, no clip needed
+            if(phase>=0.20&&phase<0.36){
+                // Entry turn — tW=28, truckY=roadY+30: tip=roadY+2, no clip needed
                 ctx.save();ctx.translate(entryX,truckY);ctx.rotate(((phase-0.20)/0.16)*Math.PI*0.5);drawOv();ctx.restore();
             } else if(phase>=0.36&&phase<0.57){
-                // Bay traverse entry side
                 ctx.save();
-                ctx.beginPath(); ctx.rect(bayLeft, floorTop-tW-14, bayRight-bayLeft, floorH+tW+cW+18); ctx.clip();
+                ctx.beginPath(); ctx.rect(bayLeft, roadY-4, bayRight-bayLeft, wy+wh-roadY+4); ctx.clip();
                 const p=(phase-0.36)/0.21;
                 const cy=truckY+p*(wy+wh+14-truckY);
                 ctx.save();ctx.translate(entryX,cy);ctx.rotate(Math.PI*0.5);drawOv();ctx.restore();
                 ctx.restore();
             } else if(phase>=0.57&&phase<0.78){
-                // Bay traverse exit side
                 ctx.save();
-                ctx.beginPath(); ctx.rect(bayLeft, floorTop-tW-14, bayRight-bayLeft, floorH+tW+cW+18); ctx.clip();
+                ctx.beginPath(); ctx.rect(bayLeft, roadY-4, bayRight-bayLeft, wy+wh-roadY+4); ctx.clip();
                 const p=(phase-0.57)/0.21;
                 const cy=(wy+wh+14)*(1-p)+truckY*p;
                 ctx.save();ctx.translate(exitX,cy);ctx.rotate(-Math.PI*0.5);drawOv();ctx.restore();
                 ctx.restore();
             } else if(phase>=0.78&&phase<0.94){
-                // Exit turn — trailer tip stays at roadY+4, no clip needed
+                // Exit turn
                 ctx.save();ctx.translate(exitX,truckY);ctx.rotate(-Math.PI*0.5+((phase-0.78)/0.16)*Math.PI*0.5);drawOv();ctx.restore();
-            } else if(phase>=0.94){
-                // Depart: sweeps off-screen right
-                const p=(phase-0.94)/0.06;
-                drawOvAt(exitX+p*(wx+ww+tW+cW+8-exitX), truckY, 0);
             }
         }
     }
@@ -13685,6 +13766,7 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(ceo.y - cf.y, ceo.x - cf.x);
+            SFX.play('shoot');
             bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
@@ -13697,6 +13779,7 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(cb.y - cf.y, cb.x - cf.x);
+            SFX.play('shoot');
             bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
@@ -13709,6 +13792,7 @@ function updateCloneFollower() {
         cf.shootTimer++;
         if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
             const angle = Math.atan2(hcb.y - cf.y, hcb.x - cf.x);
+            SFX.play('shoot');
             bullets.push({ x: cf.x, y: cf.y - 25, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
             cf.lastShot = Date.now();
             cf.shootTimer = 0;
@@ -21159,27 +21243,23 @@ function drawScene() {
                             x: npc.x, y: ny,
                             color: npc.color,
                             state: allArrived ? 'happy' : 'idle',
-                            needsDoc: false
+                            needsDoc: false,
+                            skipArms: allArrived  // suppress hanging arms so raised arms can be drawn cleanly
                         };
                         drawNPC(tempNPC);
 
-                        // When hoisting: overwrite drawNPC's hanging arms with raised arms
-                        // (drawNPC uses s=2; shoulder is at ny - 3*s = ny-6)
+                        // When celebrating: draw raised arms (skipArms suppressed hanging arms above)
                         if(allArrived) {
                             const s = 2;
                             const hob = Math.sin(ceoTime / 300 + npc.x) * 2;
                             const shirtHex = npc.color ? (npc.color.hex || npc.color) : '#cc8844';
-                            // Cover the hanging arms drawNPC drew
                             ctx.fillStyle = shirtHex;
-                            ctx.fillRect(npc.x - 8*s, ny - 3*s, 2*s, 7*s); // erase left hang
-                            ctx.fillRect(npc.x + 6*s, ny - 3*s, 2*s, 7*s); // erase right hang
-                            // Raised arms — same geometry as drawMulletPro holding pose
-                            ctx.fillRect(npc.x - 9*s, ny - 14*s + hob, 2*s, 11*s); // left up
-                            ctx.fillRect(npc.x + 7*s, ny - 14*s + hob, 2*s, 11*s); // right up
+                            ctx.fillRect(npc.x - 8*s, ny - 14*s + hob, 2*s, 11*s); // left arm raised
+                            ctx.fillRect(npc.x + 6*s, ny - 14*s + hob, 2*s, 11*s); // right arm raised
                             // Hands at top
-                            ctx.fillStyle = '#ddb88a';
-                            ctx.fillRect(npc.x - 9*s, ny - 16*s + hob, 2*s, 2*s);
-                            ctx.fillRect(npc.x + 7*s, ny - 16*s + hob, 2*s, 2*s);
+                            ctx.fillStyle = '#f5c89a';
+                            ctx.fillRect(npc.x - 8*s, ny - 16*s + hob, 2*s, 2*s);
+                            ctx.fillRect(npc.x + 6*s, ny - 16*s + hob, 2*s, 2*s);
                         }
                     }
                 }
@@ -23900,6 +23980,7 @@ function update() {
 
                 // Elevator enter — once brickwall fully open
                 if((level6.marbleBrickSlide || 0) >= 1 && player.x > BRICK_X_MR - 30 && !level6.marbleElevatorTransition && (keys[' ']||keys['action'])) {
+                    SFX.play('elevator');
                     level6.marbleElevatorTransition = true;
                     level6.marbleElevatorFadeAlpha = 0;
                     level6.marbleElevatorTarget = 'entryway';
@@ -24596,6 +24677,7 @@ function update() {
 
                 // CEO elevator — private elevator to marble security room
                 if(player.x > 540 && !level6.marbleElevatorTransition && !level6.marbleElevatorFadeIn && (keys[' '] || keys['action'])) {
+                    SFX.play('elevator');
                     level6.marbleElevatorTransition = true;
                     level6.marbleElevatorFadeAlpha = 0;
                     level6.marbleElevatorTarget = 'marbleRoom';
@@ -24603,6 +24685,7 @@ function update() {
                 }
 
                 if(Math.abs(player.x - 350) < 100 && (keys[' '] || keys['action'])) {
+                    SFX.play('doorOpen');
                     level6.room = 'ceoOffice';
                     player.x = 350;
                     player.y = 380;
@@ -25238,6 +25321,7 @@ if (keys[' '] || keys['action']) {
                 if(!bullets[i].fromCEO && level6.room === 'nuclearBridge' && level6.bridgeCloningBoss && level6.bridgeCloningBoss.alive) {
                     const bcb = level6.bridgeCloningBoss;
                     if(Math.abs(bullets[i].x - bcb.x) < 30 && Math.abs(bullets[i].y - bcb.y) < 40) {
+                        SFX.play('bridgeFall');
                         bcb.alive = false;
                         bcb.deathTime = Date.now();
                         // Determine death type based on x-position over factory hazards
@@ -25428,6 +25512,7 @@ if (keys[' '] || keys['action']) {
                     const missileHitX = 250, missileHitY = 100;
                     if(!level6.missileExploded && Math.abs(bx - missileHitX) < 20 && by > missileHitY - 5 && by < missileHitY + 65) {
                         bulletImpact(bx, by);
+                        SFX.play('explode');
                         level6.missileExploded = true;
                         level6.missileExplosionTime = Date.now();
                         level6.missileFireTimer = 0;
@@ -25857,6 +25942,7 @@ if (keys[' '] || keys['action']) {
 
                         // Decorative missile
                         if(!level6.missileExploded && Math.abs(bx - 250) < 20 && by > 95 && by < 165) {
+                            SFX.play('explode');
                             level6.missileExploded = true;
                             level6.missileExplosionTime = Date.now();
                             level6.missileFireTimer = 0;
@@ -25963,6 +26049,7 @@ if (keys[' '] || keys['action']) {
                     if(level6.room === 'nuclearBridge' && level6.bridgeCloningBoss && level6.bridgeCloningBoss.alive) {
                         const bcb = level6.bridgeCloningBoss;
                         if(Math.abs(wb.x - bcb.x) < 30 && Math.abs(wb.y - bcb.y) < 40) {
+                            SFX.play('bridgeFall');
                             bcb.alive = false;
                             bcb.deathTime = Date.now();
                             if (bcb.x >= 60 && bcb.x < 155)       bcb.deathType = 'acid';
