@@ -586,6 +586,27 @@ const SFX = (() => {
                 o.start(t + dt); o.stop(t + dt + 0.4);
             });
         },
+        pipeCrack: (a, t) => {
+            // Percussive kick-drum thud when a pipe crack first appears
+            const o = osc(a, 'sine', 90), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.exponentialRampToValueAtTime(35, t + 0.18);
+            g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+            o.start(t); o.stop(t + 0.25);
+            const n = noise(a, 0.4), gn = gain(a, 0), fn = a.createBiquadFilter();
+            fn.type = 'highpass'; fn.frequency.value = 1800;
+            n.connect(fn); fn.connect(gn); gn.connect(a.destination);
+            gn.gain.setValueAtTime(0.3, t); gn.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+            n.start(t); n.stop(t + 0.1);
+        },
+        acidSizzle: (a, t) => {
+            // Sustained acid sizzle for PM dissolve animation (~2.5s)
+            const n = noise(a, 0.6), g = gain(a, 0), f = a.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 2400; f.Q.value = 0.7;
+            n.connect(f); f.connect(g); g.connect(a.destination);
+            g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.35, t + 0.05);
+            g.gain.setValueAtTime(0.35, t + 1.8); g.gain.linearRampToValueAtTime(0.0, t + 2.5);
+            n.start(t); n.stop(t + 2.6);
+        },
         pipeBurst: (a, t) => {
             // Heavy industrial pipe rupture — loud broadband whoosh + deep resonant thump + steam hiss tail
             // Initial crack/bang: full-spectrum noise surge
@@ -619,6 +640,22 @@ const SFX = (() => {
             o.frequency.exponentialRampToValueAtTime(18, t + 0.55);
             g2.gain.setValueAtTime(0.5, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
             o.start(t); o.stop(t + 0.6);
+        },
+        bossGreet: (a, t) => {
+            // Boss entering — brief upbeat "da-da-dah" greeting chatter
+            [[0, 330, 0.10], [0.10, 440, 0.10], [0.22, 550, 0.18]].forEach(([dt, freq, dur]) => {
+                const o = osc(a, 'triangle', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.14, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + dur);
+                o.start(t + dt); o.stop(t + dt + dur + 0.02);
+            });
+        },
+        bossAngry: (a, t) => {
+            // Boss leaving angry — descending grumble grunt
+            [[0, 220, 0.14], [0.15, 165, 0.14], [0.32, 110, 0.24]].forEach(([dt, freq, dur]) => {
+                const o = osc(a, 'sawtooth', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.16, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + dur);
+                o.start(t + dt); o.stop(t + dt + dur + 0.02);
+            });
         },
         chatter: (a, t) => {
             // Short consonant click for typewriter dialogue voice
@@ -1486,7 +1523,7 @@ function spawnCracks() {
             if(available.length > 0) {
                 const npc = available[Math.floor(Math.random() * available.length)];
                 cracks.push({npc: npc, time: Date.now(), max: 12000});
-                SFX.play('pipeBurst');
+                SFX.play('pipeCrack');
                 npc.state = 'stressed';
                 npc.needsDoc = true;
             }
@@ -1507,6 +1544,7 @@ function spawnBoss() {
         boss.angry = false;
         boss.facing = 'left';
         bossDoor = { state: 'opening', openPct: 0 };
+        SFX.play('bossGreet');
         
         const nextSpawn = level === 4 ? 12000 : 18000;
         setTimeout(() => spawnBoss(), nextSpawn);
@@ -1797,10 +1835,10 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
     const isWalking = Date.now() - player.lastMove < 150;
 
-    // Shadow — at foot level (y+42 = shoe bottom)
+    // Shadow — at foot level (y+50 = shoe bottom, matching boss NPC height)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 42, 10, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 50, 10, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const skinColor = '#f5c89a';
@@ -1819,24 +1857,26 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x - 2*s, y - 9*s, 2*s, 2*s);
         ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
 
+        ctx.fillStyle = skinColor; // neck
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillRect(x - 7*s, y + s, 14*s, 10*s);
         ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
+        ctx.fillRect(x + 5*s, y + s, 2*s, 10*s);
 
         ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
+        ctx.fillRect(x - 2*s, y + s, 4*s, 10*s);
 
         // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 14*s);
+            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 17*s);
+            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 17*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            ctx.fillRect(x + 7*s, y - 2*s, 2*s, 9*s);
+            ctx.fillRect(x + 7*s, y + s, 2*s, 9*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
@@ -1848,12 +1888,12 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         }
 
         ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 12*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s - bmLegBob, 4*s, 8*s);
+        ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
         ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 20*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 20*s - bmLegBob, 4*s, 2*s);
+        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
 
     } else if(facing === 'right') {
         ctx.fillStyle = skinColor;
@@ -1865,24 +1905,26 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x, y - 9*s, 2*s, 2*s);
         ctx.fillRect(x, y - 5*s, 3*s, s);
 
+        ctx.fillStyle = skinColor; // neck
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillRect(x - 7*s, y + s, 14*s, 10*s);
         ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        ctx.fillRect(x - 7*s, y + s, 2*s, 10*s);
 
         ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
+        ctx.fillRect(x - 2*s, y + s, 4*s, 10*s);
 
         // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 14*s);
+            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 17*s);
+            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 17*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            ctx.fillRect(x - 9*s, y - 2*s, 2*s, 9*s);
+            ctx.fillRect(x - 9*s, y + s, 2*s, 9*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
@@ -1894,12 +1936,12 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         }
 
         ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 12*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s - bmLegBob, 4*s, 8*s);
+        ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
         ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 20*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 20*s - bmLegBob, 4*s, 2*s);
+        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
 
     } else {
         ctx.fillStyle = skinColor;
@@ -1912,24 +1954,26 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y - 9*s, 2*s, 2*s);
         ctx.fillRect(x - 2*s, y - 5*s, 4*s, s);
 
+        ctx.fillStyle = skinColor; // neck
+        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillRect(x - 7*s, y + s, 14*s, 10*s);
         ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        ctx.fillRect(x - 7*s, y + s, 2*s, 10*s);
 
         ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 10*s);
+        ctx.fillRect(x - 2*s, y + s, 4*s, 10*s);
 
         // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 14*s);
+            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 17*s);
+            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 17*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            ctx.fillRect(x - 9*s, y - 2*s, 2*s, 9*s);
+            ctx.fillRect(x - 9*s, y + s, 2*s, 9*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
@@ -1941,12 +1985,12 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         }
 
         ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 8*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 12*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 12*s - bmLegBob, 4*s, 8*s);
+        ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
+        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
         ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 20*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 20*s - bmLegBob, 4*s, 2*s);
+        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
     }
 
     // === DETECTIVE FEDORA HAT — drawn on top when wearing ===
@@ -21734,18 +21778,26 @@ function drawScene() {
     // Pipe wrench (level 4 melee)
     if(level === 4 && pipeWrench.hasWrench) {
         drawPipeWrench(player.x, player.y, player.facing);
-        // Wrench durability counter
-        ctx.fillStyle = 'rgba(0,0,0,0.75)';
-        ctx.fillRect(player.x - 20, player.y - 55, 40, 16);
-        const _wColor = pipeWrench.killCount >= 1 ? '#ff8844' : '#aaaaaa';
-        ctx.font = 'bold 11px Arial';
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.strokeText('WRENCH ' + (2 - pipeWrench.killCount) + '/2', player.x, player.y - 44);
+        // Wrench durability counter — styled to match ammo counter
+        const _wx = player.x, _wy = player.y;
+        const _wpw = 60, _wph = 20;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(_wx - _wpw/2, _wy - 65, _wpw, _wph);
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'miter';
+        ctx.strokeRect(_wx - _wpw/2, _wy - 65, _wpw, _wph);
+        const _wColor = pipeWrench.killCount >= 1 ? '#ff8844' : '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
         ctx.fillStyle = _wColor;
-        ctx.fillText('WRENCH ' + (2 - pipeWrench.killCount) + '/2', player.x, player.y - 44);
+        ctx.fillText((2 - pipeWrench.killCount) + '/2', _wx - _wpw/2 + 5, _wy - 50);
+        // Wrench icon
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#aaa';
+        ctx.textAlign = 'right';
+        ctx.fillText('🔧', _wx + _wpw/2 - 4, _wy - 50);
+        ctx.textAlign = 'left';
     }
     // Wrench shatter particles (level 4)
     if(level === 4 && pipeWrench.shattering) {
@@ -26172,6 +26224,7 @@ if (keys[' '] || keys['action']) {
             boss.angry = true;
             boss.walking = true;
             boss.needsColor = null;
+            SFX.play('bossAngry');
             lives--;
             score = Math.floor(score / 2);
             updateLives();
@@ -26467,8 +26520,8 @@ if (keys[' '] || keys['action']) {
         if(ui.gunUI && ui.confirming) {
             ui.gunUI = false;
             ui.confirming = false;
-            // Level 4: use pipeWrench state (wrench replaces ghost gun)
-            SFX.play('printSoft');
+            // Level 4: 3D printer (wrench) uses mechanical ratchet; other levels use quiet paper-feed
+            SFX.play(level === 4 ? 'docPrint' : 'printSoft');
             pipeWrench.printing = true;
             pipeWrench.printProgress = 0;
             pipeWrench.printingHeart = (ui.gunChoice === 1);
@@ -26557,6 +26610,8 @@ if (keys[' '] || keys['action']) {
         let crack = cracks[i];
         if(Date.now() - crack.time > crack.max) {
             createExplosion(crack.npc.x + 10, 252);
+            SFX.play('pipeBurst');
+            SFX.play('acidSizzle');
             // Delay the reset — let the acid dissolve animation play out first
             acidBursts.push({
                 npc:       crack.npc,
