@@ -292,9 +292,9 @@ function drawActionLabel(text, x, y, options) {
     const th = fontSize * FONT_SCALE;
     const bw = tw + padding * 2;
     const bh = th + padding;
-    // Clamp to canvas so label never clips off any edge
-    const bx = Math.max(2, Math.min(x - tw / 2 - padding, CANVAS_W - bw - 2));
-    const by = Math.max(2, Math.min(y - th - padding / 2, CANVAS_H - bh - 2));
+    // Clamp to game-world bounds (drawing is in game coords after ctx.translate(GX,GY))
+    const bx = Math.max(2 - GX, Math.min(x - tw / 2 - padding, CANVAS_W - GX - bw - 2));
+    const by = Math.max(2 - GY, Math.min(y - th - padding / 2, CANVAS_H - GY - bh - 2));
     const xAdj = bx + bw / 2; // re-center text within clamped box
     const yAdj = by + th + padding * 0.5;
 
@@ -12082,26 +12082,7 @@ function drawLevel6MarbleRoom() {
         ctx.globalAlpha = 1;
     }
 
-    // ── INTERACTION PROMPTS ───────────────────────────────────────────────────
-    if(player.x > BRICK_X - 80 && !level6.marbleElevatorTransition) {
-        const hasHand = level6.hasPMHand;
-        const accepted = brickSlide > 0;
-        const msg = accepted
-            ? '[ ACTION ] ENTER ELEVATOR'
-            : hasHand ? '[ ACTION ] PALM SCAN' : 'GET PM HAND FIRST';
-        const col = accepted ? '#00ff88' : hasHand ? '#ffcc44' : '#ff6644';
-        const msgW = Math.min(220, msg.length * 7 + 20);
-        ctx.fillStyle = 'rgba(0,0,0,0.88)';
-        ctx.fillRect(Math.max(0, BRICK_X - msgW/2 - 10), FLOOR_Y + 8, msgW, 20);
-        ctx.fillStyle = col; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(msg, Math.max(msgW/2, BRICK_X - 10), FLOOR_Y + 23);
-    }
-    if(player.x < 140) {
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(4, FLOOR_Y + 8, 120, 20);
-        ctx.fillStyle = '#c0844a'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('\u2190 BRIDGE', 64, FLOOR_Y + 23);
-    }
+    // (interaction prompts drawn after player in main render loop for correct z-order)
 }
 
 
@@ -15625,12 +15606,7 @@ function drawLevel6Entryway() {
     ctx.font = 'bold 12px monospace';
     ctx.fillText('CEO', eelvX + eelvW/2, eelvY - 8);
 
-    if(Math.abs(player.x - 350) < 100 && player.y > 360) {
-        drawActionLabel('[ ACTION ] - ENTER CEO OFFICE', 350, 420);
-    }
-    if(player.x > 540) {
-        drawActionLabel('[ ACTION ] - ELEVATOR', eelvX + eelvW/2, eelvY - 28);
-    }
+    // (action labels drawn after player in main render loop for correct z-order)
 }
 
 function drawLevel6CEOOffice() {
@@ -19860,6 +19836,17 @@ function drawScene() {
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
             if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0) { drawAmmoCounter(player.x, player.y, level6.threeShotRifleAmmo); }
+            // Marble room action labels — after player for correct z-order
+            { const _mrBrickX = 520, _mrFloorY = 380;
+              if(player.x > _mrBrickX - 80 && !level6.marbleElevatorTransition) {
+                const _accepted = (level6.marbleBrickSlide || 0) > 0;
+                const _msg = _accepted ? '[ ACTION ] ENTER ELEVATOR'
+                    : level6.hasPMHand ? '[ ACTION ] PALM SCAN' : 'GET PM HAND FIRST';
+                const _col = _accepted ? '#00ff88' : level6.hasPMHand ? '#ffcc44' : '#ff6644';
+                drawActionLabel(_msg, _mrBrickX, _mrFloorY - 10, {color: _col, fontSize: 11});
+              }
+              if(player.x < 140) drawActionLabel('\u2190 BRIDGE', 70, _mrFloorY - 10, {color: '#c0844a', fontSize: 11});
+            }
         } else if(level6.room === 'entryway') {
             drawLevel6Entryway();
 
@@ -19870,6 +19857,13 @@ function drawScene() {
             // Draw player in entryway
             drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            // Action labels drawn AFTER player so they float above the character
+            { const _eelvX = 550, _eelvW = 130;
+              if(Math.abs(player.x - 350) < 100 && player.y > 360)
+                drawActionLabel('[ ACTION ] - ENTER CEO OFFICE', 350, 410);
+              if(player.x > 540)
+                drawActionLabel('[ ACTION ] - ELEVATOR', _eelvX + _eelvW/2, 228);
+            }
         } else if(level6.room === 'employeeLobby') {
             drawLevel6EmployeeLobby();
 
@@ -21842,22 +21836,21 @@ function drawScene() {
     }
 
     // ── UI action labels — drawn last, above all geometry, props, and characters ──
-    // Doc computer: prompt to pick up a document
-    if(Math.abs(player.x - computer.x) < 60 && !player.holding && !ui.show && !ui.gunUI
-        && !ghostGun.hasGun && !pipeWrench.hasWrench) {
-        drawActionLabel('[ ACTION ] - PRINT DOC', computer.x, computer.y - 36, {fontSize: 12});
+    // One label at a time: find closest interactive object in range
+    const _nearPrinter = level === 4 && Math.abs(player.x - printer3d.x) < 55 && !pipeWrench.printing && !pipeWrench.hasWrench && !ui.gunUI;
+    const _nearComputer = Math.abs(player.x - computer.x) < 55 && !player.holding && !ui.show && !ui.gunUI && !ghostGun.hasGun && !pipeWrench.hasWrench;
+    if(_nearPrinter && (!_nearComputer || Math.abs(player.x - printer3d.x) < Math.abs(player.x - computer.x))) {
+        drawActionLabel('[ ACTION ] - PRINT WRENCH', printer3d.x, printer3d.y - 38, {fontSize: 12});
+    } else if(_nearComputer) {
+        drawActionLabel('[ ACTION ] - PRINT DOC', computer.x, computer.y - 38, {fontSize: 12});
     }
     // Pipe manager: prompt to deliver matching-color doc and fix the crack
     if(player.holding) {
         for(const npc of npcs) {
             if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && npc.color.name === player.holding) {
-                drawActionLabel('[ ACTION ] - FIX PIPE', npc.x, npc.y - 58, {fontSize: 12, color: npc.color.hex});
+                drawActionLabel('[ ACTION ] - FIX PIPE', npc.x, npc.y - 60, {fontSize: 12, color: npc.color.hex});
             }
         }
-    }
-    // Level 4 wrench: prompt at 3D printer (shown when player near printer and wrench not yet collected)
-    if(level === 4 && Math.abs(player.x - printer3d.x) < 60 && !pipeWrench.printing && !pipeWrench.hasWrench && !ui.gunUI) {
-        drawActionLabel('[ ACTION ] - PRINT WRENCH', printer3d.x, printer3d.y - 36, {fontSize: 12});
     }
 
     // Level skip cheat hints — only reveal counter after 5 presses (keep secret during normal play)
