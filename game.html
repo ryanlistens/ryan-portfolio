@@ -669,8 +669,8 @@ const SFX = (() => {
             n.start(t); n.stop(t + 0.3);
         },
         detectiveSting: (a, t) => {
-            // Dragnet: G3–F#3–G3–C4, low trombone/tuba character with proper brass sustain
-            const notes = [[0,196,0.16,0.18,0.60],[0.22,185,0.14,0.16,0.50],[0.40,196,0.16,0.18,0.60],[0.60,262,0.60,0.22,0.75]];
+            // Dragnet: C3–G3–C4–Eb4 (C minor "Dum-da-dum-dum" — tonic, dominant, octave, minor third)
+            const notes = [[0,131,0.22,0.20,0.60],[0.28,196,0.14,0.16,0.50],[0.46,262,0.14,0.18,0.55],[0.64,311,0.65,0.22,0.75]];
             notes.forEach(([dt, freq, dur, vol, sus]) => {
                 const ts = t + dt;
                 // Sawtooth through narrow lowpass — trombone timbre
@@ -21674,10 +21674,7 @@ function drawScene() {
             ctx.fillStyle = pipeWrench.printingHeart ? '#e74c3c' : '#888';
             ctx.fillRect(printer3d.x - 21, printer3d.y + 6, 42 * pipeWrench.printProgress, 6);
         }
-        // Interaction prompt when player is near printer (hidden when wrench equipped)
-        if(Math.abs(player.x - printer3d.x) < 60 && !pipeWrench.printing && !ui.gunUI && !pipeWrench.hasWrench) {
-            drawActionLabel('[ ACTION ] - PRINT', printer3d.x, printer3d.y - 36, {fontSize: 12});
-        }
+        // (printer prompt drawn after player for correct z-order — see post-character UI pass below)
     }
 
     // Water cooler — between 3D printer area (x=50) and doc printer (x=180)
@@ -21842,6 +21839,25 @@ function drawScene() {
     // Wrench shatter particles (level 4)
     if(level === 4 && pipeWrench.shattering) {
         drawWrenchShatter(pipeWrench.shatterPieces);
+    }
+
+    // ── UI action labels — drawn last, above all geometry, props, and characters ──
+    // Doc computer: prompt to pick up a document
+    if(Math.abs(player.x - computer.x) < 60 && !player.holding && !ui.show && !ui.gunUI
+        && !ghostGun.hasGun && !pipeWrench.hasWrench) {
+        drawActionLabel('[ ACTION ] - PRINT DOC', computer.x, computer.y - 36, {fontSize: 12});
+    }
+    // Pipe manager: prompt to deliver matching-color doc and fix the crack
+    if(player.holding) {
+        for(const npc of npcs) {
+            if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && npc.color.name === player.holding) {
+                drawActionLabel('[ ACTION ] - FIX PIPE', npc.x, npc.y - 58, {fontSize: 12, color: npc.color.hex});
+            }
+        }
+    }
+    // Level 4 wrench: prompt at 3D printer (shown when player near printer and wrench not yet collected)
+    if(level === 4 && Math.abs(player.x - printer3d.x) < 60 && !pipeWrench.printing && !pipeWrench.hasWrench && !ui.gunUI) {
+        drawActionLabel('[ ACTION ] - PRINT WRENCH', printer3d.x, printer3d.y - 36, {fontSize: 12});
     }
 
     // Level skip cheat hints — only reveal counter after 5 presses (keep secret during normal play)
@@ -22605,7 +22621,9 @@ function update() {
                 const wasRed = player.holding === 'RED';
                 player.holding = null;
                 furnace.flameTime = Date.now();
-                SFX.play('furnaceBurn'); SFX.play('pickup'); level5.docsCollected++;
+                SFX.play('furnaceBurn');
+                if(wasRed) SFX.play('pickup'); // reward chime only when red doc drops key
+                level5.docsCollected++;
 
                 // Drop golden key on first RED doc burn
                 if(wasRed && !level5.redKeyEverDropped) {
