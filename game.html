@@ -599,12 +599,12 @@ const SFX = (() => {
             n.start(t); n.stop(t + 0.1);
         },
         acidSizzle: (a, t) => {
-            // Sustained acid sizzle for PM dissolve animation (~2.5s)
-            const n = noise(a, 0.6), g = gain(a, 0), f = a.createBiquadFilter();
-            f.type = 'bandpass'; f.frequency.value = 2400; f.Q.value = 0.7;
+            // Sustained acid sizzle for PM dissolve animation (~2.5s) — kept subtle/low
+            const n = noise(a, 0.3), g = gain(a, 0), f = a.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 2400; f.Q.value = 0.5;
             n.connect(f); f.connect(g); g.connect(a.destination);
-            g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.35, t + 0.05);
-            g.gain.setValueAtTime(0.35, t + 1.8); g.gain.linearRampToValueAtTime(0.0, t + 2.5);
+            g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.09, t + 0.08);
+            g.gain.setValueAtTime(0.09, t + 1.8); g.gain.linearRampToValueAtTime(0.0, t + 2.5);
             n.start(t); n.stop(t + 2.6);
         },
         pipeBurst: (a, t) => {
@@ -776,6 +776,34 @@ const SFX = (() => {
             n.connect(f); f.connect(g3); g3.connect(a.destination);
             g3.gain.setValueAtTime(0.18,t); g3.gain.exponentialRampToValueAtTime(0.001,t+0.38);
             n.start(t); n.stop(t+0.42);
+        },
+        waterDrink: (a, t) => {
+            // Gulping swallow: three wet clicks with descending pitch
+            [[0, 320, 0.07], [0.10, 270, 0.07], [0.21, 210, 0.09]].forEach(([dt, freq, dur]) => {
+                const o = osc(a, 'sine', freq), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+                g.gain.setValueAtTime(0.0, t+dt); g.gain.linearRampToValueAtTime(0.22, t+dt+0.012);
+                g.gain.exponentialRampToValueAtTime(0.001, t+dt+dur);
+                o.frequency.exponentialRampToValueAtTime(freq * 0.55, t+dt+dur);
+                o.start(t+dt); o.stop(t+dt+dur+0.02);
+                // Wet noise burst
+                const n = noise(a, 0.06), f2 = a.createBiquadFilter(), gn = gain(a, 0);
+                f2.type = 'bandpass'; f2.frequency.value = 800 + Math.random()*400; f2.Q.value = 2;
+                n.connect(f2); f2.connect(gn); gn.connect(a.destination);
+                gn.gain.setValueAtTime(0.10, t+dt); gn.gain.exponentialRampToValueAtTime(0.001, t+dt+0.05);
+                n.start(t+dt); n.stop(t+dt+0.06);
+            });
+        },
+        hatchOpen: (a, t) => {
+            // Heavy metallic hatch groan + clunk
+            const o = osc(a, 'sawtooth', 90), g = gain(a, 0); o.connect(g); g.connect(a.destination);
+            o.frequency.exponentialRampToValueAtTime(38, t + 0.45);
+            g.gain.setValueAtTime(0.30, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+            o.start(t); o.stop(t + 0.55);
+            const n = noise(a, 0.5), g2 = gain(a, 0), f = a.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 300;
+            n.connect(f); f.connect(g2); g2.connect(a.destination);
+            g2.gain.setValueAtTime(0.35, t + 0.38); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+            n.start(t + 0.38); n.stop(t + 0.75);
         }
     };
     const vibPat = {
@@ -792,7 +820,9 @@ const SFX = (() => {
         furnaceBurn:  [30, 10, 20],
         detectiveSting: [15, 10, 15, 10, 25],
         bridgeFall:   [10, 5, 50],
-        skeletonRattle: [20, 10, 20, 10, 20]
+        skeletonRattle: [20, 10, 20, 10, 20],
+        waterDrink:     [10, 8, 10],
+        hatchOpen:      [40, 20, 60]
     };
     return {
         unlock() { try { const a = ac(); if (a.state === 'suspended') a.resume(); } catch(e) {} },
@@ -1045,6 +1075,26 @@ let level6 = {
     pipeRoomPrinterConfirming: false,
     pipeRoomPrinting: false,
     pipeRoomPrintProgress: 0
+};
+
+// Self-destruct ending sequence state
+let selfDestructSeq = {
+    room: 'hatch',        // hatch → chute → cave1 → cave2 → safeRoom
+    hatchOpenAnim: 0,     // 0..1 hatch opening animation
+    countdown: 10,        // 10-second countdown before hatch closes
+    countdownTimer: 0,    // ms accumulator
+    countdownStarted: false,
+    playerY: 380,         // vertical position in chute
+    chuteArrivedCave: false,
+    devilState: 'idle',   // idle | talking | attacking | dead
+    devilX: 560,
+    devilFrame: 0,
+    coffinY: 550,         // coffin rises from below cave2
+    coffinRisen: false,
+    devilHp: 3,
+    chairSitting: false,
+    tvEndTimer: 0,
+    tvEndStarted: false
 };
 
 let ghostGun = {
@@ -1880,8 +1930,8 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = skinColor;
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
-            ctx.fillRect(x - 9*s + bmStride, y - 2*s, 2*s, 9*s);
-            ctx.fillRect(x + 7*s - bmStride, y - 2*s, 2*s, 9*s);
+            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 6*s);
+            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 6*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s + bmStride, y + 6*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s - bmStride, y + 6*s, 2*s, 2*s);
@@ -1928,8 +1978,8 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            ctx.fillRect(x - 9*s + bmStride, y - 2*s, 2*s, 9*s);
-            ctx.fillRect(x + 7*s - bmStride, y - 2*s, 2*s, 9*s);
+            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 6*s);
+            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 6*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s + bmStride, y + 6*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s - bmStride, y + 6*s, 2*s, 2*s);
@@ -1977,8 +2027,8 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            ctx.fillRect(x - 9*s + bmStride, y - 2*s, 2*s, 9*s);
-            ctx.fillRect(x + 7*s - bmStride, y - 2*s, 2*s, 9*s);
+            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 6*s);
+            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 6*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s + bmStride, y + 6*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s - bmStride, y + 6*s, 2*s, 2*s);
@@ -5705,16 +5755,20 @@ function drawWaterCooler(x, y) {
     ctx.fillRect(x - 11, y + 2, 8, 4);
     ctx.fillRect(x + 3, y + 2, 8, 4);
 
-    // Drink prompt — show when player is near and cooldown allows
+    // Glow indicator — subtle blue aura when cooler is available and player is nearby
     const currentLives = (state === 'playing' && level >= 5 && level6.room) ? level6.moneyLives : lives;
     const maxLives = 3;
-    if(state === 'playing' && Math.abs(player.x - x) < 40 && Math.abs(player.y - y) < 50 && currentLives < maxLives) {
+    if(state === 'playing' && currentLives < maxLives) {
         const bubbleCycle = Math.floor(Date.now() / 30000);
         const available = fountainLastCycle !== bubbleCycle;
         if(available) {
-            // No prompt — fountain is discoverable
-        } else {
-            // No prompt — cooldown is silent
+            // Pulsing blue glow around bottle — subtle, discovery-friendly
+            const pulse = 0.35 + 0.15 * Math.sin(Date.now() / 500);
+            const grd = ctx.createRadialGradient(x, y - 68, 4, x, y - 68, 22);
+            grd.addColorStop(0, `rgba(100,200,255,${pulse})`);
+            grd.addColorStop(1, 'rgba(100,200,255,0)');
+            ctx.fillStyle = grd;
+            ctx.beginPath(); ctx.arc(x, y - 68, 22, 0, Math.PI * 2); ctx.fill();
         }
     }
 }
@@ -11904,7 +11958,7 @@ function drawLevel6MarbleRoom() {
 
     // ── RED CARPET ─────────────────────────────────────────────────────────────
     {
-        const carpX = 68, carpW = BRICK_X - 68, carpY = FLOOR_Y, carpH = 48;
+        const carpX = 0, carpW = 690, carpY = FLOOR_Y, carpH = 48;
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(carpX + 3, carpY + 5, carpW, carpH);
         const cg = ctx.createLinearGradient(carpX, carpY, carpX, carpY + carpH);
         cg.addColorStop(0, '#8b0000'); cg.addColorStop(0.5, '#a00000'); cg.addColorStop(1, '#6e0000');
@@ -12032,6 +12086,32 @@ function drawLevel6MarbleRoom() {
             }
             ctx.restore();
         }
+    }
+
+    // ── FREEDOM ISN'T FREE — framed portrait on brick wall ───────────────────
+    {
+        const picX = BRICK_X + 10, picY = 28, picW = 150, picH = 112;
+        // Outer shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(picX + 4, picY + 4, picW, picH);
+        // Gold frame (outer)
+        const fg = ctx.createLinearGradient(picX, picY, picX, picY + picH);
+        fg.addColorStop(0, '#c8a018'); fg.addColorStop(0.5, '#ffd700'); fg.addColorStop(1, '#a07010');
+        ctx.fillStyle = fg; ctx.fillRect(picX, picY, picW, picH);
+        // Dark mat / recess
+        ctx.fillStyle = '#1a1208'; ctx.fillRect(picX + 6, picY + 6, picW - 12, picH - 12);
+        // Image inside mat
+        const imgX = picX + 9, imgY = picY + 9, imgW = picW - 18, imgH = picH - 18;
+        if(trophy1Img.complete && trophy1Img.naturalWidth > 0) {
+            ctx.drawImage(trophy1Img, imgX, imgY, imgW, imgH);
+        } else {
+            ctx.fillStyle = '#2a2018'; ctx.fillRect(imgX, imgY, imgW, imgH);
+        }
+        // Frame inner bevel highlight (top/left)
+        ctx.fillStyle = 'rgba(255,220,80,0.35)'; ctx.fillRect(picX, picY, picW, 3);
+        ctx.fillRect(picX, picY, 3, picH);
+        // Frame inner bevel shadow (bottom/right)
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(picX, picY + picH - 3, picW, 3);
+        ctx.fillRect(picX + picW - 3, picY, 3, picH);
     }
 
     // ── RED HAND PALM SCANNER — left of brickwall ─────────────────────────────
@@ -19247,6 +19327,476 @@ function drawAcidBurst(ab) {
     }
 }
 
+// ── SELF-DESTRUCT SEQUENCE DRAW FUNCTIONS ────────────────────────────────────
+
+function drawSelfDestructHatch() {
+    // Reuse CEO office as backdrop
+    drawLevel6CEOOffice();
+    // Draw CEO if alive
+    if(ceo.state !== 'dead' && !level6.ceoPursuing) drawCEO(ceo.x, ceo.y, ceo.facing);
+
+    const hx = 200, hy = 380;
+    const openAmt = selfDestructSeq.hatchOpenAnim; // 0..1
+
+    // Hatch shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath(); ctx.ellipse(hx, hy + 4, 26 + openAmt * 4, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Red glow in pit (glows once opening starts)
+    if(openAmt > 0.05) {
+        const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 30 + openAmt * 20);
+        glow.addColorStop(0, `rgba(255,30,0,${0.55 * openAmt})`);
+        glow.addColorStop(1, 'rgba(255,30,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.ellipse(hx, hy, 30 + openAmt * 20, 12 + openAmt * 8, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Hatch door (hinges open left, revealing dark pit below)
+    ctx.save();
+    ctx.translate(hx - 20, hy);
+    ctx.rotate(-openAmt * Math.PI * 0.55);
+    // Hatch plate
+    const hg = ctx.createLinearGradient(0, -6, 40, 0);
+    hg.addColorStop(0, '#4a4a4a'); hg.addColorStop(0.5, '#6a6a6a'); hg.addColorStop(1, '#3a3a3a');
+    ctx.fillStyle = hg; ctx.fillRect(0, -6, 40, 10);
+    // Danger stripes
+    ctx.fillStyle = '#f0c000';
+    for(let s = 0; s < 5; s++) { ctx.fillRect(s * 8, -5, 4, 8); }
+    // Hinge
+    ctx.fillStyle = '#888'; ctx.fillRect(-3, -3, 6, 6);
+    ctx.restore();
+
+    // Ladder visible in pit
+    if(openAmt > 0.5) {
+        const ladderAlpha = (openAmt - 0.5) * 2;
+        ctx.globalAlpha = ladderAlpha;
+        ctx.fillStyle = '#c8a010';
+        // Side rails
+        ctx.fillRect(hx - 8, hy - 2, 3, 18); ctx.fillRect(hx + 5, hy - 2, 3, 18);
+        // Rungs
+        for(let r = 0; r < 3; r++) { ctx.fillRect(hx - 8, hy + 2 + r * 5, 16, 2); }
+        ctx.globalAlpha = 1;
+    }
+
+    // Countdown
+    if(selfDestructSeq.countdownStarted) {
+        const cd = selfDestructSeq.countdown;
+        const urgency = cd <= 3;
+        ctx.fillStyle = urgency ? `rgba(255,0,0,${0.6 + 0.4 * Math.sin(Date.now() / 120)})` : 'rgba(255, 220, 0, 0.9)';
+        ctx.font = 'bold 28px monospace';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+        ctx.strokeText('SELF-DESTRUCT: ' + cd + 's', 350, 60);
+        ctx.fillText('SELF-DESTRUCT: ' + cd + 's', 350, 60);
+    }
+
+    // Action prompt once hatch is open
+    if(openAmt >= 1 && Math.abs(player.x - hx) < 50) {
+        ctx.fillStyle = 'rgba(255,220,0,0.9)';
+        ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ACTION] DESCEND', hx, hy - 20);
+    }
+}
+
+function drawSelfDestructChute() {
+    // Black void with red center glow
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Red heat glow from below
+    const grd = ctx.createRadialGradient(350, 550, 10, 350, 550, 200);
+    grd.addColorStop(0, 'rgba(255,40,0,0.45)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd; ctx.fillRect(0, 350, 700, 200);
+
+    // Golden ladder rails
+    ctx.fillStyle = '#c8a010';
+    ctx.fillRect(324, 0, 4, 500); ctx.fillRect(372, 0, 4, 500);
+    // Rungs
+    for(let r = 0; r < 18; r++) {
+        ctx.fillRect(325, 10 + r * 28, 50, 4);
+    }
+
+    // Shaft walls with rivets
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, 310, 500); ctx.fillRect(390, 0, 310, 500);
+    ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 2;
+    ctx.strokeRect(310, 0, 4, 500); ctx.strokeRect(386, 0, 4, 500);
+    for(let ry = 20; ry < 500; ry += 40) {
+        ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(310, ry, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(390, ry, 3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Draw player from back (back-facing, climbing pose)
+    const py = selfDestructSeq.playerY;
+    const s = 2;
+    const bx = 350, by = py;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(bx, by + 2, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // Shirt back — bald manager grey
+    ctx.fillStyle = '#666'; ctx.fillRect(bx - 7*s, by - 13*s, 14*s, 12*s);
+    // Bald head (back)
+    ctx.fillStyle = '#c8a882'; ctx.beginPath(); ctx.arc(bx, by - 16*s, 5*s, 0, Math.PI * 2); ctx.fill();
+    // Arms (climbing, alternating)
+    const climbPhase = Math.sin(Date.now() / 200);
+    ctx.fillStyle = '#c8a882';
+    ctx.fillRect(bx - 9*s, by - 15*s + climbPhase * 2, 2*s, 6*s);
+    ctx.fillRect(bx + 7*s, by - 11*s - climbPhase * 2, 2*s, 6*s);
+    // Pants
+    ctx.fillStyle = '#333'; ctx.fillRect(bx - 5*s, by - 2*s, 4*s, 8*s); ctx.fillRect(bx + s, by - 2*s, 4*s, 8*s);
+    // Shoes
+    ctx.fillStyle = '#222'; ctx.fillRect(bx - 6*s, by + 6*s, 5*s, 3*s); ctx.fillRect(bx + s, by + 6*s, 5*s, 3*s);
+
+    // Destination indicator
+    if(py > 380) {
+        ctx.fillStyle = 'rgba(255,220,0,0.7)'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('▼ DESCENDING ▼', 350, 30);
+    }
+}
+
+function drawSelfDestructCave1() {
+    // Cave background — deep earth tones
+    ctx.fillStyle = '#0d0a08';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Dirt floor
+    const floorY = 380;
+    const fg = ctx.createLinearGradient(0, floorY, 0, 500);
+    fg.addColorStop(0, '#2a1e14'); fg.addColorStop(1, '#1a1208');
+    ctx.fillStyle = fg; ctx.fillRect(0, floorY, 700, 120);
+
+    // Cave ceiling with stalactites
+    ctx.fillStyle = '#1c1410';
+    ctx.fillRect(0, 0, 700, 60);
+    const stalactites = [[60,60,8,45],[130,60,6,30],[200,60,10,55],[290,60,7,38],[370,60,9,50],[440,60,6,28],[510,60,11,60],[590,60,7,35],[650,60,8,42]];
+    stalactites.forEach(([sx,sy,sw,sh]) => {
+        ctx.fillStyle = '#2a1e14';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#3a2a1c';
+        ctx.beginPath(); ctx.moveTo(sx-sw+2,sy); ctx.lineTo(sx-sw+4,sy); ctx.lineTo(sx-sw/2+2,sy+sh*0.6); ctx.closePath(); ctx.fill();
+    });
+
+    // Stalagmites from floor
+    const stalagmites = [[80,floorY,7,35],[180,floorY,5,20],[320,floorY,8,42],[480,floorY,6,28],[580,floorY,9,38],[660,floorY,5,22]];
+    stalagmites.forEach(([sx,sy,sw,sh]) => {
+        ctx.fillStyle = '#2a1e14';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy-sh); ctx.closePath(); ctx.fill();
+    });
+
+    // Scattered bones/skulls on floor
+    [[140, floorY-4],[260,floorY-3],[400,floorY-4],[540,floorY-3]].forEach(([bx,by]) => {
+        // Bone
+        ctx.fillStyle = '#d4c8a8';
+        ctx.fillRect(bx-10, by, 20, 4);
+        ctx.beginPath(); ctx.arc(bx-12, by+2, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bx+12, by+2, 5, 0, Math.PI*2); ctx.fill();
+    });
+    [[220,floorY-8],[460,floorY-8]].forEach(([sx,sy]) => {
+        // Skull
+        ctx.fillStyle = '#d4c8a8';
+        ctx.beginPath(); ctx.arc(sx, sy-5, 9, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(sx-6, sy-2, 12, 8);
+        // Eye sockets
+        ctx.fillStyle = '#0d0a08';
+        ctx.beginPath(); ctx.arc(sx-3, sy-6, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx+3, sy-6, 2.5, 0, Math.PI*2); ctx.fill();
+        // Teeth
+        ctx.fillStyle = '#b8ac8c';
+        for(let t=0; t<4; t++) ctx.fillRect(sx-5+t*3, sy+4, 2, 4);
+    });
+
+    // Golden ladder on left wall (exit up)
+    ctx.fillStyle = '#c8a010';
+    ctx.fillRect(30, floorY-120, 4, 120); ctx.fillRect(54, floorY-120, 4, 120);
+    for(let r=0; r<5; r++) { ctx.fillRect(30, floorY - 20 - r*22, 28, 4); }
+
+    // Right passage glow (to cave2)
+    const rightGlow = ctx.createRadialGradient(700, floorY-80, 10, 700, floorY-80, 80);
+    rightGlow.addColorStop(0, 'rgba(255,80,20,0.4)');
+    rightGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rightGlow; ctx.fillRect(620, floorY-180, 80, 200);
+
+    // Ambient torches on walls
+    [[100,160],[300,180],[500,160],[640,170]].forEach(([tx,ty]) => {
+        ctx.fillStyle = '#5a3a10'; ctx.fillRect(tx-3, ty, 6, 18);
+        const flame = ctx.createRadialGradient(tx, ty, 0, tx, ty, 14);
+        flame.addColorStop(0, `rgba(255,200,50,${0.6 + 0.3*Math.sin(Date.now()/180+tx)})`);
+        flame.addColorStop(0.5, `rgba(255,80,10,${0.4 + 0.2*Math.sin(Date.now()/220+tx)})`);
+        flame.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = flame; ctx.beginPath(); ctx.arc(tx, ty, 14, 0, Math.PI*2); ctx.fill();
+    });
+
+    // Player
+    drawBaldManager(player.x, player.y, player.facing);
+
+    // Wall hint at right edge
+    if(player.x > 600) {
+        ctx.fillStyle = 'rgba(255,180,50,0.55)'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('→', 685, floorY - 80);
+    }
+}
+
+function drawSelfDestructCave2() {
+    const floorY = 380;
+    // Dark cave background
+    ctx.fillStyle = '#0d0806';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Floor
+    const fg2 = ctx.createLinearGradient(0, floorY, 0, 500);
+    fg2.addColorStop(0, '#2a1408'); fg2.addColorStop(1, '#150902');
+    ctx.fillStyle = fg2; ctx.fillRect(0, floorY, 700, 120);
+
+    // Ceiling
+    ctx.fillStyle = '#120c08'; ctx.fillRect(0, 0, 700, 50);
+    [[50,50,7,32],[150,50,9,48],[260,50,6,28],[380,50,11,55],[490,50,7,36],[610,50,8,40]].forEach(([sx,sy,sw,sh]) => {
+        ctx.fillStyle = '#241810';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
+    });
+
+    // Hell fire pit on right side (source of flames)
+    const pitX = 600, pitY = floorY;
+    for(let fi = 0; fi < 8; fi++) {
+        const fx = pitX - 30 + fi * 10;
+        const fh = 30 + 25 * Math.sin(Date.now() / (150 + fi * 22) + fi);
+        const ff = ctx.createLinearGradient(fx, pitY, fx, pitY - fh);
+        ff.addColorStop(0, 'rgba(255,100,0,0.9)');
+        ff.addColorStop(0.4, 'rgba(255,50,0,0.7)');
+        ff.addColorStop(1, 'rgba(200,10,0,0)');
+        ctx.fillStyle = ff;
+        ctx.beginPath(); ctx.ellipse(fx, pitY, 7, fh, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // Fire light on floor
+    const fireGlow = ctx.createRadialGradient(pitX, pitY, 5, pitX, pitY, 120);
+    fireGlow.addColorStop(0, 'rgba(255,80,20,0.35)');
+    fireGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fireGlow; ctx.fillRect(480, 280, 220, 200);
+
+    // Coffin — rises from pit
+    const coffinY = selfDestructSeq.coffinY;
+    if(coffinY < 520) {
+        const cx = 560, cy = coffinY;
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath(); ctx.ellipse(cx, floorY + 4, 22, 7, 0, 0, Math.PI*2); ctx.fill();
+        // Coffin body (dark wood)
+        ctx.fillStyle = '#2a1208';
+        ctx.beginPath();
+        ctx.moveTo(cx-14, cy); ctx.lineTo(cx-18, cy+20); ctx.lineTo(cx-18, cy+50);
+        ctx.lineTo(cx+18, cy+50); ctx.lineTo(cx+18, cy+20); ctx.lineTo(cx+14, cy);
+        ctx.closePath(); ctx.fill();
+        // Grain
+        ctx.strokeStyle = '#3a1e10'; ctx.lineWidth = 1;
+        for(let gl=0;gl<5;gl++){ ctx.beginPath(); ctx.moveTo(cx-12+gl*5,cy+2); ctx.lineTo(cx-12+gl*5,cy+48); ctx.stroke(); }
+        // Gold cross
+        ctx.fillStyle = '#c8a010';
+        ctx.fillRect(cx-2, cy+10, 4, 24); ctx.fillRect(cx-8, cy+18, 16, 4);
+        // Lid highlight
+        ctx.fillStyle = 'rgba(255,200,100,0.12)';
+        ctx.beginPath();
+        ctx.moveTo(cx-13, cy+1); ctx.lineTo(cx-17, cy+20); ctx.lineTo(cx-17, cy+10);
+        ctx.lineTo(cx-12, cy+1); ctx.closePath(); ctx.fill();
+    }
+
+    // Devil NPC
+    const dv = selfDestructSeq;
+    if(dv.devilState !== 'dead') {
+        const dvx = dv.devilX, dvy = floorY;
+        // Devil shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(dvx, dvy+2, 20, 6, 0, 0, Math.PI*2); ctx.fill();
+        // Body — red with cape
+        ctx.fillStyle = '#8b0000';
+        ctx.fillRect(dvx-10, dvy-40, 20, 30);
+        // Cape
+        ctx.fillStyle = '#6b0000';
+        ctx.beginPath(); ctx.moveTo(dvx-14, dvy-38); ctx.lineTo(dvx-10, dvy-10); ctx.lineTo(dvx-4, dvy-38); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(dvx+14, dvy-38); ctx.lineTo(dvx+10, dvy-10); ctx.lineTo(dvx+4, dvy-38); ctx.closePath(); ctx.fill();
+        // Head
+        ctx.fillStyle = '#cc2200';
+        ctx.beginPath(); ctx.arc(dvx, dvy-50, 11, 0, Math.PI*2); ctx.fill();
+        // Horns
+        ctx.fillStyle = '#8b0000';
+        ctx.beginPath(); ctx.moveTo(dvx-8, dvy-58); ctx.lineTo(dvx-12, dvy-70); ctx.lineTo(dvx-4, dvy-58); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(dvx+8, dvy-58); ctx.lineTo(dvx+12, dvy-70); ctx.lineTo(dvx+4, dvy-58); ctx.closePath(); ctx.fill();
+        // Yellow eyes
+        ctx.fillStyle = '#ffdd00';
+        ctx.beginPath(); ctx.arc(dvx-4, dvy-51, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(dvx+4, dvy-51, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(dvx-4, dvy-51, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(dvx+4, dvy-51, 1.5, 0, Math.PI*2); ctx.fill();
+        // Tail
+        ctx.strokeStyle = '#8b0000'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(dvx+10, dvy-20); ctx.quadraticCurveTo(dvx+28, dvy-10, dvx+22, dvy-2); ctx.stroke();
+        // Pitchfork
+        const pfBob = dv.devilState === 'attacking' ? Math.sin(Date.now()/80)*4 : Math.sin(Date.now()/400)*2;
+        ctx.fillStyle = '#c8a010';
+        ctx.fillRect(dvx-18, dvy-58+pfBob, 3, 48);
+        ctx.fillRect(dvx-22, dvy-58+pfBob, 3, 8); ctx.fillRect(dvx-18, dvy-58+pfBob, 3, 8); ctx.fillRect(dvx-14, dvy-58+pfBob, 3, 8);
+        // Speech bubble
+        if(dv.devilState === 'idle' || dv.devilState === 'talking') {
+            const bw = 160, bh = 36, bx2 = dvx - bw/2, by2 = dvy - 100;
+            ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.beginPath(); ctx.roundRect(bx2, by2, bw, bh, 6); ctx.fill();
+            ctx.strokeStyle = '#cc2200'; ctx.lineWidth = 2; ctx.stroke();
+            // Tail pointing down-right toward devil head
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.beginPath(); ctx.moveTo(dvx-6, by2+bh); ctx.lineTo(dvx+6, by2+bh); ctx.lineTo(dvx, by2+bh+10); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ffcc44'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('Your chariot awaits, sir.', dvx, by2+14);
+            ctx.fillStyle = '#ff8844';
+            ctx.fillText(dv.coffinRisen ? '[ACTION] Board' : '...', dvx, by2+28);
+        }
+    } else {
+        // Devil dead — slumped on floor
+        ctx.fillStyle = '#6b0000'; ctx.fillRect(dv.devilX-18, floorY-6, 36, 8);
+        ctx.fillStyle = '#cc2200'; ctx.beginPath(); ctx.arc(dv.devilX, floorY-10, 9, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Player
+    drawBaldManager(player.x, player.y, player.facing);
+    // Gun UI if player has it
+    if(level6.hasRevolver || level6.revolverAmmo > 0) drawAmmoCounter();
+}
+
+function drawSelfDestructSafeRoom() {
+    const floorY = 380;
+    // Cozy room — warm wood paneling
+    ctx.fillStyle = '#1c1008';
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Floor — warm hardwood
+    const hf = ctx.createLinearGradient(0, floorY, 0, 500);
+    hf.addColorStop(0, '#3a2010'); hf.addColorStop(1, '#2a1508');
+    ctx.fillStyle = hf; ctx.fillRect(0, floorY, 700, 120);
+    ctx.strokeStyle = '#4a2e14'; ctx.lineWidth = 1;
+    for(let bx = 0; bx < 700; bx += 80) { ctx.beginPath(); ctx.moveTo(bx, floorY); ctx.lineTo(bx, 500); ctx.stroke(); }
+    for(let by = floorY + 40; by < 500; by += 50) { ctx.beginPath(); ctx.moveTo(0, by); ctx.lineTo(700, by); ctx.stroke(); }
+
+    // Wood panel walls
+    const wg = ctx.createLinearGradient(0, 0, 0, floorY);
+    wg.addColorStop(0, '#2a1c0c'); wg.addColorStop(1, '#3a2410');
+    ctx.fillStyle = wg; ctx.fillRect(0, 0, 700, floorY);
+    ctx.strokeStyle = '#4a3018'; ctx.lineWidth = 1;
+    for(let px = 0; px < 700; px += 60) { ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, floorY); ctx.stroke(); }
+
+    // ── KITCHENETTE — left side ───────────────────────────────────────────────
+    const kx = 100;
+    // Counter top
+    ctx.fillStyle = '#555'; ctx.fillRect(kx-70, floorY-60, 140, 10);
+    ctx.fillStyle = '#666'; ctx.fillRect(kx-70, floorY-70, 140, 12);
+    ctx.fillStyle = '#4a4a4a'; ctx.fillRect(kx-70, floorY-58, 140, floorY - (floorY-58));
+    // Cabinet doors
+    ctx.strokeStyle = '#5a5a5a'; ctx.lineWidth = 1;
+    for(let cd = 0; cd < 3; cd++) {
+        const cdx = kx - 65 + cd * 46;
+        ctx.fillStyle = '#505050'; ctx.fillRect(cdx, floorY-58, 42, floorY-8-(floorY-58));
+        ctx.strokeRect(cdx+2, floorY-56, 38, floorY-12-(floorY-56));
+        // Handle
+        ctx.fillStyle = '#888'; ctx.fillRect(cdx+16, floorY-35, 10, 4);
+    }
+    // Microwave on counter
+    ctx.fillStyle = '#333'; ctx.fillRect(kx-25, floorY-110, 50, 40);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(kx-22, floorY-107, 30, 28); // window
+    ctx.fillStyle = 'rgba(0,200,50,0.6)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('00:00', kx-7, floorY-90);
+    // Mini fridge
+    ctx.fillStyle = '#e0e0e0'; ctx.fillRect(kx+40, floorY-120, 30, 120);
+    ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1; ctx.strokeRect(kx+42, floorY-118, 26, 56);
+    ctx.strokeRect(kx+42, floorY-60, 26, 58);
+    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(kx+63, floorY-90, 4, 10); ctx.fillRect(kx+63, floorY-35, 4, 10);
+
+    // ── LAZY BOY + TV — right side ────────────────────────────────────────────
+    const chairX = 460, chairY = floorY;
+    // Armchair shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(chairX, chairY + 4, 45, 12, 0, 0, Math.PI * 2); ctx.fill();
+    // Chair base/seat
+    ctx.fillStyle = '#8b3a10';
+    ctx.fillRect(chairX-38, chairY-30, 76, 28);
+    // Seat cushion
+    ctx.fillStyle = '#a04818';
+    ctx.fillRect(chairX-35, chairY-28, 70, 22);
+    // Back
+    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-35, chairY-80, 70, 52);
+    // Back cushion
+    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-32, chairY-78, 64, 46);
+    // Arm rests
+    ctx.fillStyle = '#7a3008';
+    ctx.fillRect(chairX-42, chairY-60, 10, 58); ctx.fillRect(chairX+32, chairY-60, 10, 58);
+    // Footrest (extended if sitting)
+    if(selfDestructSeq.chairSitting) {
+        ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-30, chairY-4, 60, 12);
+        ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-27, chairY-2, 54, 8);
+    }
+    // Remote on armrest
+    ctx.fillStyle = '#222'; ctx.fillRect(chairX+32, chairY-50, 8, 16);
+    ctx.fillStyle = '#444'; ctx.fillRect(chairX+33, chairY-49, 3, 3); ctx.fillRect(chairX+37, chairY-49, 3, 3);
+    ctx.fillRect(chairX+33, chairY-44, 3, 3); ctx.fillRect(chairX+37, chairY-44, 3, 3);
+
+    // Giant TV on right wall
+    const tvX = 600, tvY = 60, tvW = 180, tvH = 115;
+    // TV mount
+    ctx.fillStyle = '#222'; ctx.fillRect(tvX+tvW/2-4, tvY+tvH, 8, 30); ctx.fillRect(tvX+tvW/2-20, tvY+tvH+28, 40, 6);
+    // TV bezel
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(tvX, tvY, tvW, tvH);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.strokeRect(tvX, tvY, tvW, tvH);
+
+    if(selfDestructSeq.tvEndStarted) {
+        // TV on — show ending scene (warm cozy image)
+        const elapsed = selfDestructSeq.tvEndTimer;
+        const tvScreen = ctx.createLinearGradient(tvX+4, tvY+4, tvX+tvW-4, tvY+tvH-4);
+        tvScreen.addColorStop(0, '#1a3a5a'); tvScreen.addColorStop(1, '#0a2a4a');
+        ctx.fillStyle = tvScreen; ctx.fillRect(tvX+4, tvY+4, tvW-8, tvH-8);
+        // Sunrise glow
+        const sunGlow = ctx.createRadialGradient(tvX+tvW/2, tvY+tvH-4, 2, tvX+tvW/2, tvY+tvH-4, 50);
+        sunGlow.addColorStop(0, `rgba(255,200,50,${Math.min(1, elapsed/2000)})`);
+        sunGlow.addColorStop(1, 'rgba(255,80,20,0)');
+        ctx.fillStyle = sunGlow; ctx.fillRect(tvX+4, tvY+4, tvW-8, tvH-8);
+        // Text fade in
+        if(elapsed > 1500) {
+            const alpha = Math.min(1, (elapsed-1500)/1000);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px serif'; ctx.textAlign = 'center';
+            ctx.fillText('THE END', tvX+tvW/2, tvY+tvH/2-6);
+            ctx.fillStyle = '#c8e8ff'; ctx.font = '8px serif';
+            ctx.fillText('Mullet Pro', tvX+tvW/2, tvY+tvH/2+8);
+            ctx.globalAlpha = 1;
+        }
+        // If enough time has passed, show the real end card
+        if(elapsed > 5000) {
+            // Transition to theend state
+            state = 'theend';
+            menuChoice = 0;
+        }
+    } else {
+        // TV off — dark screen with faint reflection
+        ctx.fillStyle = '#0a0a12'; ctx.fillRect(tvX+4, tvY+4, tvW-8, tvH-8);
+        ctx.fillStyle = 'rgba(100,120,180,0.06)';
+        ctx.beginPath(); ctx.ellipse(tvX+tvW*0.35, tvY+tvH*0.35, 20, 30, -0.3, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Action prompt on chair
+    if(!selfDestructSeq.chairSitting && Math.abs(player.x - chairX) < 50) {
+        ctx.fillStyle = 'rgba(255,220,0,0.9)'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ACTION] SIT', chairX, chairY - 90);
+    }
+
+    // Player (only visible if not sitting)
+    if(!selfDestructSeq.chairSitting) {
+        drawBaldManager(player.x, player.y, player.facing);
+    } else {
+        // Draw player sitting in chair
+        const s = 2;
+        const px = chairX - 6, py = chairY - 20;
+        ctx.fillStyle = '#c8a882'; ctx.fillRect(px - 5*s, py - 16*s, 10*s, 8*s); // head (bald)
+        ctx.fillStyle = '#666'; ctx.fillRect(px - 6*s, py - 8*s, 12*s, 10*s); // torso
+        ctx.fillStyle = '#333'; ctx.fillRect(px - 6*s, py + 2*s, 12*s, 6*s); // seated legs
+        ctx.fillStyle = '#222'; ctx.fillRect(px - 7*s, py + 8*s, 6*s, 3*s); ctx.fillRect(px + s, py + 8*s, 6*s, 3*s); // shoes
+    }
+}
+
+
 function drawScene() {
     // Clear full expanded canvas and translate to center game area
     ctx.save();
@@ -19516,6 +20066,19 @@ function drawScene() {
         }
 
         // Draw mute indicator on promotion screen
+        drawMuteIndicator();
+        ctx.restore(); return;
+    }
+
+    // ── SELF-DESTRUCT SEQUENCE ────────────────────────────────────────────────
+    if(state === 'selfDestructSeq') {
+        switch(selfDestructSeq.room) {
+            case 'hatch':    drawSelfDestructHatch(); break;
+            case 'chute':    drawSelfDestructChute(); break;
+            case 'cave1':    drawSelfDestructCave1(); break;
+            case 'cave2':    drawSelfDestructCave2(); break;
+            case 'safeRoom': drawSelfDestructSafeRoom(); break;
+        }
         drawMuteIndicator();
         ctx.restore(); return;
     }
@@ -22007,6 +22570,142 @@ function update() {
         return;
     }
 
+    // ── SELF-DESTRUCT SEQUENCE UPDATE ────────────────────────────────────────
+    if(state === 'selfDestructSeq') {
+        const sds = selfDestructSeq;
+        const speed = 2;
+        const floorY = 380;
+
+        if(sds.room === 'hatch') {
+            // Animate hatch opening
+            if(sds.hatchOpenAnim < 1) {
+                sds.hatchOpenAnim = Math.min(1, sds.hatchOpenAnim + 0.015);
+                if(sds.hatchOpenAnim >= 1 && !sds.countdownStarted) {
+                    sds.countdownStarted = true;
+                }
+            }
+            // Countdown
+            if(sds.countdownStarted && sds.countdown > 0) {
+                sds.countdownTimer += 1000/60;
+                if(sds.countdownTimer >= 1000) {
+                    sds.countdownTimer -= 1000;
+                    sds.countdown--;
+                    if(sds.countdown <= 0) {
+                        // Countdown over — if player didn't descend, auto-transition to theend
+                        state = 'theend'; menuChoice = 0; return;
+                    }
+                }
+            }
+            // Player movement (normal horizontal)
+            if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
+            if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
+            player.x = Math.max(20, Math.min(680, player.x));
+            // ACTION near open hatch descends
+            if((keys[' '] || keys['action']) && sds.hatchOpenAnim >= 1 && Math.abs(player.x - 200) < 50) {
+                sds.room = 'chute';
+                sds.playerY = 60;
+                player.x = 350;
+                keys[' '] = false; keys['action'] = false;
+            }
+
+        } else if(sds.room === 'chute') {
+            // Vertical descent only — player climbs down (playerY increases toward floor)
+            if(keys['ArrowDown'] || keys['down']) {
+                sds.playerY = Math.min(460, sds.playerY + speed * 1.5);
+            }
+            if(keys['ArrowUp'] || keys['up']) {
+                sds.playerY = Math.max(40, sds.playerY - speed);
+            }
+            // Arrive at bottom
+            if(sds.playerY >= 450 && !sds.chuteArrivedCave) {
+                sds.chuteArrivedCave = true;
+                sds.room = 'cave1';
+                player.x = 80; player.y = floorY; player.facing = 'right';
+            }
+
+        } else if(sds.room === 'cave1') {
+            // Normal horizontal movement
+            if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
+            if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
+            player.x = Math.max(10, Math.min(690, player.x));
+            player.y = floorY;
+            // Walk right to cave2
+            if(player.x >= 685) {
+                sds.room = 'cave2';
+                player.x = 80; player.y = floorY; player.facing = 'right';
+            }
+
+        } else if(sds.room === 'cave2') {
+            // Normal horizontal movement
+            if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
+            if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
+            player.x = Math.max(10, Math.min(680, player.x));
+            player.y = floorY;
+
+            // Devil AI
+            sds.devilFrame++;
+            if(sds.devilState === 'idle' || sds.devilState === 'talking') {
+                // Devil faces player
+                sds.devilX = 540;
+                // Coffin rises after player gets close
+                if(player.x > 360 && sds.coffinY > floorY - 50) {
+                    sds.coffinY = Math.max(floorY - 50, sds.coffinY - 1.5);
+                    if(sds.coffinY <= floorY - 50) sds.coffinRisen = true;
+                }
+                sds.devilState = 'talking';
+                // ACTION to board coffin (ride to safe room)
+                if(sds.coffinRisen && (keys[' '] || keys['action']) && Math.abs(player.x - 560) < 80) {
+                    sds.room = 'safeRoom';
+                    player.x = 300; player.y = floorY; player.facing = 'right';
+                    keys[' '] = false; keys['action'] = false;
+                }
+            }
+            // Player can shoot devil if has revolver
+            if(sds.devilState !== 'dead' && (level6.hasRevolver || level6.revolverAmmo > 0)) {
+                if(player.shootTimer > 0 && !player._devilShotFrame) {
+                    player._devilShotFrame = true;
+                    const bulletRight = player.facing !== 'left';
+                    if((bulletRight && player.x < sds.devilX) || (!bulletRight && player.x > sds.devilX)) {
+                        if(Math.abs(player.x - sds.devilX) < 350) {
+                            sds.devilHp--;
+                            SFX.play('enemyDie');
+                            if(sds.devilHp <= 0) {
+                                sds.devilState = 'dead';
+                                // Coffin catches devil and descends — auto advance to safe room
+                                setTimeout(() => {
+                                    sds.room = 'safeRoom';
+                                    player.x = 300; player.y = floorY; player.facing = 'right';
+                                }, 1800);
+                            }
+                        }
+                    }
+                } else if(player.shootTimer <= 0) {
+                    player._devilShotFrame = false;
+                }
+            }
+
+        } else if(sds.room === 'safeRoom') {
+            if(!sds.chairSitting) {
+                if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
+                if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
+                player.x = Math.max(10, Math.min(680, player.x));
+                player.y = floorY;
+                // Sit in chair
+                if((keys[' '] || keys['action']) && Math.abs(player.x - 460) < 50) {
+                    sds.chairSitting = true;
+                    sds.tvEndStarted = true;
+                    sds.tvEndTimer = 0;
+                    SFX.play('pickup');
+                    keys[' '] = false; keys['action'] = false;
+                }
+            } else {
+                // Increment TV timer
+                sds.tvEndTimer += 1000/60;
+            }
+        }
+        return;
+    }
+
     // Main menu screen - audio is now handled in event handlers for proper autoplay support
     if(state === 'menu') {
         // State transition is now handled in handleMenuInteraction() called from event handlers
@@ -22266,6 +22965,7 @@ function update() {
                     fountainLastCycle = curCycle;
                     lives = Math.min(3, lives + 1);
                     updateLives();
+                    SFX.play('waterDrink');
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -23688,6 +24388,7 @@ function update() {
                         fountainLastCycle = curCycle;
                         level6.moneyLives = Math.min(3, level6.moneyLives + 1);
                         updateLives();
+                        SFX.play('waterDrink');
                         keys[' '] = false;
                         keys['action'] = false;
                     }
@@ -24405,6 +25106,7 @@ function update() {
                         fountainLastCycle = curCycle;
                         level6.moneyLives = Math.min(3, level6.moneyLives + 1);
                         updateLives();
+                        SFX.play('waterDrink');
                         keys[' '] = false;
                         keys['action'] = false;
                     }
@@ -24931,10 +25633,25 @@ function update() {
                     // Confirm selection
                     if(keys[' '] || keys['action']) {
                         if(level6.computerChoice === 0) {
-                            // Self-destruct - "The End"
+                            // Self-destruct — begins hatch sequence
                             level6.computerUI = false;
-                            state = 'theend';
-                            menuChoice = 0;
+                            selfDestructSeq.room = 'hatch';
+                            selfDestructSeq.hatchOpenAnim = 0;
+                            selfDestructSeq.countdown = 10;
+                            selfDestructSeq.countdownTimer = 0;
+                            selfDestructSeq.countdownStarted = false;
+                            selfDestructSeq.playerY = 380;
+                            selfDestructSeq.chuteArrivedCave = false;
+                            selfDestructSeq.devilState = 'idle';
+                            selfDestructSeq.coffinY = 550;
+                            selfDestructSeq.coffinRisen = false;
+                            selfDestructSeq.devilHp = 3;
+                            selfDestructSeq.chairSitting = false;
+                            selfDestructSeq.tvEndStarted = false;
+                            selfDestructSeq.tvEndTimer = 0;
+                            player.x = 200; player.y = 380;
+                            state = 'selfDestructSeq';
+                            SFX.play('hatchOpen');
                         } else {
                             // Deliver means of production — Mullet Pro distributes cash to each PM, then player
                             level6.computerCompleted = true;
@@ -26661,7 +27378,8 @@ function gameLoop() {
     if(state !== 'playing' && state !== 'levelCard' && state !== 'over' &&
        state !== 'win' && state !== 'menu' && state !== 'promotion' &&
        state !== 'theend' && state !== 'victory' && state !== 'rtPresents' &&
-       state !== 'conceptArt' && state !== 'fired' && state !== 'gameover') return;
+       state !== 'conceptArt' && state !== 'fired' && state !== 'gameover' &&
+       state !== 'selfDestructSeq') return;
 
     // Retry pending music every ~2 seconds if audio is unlocked but music didn't start
     if(audioUnlocked && pendingMusicKey && frame % 120 === 0) {
