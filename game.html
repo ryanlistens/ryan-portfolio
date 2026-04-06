@@ -1079,19 +1079,28 @@ let level6 = {
 
 // Self-destruct ending sequence state
 let selfDestructSeq = {
-    room: 'hatch',        // hatch → chute → cave1 → cave2 → safeRoom
-    hatchOpenAnim: 0,     // 0..1 hatch opening animation
-    countdown: 10,        // 10-second countdown before hatch closes
-    countdownTimer: 0,    // ms accumulator
+    room: 'hatch',            // hatch → chute → cave1 → cave2 → safeRoom
+    hatchOpenAnim: 0,         // 0..1 hatch opening animation
+    countdown: 10,            // 10-second countdown before hatch closes
+    countdownTimer: 0,
     countdownStarted: false,
-    playerY: 380,         // vertical position in chute
+    playerY: 380,             // vertical position in chute
     chuteArrivedCave: false,
-    devilState: 'idle',   // idle | talking | attacking | dead
-    devilX: 560,
+    // Devil state machine
+    devilState: 'seated',     // seated|rising|walking|talking|coffin_rising|attacking|dead
+    devilX: 600,              // starts at throne
+    devilRiseTimer: 0,        // 0..90 frames for stand-up animation
+    devilWaitTimer: 0,        // pause before rising
     devilFrame: 0,
-    coffinY: 550,         // coffin rises from below cave2
-    coffinRisen: false,
     devilHp: 3,
+    devilDialogue: false,
+    devilDialogueLine: 0,
+    devilDialogueChars: 0.0,
+    devilDialogueComplete: false,
+    coffinRisingTimer: 0,     // 0..180 frames = 3 seconds
+    coffinY: 500,
+    stabAnimTimer: 0,
+    throneActionAvailable: false,
     chairSitting: false,
     tvEndTimer: 0,
     tvEndStarted: false
@@ -1930,11 +1939,11 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = skinColor;
             ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
-            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 6*s);
-            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 6*s);
+            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
+            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
             ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s + bmStride, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - bmStride, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s + bmStride, y + 10*s, 2*s, 2*s);
+            ctx.fillRect(x + 7*s - bmStride, y + 10*s, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#1a1a1a';
@@ -1978,11 +1987,11 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 6*s);
-            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 6*s);
+            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
+            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
             ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s + bmStride, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - bmStride, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s + bmStride, y + 10*s, 2*s, 2*s);
+            ctx.fillRect(x + 7*s - bmStride, y + 10*s, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#1a1a1a';
@@ -2027,11 +2036,11 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
-            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 6*s);
-            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 6*s);
+            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
+            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
             ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s + bmStride, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - bmStride, y + 6*s, 2*s, 2*s);
+            ctx.fillRect(x - 9*s + bmStride, y + 10*s, 2*s, 2*s);
+            ctx.fillRect(x + 7*s - bmStride, y + 10*s, 2*s, 2*s);
         }
 
         ctx.fillStyle = '#1a1a1a';
@@ -19330,469 +19339,854 @@ function drawAcidBurst(ab) {
 // ── SELF-DESTRUCT SEQUENCE DRAW FUNCTIONS ────────────────────────────────────
 
 function drawSelfDestructHatch() {
-    // Reuse CEO office as backdrop
+    // Full CEO office render with player — hatch is overlay on CEO floor
     drawLevel6CEOOffice();
-    // Draw CEO if alive
     if(ceo.state !== 'dead' && !level6.ceoPursuing) drawCEO(ceo.x, ceo.y, ceo.facing);
 
-    const hx = 200, hy = 380;
+    // ── HATCH OVERLAY ────────────────────────────────────────────────────────
+    const hx = 185, hy = 380;
     const openAmt = selfDestructSeq.hatchOpenAnim; // 0..1
 
-    // Hatch shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath(); ctx.ellipse(hx, hy + 4, 26 + openAmt * 4, 8, 0, 0, Math.PI * 2); ctx.fill();
+    // Pit opening in floor — rectangular dark hole
+    ctx.fillStyle = '#000';
+    ctx.fillRect(hx - 22, hy - 2, 44, 16);
 
-    // Red glow in pit (glows once opening starts)
-    if(openAmt > 0.05) {
-        const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 30 + openAmt * 20);
-        glow.addColorStop(0, `rgba(255,30,0,${0.55 * openAmt})`);
-        glow.addColorStop(1, 'rgba(255,30,0,0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath(); ctx.ellipse(hx, hy, 30 + openAmt * 20, 12 + openAmt * 8, 0, 0, Math.PI * 2); ctx.fill();
+    // Red heat glow emanating from below
+    if(openAmt > 0.02) {
+        const grd = ctx.createRadialGradient(hx, hy + 8, 2, hx, hy + 8, 40 + openAmt * 30);
+        grd.addColorStop(0, `rgba(255,60,0,${0.7 * openAmt})`);
+        grd.addColorStop(0.4, `rgba(200,20,0,${0.3 * openAmt})`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.ellipse(hx, hy + 8, 40 + openAmt * 30, 16 + openAmt * 10, 0, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Hatch door (hinges open left, revealing dark pit below)
-    ctx.save();
-    ctx.translate(hx - 20, hy);
-    ctx.rotate(-openAmt * Math.PI * 0.55);
-    // Hatch plate
-    const hg = ctx.createLinearGradient(0, -6, 40, 0);
-    hg.addColorStop(0, '#4a4a4a'); hg.addColorStop(0.5, '#6a6a6a'); hg.addColorStop(1, '#3a3a3a');
-    ctx.fillStyle = hg; ctx.fillRect(0, -6, 40, 10);
-    // Danger stripes
-    ctx.fillStyle = '#f0c000';
-    for(let s = 0; s < 5; s++) { ctx.fillRect(s * 8, -5, 4, 8); }
-    // Hinge
-    ctx.fillStyle = '#888'; ctx.fillRect(-3, -3, 6, 6);
-    ctx.restore();
+    // Hatch plate — hinges on left edge, swings up-left
+    if(openAmt < 1) {
+        ctx.save();
+        ctx.translate(hx - 22, hy - 2);
+        ctx.rotate(-openAmt * Math.PI * 0.6);
+        const hg = ctx.createLinearGradient(0, 0, 44, 0);
+        hg.addColorStop(0, '#5a5a5a'); hg.addColorStop(0.5, '#7a7a7a'); hg.addColorStop(1, '#4a4a4a');
+        ctx.fillStyle = hg; ctx.fillRect(0, -8, 44, 12);
+        // Danger stripes
+        for(let s = 0; s < 6; s++) {
+            ctx.fillStyle = s % 2 === 0 ? '#f0c000' : '#1a1a1a';
+            ctx.fillRect(s * 7 + 1, -7, 7, 10);
+        }
+        // Rivets
+        ctx.fillStyle = '#888';
+        [4, 40].forEach(rx => { ctx.beginPath(); ctx.arc(rx, -3, 2.5, 0, Math.PI*2); ctx.fill(); });
+        // Hinge barrel
+        ctx.fillStyle = '#999'; ctx.fillRect(-3, -5, 5, 9);
+        ctx.restore();
+    }
 
-    // Ladder visible in pit
-    if(openAmt > 0.5) {
-        const ladderAlpha = (openAmt - 0.5) * 2;
-        ctx.globalAlpha = ladderAlpha;
+    // Ladder visible in pit once open enough
+    if(openAmt > 0.4) {
+        const la = Math.min(1, (openAmt - 0.4) / 0.4);
+        ctx.globalAlpha = la;
         ctx.fillStyle = '#c8a010';
-        // Side rails
-        ctx.fillRect(hx - 8, hy - 2, 3, 18); ctx.fillRect(hx + 5, hy - 2, 3, 18);
-        // Rungs
-        for(let r = 0; r < 3; r++) { ctx.fillRect(hx - 8, hy + 2 + r * 5, 16, 2); }
+        ctx.fillRect(hx - 9, hy - 2, 3, 20); ctx.fillRect(hx + 6, hy - 2, 3, 20);
+        for(let r = 0; r < 4; r++) ctx.fillRect(hx - 9, hy + r * 5, 18, 2);
         ctx.globalAlpha = 1;
     }
 
-    // Countdown
+    // Pit depth darkness (flat dark interior)
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(hx - 20, hy, 40, 14);
+
+    // Draw player on top of hatch overlay
+    drawBaldManager(player.x, player.y, player.facing);
+
+    // Countdown — top of screen
     if(selfDestructSeq.countdownStarted) {
         const cd = selfDestructSeq.countdown;
-        const urgency = cd <= 3;
-        ctx.fillStyle = urgency ? `rgba(255,0,0,${0.6 + 0.4 * Math.sin(Date.now() / 120)})` : 'rgba(255, 220, 0, 0.9)';
-        ctx.font = 'bold 28px monospace';
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-        ctx.strokeText('SELF-DESTRUCT: ' + cd + 's', 350, 60);
-        ctx.fillText('SELF-DESTRUCT: ' + cd + 's', 350, 60);
+        const urgent = cd <= 3;
+        const pulse = urgent ? (0.7 + 0.3 * Math.sin(Date.now() / 100)) : 1;
+        ctx.save();
+        ctx.fillStyle = `rgba(0,0,0,${0.75 * pulse})`;
+        ctx.fillRect(160, 18, 380, 40);
+        ctx.strokeStyle = urgent ? '#ff2200' : '#ffd700';
+        ctx.lineWidth = 2; ctx.strokeRect(160, 18, 380, 40);
+        ctx.fillStyle = urgent ? `rgba(255,40,0,${pulse})` : '#ffd700';
+        ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('SELF-DESTRUCT: ' + cd + 's', 350, 45);
+        ctx.restore();
     }
 
-    // Action prompt once hatch is open
-    if(openAmt >= 1 && Math.abs(player.x - hx) < 50) {
-        ctx.fillStyle = 'rgba(255,220,0,0.9)';
-        ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ACTION] DESCEND', hx, hy - 20);
+    // Action prompt near open hatch
+    if(openAmt >= 1 && Math.abs(player.x - hx) < 60) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(hx - 55, hy - 36, 110, 22);
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] DESCEND', hx, hy - 20);
     }
 }
 
 function drawSelfDestructChute() {
-    // Black void with red center glow
-    ctx.fillStyle = '#000';
-    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-
-    // Red heat glow from below
-    const grd = ctx.createRadialGradient(350, 550, 10, 350, 550, 200);
-    grd.addColorStop(0, 'rgba(255,40,0,0.45)');
-    grd.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grd; ctx.fillRect(0, 350, 700, 200);
-
-    // Golden ladder rails
-    ctx.fillStyle = '#c8a010';
-    ctx.fillRect(324, 0, 4, 500); ctx.fillRect(372, 0, 4, 500);
-    // Rungs
-    for(let r = 0; r < 18; r++) {
-        ctx.fillRect(325, 10 + r * 28, 50, 4);
-    }
-
-    // Shaft walls with rivets
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, 310, 500); ctx.fillRect(390, 0, 310, 500);
-    ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 2;
-    ctx.strokeRect(310, 0, 4, 500); ctx.strokeRect(386, 0, 4, 500);
-    for(let ry = 20; ry < 500; ry += 40) {
-        ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(310, ry, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(390, ry, 3, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Draw player from back (back-facing, climbing pose)
-    const py = selfDestructSeq.playerY;
     const s = 2;
-    const bx = 350, by = py;
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(bx, by + 2, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
-    // Shirt back — bald manager grey
-    ctx.fillStyle = '#666'; ctx.fillRect(bx - 7*s, by - 13*s, 14*s, 12*s);
-    // Bald head (back)
-    ctx.fillStyle = '#c8a882'; ctx.beginPath(); ctx.arc(bx, by - 16*s, 5*s, 0, Math.PI * 2); ctx.fill();
-    // Arms (climbing, alternating)
-    const climbPhase = Math.sin(Date.now() / 200);
-    ctx.fillStyle = '#c8a882';
-    ctx.fillRect(bx - 9*s, by - 15*s + climbPhase * 2, 2*s, 6*s);
-    ctx.fillRect(bx + 7*s, by - 11*s - climbPhase * 2, 2*s, 6*s);
-    // Pants
-    ctx.fillStyle = '#333'; ctx.fillRect(bx - 5*s, by - 2*s, 4*s, 8*s); ctx.fillRect(bx + s, by - 2*s, 4*s, 8*s);
-    // Shoes
-    ctx.fillStyle = '#222'; ctx.fillRect(bx - 6*s, by + 6*s, 5*s, 3*s); ctx.fillRect(bx + s, by + 6*s, 5*s, 3*s);
+    // ── BACKGROUND: rough-carved rock shaft ───────────────────────────────────
+    // Entire canvas filled with deep earth first
+    const earthGrd = ctx.createLinearGradient(0, 0, 0, 500);
+    earthGrd.addColorStop(0, '#0e0a06'); earthGrd.addColorStop(1, '#1a0e08');
+    ctx.fillStyle = earthGrd; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Destination indicator
-    if(py > 380) {
-        ctx.fillStyle = 'rgba(255,220,0,0.7)'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('▼ DESCENDING ▼', 350, 30);
+    // Shaft opening — narrow vertical channel, darker than surrounding rock
+    const shaftX = 316, shaftW = 68;
+    ctx.fillStyle = '#060402'; ctx.fillRect(shaftX, 0, shaftW, 500);
+
+    // Left rock wall — layered geological strata
+    for(let layer = 0; layer < 6; layer++) {
+        const lx = shaftX - 20 - layer * 32;
+        const shade = ['#1e1408','#241808','#1a1208','#201608','#181008','#1c1408'][layer];
+        ctx.fillStyle = shade; ctx.fillRect(lx, 0, 35, 500);
+        // Embedded pebbles
+        ctx.fillStyle = 'rgba(255,200,100,0.04)';
+        for(let py2 = layer*17; py2 < 500; py2 += 40+layer*7) {
+            ctx.beginPath(); ctx.ellipse(lx+8+layer*3, py2+12, 4, 2, 0.3, 0, Math.PI*2); ctx.fill();
+        }
     }
+    // Right rock wall — mirror
+    for(let layer = 0; layer < 6; layer++) {
+        const lx = shaftX + shaftW + layer * 32;
+        const shade = ['#1e1408','#241808','#1a1208','#201608','#181008','#1c1408'][layer];
+        ctx.fillStyle = shade; ctx.fillRect(lx, 0, 35, 500);
+        ctx.fillStyle = 'rgba(255,200,100,0.04)';
+        for(let py2 = layer*19; py2 < 500; py2 += 38+layer*7) {
+            ctx.beginPath(); ctx.ellipse(lx+20, py2+8, 4, 2, -0.3, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    // Shaft wall edges — rough stone profile
+    ctx.fillStyle = '#2a1a0c';
+    ctx.fillRect(shaftX - 6, 0, 8, 500);
+    ctx.fillRect(shaftX + shaftW - 2, 0, 8, 500);
+    // Crevice details on shaft walls
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5;
+    for(let cy = 20; cy < 500; cy += 38) {
+        ctx.beginPath(); ctx.moveTo(shaftX-4, cy); ctx.lineTo(shaftX+2, cy+8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(shaftX+shaftW+4, cy+18); ctx.lineTo(shaftX+shaftW-2, cy+26); ctx.stroke();
+    }
+
+    // Heat glow from bottom (lava below)
+    const heatGrd = ctx.createRadialGradient(350, 510, 10, 350, 510, 160);
+    heatGrd.addColorStop(0, 'rgba(255,80,10,0.55)');
+    heatGrd.addColorStop(0.4, 'rgba(200,40,0,0.3)');
+    heatGrd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = heatGrd; ctx.fillRect(shaftX, 360, shaftW, 140);
+
+    // Cool darkness from above
+    const coolGrd = ctx.createLinearGradient(0, 0, 0, 120);
+    coolGrd.addColorStop(0, 'rgba(0,0,0,0.8)');
+    coolGrd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = coolGrd; ctx.fillRect(shaftX, 0, shaftW, 120);
+
+    // ── GOLDEN LADDER ─────────────────────────────────────────────────────────
+    const ladX = 340, ladW = 20;
+    // Side rails with shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(ladX+2, 0, 3, 500); ctx.fillRect(ladX+ladW+2, 0, 3, 500);
+    const railGrd = ctx.createLinearGradient(ladX, 0, ladX+3, 0);
+    railGrd.addColorStop(0, '#c8a010'); railGrd.addColorStop(0.5, '#e8c030'); railGrd.addColorStop(1, '#a08008');
+    ctx.fillStyle = railGrd; ctx.fillRect(ladX, 0, 3, 500); ctx.fillRect(ladX+ladW, 0, 3, 500);
+    // Rungs
+    for(let r = 0; r < 20; r++) {
+        const ry = r * 26 + 8;
+        const rungGrd = ctx.createLinearGradient(ladX, ry, ladX, ry+4);
+        rungGrd.addColorStop(0, '#e0b820'); rungGrd.addColorStop(1, '#906800');
+        ctx.fillStyle = rungGrd; ctx.fillRect(ladX+3, ry, ladW-3, 4);
+        // Rung shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(ladX+3, ry+4, ladW-3, 2);
+    }
+
+    // ── PLAYER ON LADDER (back-facing) ────────────────────────────────────────
+    const py = selfDestructSeq.playerY;
+    const bx = 350;
+    const climbPhase = Math.sin(Date.now() / 220);
+
+    // Shadow on rung below
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(bx, py + 47, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Shoes
+    ctx.fillStyle = '#111';
+    ctx.fillRect(bx - 6*s, py + 23*s, 5*s, 2*s);
+    ctx.fillRect(bx + s, py + 23*s, 5*s, 2*s);
+    // Trouser legs (alternating with climb)
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fillRect(bx - 5*s, py + 15*s + climbPhase*2, 4*s, 9*s);
+    ctx.fillRect(bx + s, py + 15*s - climbPhase*2, 4*s, 9*s);
+    // Belt
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx - 7*s, py + 11*s, 14*s, 3*s);
+    // Shirt back (white with dark shadow)
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(bx - 7*s, py + s, 14*s, 11*s);
+    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(bx - 7*s, py + s, 2*s, 11*s); // left shadow
+    // Tie (visible from back as small stripe)
+    ctx.fillStyle = '#800020'; ctx.fillRect(bx - s, py + 2*s, 2*s, 9*s);
+    // Arms reaching up to rungs — alternating
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3, 2*s, 9*s);
+    ctx.fillRect(bx + 7*s, py - 8*s - climbPhase*3, 2*s, 9*s);
+    // Hands (skin)
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3 - 2, 2*s, 3);
+    ctx.fillRect(bx + 7*s, py - 8*s - climbPhase*3 - 2, 2*s, 3);
+    // Neck (back — just a small flesh strip)
+    ctx.fillStyle = '#f0c080'; ctx.fillRect(bx - 2*s, py - 2*s, 4*s, 3*s);
+    // Bald head (back view — round, skin color with slight shine)
+    ctx.fillStyle = '#f5c89a';
+    ctx.beginPath(); ctx.arc(bx, py - 9*s, 5*s, 0, Math.PI * 2); ctx.fill();
+    // Head highlight
+    ctx.fillStyle = 'rgba(255,230,190,0.5)';
+    ctx.beginPath(); ctx.arc(bx - s, py - 11*s, 2*s, 0, Math.PI); ctx.fill();
 }
 
 function drawSelfDestructCave1() {
-    // Cave background — deep earth tones
-    ctx.fillStyle = '#0d0a08';
-    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-
-    // Dirt floor
     const floorY = 380;
-    const fg = ctx.createLinearGradient(0, floorY, 0, 500);
-    fg.addColorStop(0, '#2a1e14'); fg.addColorStop(1, '#1a1208');
-    ctx.fillStyle = fg; ctx.fillRect(0, floorY, 700, 120);
 
-    // Cave ceiling with stalactites
-    ctx.fillStyle = '#1c1410';
-    ctx.fillRect(0, 0, 700, 60);
-    const stalactites = [[60,60,8,45],[130,60,6,30],[200,60,10,55],[290,60,7,38],[370,60,9,50],[440,60,6,28],[510,60,11,60],[590,60,7,35],[650,60,8,42]];
-    stalactites.forEach(([sx,sy,sw,sh]) => {
-        ctx.fillStyle = '#2a1e14';
+    // ── DEPTH LAYERS — distant cavern backdrop ────────────────────────────────
+    // Layer 0: infinite void
+    ctx.fillStyle = '#050302'; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+    // Layer 1: far-distance cave walls (barely visible silhouettes)
+    ctx.fillStyle = '#0f0b07';
+    ctx.fillRect(0, 0, 700, floorY);
+    // Distant stalactite silhouettes (very dark, blurred)
+    ctx.fillStyle = '#0c0804';
+    [[80,0,25,120],[180,0,18,90],[310,0,30,140],[420,0,20,100],[560,0,28,130],[650,0,16,80]].forEach(([sx,sy,sw,sh]) => {
         ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#3a2a1c';
-        ctx.beginPath(); ctx.moveTo(sx-sw+2,sy); ctx.lineTo(sx-sw+4,sy); ctx.lineTo(sx-sw/2+2,sy+sh*0.6); ctx.closePath(); ctx.fill();
     });
 
-    // Stalagmites from floor
-    const stalagmites = [[80,floorY,7,35],[180,floorY,5,20],[320,floorY,8,42],[480,floorY,6,28],[580,floorY,9,38],[660,floorY,5,22]];
-    stalagmites.forEach(([sx,sy,sw,sh]) => {
-        ctx.fillStyle = '#2a1e14';
+    // Layer 2: mid-distance rock formations (slightly lighter, gives depth)
+    ctx.fillStyle = '#141008';
+    ctx.fillRect(0, 0, 700, 80); // ceiling slab
+    [[50,80,16,75],[160,80,22,100],[270,80,14,65],[380,80,26,115],[490,80,18,82],[620,80,20,95]].forEach(([sx,sy,sw,sh]) => {
+        ctx.fillStyle = '#1a1208';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
+        // Mid-layer highlight edge
+        ctx.fillStyle = '#221810';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx-sw+3,sy); ctx.lineTo(sx-sw/2,sy+sh*0.7); ctx.closePath(); ctx.fill();
+    });
+
+    // Underground horizon line — dark hazy band where cave walls meet floor
+    const horizGrd = ctx.createLinearGradient(0, floorY - 80, 0, floorY);
+    horizGrd.addColorStop(0, 'rgba(8,5,3,0)');
+    horizGrd.addColorStop(0.6, 'rgba(6,4,2,0.5)');
+    horizGrd.addColorStop(1, 'rgba(4,3,1,0.85)');
+    ctx.fillStyle = horizGrd; ctx.fillRect(0, floorY-80, 700, 80);
+
+    // Atmospheric depth haze — mid-cave fog
+    const fogGrd = ctx.createLinearGradient(0, 100, 0, floorY);
+    fogGrd.addColorStop(0, 'rgba(20,10,4,0)');
+    fogGrd.addColorStop(0.5, 'rgba(14,8,3,0.15)');
+    fogGrd.addColorStop(1, 'rgba(8,4,2,0.35)');
+    ctx.fillStyle = fogGrd; ctx.fillRect(0, 100, 700, floorY-100);
+
+    // ── FOREGROUND — detailed cave elements ───────────────────────────────────
+    // Floor — packed earth/stone
+    const floorGrd = ctx.createLinearGradient(0, floorY, 0, 500);
+    floorGrd.addColorStop(0, '#2e2018'); floorGrd.addColorStop(0.4, '#241810'); floorGrd.addColorStop(1, '#180e08');
+    ctx.fillStyle = floorGrd; ctx.fillRect(0, floorY, 700, 120);
+    // Floor cracks
+    ctx.strokeStyle = '#1a0e08'; ctx.lineWidth = 1;
+    [[60,floorY,130,floorY+18],[200,floorY,240,floorY+8],[380,floorY,450,floorY+22],[530,floorY,600,floorY+12]].forEach(([x1,y1,x2,y2]) => {
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    });
+
+    // Foreground stalactites — largest, most detailed
+    const stalFG = [[40,0,12,62],[110,0,9,44],[190,0,14,78],[280,0,11,55],[360,0,15,85],[440,0,10,48],[530,0,13,70],[620,0,9,42],[680,0,11,58]];
+    stalFG.forEach(([sx,sy,sw,sh]) => {
+        const sg = ctx.createLinearGradient(sx-sw, sy, sx+sw, sy);
+        sg.addColorStop(0, '#281c12'); sg.addColorStop(0.4, '#362618'); sg.addColorStop(1, '#1e1408');
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
+        // Wet drip shine
+        ctx.fillStyle = 'rgba(100,180,255,0.12)';
+        ctx.beginPath(); ctx.moveTo(sx-2, sy+sh-18); ctx.lineTo(sx+1, sy+sh-18); ctx.lineTo(sx, sy+sh); ctx.closePath(); ctx.fill();
+        // Left highlight
+        ctx.fillStyle = 'rgba(255,200,120,0.08)';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx-sw+3,sy); ctx.lineTo(sx-sw*0.3,sy+sh*0.65); ctx.closePath(); ctx.fill();
+    });
+
+    // Ceiling slab (top 30px very dark)
+    ctx.fillStyle = '#100c06'; ctx.fillRect(0, 0, 700, 30);
+
+    // Foreground stalagmites
+    [[90,floorY,9,48],[210,floorY,6,30],[350,floorY,10,56],[490,floorY,7,36],[620,floorY,8,44]].forEach(([sx,sy,sw,sh]) => {
+        const sg2 = ctx.createLinearGradient(sx-sw,sy,sx+sw,sy);
+        sg2.addColorStop(0,'#281c10'); sg2.addColorStop(0.5,'#382a18'); sg2.addColorStop(1,'#1e1408');
+        ctx.fillStyle = sg2;
         ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy-sh); ctx.closePath(); ctx.fill();
     });
 
-    // Scattered bones/skulls on floor
-    [[140, floorY-4],[260,floorY-3],[400,floorY-4],[540,floorY-3]].forEach(([bx,by]) => {
-        // Bone
-        ctx.fillStyle = '#d4c8a8';
-        ctx.fillRect(bx-10, by, 20, 4);
-        ctx.beginPath(); ctx.arc(bx-12, by+2, 5, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(bx+12, by+2, 5, 0, Math.PI*2); ctx.fill();
+    // Bones on floor
+    [[120,floorY-3],[270,floorY-2],[430,floorY-3],[560,floorY-2]].forEach(([bx2,by]) => {
+        ctx.fillStyle = '#c8bc9a';
+        ctx.fillRect(bx2-11,by,22,3);
+        ctx.beginPath(); ctx.arc(bx2-13,by+1.5,4.5,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bx2+13,by+1.5,4.5,0,Math.PI*2); ctx.fill();
     });
-    [[220,floorY-8],[460,floorY-8]].forEach(([sx,sy]) => {
-        // Skull
-        ctx.fillStyle = '#d4c8a8';
-        ctx.beginPath(); ctx.arc(sx, sy-5, 9, 0, Math.PI*2); ctx.fill();
-        ctx.fillRect(sx-6, sy-2, 12, 8);
-        // Eye sockets
-        ctx.fillStyle = '#0d0a08';
-        ctx.beginPath(); ctx.arc(sx-3, sy-6, 2.5, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(sx+3, sy-6, 2.5, 0, Math.PI*2); ctx.fill();
-        // Teeth
-        ctx.fillStyle = '#b8ac8c';
-        for(let t=0; t<4; t++) ctx.fillRect(sx-5+t*3, sy+4, 2, 4);
+    // Skulls
+    [[220,floorY],[470,floorY]].forEach(([sx,sy]) => {
+        ctx.fillStyle = '#ccc0a0';
+        ctx.beginPath(); ctx.arc(sx,sy-12,8,0,Math.PI*2); ctx.fill();
+        ctx.fillRect(sx-6,sy-8,12,8);
+        ctx.fillStyle = '#080604';
+        ctx.beginPath(); ctx.arc(sx-3,sy-13,2,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx+3,sy-13,2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#b0a880';
+        for(let t=0;t<4;t++) ctx.fillRect(sx-5+t*3,sy-2,2,4);
     });
 
-    // Golden ladder on left wall (exit up)
+    // Wall torches — bracketed sconces with warm flicker
+    [[110,floorY-210],[310,floorY-200],[510,floorY-210]].forEach(([tx,ty]) => {
+        // Iron bracket
+        ctx.fillStyle = '#4a3a28'; ctx.fillRect(tx-2,ty,4,20);
+        ctx.fillRect(tx-6,ty-4,12,5);
+        // Bowl
+        ctx.fillStyle = '#6a4a28'; ctx.fillRect(tx-5,ty-8,10,6);
+        // Flame — animated
+        const flkr = 0.75 + 0.25*Math.sin(Date.now()/160+tx);
+        const fGrd = ctx.createRadialGradient(tx,ty-10,0,tx,ty-10,18*flkr);
+        fGrd.addColorStop(0,`rgba(255,220,80,${flkr})`);
+        fGrd.addColorStop(0.35,`rgba(255,120,20,${0.8*flkr})`);
+        fGrd.addColorStop(0.7,`rgba(200,40,0,${0.4*flkr})`);
+        fGrd.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = fGrd; ctx.beginPath(); ctx.arc(tx,ty-10,18*flkr,0,Math.PI*2); ctx.fill();
+        // Pool of light on floor below
+        const poolGrd = ctx.createRadialGradient(tx,floorY,0,tx,floorY,55);
+        poolGrd.addColorStop(0,`rgba(255,180,60,${0.12*flkr})`);
+        poolGrd.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = poolGrd; ctx.fillRect(tx-55,floorY-20,110,60);
+    });
+
+    // Right passage glow (cave2 entrance)
+    const rGrd = ctx.createLinearGradient(600, 0, 700, 0);
+    rGrd.addColorStop(0, 'rgba(0,0,0,0)'); rGrd.addColorStop(1, 'rgba(200,50,10,0.4)');
+    ctx.fillStyle = rGrd; ctx.fillRect(600, floorY-220, 100, 220);
+
+    // Left wall with ladder (entry from chute)
+    ctx.fillStyle = '#201408'; ctx.fillRect(0, 0, 30, floorY);
     ctx.fillStyle = '#c8a010';
-    ctx.fillRect(30, floorY-120, 4, 120); ctx.fillRect(54, floorY-120, 4, 120);
-    for(let r=0; r<5; r++) { ctx.fillRect(30, floorY - 20 - r*22, 28, 4); }
-
-    // Right passage glow (to cave2)
-    const rightGlow = ctx.createRadialGradient(700, floorY-80, 10, 700, floorY-80, 80);
-    rightGlow.addColorStop(0, 'rgba(255,80,20,0.4)');
-    rightGlow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = rightGlow; ctx.fillRect(620, floorY-180, 80, 200);
-
-    // Ambient torches on walls
-    [[100,160],[300,180],[500,160],[640,170]].forEach(([tx,ty]) => {
-        ctx.fillStyle = '#5a3a10'; ctx.fillRect(tx-3, ty, 6, 18);
-        const flame = ctx.createRadialGradient(tx, ty, 0, tx, ty, 14);
-        flame.addColorStop(0, `rgba(255,200,50,${0.6 + 0.3*Math.sin(Date.now()/180+tx)})`);
-        flame.addColorStop(0.5, `rgba(255,80,10,${0.4 + 0.2*Math.sin(Date.now()/220+tx)})`);
-        flame.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = flame; ctx.beginPath(); ctx.arc(tx, ty, 14, 0, Math.PI*2); ctx.fill();
-    });
+    ctx.fillRect(22, floorY-130, 3, 130); ctx.fillRect(48, floorY-130, 3, 130);
+    for(let r=0;r<6;r++) ctx.fillRect(22, floorY-20-r*22, 29, 3);
 
     // Player
     drawBaldManager(player.x, player.y, player.facing);
-
-    // Wall hint at right edge
-    if(player.x > 600) {
-        ctx.fillStyle = 'rgba(255,180,50,0.55)'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('→', 685, floorY - 80);
-    }
 }
 
 function drawSelfDestructCave2() {
     const floorY = 380;
-    // Dark cave background
-    ctx.fillStyle = '#0d0806';
-    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    const sds = selfDestructSeq;
+    const dvx = sds.devilX;
 
-    // Floor
-    const fg2 = ctx.createLinearGradient(0, floorY, 0, 500);
-    fg2.addColorStop(0, '#2a1408'); fg2.addColorStop(1, '#150902');
-    ctx.fillStyle = fg2; ctx.fillRect(0, floorY, 700, 120);
+    // ── BACKGROUND ────────────────────────────────────────────────────────────
+    ctx.fillStyle = '#080402'; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-    // Ceiling
-    ctx.fillStyle = '#120c08'; ctx.fillRect(0, 0, 700, 50);
-    [[50,50,7,32],[150,50,9,48],[260,50,6,28],[380,50,11,55],[490,50,7,36],[610,50,8,40]].forEach(([sx,sy,sw,sh]) => {
-        ctx.fillStyle = '#241810';
-        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
+    // Deep cave walls — lava vein texture
+    const bgGrd = ctx.createLinearGradient(0, 0, 0, floorY);
+    bgGrd.addColorStop(0, '#0d0804'); bgGrd.addColorStop(0.7, '#120a05'); bgGrd.addColorStop(1, '#1a0e06');
+    ctx.fillStyle = bgGrd; ctx.fillRect(0, 0, 700, floorY);
+
+    // Lava veins in walls (glowing cracks)
+    ctx.strokeStyle = 'rgba(255,80,10,0.25)'; ctx.lineWidth = 1.5;
+    [[20,40,80,200],[40,60,100,280],[660,30,620,180],[640,100,680,260],[350,10,380,80],[300,20,260,120]].forEach(([x1,y1,x2,y2]) => {
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     });
 
-    // Hell fire pit on right side (source of flames)
-    const pitX = 600, pitY = floorY;
-    for(let fi = 0; fi < 8; fi++) {
-        const fx = pitX - 30 + fi * 10;
-        const fh = 30 + 25 * Math.sin(Date.now() / (150 + fi * 22) + fi);
-        const ff = ctx.createLinearGradient(fx, pitY, fx, pitY - fh);
-        ff.addColorStop(0, 'rgba(255,100,0,0.9)');
-        ff.addColorStop(0.4, 'rgba(255,50,0,0.7)');
-        ff.addColorStop(1, 'rgba(200,10,0,0)');
-        ctx.fillStyle = ff;
-        ctx.beginPath(); ctx.ellipse(fx, pitY, 7, fh, 0, 0, Math.PI*2); ctx.fill();
-    }
-    // Fire light on floor
-    const fireGlow = ctx.createRadialGradient(pitX, pitY, 5, pitX, pitY, 120);
-    fireGlow.addColorStop(0, 'rgba(255,80,20,0.35)');
-    fireGlow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = fireGlow; ctx.fillRect(480, 280, 220, 200);
+    // Ceiling stalactites
+    ctx.fillStyle = '#140e06'; ctx.fillRect(0, 0, 700, 40);
+    [[40,40,12,55],[120,40,16,80],[220,40,11,50],[330,40,18,95],[440,40,13,65],[560,40,10,48],[660,40,14,72]].forEach(([sx,sy,sw,sh]) => {
+        ctx.fillStyle = '#1c1408';
+        ctx.beginPath(); ctx.moveTo(sx-sw,sy); ctx.lineTo(sx+sw,sy); ctx.lineTo(sx,sy+sh); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,80,10,0.07)';
+        ctx.beginPath(); ctx.moveTo(sx,sy+sh-12); ctx.lineTo(sx+1,sy+sh); ctx.lineTo(sx-2,sy+sh-14); ctx.closePath(); ctx.fill();
+    });
 
-    // Coffin — rises from pit
-    const coffinY = selfDestructSeq.coffinY;
-    if(coffinY < 520) {
-        const cx = 560, cy = coffinY;
+    // ── AMBIENT FIRE CURTAIN — spread across full floor ───────────────────────
+    const t = Date.now();
+    for(let fi = 0; fi < 22; fi++) {
+        const fx = fi * 32 + 8;
+        const seed = fi * 137.5;
+        const fh = 18 + 20 * Math.sin(t / (130 + seed % 80) + seed);
+        const fw = 7 + 4 * Math.sin(t / (200 + seed % 60) + seed + 1);
+        const ff = ctx.createLinearGradient(fx, floorY, fx, floorY - fh);
+        const alpha1 = 0.55 + 0.3 * Math.sin(t / (170 + fi * 31));
+        const alpha2 = 0.3 + 0.2 * Math.sin(t / (210 + fi * 17) + 1);
+        ff.addColorStop(0, `rgba(255,${80 + fi*5 % 40},0,${alpha1})`);
+        ff.addColorStop(0.4, `rgba(255,40,0,${alpha2})`);
+        ff.addColorStop(1, 'rgba(180,10,0,0)');
+        ctx.fillStyle = ff;
+        ctx.beginPath(); ctx.ellipse(fx, floorY, fw, fh, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // Fire floor glow
+    const fgGrd = ctx.createLinearGradient(0, floorY-40, 0, floorY+20);
+    fgGrd.addColorStop(0, 'rgba(255,60,0,0)'); fgGrd.addColorStop(1, 'rgba(255,80,10,0.18)');
+    ctx.fillStyle = fgGrd; ctx.fillRect(0, floorY-40, 700, 60);
+
+    // ── STONE FLOOR ───────────────────────────────────────────────────────────
+    const flGrd = ctx.createLinearGradient(0, floorY, 0, 500);
+    flGrd.addColorStop(0, '#2a1808'); flGrd.addColorStop(1, '#180e04');
+    ctx.fillStyle = flGrd; ctx.fillRect(0, floorY, 700, 120);
+    // Cracked stone tiles
+    ctx.strokeStyle = '#1a0e04'; ctx.lineWidth = 1;
+    for(let tx = 0; tx < 700; tx += 70) { ctx.beginPath(); ctx.moveTo(tx,floorY); ctx.lineTo(tx+4,floorY+60); ctx.stroke(); }
+
+    // ── THRONE OF STONE — right side ─────────────────────────────────────────
+    const thrX = 610, thrY = floorY;
+    // Platform raised 18px
+    const platGrd = ctx.createLinearGradient(thrX-50, thrY-18, thrX+50, thrY-18);
+    platGrd.addColorStop(0,'#2a1c10'); platGrd.addColorStop(0.5,'#382618'); platGrd.addColorStop(1,'#1e140c');
+    ctx.fillStyle = platGrd; ctx.fillRect(thrX-50, thrY-18, 100, 18);
+    ctx.fillStyle = '#482e18'; ctx.fillRect(thrX-50, thrY-20, 100, 4);
+    // Throne back — jagged carved rock
+    ctx.fillStyle = '#2e2010';
+    ctx.beginPath();
+    ctx.moveTo(thrX-34, thrY-18);
+    ctx.lineTo(thrX-38, thrY-95); ctx.lineTo(thrX-28, thrY-82); ctx.lineTo(thrX-20, thrY-100);
+    ctx.lineTo(thrX-10, thrY-88); ctx.lineTo(thrX, thrY-110); ctx.lineTo(thrX+10, thrY-88);
+    ctx.lineTo(thrX+20, thrY-100); ctx.lineTo(thrX+28, thrY-82); ctx.lineTo(thrX+38, thrY-95);
+    ctx.lineTo(thrX+34, thrY-18); ctx.closePath(); ctx.fill();
+    // Throne back — lighter face
+    ctx.fillStyle = '#3a2818';
+    ctx.beginPath();
+    ctx.moveTo(thrX-30, thrY-18); ctx.lineTo(thrX-32, thrY-88); ctx.lineTo(thrX, thrY-105);
+    ctx.lineTo(thrX+32, thrY-88); ctx.lineTo(thrX+30, thrY-18); ctx.closePath(); ctx.fill();
+    // Lava crack in throne back
+    ctx.strokeStyle = 'rgba(255,80,10,0.4)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(thrX-5,thrY-30); ctx.lineTo(thrX+3,thrY-60); ctx.lineTo(thrX-2,thrY-88); ctx.stroke();
+    // Throne seat
+    const seatGrd = ctx.createLinearGradient(thrX-28, thrY-38, thrX+28, thrY-20);
+    seatGrd.addColorStop(0,'#3c2814'); seatGrd.addColorStop(1,'#2a1c0e');
+    ctx.fillStyle = seatGrd; ctx.fillRect(thrX-28, thrY-38, 56, 22);
+    ctx.fillStyle = '#482e18'; ctx.fillRect(thrX-28, thrY-40, 56, 4);
+    // Arm rests — angular rock slabs
+    ctx.fillStyle = '#342010';
+    ctx.fillRect(thrX-36, thrY-52, 10, 36); ctx.fillRect(thrX+26, thrY-52, 10, 36);
+    ctx.fillStyle = '#483018'; ctx.fillRect(thrX-36, thrY-54, 10, 4); ctx.fillRect(thrX+26, thrY-54, 10, 4);
+    // Skull on each arm rest
+    [[thrX-31, thrY-68],[thrX+31, thrY-68]].forEach(([skx,sky]) => {
+        ctx.fillStyle = '#c0b498';
+        ctx.beginPath(); ctx.arc(skx, sky-4, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(skx-4, sky-1, 8, 6);
+        ctx.fillStyle = '#0a0604';
+        ctx.beginPath(); ctx.arc(skx-2,sky-5,1.5,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(skx+2,sky-5,1.5,0,Math.PI*2); ctx.fill();
+    });
+    // Throne action prompt (if available)
+    if(sds.throneActionAvailable) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(thrX-58, thrY-130, 116, 22);
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] SAFE ROOM', thrX, thrY-115);
+    }
+
+    // ── COFFIN ────────────────────────────────────────────────────────────────
+    const coffinX = 490;
+    if(sds.coffinRisingTimer > 0 || sds.devilState === 'dead') {
+        const cy = sds.coffinY;
+        // Shadow on floor
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.ellipse(coffinX, floorY+4, 22, 6, 0, 0, Math.PI*2); ctx.fill();
+        // Coffin body
+        const cg = ctx.createLinearGradient(coffinX-18, cy, coffinX+18, cy);
+        cg.addColorStop(0,'#1e0e06'); cg.addColorStop(0.4,'#2e1a0c'); cg.addColorStop(1,'#180c04');
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.moveTo(coffinX-14,cy); ctx.lineTo(coffinX-18,cy+22); ctx.lineTo(coffinX-18,cy+60);
+        ctx.lineTo(coffinX+18,cy+60); ctx.lineTo(coffinX+18,cy+22); ctx.lineTo(coffinX+14,cy);
+        ctx.closePath(); ctx.fill();
+        // Wood grain
+        ctx.strokeStyle = '#3a1e10'; ctx.lineWidth = 0.8;
+        for(let gl=0;gl<5;gl++){ ctx.beginPath(); ctx.moveTo(coffinX-11+gl*5,cy+2); ctx.lineTo(coffinX-11+gl*5,cy+58); ctx.stroke(); }
+        // Gold cross
+        ctx.fillStyle = '#c8a010'; ctx.fillRect(coffinX-2,cy+12,4,28); ctx.fillRect(coffinX-9,cy+22,18,4);
+        // Lid edge bevel
+        ctx.fillStyle = 'rgba(255,180,80,0.15)';
+        ctx.fillRect(coffinX-14,cy,5,60); // left bevel
+        // Lid seam
+        ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(coffinX,cy); ctx.lineTo(coffinX,cy+60); ctx.stroke();
+    }
+
+    // ── DEVIL NPC ─────────────────────────────────────────────────────────────
+    const ds = sds.devilState;
+    const s = 2;
+    const dvy = floorY;
+
+    function drawDevilBody(dx, dy, seated, riseAmt) {
+        // riseAmt 0=seated, 1=standing
+        const bodyOfsY = seated ? 22 * (1 - riseAmt) : 0;
+        const legFold = seated ? (1 - riseAmt) : 0;
+
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.beginPath(); ctx.ellipse(cx, floorY + 4, 22, 7, 0, 0, Math.PI*2); ctx.fill();
-        // Coffin body (dark wood)
-        ctx.fillStyle = '#2a1208';
-        ctx.beginPath();
-        ctx.moveTo(cx-14, cy); ctx.lineTo(cx-18, cy+20); ctx.lineTo(cx-18, cy+50);
-        ctx.lineTo(cx+18, cy+50); ctx.lineTo(cx+18, cy+20); ctx.lineTo(cx+14, cy);
-        ctx.closePath(); ctx.fill();
-        // Grain
-        ctx.strokeStyle = '#3a1e10'; ctx.lineWidth = 1;
-        for(let gl=0;gl<5;gl++){ ctx.beginPath(); ctx.moveTo(cx-12+gl*5,cy+2); ctx.lineTo(cx-12+gl*5,cy+48); ctx.stroke(); }
-        // Gold cross
-        ctx.fillStyle = '#c8a010';
-        ctx.fillRect(cx-2, cy+10, 4, 24); ctx.fillRect(cx-8, cy+18, 16, 4);
-        // Lid highlight
-        ctx.fillStyle = 'rgba(255,200,100,0.12)';
-        ctx.beginPath();
-        ctx.moveTo(cx-13, cy+1); ctx.lineTo(cx-17, cy+20); ctx.lineTo(cx-17, cy+10);
-        ctx.lineTo(cx-12, cy+1); ctx.closePath(); ctx.fill();
-    }
+        ctx.beginPath(); ctx.ellipse(dx, dy+3, 18+4*riseAmt, 5, 0, 0, Math.PI*2); ctx.fill();
 
-    // Devil NPC
-    const dv = selfDestructSeq;
-    if(dv.devilState !== 'dead') {
-        const dvx = dv.devilX, dvy = floorY;
-        // Devil shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        ctx.beginPath(); ctx.ellipse(dvx, dvy+2, 20, 6, 0, 0, Math.PI*2); ctx.fill();
-        // Body — red with cape
-        ctx.fillStyle = '#8b0000';
-        ctx.fillRect(dvx-10, dvy-40, 20, 30);
-        // Cape
-        ctx.fillStyle = '#6b0000';
-        ctx.beginPath(); ctx.moveTo(dvx-14, dvy-38); ctx.lineTo(dvx-10, dvy-10); ctx.lineTo(dvx-4, dvy-38); ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(dvx+14, dvy-38); ctx.lineTo(dvx+10, dvy-10); ctx.lineTo(dvx+4, dvy-38); ctx.closePath(); ctx.fill();
-        // Head
+        // Legs/lower body
+        if(!seated || riseAmt > 0) {
+            ctx.fillStyle = '#4a0808';
+            ctx.fillRect(dx-7*s, dy-10*s+bodyOfsY, 6*s, 10*s); // left leg
+            ctx.fillRect(dx+s, dy-10*s+bodyOfsY, 6*s, 10*s);   // right leg
+            ctx.fillStyle = '#1a0404';
+            ctx.fillRect(dx-7*s, dy-2*s, 6*s, 2*s); // left boot
+            ctx.fillRect(dx+s, dy-2*s, 6*s, 2*s);   // right boot
+        } else {
+            // Seated legs folded — thighs horizontal
+            ctx.fillStyle = '#4a0808';
+            ctx.fillRect(dx-16*s, dy-14*s, 10*s, 6*s); // left thigh out
+            ctx.fillRect(dx+6*s, dy-14*s, 10*s, 6*s);  // right thigh out
+            ctx.fillRect(dx-16*s, dy-8*s, 5*s, 5*s);   // lower legs folded
+            ctx.fillRect(dx+11*s, dy-8*s, 5*s, 5*s);
+            ctx.fillStyle = '#1a0404'; // hooves
+            ctx.fillRect(dx-18*s, dy-4*s, 6*s, 2*s);
+            ctx.fillRect(dx+12*s, dy-4*s, 6*s, 2*s);
+        }
+
+        // Cape — sweeping black with dark red lining
+        const capeY = dy - 12*s - 20 + bodyOfsY;
+        ctx.fillStyle = '#0e0404';
+        ctx.beginPath();
+        ctx.moveTo(dx-12*s, capeY+8); ctx.lineTo(dx-18*s, dy); ctx.lineTo(dx-6*s, dy); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(dx+12*s, capeY+8); ctx.lineTo(dx+18*s, dy); ctx.lineTo(dx+6*s, dy); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#3a0808';
+        ctx.beginPath(); ctx.moveTo(dx-12*s, capeY+10); ctx.lineTo(dx-8*s, dy-2*s); ctx.lineTo(dx-4*s, capeY+10); ctx.closePath(); ctx.fill();
+
+        // Torso
+        const torsoY = dy - 22*s - 8 + bodyOfsY;
+        ctx.fillStyle = '#7a0000';
+        ctx.fillRect(dx-8*s, torsoY, 16*s, 12*s);
+        // Lapel/collar detail
+        ctx.fillStyle = '#aa0808';
+        ctx.fillRect(dx-6*s, torsoY, 4*s, 10*s);
+        ctx.fillRect(dx+2*s, torsoY, 4*s, 10*s);
+
+        // Arms
+        const pfSide = dx < player.x ? 1 : -1; // pitchfork arm faces player
         ctx.fillStyle = '#cc2200';
-        ctx.beginPath(); ctx.arc(dvx, dvy-50, 11, 0, Math.PI*2); ctx.fill();
+        // Arm toward player (pitchfork arm)
+        const pfAnim = ds === 'attacking' ? Math.min(sds.stabAnimTimer/20, 1) * 18 * pfSide : 0;
+        ctx.fillRect(dx + pfSide*8*s, torsoY+2, 2*s, 12*s);
+        // Other arm
+        ctx.fillRect(dx - pfSide*10*s, torsoY+2, 2*s, 10*s);
+
+        // Head
+        const headY = torsoY - 12*s;
+        ctx.fillStyle = '#cc1500';
+        ctx.beginPath(); ctx.arc(dx, headY+6*s, 6*s, 0, Math.PI*2); ctx.fill();
         // Horns
         ctx.fillStyle = '#8b0000';
-        ctx.beginPath(); ctx.moveTo(dvx-8, dvy-58); ctx.lineTo(dvx-12, dvy-70); ctx.lineTo(dvx-4, dvy-58); ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(dvx+8, dvy-58); ctx.lineTo(dvx+12, dvy-70); ctx.lineTo(dvx+4, dvy-58); ctx.closePath(); ctx.fill();
-        // Yellow eyes
-        ctx.fillStyle = '#ffdd00';
-        ctx.beginPath(); ctx.arc(dvx-4, dvy-51, 3, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(dvx+4, dvy-51, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(dx-5*s,headY+2*s); ctx.lineTo(dx-9*s,headY-8*s); ctx.lineTo(dx-s,headY+2*s); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(dx+5*s,headY+2*s); ctx.lineTo(dx+9*s,headY-8*s); ctx.lineTo(dx+s,headY+2*s); ctx.closePath(); ctx.fill();
+        // Horn highlights
+        ctx.fillStyle = '#aa1010';
+        ctx.beginPath(); ctx.moveTo(dx-5*s,headY+2*s); ctx.lineTo(dx-8*s,headY-7*s); ctx.lineTo(dx-6*s,headY); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(dx+5*s,headY+2*s); ctx.lineTo(dx+8*s,headY-7*s); ctx.lineTo(dx+6*s,headY); ctx.closePath(); ctx.fill();
+        // Eyes (glowing yellow, slit pupils)
+        const eyeFlkr = 0.8 + 0.2*Math.sin(Date.now()/300+dx);
+        ctx.fillStyle = `rgba(255,220,0,${eyeFlkr})`;
+        ctx.beginPath(); ctx.ellipse(dx-3*s, headY+5*s, 3, 4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(dx+3*s, headY+5*s, 3, 4, 0, 0, Math.PI*2); ctx.fill();
+        // Pupils (vertical slit)
         ctx.fillStyle = '#000';
-        ctx.beginPath(); ctx.arc(dvx-4, dvy-51, 1.5, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(dvx+4, dvy-51, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(dx-3*s-1, headY+2*s, 2, 6);
+        ctx.fillRect(dx+3*s-1, headY+2*s, 2, 6);
+        // Sneer / mouth
+        ctx.strokeStyle = '#600'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(dx-3*s, headY+10*s); ctx.quadraticCurveTo(dx, headY+8*s, dx+3*s, headY+10*s); ctx.stroke();
+
         // Tail
         ctx.strokeStyle = '#8b0000'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(dvx+10, dvy-20); ctx.quadraticCurveTo(dvx+28, dvy-10, dvx+22, dvy-2); ctx.stroke();
-        // Pitchfork
-        const pfBob = dv.devilState === 'attacking' ? Math.sin(Date.now()/80)*4 : Math.sin(Date.now()/400)*2;
+        ctx.beginPath(); ctx.moveTo(dx+8*s, torsoY+8*s); ctx.quadraticCurveTo(dx+20*s, torsoY+14*s, dx+16*s, dy-2*s); ctx.stroke();
+        // Tail tip (arrowhead)
+        ctx.fillStyle = '#6b0000';
+        ctx.beginPath(); ctx.moveTo(dx+14*s,dy-2*s); ctx.lineTo(dx+18*s,dy-2*s); ctx.lineTo(dx+16*s,dy+2*s); ctx.closePath(); ctx.fill();
+
+        // Pitchfork — in arm on player side
+        const pfX = dx + pfSide*10*s + pfAnim;
+        const pfTopY = headY - 4*s;
+        ctx.fillStyle = '#8a6000';
+        ctx.fillRect(pfX-2, pfTopY, 4, 52); // handle
         ctx.fillStyle = '#c8a010';
-        ctx.fillRect(dvx-18, dvy-58+pfBob, 3, 48);
-        ctx.fillRect(dvx-22, dvy-58+pfBob, 3, 8); ctx.fillRect(dvx-18, dvy-58+pfBob, 3, 8); ctx.fillRect(dvx-14, dvy-58+pfBob, 3, 8);
-        // Speech bubble
-        if(dv.devilState === 'idle' || dv.devilState === 'talking') {
-            const bw = 160, bh = 36, bx2 = dvx - bw/2, by2 = dvy - 100;
-            ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.beginPath(); ctx.roundRect(bx2, by2, bw, bh, 6); ctx.fill();
-            ctx.strokeStyle = '#cc2200'; ctx.lineWidth = 2; ctx.stroke();
-            // Tail pointing down-right toward devil head
-            ctx.fillStyle = 'rgba(0,0,0,0.75)';
-            ctx.beginPath(); ctx.moveTo(dvx-6, by2+bh); ctx.lineTo(dvx+6, by2+bh); ctx.lineTo(dvx, by2+bh+10); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#ffcc44'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('Your chariot awaits, sir.', dvx, by2+14);
-            ctx.fillStyle = '#ff8844';
-            ctx.fillText(dv.coffinRisen ? '[ACTION] Board' : '...', dvx, by2+28);
+        ctx.fillRect(pfX-2, pfTopY, 4, 44); // handle (gold tipped)
+        // Tines
+        const tineY = pfTopY - 2;
+        ctx.fillRect(pfX-10, tineY, 3, 10); ctx.fillRect(pfX-2, tineY, 3, 10); ctx.fillRect(pfX+6, tineY, 3, 10);
+        // Tine tips
+        ctx.fillStyle = '#e8c020';
+        [[pfX-10, tineY], [pfX-2, tineY], [pfX+6, tineY]].forEach(([tx2,ty2]) => {
+            ctx.beginPath(); ctx.moveTo(tx2, ty2); ctx.lineTo(tx2+3, ty2); ctx.lineTo(tx2+1.5, ty2-6); ctx.closePath(); ctx.fill();
+        });
+        // Stab effect
+        if(ds === 'attacking' && sds.stabAnimTimer > 20) {
+            const stabAlpha = Math.min(1, (sds.stabAnimTimer-20)/15);
+            ctx.fillStyle = `rgba(255,220,80,${stabAlpha*0.7})`;
+            ctx.beginPath(); ctx.arc(pfX + pfSide*20, pfTopY-4, 16*stabAlpha, 0, Math.PI*2); ctx.fill();
         }
-    } else {
-        // Devil dead — slumped on floor
-        ctx.fillStyle = '#6b0000'; ctx.fillRect(dv.devilX-18, floorY-6, 36, 8);
-        ctx.fillStyle = '#cc2200'; ctx.beginPath(); ctx.arc(dv.devilX, floorY-10, 9, 0, Math.PI*2); ctx.fill();
     }
 
-    // Player
+    if(ds === 'dead') {
+        // Devil slumped in coffin
+        if(sds.coffinY < floorY) {
+            const cy = sds.coffinY;
+            ctx.fillStyle = '#cc1500'; ctx.fillRect(coffinX-6*s, cy+4, 12*s, 8*s);
+            ctx.beginPath(); ctx.arc(coffinX, cy+3, 5*s, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#8b0000'; // horns sticking up
+            ctx.beginPath(); ctx.moveTo(coffinX-4*s,cy); ctx.lineTo(coffinX-7*s,cy-8); ctx.lineTo(coffinX,cy); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(coffinX+4*s,cy); ctx.lineTo(coffinX+7*s,cy-8); ctx.lineTo(coffinX,cy); ctx.closePath(); ctx.fill();
+        }
+    } else if(ds === 'seated') {
+        drawDevilBody(dvx, dvy, true, 0);
+    } else if(ds === 'rising') {
+        const riseAmt = Math.min(1, sds.devilRiseTimer / 60);
+        drawDevilBody(dvx, dvy, true, riseAmt);
+    } else {
+        drawDevilBody(dvx, dvy, false, 1);
+    }
+
+    // ── LOWER-THIRD DIALOGUE ──────────────────────────────────────────────────
+    if(sds.devilDialogue) {
+        const dlgLines = ["Your chariot awaits, sir.", "Step right up..."];
+        const curLine = dlgLines[sds.devilDialogueLine] || '';
+        const charsShown = Math.min(Math.floor(sds.devilDialogueChars), curLine.length);
+        const displayText = curLine.substring(0, charsShown);
+        const isTyping = charsShown < curLine.length;
+
+        const dlgX = -GX, dlgY = 305, dlgW = CANVAS_W, dlgH = 150;
+        ctx.save();
+        ctx.fillStyle = 'rgba(20,5,3,0.94)'; ctx.fillRect(dlgX, dlgY, dlgW, dlgH);
+        ctx.fillStyle = '#8b0000'; ctx.fillRect(dlgX, dlgY, dlgW, 3); // red border top
+        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillStyle = '#cc2200';
+        ctx.fillText('DEVIL', dlgX + 20, dlgY + 26);
+        // Dialogue text
+        ctx.font = '20px Arial'; ctx.fillStyle = '#f0d0c8';
+        const maxW = CANVAS_W - 50;
+        const words = displayText.split(' ');
+        let lineA = '', lineB = '';
+        for(const w of words) {
+            const test = lineA ? lineA + ' ' + w : w;
+            if(ctx.measureText(test).width <= maxW) lineA = test;
+            else lineB = lineB ? lineB + ' ' + w : w;
+        }
+        ctx.fillText(lineA, dlgX + 20, dlgY + 65);
+        if(lineB) ctx.fillText(lineB, dlgX + 20, dlgY + 93);
+        if(isTyping) {
+            if(Math.floor(Date.now()/400) % 2 === 0) {
+                const cx2 = dlgX + 20 + ctx.measureText(lineB || lineA).width + 3;
+                const cy2 = lineB ? dlgY + 93 : dlgY + 65;
+                ctx.fillStyle = '#f0d0c8'; ctx.fillRect(cx2, cy2-16, 2, 18);
+            }
+        } else {
+            if(Math.floor(Date.now()/500) % 2 === 0) {
+                const isLast = sds.devilDialogueLine >= dlgLines.length - 1;
+                ctx.font = 'bold 17px Arial'; ctx.textAlign = 'right'; ctx.fillStyle = '#ff6644';
+                ctx.fillText(isLast ? '[ ACTION ]' : '[ ACTION ] \u25ba', dlgX + dlgW - 16, dlgY + 136);
+            }
+        }
+        ctx.restore();
+    }
+
+    // ── PLAYER ────────────────────────────────────────────────────────────────
     drawBaldManager(player.x, player.y, player.facing);
-    // Gun UI if player has it
     if(level6.hasRevolver || level6.revolverAmmo > 0) drawAmmoCounter();
 }
 
 function drawSelfDestructSafeRoom() {
     const floorY = 380;
-    // Cozy room — warm wood paneling
-    ctx.fillStyle = '#1c1008';
-    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    const sds = selfDestructSeq;
+    const s = 2;
 
-    // Floor — warm hardwood
-    const hf = ctx.createLinearGradient(0, floorY, 0, 500);
-    hf.addColorStop(0, '#3a2010'); hf.addColorStop(1, '#2a1508');
-    ctx.fillStyle = hf; ctx.fillRect(0, floorY, 700, 120);
-    ctx.strokeStyle = '#4a2e14'; ctx.lineWidth = 1;
-    for(let bx = 0; bx < 700; bx += 80) { ctx.beginPath(); ctx.moveTo(bx, floorY); ctx.lineTo(bx, 500); ctx.stroke(); }
-    for(let by = floorY + 40; by < 500; by += 50) { ctx.beginPath(); ctx.moveTo(0, by); ctx.lineTo(700, by); ctx.stroke(); }
-
-    // Wood panel walls
-    const wg = ctx.createLinearGradient(0, 0, 0, floorY);
-    wg.addColorStop(0, '#2a1c0c'); wg.addColorStop(1, '#3a2410');
-    ctx.fillStyle = wg; ctx.fillRect(0, 0, 700, floorY);
-    ctx.strokeStyle = '#4a3018'; ctx.lineWidth = 1;
-    for(let px = 0; px < 700; px += 60) { ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, floorY); ctx.stroke(); }
-
-    // ── KITCHENETTE — left side ───────────────────────────────────────────────
-    const kx = 100;
-    // Counter top
-    ctx.fillStyle = '#555'; ctx.fillRect(kx-70, floorY-60, 140, 10);
-    ctx.fillStyle = '#666'; ctx.fillRect(kx-70, floorY-70, 140, 12);
-    ctx.fillStyle = '#4a4a4a'; ctx.fillRect(kx-70, floorY-58, 140, floorY - (floorY-58));
-    // Cabinet doors
-    ctx.strokeStyle = '#5a5a5a'; ctx.lineWidth = 1;
-    for(let cd = 0; cd < 3; cd++) {
-        const cdx = kx - 65 + cd * 46;
-        ctx.fillStyle = '#505050'; ctx.fillRect(cdx, floorY-58, 42, floorY-8-(floorY-58));
-        ctx.strokeRect(cdx+2, floorY-56, 38, floorY-12-(floorY-56));
-        // Handle
-        ctx.fillStyle = '#888'; ctx.fillRect(cdx+16, floorY-35, 10, 4);
+    // ── ROOM SHELL ────────────────────────────────────────────────────────────
+    // Back wall — warm paneled wood
+    const wallGrd = ctx.createLinearGradient(0, 0, 0, floorY);
+    wallGrd.addColorStop(0, '#1e1208'); wallGrd.addColorStop(1, '#2e1c0e');
+    ctx.fillStyle = wallGrd; ctx.fillRect(0, 0, 700, floorY);
+    // Wainscoting panels
+    ctx.strokeStyle = '#3a2414'; ctx.lineWidth = 1;
+    for(let px = 0; px < 700; px += 80) {
+        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, floorY); ctx.stroke();
+        if(px > 0 && px < 680) {
+            ctx.strokeStyle = 'rgba(80,50,20,0.3)';
+            ctx.strokeRect(px+4, 40, 72, floorY-80);
+            ctx.strokeStyle = '#3a2414';
+        }
     }
-    // Microwave on counter
-    ctx.fillStyle = '#333'; ctx.fillRect(kx-25, floorY-110, 50, 40);
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(kx-22, floorY-107, 30, 28); // window
-    ctx.fillStyle = 'rgba(0,200,50,0.6)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('00:00', kx-7, floorY-90);
-    // Mini fridge
-    ctx.fillStyle = '#e0e0e0'; ctx.fillRect(kx+40, floorY-120, 30, 120);
-    ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1; ctx.strokeRect(kx+42, floorY-118, 26, 56);
-    ctx.strokeRect(kx+42, floorY-60, 26, 58);
-    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(kx+63, floorY-90, 4, 10); ctx.fillRect(kx+63, floorY-35, 4, 10);
+    // Chair rail
+    ctx.fillStyle = '#4a3018'; ctx.fillRect(0, floorY-100, 700, 6);
+    ctx.fillStyle = '#6a4a28'; ctx.fillRect(0, floorY-100, 700, 2);
 
-    // ── LAZY BOY + TV — right side ────────────────────────────────────────────
-    const chairX = 460, chairY = floorY;
-    // Armchair shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.ellipse(chairX, chairY + 4, 45, 12, 0, 0, Math.PI * 2); ctx.fill();
-    // Chair base/seat
-    ctx.fillStyle = '#8b3a10';
-    ctx.fillRect(chairX-38, chairY-30, 76, 28);
-    // Seat cushion
-    ctx.fillStyle = '#a04818';
-    ctx.fillRect(chairX-35, chairY-28, 70, 22);
-    // Back
-    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-35, chairY-80, 70, 52);
-    // Back cushion
-    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-32, chairY-78, 64, 46);
-    // Arm rests
-    ctx.fillStyle = '#7a3008';
-    ctx.fillRect(chairX-42, chairY-60, 10, 58); ctx.fillRect(chairX+32, chairY-60, 10, 58);
-    // Footrest (extended if sitting)
-    if(selfDestructSeq.chairSitting) {
-        ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-30, chairY-4, 60, 12);
-        ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-27, chairY-2, 54, 8);
-    }
-    // Remote on armrest
-    ctx.fillStyle = '#222'; ctx.fillRect(chairX+32, chairY-50, 8, 16);
-    ctx.fillStyle = '#444'; ctx.fillRect(chairX+33, chairY-49, 3, 3); ctx.fillRect(chairX+37, chairY-49, 3, 3);
-    ctx.fillRect(chairX+33, chairY-44, 3, 3); ctx.fillRect(chairX+37, chairY-44, 3, 3);
+    // Floor — warm hardwood with planks
+    const floorGrd = ctx.createLinearGradient(0, floorY, 0, 500);
+    floorGrd.addColorStop(0,'#3a2212'); floorGrd.addColorStop(1,'#281608');
+    ctx.fillStyle = floorGrd; ctx.fillRect(0, floorY, 700, 120);
+    ctx.strokeStyle = '#2e1a0a'; ctx.lineWidth = 1;
+    for(let fx = 0; fx < 700; fx += 90) { ctx.beginPath(); ctx.moveTo(fx, floorY); ctx.lineTo(fx, 500); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(40,20,8,0.4)';
+    for(let fy = floorY+40; fy < 500; fy += 55) { ctx.beginPath(); ctx.moveTo(0,fy); ctx.lineTo(700,fy); ctx.stroke(); }
+    // Rug under chair area
+    const rugGrd = ctx.createRadialGradient(350, floorY+10, 10, 350, floorY+10, 100);
+    rugGrd.addColorStop(0,'rgba(100,40,20,0.6)'); rugGrd.addColorStop(1,'rgba(60,20,8,0)');
+    ctx.fillStyle = rugGrd; ctx.beginPath(); ctx.ellipse(350, floorY+8, 100, 28, 0, 0, Math.PI*2); ctx.fill();
 
-    // Giant TV on right wall
-    const tvX = 600, tvY = 60, tvW = 180, tvH = 115;
-    // TV mount
-    ctx.fillStyle = '#222'; ctx.fillRect(tvX+tvW/2-4, tvY+tvH, 8, 30); ctx.fillRect(tvX+tvW/2-20, tvY+tvH+28, 40, 6);
-    // TV bezel
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(tvX, tvY, tvW, tvH);
+    // ── GIANT TV — back wall, centered, full-width feel ───────────────────────
+    const tvX = 115, tvY = 12, tvW = 470, tvH = 200;
+    // TV mount bracket
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(350-6, tvY+tvH, 12, 35); ctx.fillRect(350-30, tvY+tvH+33, 60, 6);
+    // TV outer bezel
+    ctx.fillStyle = '#111'; ctx.fillRect(tvX, tvY, tvW, tvH);
     ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.strokeRect(tvX, tvY, tvW, tvH);
+    // Thin bezel detail
+    ctx.fillStyle = '#1e1e1e'; ctx.fillRect(tvX+3, tvY+3, tvW-6, tvH-6);
+    // Screen
+    const scrX = tvX+8, scrY = tvY+8, scrW = tvW-16, scrH = tvH-16;
 
-    if(selfDestructSeq.tvEndStarted) {
-        // TV on — show ending scene (warm cozy image)
-        const elapsed = selfDestructSeq.tvEndTimer;
-        const tvScreen = ctx.createLinearGradient(tvX+4, tvY+4, tvX+tvW-4, tvY+tvH-4);
-        tvScreen.addColorStop(0, '#1a3a5a'); tvScreen.addColorStop(1, '#0a2a4a');
-        ctx.fillStyle = tvScreen; ctx.fillRect(tvX+4, tvY+4, tvW-8, tvH-8);
-        // Sunrise glow
-        const sunGlow = ctx.createRadialGradient(tvX+tvW/2, tvY+tvH-4, 2, tvX+tvW/2, tvY+tvH-4, 50);
-        sunGlow.addColorStop(0, `rgba(255,200,50,${Math.min(1, elapsed/2000)})`);
-        sunGlow.addColorStop(1, 'rgba(255,80,20,0)');
-        ctx.fillStyle = sunGlow; ctx.fillRect(tvX+4, tvY+4, tvW-8, tvH-8);
-        // Text fade in
-        if(elapsed > 1500) {
-            const alpha = Math.min(1, (elapsed-1500)/1000);
+    if(sds.tvEndStarted) {
+        const elapsed = sds.tvEndTimer;
+        // Warm sunrise scene
+        const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
+        sky.addColorStop(0,'#0a1a2e'); sky.addColorStop(0.5,'#1a3a5a'); sky.addColorStop(0.8,'#3a6a8a'); sky.addColorStop(1,'#8aaa80');
+        ctx.fillStyle = sky; ctx.fillRect(scrX, scrY, scrW, scrH);
+        // Sun rising
+        if(elapsed > 500) {
+            const sunRise = Math.min(1, (elapsed-500)/2000);
+            const sunY = scrY+scrH - sunRise*scrH*0.55;
+            const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, 60*sunRise);
+            sunGrd.addColorStop(0,`rgba(255,230,100,${sunRise})`);
+            sunGrd.addColorStop(0.3,`rgba(255,160,40,${0.7*sunRise})`);
+            sunGrd.addColorStop(1,'rgba(255,80,0,0)');
+            ctx.fillStyle = sunGrd; ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, 60*sunRise, 0, Math.PI*2); ctx.fill();
+        }
+        // Horizon glow
+        const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
+        hzGrd.addColorStop(0,'rgba(255,180,50,0)'); hzGrd.addColorStop(1,`rgba(255,140,30,${Math.min(0.5, elapsed/3000)})`);
+        ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
+        // Text
+        if(elapsed > 2500) {
+            const alpha = Math.min(1, (elapsed-2500)/1000);
             ctx.globalAlpha = alpha;
-            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px serif'; ctx.textAlign = 'center';
-            ctx.fillText('THE END', tvX+tvW/2, tvY+tvH/2-6);
-            ctx.fillStyle = '#c8e8ff'; ctx.font = '8px serif';
-            ctx.fillText('Mullet Pro', tvX+tvW/2, tvY+tvH/2+8);
+            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
+            ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
+            ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
+            ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
             ctx.globalAlpha = 1;
         }
-        // If enough time has passed, show the real end card
-        if(elapsed > 5000) {
-            // Transition to theend state
-            state = 'theend';
-            menuChoice = 0;
-        }
+        if(elapsed > 6000) { state = 'theend'; menuChoice = 0; }
     } else {
-        // TV off — dark screen with faint reflection
-        ctx.fillStyle = '#0a0a12'; ctx.fillRect(tvX+4, tvY+4, tvW-8, tvH-8);
-        ctx.fillStyle = 'rgba(100,120,180,0.06)';
-        ctx.beginPath(); ctx.ellipse(tvX+tvW*0.35, tvY+tvH*0.35, 20, 30, -0.3, 0, Math.PI*2); ctx.fill();
+        // TV off
+        ctx.fillStyle = '#0a0c10'; ctx.fillRect(scrX, scrY, scrW, scrH);
+        ctx.fillStyle = 'rgba(80,100,160,0.06)';
+        ctx.beginPath(); ctx.ellipse(scrX+scrW*0.4, scrY+scrH*0.35, 30, 45, -0.3, 0, Math.PI*2); ctx.fill();
+        // Power LED
+        ctx.fillStyle = 'rgba(0,60,0,0.8)'; ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
     }
+
+    // ── KITCHENETTE — left wall ───────────────────────────────────────────────
+    // Upper cabinets on wall
+    ctx.fillStyle = '#3a2818'; ctx.fillRect(4, 220, 140, 80);
+    ctx.strokeStyle = '#4a3828'; ctx.lineWidth = 1;
+    for(let cd=0;cd<2;cd++){
+        ctx.fillStyle = '#342214'; ctx.fillRect(8+cd*70, 224, 64, 72);
+        ctx.strokeStyle = '#504030'; ctx.strokeRect(10+cd*70, 226, 60, 68);
+        ctx.fillStyle = '#888'; ctx.fillRect(34+cd*70, 258, 16, 4); // handle
+    }
+    // Counter top
+    ctx.fillStyle = '#6a6a6a'; ctx.fillRect(4, 300, 150, 8);
+    ctx.fillStyle = '#7a7a7a'; ctx.fillRect(4, 296, 150, 6); // edge
+    // Cabinet base
+    ctx.fillStyle = '#2a1e14'; ctx.fillRect(4, 308, 150, floorY-308);
+    ctx.strokeStyle = '#3a2820'; ctx.lineWidth = 1;
+    for(let cd=0;cd<2;cd++){
+        ctx.fillStyle = '#322018'; ctx.fillRect(8+cd*74, 312, 68, floorY-316);
+        ctx.strokeRect(10+cd*74, 314, 64, floorY-320);
+        ctx.fillStyle = '#888'; ctx.fillRect(36+cd*74, floorY-36, 18, 4);
+    }
+    // Sink basin in counter
+    ctx.fillStyle = '#555'; ctx.fillRect(60, 300, 70, 6);
+    ctx.fillStyle = '#444'; ctx.fillRect(64, 298, 62, 5);
+    ctx.fillStyle = '#4a4a4a'; ctx.beginPath(); ctx.ellipse(95, 300, 24, 5, 0, 0, Math.PI*2); ctx.fill();
+    // Faucet
+    ctx.fillStyle = '#ccc'; ctx.fillRect(92, 282, 4, 18); ctx.fillRect(86, 282, 16, 4);
+    // Microwave on counter
+    ctx.fillStyle = '#2a2a2a'; ctx.fillRect(8, 270, 52, 28);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(10, 272, 30, 22);
+    ctx.fillStyle = 'rgba(0,200,50,0.8)'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('00:00', 25, 286);
+    // Toaster
+    ctx.fillStyle = '#b8b8b8'; ctx.fillRect(135, 286, 16, 14); ctx.fillStyle = '#888'; ctx.fillRect(136,284,14,4);
+
+    // ── LAZY BOY CHAIR — center, facing TV ────────────────────────────────────
+    const chairX = 350, chairY = floorY;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(chairX, chairY+5, 52, 14, 0, 0, Math.PI*2); ctx.fill();
+    // Footrest (extended when sitting)
+    if(sds.chairSitting) {
+        ctx.fillStyle = '#7a3008'; ctx.fillRect(chairX-32, chairY-5, 64, 14);
+        ctx.fillStyle = '#9a4018'; ctx.fillRect(chairX-30, chairY-3, 60, 10);
+    }
+    // Chair base/legs
+    ctx.fillStyle = '#5a2808';
+    ctx.fillRect(chairX-44, chairY-8, 8, 8); ctx.fillRect(chairX+36, chairY-8, 8, 8);
+    // Seat
+    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-42, chairY-38, 84, 32);
+    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-38, chairY-36, 76, 26);
+    // Seat crease
+    ctx.strokeStyle = '#7a3008'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(chairX, chairY-36); ctx.lineTo(chairX, chairY-12); ctx.stroke();
+    // Back
+    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-40, chairY-92, 80, 56);
+    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-36, chairY-90, 72, 50);
+    // Back cushion crease
+    ctx.beginPath(); ctx.moveTo(chairX, chairY-90); ctx.lineTo(chairX, chairY-42); ctx.stroke();
+    // Head rest
+    ctx.fillStyle = '#9b4a20'; ctx.fillRect(chairX-24, chairY-104, 48, 16);
+    // Arm rests
+    ctx.fillStyle = '#7a3008';
+    ctx.fillRect(chairX-46, chairY-72, 12, 66); ctx.fillRect(chairX+34, chairY-72, 12, 66);
+    ctx.fillStyle = '#9a4018';
+    ctx.fillRect(chairX-46, chairY-74, 12, 6); ctx.fillRect(chairX+34, chairY-74, 12, 6);
+    // Remote on right armrest
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(chairX+36, chairY-62, 8, 18);
+    ctx.fillStyle = '#cc2200'; ctx.beginPath(); ctx.arc(chairX+40, chairY-58, 3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#444';
+    ctx.fillRect(chairX+37, chairY-52, 2.5, 2.5); ctx.fillRect(chairX+41, chairY-52, 2.5, 2.5);
+    ctx.fillRect(chairX+37, chairY-47, 2.5, 2.5); ctx.fillRect(chairX+41, chairY-47, 2.5, 2.5);
+
+    // Ceiling pendant light
+    ctx.fillStyle = '#888'; ctx.fillRect(348, 0, 4, 18);
+    ctx.fillStyle = '#c8b060'; ctx.fillRect(338, 16, 24, 14);
+    const lightGrd = ctx.createRadialGradient(350, 30, 2, 350, 30, 120);
+    lightGrd.addColorStop(0,'rgba(255,230,150,0.25)'); lightGrd.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = lightGrd; ctx.fillRect(230, 0, 240, 300);
 
     // Action prompt on chair
-    if(!selfDestructSeq.chairSitting && Math.abs(player.x - chairX) < 50) {
-        ctx.fillStyle = 'rgba(255,220,0,0.9)'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ACTION] SIT', chairX, chairY - 90);
+    if(!sds.chairSitting && Math.abs(player.x - chairX) < 55) {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(chairX-58, chairY-118, 116, 22);
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] SIT DOWN', chairX, chairY-102);
     }
 
-    // Player (only visible if not sitting)
-    if(!selfDestructSeq.chairSitting) {
+    // ── PLAYER ────────────────────────────────────────────────────────────────
+    if(!sds.chairSitting) {
         drawBaldManager(player.x, player.y, player.facing);
     } else {
-        // Draw player sitting in chair
-        const s = 2;
-        const px = chairX - 6, py = chairY - 20;
-        ctx.fillStyle = '#c8a882'; ctx.fillRect(px - 5*s, py - 16*s, 10*s, 8*s); // head (bald)
-        ctx.fillStyle = '#666'; ctx.fillRect(px - 6*s, py - 8*s, 12*s, 10*s); // torso
-        ctx.fillStyle = '#333'; ctx.fillRect(px - 6*s, py + 2*s, 12*s, 6*s); // seated legs
-        ctx.fillStyle = '#222'; ctx.fillRect(px - 7*s, py + 8*s, 6*s, 3*s); ctx.fillRect(px + s, py + 8*s, 6*s, 3*s); // shoes
+        // Player seated in chair — draw as forward-facing sitting figure
+        const px = chairX - 4, py = chairY - 18;
+        // Feet
+        ctx.fillStyle = '#111'; ctx.fillRect(px-6*s, py+22*s, 5*s, 2*s); ctx.fillRect(px+s, py+22*s, 5*s, 2*s);
+        // Seated legs (horizontal)
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(px-6*s, py+14*s, 12*s, 7*s);
+        // Belt
+        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(px-7*s, py+11*s, 14*s, 3*s);
+        // Shirt
+        ctx.fillStyle = '#fff'; ctx.fillRect(px-7*s, py+s, 14*s, 11*s);
+        ctx.fillStyle = '#800020'; ctx.fillRect(px-2*s, py+s, 4*s, 11*s);
+        // Arms on armrests
+        ctx.fillStyle = '#fff'; ctx.fillRect(px-9*s, py+3*s, 2*s, 8*s); ctx.fillRect(px+7*s, py+3*s, 2*s, 8*s);
+        // Head
+        const sk = '#f5c89a';
+        ctx.fillStyle = sk; ctx.fillRect(px-5*s, py-12*s, 10*s, 10*s);
+        ctx.fillStyle = '#e8d4b8'; ctx.fillRect(px-5*s, py-12*s, 10*s, 3*s);
+        ctx.fillStyle = '#000'; ctx.fillRect(px-2*s, py-9*s, 2*s, 2*s); ctx.fillRect(px, py-9*s, 2*s, 2*s);
+        ctx.fillStyle = sk; ctx.fillRect(px-2*s, py-3*s, 4*s, 3*s);
     }
 }
 
@@ -22636,47 +23030,108 @@ function update() {
             }
 
         } else if(sds.room === 'cave2') {
-            // Normal horizontal movement
+            // Normal horizontal movement — block player from walking into throne area
             if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
             if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
-            player.x = Math.max(10, Math.min(680, player.x));
+            player.x = Math.max(10, Math.min(sds.throneActionAvailable ? 680 : 540, player.x));
             player.y = floorY;
 
-            // Devil AI
+            // ── DEVIL STATE MACHINE ───────────────────────────────────────
             sds.devilFrame++;
-            if(sds.devilState === 'idle' || sds.devilState === 'talking') {
-                // Devil faces player
-                sds.devilX = 540;
-                // Coffin rises after player gets close
-                if(player.x > 360 && sds.coffinY > floorY - 50) {
-                    sds.coffinY = Math.max(floorY - 50, sds.coffinY - 1.5);
-                    if(sds.coffinY <= floorY - 50) sds.coffinRisen = true;
-                }
-                sds.devilState = 'talking';
-                // ACTION to board coffin (ride to safe room)
-                if(sds.coffinRisen && (keys[' '] || keys['action']) && Math.abs(player.x - 560) < 80) {
-                    sds.room = 'safeRoom';
-                    player.x = 300; player.y = floorY; player.facing = 'right';
-                    keys[' '] = false; keys['action'] = false;
+
+            // Phase 1: devil seated, wait 90 frames then start rising
+            if(sds.devilState === 'seated') {
+                sds.devilWaitTimer++;
+                if(sds.devilWaitTimer >= 90) { sds.devilState = 'rising'; sds.devilRiseTimer = 0; }
+            }
+            // Phase 2: standing up animation (60 frames)
+            else if(sds.devilState === 'rising') {
+                sds.devilRiseTimer++;
+                if(sds.devilRiseTimer >= 60) { sds.devilState = 'walking'; SFX.play('bossAlert'); }
+            }
+            // Phase 3: walk toward player
+            else if(sds.devilState === 'walking') {
+                const targetX = Math.max(260, player.x + 120);
+                if(sds.devilX > targetX + 2) { sds.devilX -= 1.8; }
+                else {
+                    sds.devilX = targetX;
+                    sds.devilState = 'talking';
+                    sds.devilDialogue = true;
+                    sds.devilDialogueLine = 0;
+                    sds.devilDialogueChars = 0;
+                    sds.devilDialogueComplete = false;
                 }
             }
-            // Player can shoot devil if has revolver
-            if(sds.devilState !== 'dead' && (level6.hasRevolver || level6.revolverAmmo > 0)) {
+            // Phase 4: lower-third dialogue (typewriter)
+            else if(sds.devilState === 'talking') {
+                const dlgLines = ["Your chariot awaits, sir.", "Step right up..."];
+                if(!sds.devilDialogueComplete) {
+                    sds.devilDialogueChars += 0.6;
+                    const curLine = dlgLines[sds.devilDialogueLine] || '';
+                    if(sds.devilDialogueChars >= curLine.length) {
+                        // Line complete — wait for ACTION
+                        if((keys[' '] || keys['action'])) {
+                            keys[' '] = false; keys['action'] = false;
+                            if(sds.devilDialogueLine < dlgLines.length - 1) {
+                                sds.devilDialogueLine++;
+                                sds.devilDialogueChars = 0;
+                                SFX.play('chatter');
+                            } else {
+                                // Dialogue done — coffin starts rising
+                                sds.devilDialogueComplete = true;
+                                sds.devilDialogue = false;
+                                sds.devilState = 'coffin_rising';
+                                sds.coffinRisingTimer = 0;
+                                sds.coffinY = 490;
+                            }
+                        }
+                    } else {
+                        if(sds.devilFrame % 3 === 0) SFX.play('chatter');
+                    }
+                }
+            }
+            // Phase 5: coffin rising (3 seconds = 180 frames)
+            else if(sds.devilState === 'coffin_rising') {
+                sds.coffinRisingTimer++;
+                // Coffin rises from 490 to 310 over 180 frames
+                sds.coffinY = 490 - (sds.coffinRisingTimer / 180) * 180;
+                if(sds.coffinRisingTimer >= 180) {
+                    // Coffin fully risen — devil attacks if player didn't shoot
+                    sds.devilState = 'attacking';
+                    sds.stabAnimTimer = 0;
+                }
+            }
+            // Phase 6: stab attack
+            else if(sds.devilState === 'attacking') {
+                sds.stabAnimTimer++;
+                if(sds.stabAnimTimer >= 40) {
+                    // Stab connects — player grace teleport to safe room
+                    sds.room = 'safeRoom';
+                    player.x = 350; player.y = floorY; player.facing = 'forward';
+                    SFX.play('hurt');
+                }
+            }
+
+            // ACTION on throne (if throneActionAvailable — after devil shot dead)
+            if(sds.throneActionAvailable && (keys[' '] || keys['action']) && player.x > 530) {
+                sds.room = 'safeRoom';
+                player.x = 350; player.y = floorY; player.facing = 'forward';
+                keys[' '] = false; keys['action'] = false;
+            }
+
+            // Shoot devil during coffin_rising phase
+            const canShoot = sds.devilState === 'coffin_rising' || sds.devilState === 'attacking' || sds.devilState === 'talking';
+            if(canShoot && sds.devilState !== 'dead' && (level6.hasRevolver || level6.revolverAmmo > 0)) {
                 if(player.shootTimer > 0 && !player._devilShotFrame) {
                     player._devilShotFrame = true;
                     const bulletRight = player.facing !== 'left';
-                    if((bulletRight && player.x < sds.devilX) || (!bulletRight && player.x > sds.devilX)) {
-                        if(Math.abs(player.x - sds.devilX) < 350) {
-                            sds.devilHp--;
-                            SFX.play('enemyDie');
-                            if(sds.devilHp <= 0) {
-                                sds.devilState = 'dead';
-                                // Coffin catches devil and descends — auto advance to safe room
-                                setTimeout(() => {
-                                    sds.room = 'safeRoom';
-                                    player.x = 300; player.y = floorY; player.facing = 'right';
-                                }, 1800);
-                            }
+                    const towardDevil = (bulletRight && player.x < sds.devilX) || (!bulletRight && player.x > sds.devilX);
+                    if(towardDevil && Math.abs(player.x - sds.devilX) < 400) {
+                        sds.devilHp--;
+                        SFX.play('enemyDie');
+                        if(sds.devilHp <= 0) {
+                            sds.devilState = 'dead';
+                            sds.throneActionAvailable = true;
                         }
                     }
                 } else if(player.shootTimer <= 0) {
@@ -22691,7 +23146,7 @@ function update() {
                 player.x = Math.max(10, Math.min(680, player.x));
                 player.y = floorY;
                 // Sit in chair
-                if((keys[' '] || keys['action']) && Math.abs(player.x - 460) < 50) {
+                if((keys[' '] || keys['action']) && Math.abs(player.x - 350) < 55) {
                     sds.chairSitting = true;
                     sds.tvEndStarted = true;
                     sds.tvEndTimer = 0;
@@ -25635,21 +26090,19 @@ function update() {
                         if(level6.computerChoice === 0) {
                             // Self-destruct — begins hatch sequence
                             level6.computerUI = false;
-                            selfDestructSeq.room = 'hatch';
-                            selfDestructSeq.hatchOpenAnim = 0;
-                            selfDestructSeq.countdown = 10;
-                            selfDestructSeq.countdownTimer = 0;
-                            selfDestructSeq.countdownStarted = false;
-                            selfDestructSeq.playerY = 380;
-                            selfDestructSeq.chuteArrivedCave = false;
-                            selfDestructSeq.devilState = 'idle';
-                            selfDestructSeq.coffinY = 550;
-                            selfDestructSeq.coffinRisen = false;
-                            selfDestructSeq.devilHp = 3;
-                            selfDestructSeq.chairSitting = false;
-                            selfDestructSeq.tvEndStarted = false;
-                            selfDestructSeq.tvEndTimer = 0;
-                            player.x = 200; player.y = 380;
+                            Object.assign(selfDestructSeq, {
+                                room: 'hatch', hatchOpenAnim: 0, countdown: 10,
+                                countdownTimer: 0, countdownStarted: false,
+                                playerY: 200, chuteArrivedCave: false,
+                                devilState: 'seated', devilX: 600, devilRiseTimer: 0,
+                                devilWaitTimer: 0, devilFrame: 0, devilHp: 3,
+                                devilDialogue: false, devilDialogueLine: 0,
+                                devilDialogueChars: 0, devilDialogueComplete: false,
+                                coffinRisingTimer: 0, coffinY: 500, stabAnimTimer: 0,
+                                throneActionAvailable: false,
+                                chairSitting: false, tvEndTimer: 0, tvEndStarted: false
+                            });
+                            player.x = 300; player.y = 380;
                             state = 'selfDestructSeq';
                             SFX.play('hatchOpen');
                         } else {
