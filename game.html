@@ -20501,24 +20501,8 @@ function drawSelfDestructCave2() {
     }
 
     // ── HELL CARD OVERLAY ─────────────────────────────────────────────────────
-    if(sds.hellCardShowing) {
-        const alpha = Math.min(1, sds.hellCardTimer / 600);
-        ctx.save();
-        ctx.fillStyle = `rgba(0,0,0,${0.85 * alpha})`; ctx.fillRect(0, 0, 700, 500);
-        ctx.globalAlpha = alpha;
-        // Red glow
-        const grd = ctx.createRadialGradient(350, 250, 20, 350, 250, 250);
-        grd.addColorStop(0, 'rgba(180,0,0,0.3)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = grd; ctx.fillRect(0, 0, 700, 500);
-        // Text
-        ctx.fillStyle = '#cc0000'; ctx.font = 'bold 32px serif'; ctx.textAlign = 'center';
-        ctx.fillText('WELCOME TO YOUR', 350, 220);
-        ctx.fillText('OWN PERSONAL HELL', 350, 265);
-        ctx.fillStyle = '#ff4400'; ctx.font = '16px serif';
-        ctx.fillText('[ ACTION ]', 350, 340);
-        ctx.globalAlpha = 1;
-        ctx.restore();
-    }
+    // (Removed: the level card itself displays "WELCOME TO YOUR OWN PERSONAL HELL"
+    //  immediately after the throne action, so a pre-card overlay would be redundant.)
 }
 
 // Skeleton player — same proportions as drawBaldManager so positioning is unchanged.
@@ -23482,7 +23466,19 @@ function drawScene() {
         if (!isMelting) {
             drawStepLadder(npc.x, npc.y, hellMode ? {hex: '#0a0a0a', shadow: '#000'} : npc.color);
             if(hellMode) {
-                drawMulletPro(npc.x, npc.y, 'forward', false, false, null);
+                // Render PM with hell-mode dark coloring but preserve all
+                // climbing/fixing animation logic from drawNPC. drawNPC also
+                // updates npc.y based on climbStartTime, so it must be called
+                // for the climb-up/fix/climb-down state machine to advance.
+                const _origColor = npc.color;
+                npc.color = {hex: '#0a0a0a', shadow: '#000'};
+                drawNPC(npc);
+                npc.color = _origColor;
+                // When idle (happy at ground), overlay a static Mullet Pro
+                // sprite so the user sees the mullet pro identity.
+                if(npc.state === 'happy' || npc.state === 'stressed') {
+                    drawMulletPro(npc.x, npc.y, 'forward', false, false, null);
+                }
             } else {
                 drawNPC(npc);
             }
@@ -23998,35 +23994,25 @@ function update() {
                 }
             }
 
-            // ACTION on throne (after coffin fully descended)
+            // ACTION on throne (after coffin fully descended) — go straight to the
+            // hell mode level card, no intermediate "welcome to hell" overlay.
             if(sds.throneActionAvailable && !sds.coffinDescending && (keys[' '] || keys['action']) && player.x > 530) {
-                sds.hellCardShowing = true;
-                sds.hellCardTimer = 0;
                 keys[' '] = false; keys['action'] = false;
-                // Cue hellmode music
                 playMusic('hellmode');
-            }
-            // Hell card timer → transition to hell mode level 1
-            if(sds.hellCardShowing) {
-                sds.hellCardTimer += 1000/60;
-                if(sds.hellCardTimer > 3000 || ((keys[' '] || keys['action']) && sds.hellCardTimer > 500)) {
-                    keys[' '] = false; keys['action'] = false;
-                    hellMode = true;
-                    hellModeStartTime = Date.now();
-                    level = 1;
-                    state = 'levelCard';
-                    cardTimer = 0;
-                    timer = 180; // 3 minutes
-                    // Reset Mullet Pro NPC death animatic state for the hell run
-                    if(typeof level5 !== 'undefined' && level5.mulletPro) {
-                        level5.mulletPro.deathDone = false;
-                        level5.mulletPro.deathStartTime = 0;
-                    }
-                    initLevel(1);
-                    sds.hellCardShowing = false;
-                    sds.hellCardTimer = 0;
-                    return;
+                hellMode = true;
+                hellModeStartTime = Date.now();
+                level = 1;
+                state = 'levelCard';
+                cardTimer = 0;
+                timer = 180; // 3 minutes
+                if(typeof level5 !== 'undefined' && level5.mulletPro) {
+                    level5.mulletPro.deathDone = false;
+                    level5.mulletPro.deathStartTime = 0;
                 }
+                initLevel(1);
+                sds.hellCardShowing = false;
+                sds.hellCardTimer = 0;
+                return;
             }
 
             // Fire revolver with ACTION key — allowed any time devil is alive after dialogue
