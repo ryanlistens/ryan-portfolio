@@ -391,6 +391,7 @@ const levelMusic = {
     menu:   new Audio('music/menu.mp3'),   // KEEP — intro/title
     level5: new Audio('music/level5.mp3'), // KEEP — most potent level track
     newceo: new Audio('music/newceo.mp3'), // KEEP — win screen
+    hellmode: new Audio('music/hellmode.mp3'), // hell mode loop after devil throne
     // Remaining tracks silenced for now (original sound design pass in progress)
     level1: null, level2: null, level3: null, level4: null,
     level6: null, blewit: null,
@@ -1097,17 +1098,28 @@ let selfDestructSeq = {
     devilDialogueLine: 0,
     devilDialogueChars: 0.0,
     devilDialogueComplete: false,
-    coffinRisingTimer: 0,     // 0..180 frames = 3 seconds
-    coffinY: 500,
+    coffinRisingTimer: 0,     // 0..240 frames
+    coffinY: 480,
     coffinDescending: false,
+    lidOpenAmt: 0,            // 0=closed, 1=open
+    lidSlamTimer: 0,
+    killWindowTimer: 0,       // 0..180 frames = 3 seconds
+    weaponSwapped: false,
+    armSwapShown: false,
     stabAnimTimer: 0,
     throneActionAvailable: false,
     hellCardShowing: false,
     hellCardTimer: 0,
     chairSitting: false,
     tvEndTimer: 0,
-    tvEndStarted: false
+    tvEndStarted: false,
+    deathBySafeRoom: false,
+    mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
+    roach: {x: 80, y: 295, antennaPhase: 0}
 };
+
+// Hell mode timer (set when entering hell mode)
+let hellModeStartTime = 0;
 
 let ghostGun = {
     hasGun: false,
@@ -19088,6 +19100,63 @@ function drawHolsterUI() {
 }
 
 // Render the acid-burst + PM-dissolve animation — Raiders of the Lost Ark / Wicked Witch style
+function drawHellMeltPlayer(px, py, t) {
+    // t: 0..1 disintegration progress
+    ctx.save();
+    const sinkY = t * 28;
+    const splayX = 1 + t * 1.4;
+    const shrinkY = 1 - t * 0.7;
+    const alpha = Math.max(0, 1 - t * 0.85);
+    ctx.globalAlpha = alpha;
+    ctx.translate(px, py + sinkY);
+    ctx.scale(splayX, shrinkY);
+
+    // Acid puddle below
+    const puddleR = 12 + t * 32;
+    const pgrd = ctx.createRadialGradient(0, 28, 0, 0, 28, puddleR);
+    pgrd.addColorStop(0, `rgba(180,30,0,${0.85 * (1-alpha*0.3)})`);
+    pgrd.addColorStop(0.5, `rgba(120,10,0,${0.5 * (1-alpha*0.3)})`);
+    pgrd.addColorStop(1, 'rgba(60,0,0,0)');
+    ctx.fillStyle = pgrd;
+    ctx.beginPath(); ctx.ellipse(0, 28, puddleR, 6 + t*8, 0, 0, Math.PI*2); ctx.fill();
+
+    // Torso (disintegrating)
+    ctx.fillStyle = '#800020';
+    ctx.fillRect(-14, -2, 28, 24 - t*10);
+    // Drips off torso
+    ctx.fillStyle = `rgb(${Math.round(160 - t*100)},${Math.round(20)},${Math.round(20)})`;
+    for(let d = 0; d < 6; d++) {
+        const dx = -12 + d * 5;
+        const dlen = t * (16 + d * 3);
+        ctx.beginPath();
+        ctx.ellipse(dx, 22 + dlen/2, 2.2, dlen/2 + 1, 0, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    // Head (sliding/melting down)
+    const headDrop = t * 12;
+    ctx.fillStyle = `rgba(245,200,154,${alpha})`;
+    ctx.beginPath(); ctx.ellipse(0, -16 + headDrop, 9, 9 - t*3, 0, 0, Math.PI*2); ctx.fill();
+    // Eyes streaming down
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-3, -18 + headDrop, 1.5, 3 + t*8);
+    ctx.fillRect(2, -18 + headDrop, 1.5, 3 + t*8);
+    // Gaping mouth
+    ctx.fillStyle = '#1a0000';
+    ctx.beginPath(); ctx.ellipse(0, -10 + headDrop, 2 + t*3, 2 + t*4, 0, 0, Math.PI*2); ctx.fill();
+
+    // Smoke wisps
+    for(let s = 0; s < 6; s++) {
+        const sa = (Math.sin(Date.now()/180 + s) + 1) * 0.5 * (1-t);
+        ctx.fillStyle = `rgba(60,30,30,${0.3 * sa})`;
+        ctx.beginPath();
+        ctx.arc(-10 + s*4, -30 - s*4 - t*10, 3 + s*0.4, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
 function drawAcidBurst(ab) {
     const elapsed = Date.now() - ab.startTime;
     const t = ab.life; // 0..1
@@ -19600,6 +19669,13 @@ function drawSelfDestructChute() {
     // Head highlight
     ctx.fillStyle = 'rgba(255,230,190,0.5)';
     ctx.beginPath(); ctx.arc(bx - s, py - 11*s, 2*s, 0, Math.PI); ctx.fill();
+
+    // Action prompt at bottom of ladder
+    if(selfDestructSeq.chuteAtBottom) {
+        ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.fillRect(245, 405, 210, 24);
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('[ ACTION ] STEP OFF LADDER', 350, 421);
+    }
 }
 
 function drawSelfDestructCave1() {
@@ -19861,33 +19937,61 @@ function drawSelfDestructCave2() {
 
     // ── COFFIN ────────────────────────────────────────────────────────────────
     const coffinX = 490;
-    if(sds.coffinRisingTimer > 0 || sds.devilState === 'dead' || sds.coffinDescending) {
+    const coffinVisible = sds.coffinRisingTimer > 0 || sds.devilState === 'dead' || sds.coffinDescending ||
+                          sds.devilState === 'walking' || sds.devilState === 'talking' ||
+                          sds.devilState === 'lid_opening' || sds.devilState === 'kill_window' ||
+                          sds.devilState === 'attacking';
+    if(coffinVisible) {
         const cy = sds.coffinY;
-        // Clip coffin to only show above the floor (emerges from earth)
+        const lidOpen = sds.lidOpenAmt || 0; // 0=closed, 1=open
+        // Clip coffin body to only show above the floor (emerges from earth)
         ctx.save();
-        ctx.beginPath(); ctx.rect(coffinX-22, 0, 44, floorY); ctx.clip();
+        ctx.beginPath(); ctx.rect(coffinX-32, 0, 64, floorY); ctx.clip();
         // Shadow on floor
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(coffinX, floorY-2, 22, 6, 0, 0, Math.PI*2); ctx.fill();
-        // Coffin body (solid, opaque)
-        const cg = ctx.createLinearGradient(coffinX-18, cy, coffinX+18, cy);
+        ctx.beginPath(); ctx.ellipse(coffinX, floorY-2, 26, 7, 0, 0, Math.PI*2); ctx.fill();
+        // Coffin body (interior visible — dark hollow when lid open)
+        const cg = ctx.createLinearGradient(coffinX-22, cy, coffinX+22, cy);
         cg.addColorStop(0,'#1e0e06'); cg.addColorStop(0.4,'#2e1a0c'); cg.addColorStop(1,'#180c04');
         ctx.fillStyle = cg;
         ctx.beginPath();
-        ctx.moveTo(coffinX-14,cy); ctx.lineTo(coffinX-18,cy+22); ctx.lineTo(coffinX-18,cy+60);
-        ctx.lineTo(coffinX+18,cy+60); ctx.lineTo(coffinX+18,cy+22); ctx.lineTo(coffinX+14,cy);
+        ctx.moveTo(coffinX-16,cy); ctx.lineTo(coffinX-22,cy+26); ctx.lineTo(coffinX-22,cy+72);
+        ctx.lineTo(coffinX+22,cy+72); ctx.lineTo(coffinX+22,cy+26); ctx.lineTo(coffinX+16,cy);
+        ctx.closePath(); ctx.fill();
+        // Hollow interior when lid opening
+        if(lidOpen > 0.1) {
+            ctx.fillStyle = '#080402';
+            ctx.fillRect(coffinX-17, cy+4, 34, 64);
+            // Red glow from inside
+            const innerGrd = ctx.createLinearGradient(coffinX, cy+4, coffinX, cy+68);
+            innerGrd.addColorStop(0,'rgba(180,20,0,0.6)');
+            innerGrd.addColorStop(1,'rgba(60,0,0,0.2)');
+            ctx.fillStyle = innerGrd; ctx.fillRect(coffinX-17, cy+4, 34, 64);
+        }
+        ctx.restore();
+
+        // Lid (drawn separately, can swing open)
+        ctx.save();
+        ctx.beginPath(); ctx.rect(coffinX-60, 0, 120, floorY); ctx.clip();
+        const hingeY = cy + 4; // top hinge
+        const lidAngle = -lidOpen * Math.PI * 0.85; // swings backward
+        ctx.translate(coffinX, hingeY);
+        ctx.rotate(lidAngle);
+        // Lid body
+        const lg = ctx.createLinearGradient(-18, 0, 18, 0);
+        lg.addColorStop(0,'#241208'); lg.addColorStop(0.5,'#3a1e0e'); lg.addColorStop(1,'#1a0c04');
+        ctx.fillStyle = lg;
+        ctx.beginPath();
+        ctx.moveTo(-16, 0); ctx.lineTo(-22, 22); ctx.lineTo(-22, 68);
+        ctx.lineTo(22, 68); ctx.lineTo(22, 22); ctx.lineTo(16, 0);
         ctx.closePath(); ctx.fill();
         // Wood grain
-        ctx.strokeStyle = '#3a1e10'; ctx.lineWidth = 0.8;
-        for(let gl=0;gl<5;gl++){ ctx.beginPath(); ctx.moveTo(coffinX-11+gl*5,cy+2); ctx.lineTo(coffinX-11+gl*5,cy+58); ctx.stroke(); }
-        // Gold cross
-        ctx.fillStyle = '#c8a010'; ctx.fillRect(coffinX-2,cy+12,4,28); ctx.fillRect(coffinX-9,cy+22,18,4);
+        ctx.strokeStyle = '#4a2010'; ctx.lineWidth = 0.8;
+        for(let gl=0;gl<5;gl++){ ctx.beginPath(); ctx.moveTo(-13+gl*6, 4); ctx.lineTo(-13+gl*6, 64); ctx.stroke(); }
+        // Gold cross on lid
+        ctx.fillStyle = '#c8a010'; ctx.fillRect(-2, 14, 4, 30); ctx.fillRect(-10, 24, 20, 4);
         // Lid edge bevel
-        ctx.fillStyle = 'rgba(255,180,80,0.15)';
-        ctx.fillRect(coffinX-14,cy,5,60);
-        // Lid seam
-        ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(coffinX,cy); ctx.lineTo(coffinX,cy+60); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,180,80,0.18)'; ctx.fillRect(-18, 2, 36, 3);
         ctx.restore();
         // Disturbed earth mound around coffin emergence point
         if(cy < floorY) {
@@ -20035,8 +20139,27 @@ function drawSelfDestructCave2() {
     }
 
     // ── PLAYER (drawn before dialogue so dialogue overlays on top) ──────────
-    drawBaldManager(player.x, player.y, player.facing);
-    if(level6.hasRevolver || level6.revolverAmmo > 0) drawAmmoCounter();
+    const playerArmed = level6.hasRevolver && level6.revolverAmmo > 0;
+    drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
+    if(playerArmed) {
+        drawRevolver(player.x, player.y, player.facing);
+        drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
+    }
+    // Muzzle flash
+    if(player.shootTimer > 12) {
+        const mfx = player.facing === 'left' ? player.x - 28 : player.x + 28;
+        ctx.fillStyle = 'rgba(255,220,80,0.85)';
+        ctx.beginPath(); ctx.arc(mfx, player.y - 6, 8, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Kill window UI
+    if(sds.devilState === 'kill_window') {
+        const remaining = Math.max(0, Math.ceil((180 - sds.killWindowTimer) / 60));
+        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(220, 60, 260, 32);
+        ctx.strokeStyle = '#ff2200'; ctx.lineWidth = 2; ctx.strokeRect(220, 60, 260, 32);
+        ctx.fillStyle = '#ff4422'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('KILL OR BE KILLED: ' + remaining + 's', 350, 82);
+    }
 
     // ── LOWER-THIRD DIALOGUE (highest z-order) ───────────────────────────────
     if(sds.devilDialogue) {
@@ -20224,6 +20347,40 @@ function drawSelfDestructSafeRoom() {
     // Toaster
     ctx.fillStyle = '#b8b8b8'; ctx.fillRect(135, 286, 16, 14); ctx.fillStyle = '#888'; ctx.fillRect(136,284,14,4);
 
+    // ── ROACH on kitchen counter ─────────────────────────────────────────────
+    {
+        const r = sds.roach;
+        const rx = r.x, ry = r.y;
+        // Body (oblong, dark brown)
+        ctx.fillStyle = '#2a1808';
+        ctx.beginPath(); ctx.ellipse(rx, ry, 6, 3.2, 0, 0, Math.PI*2); ctx.fill();
+        // Body highlight
+        ctx.fillStyle = '#4a2810';
+        ctx.beginPath(); ctx.ellipse(rx-1, ry-0.6, 4.5, 1.8, 0, 0, Math.PI*2); ctx.fill();
+        // Head
+        ctx.fillStyle = '#1a1004';
+        ctx.beginPath(); ctx.arc(rx-5, ry, 2, 0, Math.PI*2); ctx.fill();
+        // Twitching antennae
+        const ap = r.antennaPhase || 0;
+        const aw1 = Math.sin(ap) * 1.4;
+        const aw2 = Math.sin(ap + 1.3) * 1.4;
+        ctx.strokeStyle = '#1a1004'; ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(rx-6, ry-1);
+        ctx.quadraticCurveTo(rx-9 + aw1, ry-3, rx-12 + aw1, ry-5 - Math.abs(aw1));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(rx-6, ry+1);
+        ctx.quadraticCurveTo(rx-9 + aw2, ry-1, rx-12 + aw2, ry-3 - Math.abs(aw2));
+        ctx.stroke();
+        // Legs (6 thin)
+        ctx.lineWidth = 0.7;
+        for(let lg = -2; lg <= 2; lg += 2) {
+            ctx.beginPath(); ctx.moveTo(rx+lg, ry-2); ctx.lineTo(rx+lg-2, ry-4); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(rx+lg, ry+2); ctx.lineTo(rx+lg-2, ry+4); ctx.stroke();
+        }
+    }
+
     // ── LAZY BOY CHAIR — center, facing TV (we see the back of the chair) ─────
     const chairX = 350, chairY = floorY;
     // Shadow
@@ -20265,6 +20422,47 @@ function drawSelfDestructSafeRoom() {
         ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(chairX-58, chairY-106, 116, 22);
         ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
         ctx.fillText('[ ACTION ] SIT DOWN', chairX, chairY-90);
+    }
+
+    // ── MOUSE on the floor (drawn before player) ─────────────────────────────
+    {
+        const m = sds.mouse;
+        const mx = m.x, my = m.y;
+        const facing = m.vx < 0 ? -1 : 1;
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(mx, my+5, 8, 2, 0, 0, Math.PI*2); ctx.fill();
+        // Body (gray oval)
+        ctx.fillStyle = '#7a7068';
+        ctx.beginPath(); ctx.ellipse(mx, my, 8, 4.5, 0, 0, Math.PI*2); ctx.fill();
+        // Belly highlight
+        ctx.fillStyle = '#9a8e84';
+        ctx.beginPath(); ctx.ellipse(mx, my+1, 6, 2.8, 0, 0, Math.PI*2); ctx.fill();
+        // Head
+        ctx.fillStyle = '#7a7068';
+        ctx.beginPath(); ctx.arc(mx + facing*7, my-1, 3.5, 0, Math.PI*2); ctx.fill();
+        // Ears
+        ctx.fillStyle = '#5a5048';
+        ctx.beginPath(); ctx.arc(mx + facing*7 + facing*1, my-4, 2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#a08878';
+        ctx.beginPath(); ctx.arc(mx + facing*7 + facing*1, my-4, 1.2, 0, Math.PI*2); ctx.fill();
+        // Eye
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(mx + facing*8, my-1, 0.7, 0, Math.PI*2); ctx.fill();
+        // Nose
+        ctx.fillStyle = '#d08070';
+        ctx.beginPath(); ctx.arc(mx + facing*10, my, 0.7, 0, Math.PI*2); ctx.fill();
+        // Tail (curly)
+        ctx.strokeStyle = '#9a8e84'; ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(mx - facing*7, my);
+        ctx.quadraticCurveTo(mx - facing*14, my-3, mx - facing*16, my+2);
+        ctx.stroke();
+        // Tiny scampering legs
+        const scamper = Math.sin(Date.now()/80) * 1.2;
+        ctx.fillStyle = '#5a5048';
+        ctx.fillRect(mx - 4 + facing*1, my+3, 1.5, 2 + scamper);
+        ctx.fillRect(mx + 3 - facing*1, my+3, 1.5, 2 - scamper);
     }
 
     // ── PLAYER ────────────────────────────────────────────────────────────────
@@ -20497,28 +20695,72 @@ function drawScene() {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-        const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
-        lvlGrad.addColorStop(0, '#ff6b35');
-        lvlGrad.addColorStop(1, '#ffd700');
+        if(hellMode) {
+            // ── HELL MODE TITLE CARD ────────────────────────────────────
+            // Red glow background
+            const hgrd = ctx.createRadialGradient(350, 250, 30, 350, 250, 320);
+            hgrd.addColorStop(0, 'rgba(120,0,0,0.55)');
+            hgrd.addColorStop(0.6, 'rgba(40,0,0,0.3)');
+            hgrd.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = hgrd; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-        ctx.font = 'bold 80px Arial';
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 8;
-        ctx.strokeText('LEVEL ' + level, 350, 200);
-        ctx.fillStyle = lvlGrad;
-        ctx.fillText('LEVEL ' + level, 350, 200);
+            ctx.font = 'bold 44px serif';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
+            ctx.strokeText('WELCOME TO YOUR', 350, 180);
+            ctx.fillStyle = '#cc0000';
+            ctx.fillText('WELCOME TO YOUR', 350, 180);
 
-        ctx.fillStyle = '#f5f2ec';
-        ctx.font = 'bold 32px Arial';
-        const msgs = ['', 'TRAINING DAY', 'PRESSURE RISING!', 'MAXIMUM CHAOS!', '3D PRINTER UNLOCKED!', 'MANAGEMENT', 'THE CEO WANTS TO MEET YOU'];
-        ctx.fillText(msgs[level], 350, 270);
+            ctx.font = 'bold 56px serif';
+            ctx.strokeText('OWN PERSONAL', 350, 250);
+            ctx.fillText('OWN PERSONAL', 350, 250);
 
-        if(cardTimer > 60) {
-            if(Math.floor(frame / 30) % 2 === 0) {
-                ctx.fillStyle = '#ffd700';
-                ctx.font = '20px "Press Start 2P", monospace';
-                ctx.fillText('GET READY!', 350, 370);
+            ctx.font = 'bold 84px serif';
+            ctx.strokeText('HELL', 350, 340);
+            ctx.fillStyle = '#ff1a00';
+            ctx.fillText('HELL', 350, 340);
+
+            // Pentagram doodle
+            ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 2;
+            const pcx = 350, pcy = 400, pr = 22;
+            ctx.beginPath();
+            for(let p = 0; p < 5; p++) {
+                const a = -Math.PI/2 + p * (Math.PI * 4 / 5);
+                const px = pcx + Math.cos(a) * pr;
+                const py = pcy + Math.sin(a) * pr;
+                if(p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath(); ctx.stroke();
+
+            if(cardTimer > 60 && Math.floor(frame / 30) % 2 === 0) {
+                ctx.fillStyle = '#ff6644';
+                ctx.font = '14px "Press Start 2P", monospace';
+                ctx.fillText('ABANDON HOPE', 350, 460);
+            }
+        } else {
+            const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
+            lvlGrad.addColorStop(0, '#ff6b35');
+            lvlGrad.addColorStop(1, '#ffd700');
+
+            ctx.font = 'bold 80px Arial';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 8;
+            ctx.strokeText('LEVEL ' + level, 350, 200);
+            ctx.fillStyle = lvlGrad;
+            ctx.fillText('LEVEL ' + level, 350, 200);
+
+            ctx.fillStyle = '#f5f2ec';
+            ctx.font = 'bold 32px Arial';
+            const msgs = ['', 'TRAINING DAY', 'PRESSURE RISING!', 'MAXIMUM CHAOS!', '3D PRINTER UNLOCKED!', 'MANAGEMENT', 'THE CEO WANTS TO MEET YOU'];
+            ctx.fillText(msgs[level], 350, 270);
+
+            if(cardTimer > 60) {
+                if(Math.floor(frame / 30) % 2 === 0) {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '20px "Press Start 2P", monospace';
+                    ctx.fillText('GET READY!', 350, 370);
+                }
             }
         }
 
@@ -22827,7 +23069,14 @@ function drawScene() {
     }
 
     const hasGhostGun = ghostGun.hasGun && ghostGun.ammo > 0;
-    drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun);
+    // Hell mode disintegration in last 3 seconds — render melt effect instead of player
+    if(hellMode && timer <= 3 && timer >= 0) {
+        const meltElapsed = (3 - timer) * 1000 + (1000 - counter);
+        const meltT = Math.min(1, meltElapsed / 3000);
+        drawHellMeltPlayer(player.x, player.y, meltT);
+    } else {
+        drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun);
+    }
 
     if(player.holding) {
         drawHeldDoc(player.x, player.y, player.holding);
@@ -22910,34 +23159,34 @@ function drawScene() {
     if(ui.show) {
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.fillRect(-GX, 340, CANVAS_W, CANVAS_H);
-        
+
         if(!ui.confirming) {
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText('SELECT COLOR:', 30, 375);
-            
+            ctx.fillText(hellMode ? 'SELECT VOID:' : 'SELECT COLOR:', 30, 375);
+
             for(let i = 0; i < 4; i++) {
                 const selected = i === ui.selectedColor;
-                ctx.strokeStyle = selected ? '#f5f2ec' : '#666';
+                ctx.strokeStyle = selected ? '#cc0000' : '#666';
                 ctx.lineWidth = selected ? 4 : 2;
-                ctx.fillStyle = COLORS[i].hex;
+                ctx.fillStyle = hellMode ? '#0a0a0a' : COLORS[i].hex;
                 ctx.fillRect(30 + i * 160, 390, 140, 70);
                 ctx.strokeRect(30 + i * 160, 390, 140, 70);
-                ctx.fillStyle = '#2b2b2b';
+                ctx.fillStyle = hellMode ? '#660000' : '#2b2b2b';
                 ctx.font = 'bold 16px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(COLORS[i].name, 100 + i * 160, 430);
+                ctx.fillText(hellMode ? '\u2620' : COLORS[i].name, 100 + i * 160, 430);
             }
         } else {
             const col = COLORS[ui.selectedColor];
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 28px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('PRINT ' + col.name + ' DOC?', 350, 385);
-            ctx.fillStyle = col.hex;
+            ctx.fillText(hellMode ? 'PRINT VOID DOC?' : ('PRINT ' + col.name + ' DOC?'), 350, 385);
+            ctx.fillStyle = hellMode ? '#0a0a0a' : col.hex;
             ctx.fillRect(270, 410, 160, 60);
-            ctx.fillStyle = '#2b2b2b';
+            ctx.fillStyle = hellMode ? '#990000' : '#2b2b2b';
             ctx.font = 'bold 20px Arial';
             ctx.fillText('CONFIRM', 350, 445);
         }
@@ -23116,11 +23365,17 @@ function update() {
             if(keys['ArrowUp'] || keys['up']) {
                 sds.playerY = Math.max(40, sds.playerY - speed);
             }
-            // Arrive at bottom
-            if(sds.playerY >= 450 && !sds.chuteArrivedCave) {
-                sds.chuteArrivedCave = true;
-                sds.room = 'cave1';
-                player.x = 80; player.y = floorY; player.facing = 'right';
+            // At bottom of ladder — wait for action prompt to step into cave
+            if(sds.playerY >= 460 && !sds.chuteArrivedCave) {
+                sds.chuteAtBottom = true;
+                if((keys[' '] || keys['action'])) {
+                    keys[' '] = false; keys['action'] = false;
+                    sds.chuteArrivedCave = true;
+                    sds.room = 'cave1';
+                    player.x = 80; player.y = floorY; player.facing = 'right';
+                }
+            } else {
+                sds.chuteAtBottom = false;
             }
 
         } else if(sds.room === 'cave1') {
@@ -23142,6 +23397,11 @@ function update() {
             player.x = Math.max(10, Math.min(sds.throneActionAvailable ? 680 : 540, player.x));
             player.y = floorY;
 
+            // Auto-arm with revolver if player had it from CEO office
+            if(!sds.armSwapShown && level6.hasRevolver && !sds.weaponSwapped) {
+                sds.weaponSwapped = true;
+            }
+
             // ── DEVIL STATE MACHINE ───────────────────────────────────────
             sds.devilFrame++;
 
@@ -23155,8 +23415,12 @@ function update() {
                 sds.devilRiseTimer++;
                 if(sds.devilRiseTimer >= 60) { sds.devilState = 'walking'; SFX.play('bossAlert'); }
             }
-            // Phase 3: walk toward player
+            // Phase 3: walk toward player. Coffin begins ominously rising as devil walks.
             else if(sds.devilState === 'walking') {
+                if(sds.coffinRisingTimer < 240) sds.coffinRisingTimer++;
+                // Rise from y=480 (just below floor) to y=290 (clearly visible)
+                sds.coffinY = 480 - Math.min(1, sds.coffinRisingTimer / 240) * 190;
+
                 const targetX = Math.max(260, player.x + 120);
                 if(sds.devilX > targetX + 2) { sds.devilX -= 1.8; }
                 else {
@@ -23168,8 +23432,11 @@ function update() {
                     sds.devilDialogueComplete = false;
                 }
             }
-            // Phase 4: lower-third dialogue (typewriter)
+            // Phase 4: lower-third dialogue (typewriter). Coffin keeps rising.
             else if(sds.devilState === 'talking') {
+                if(sds.coffinRisingTimer < 240) sds.coffinRisingTimer++;
+                sds.coffinY = 480 - Math.min(1, sds.coffinRisingTimer / 240) * 190;
+
                 const dlgLines = ["Your chariot awaits, sir.", "Step right up..."];
                 if(!sds.devilDialogueComplete) {
                     sds.devilDialogueChars += 0.6;
@@ -23183,12 +23450,14 @@ function update() {
                                 sds.devilDialogueChars = 0;
                                 SFX.play('chatter');
                             } else {
-                                // Dialogue done — coffin starts rising
+                                // Dialogue done — coffin finishes rising and lid swings open
                                 sds.devilDialogueComplete = true;
                                 sds.devilDialogue = false;
-                                sds.devilState = 'coffin_rising';
-                                sds.coffinRisingTimer = 0;
-                                sds.coffinY = 490;
+                                sds.devilState = 'lid_opening';
+                                sds.lidOpenAmt = 0;
+                                sds.killWindowTimer = 0;
+                                sds.coffinRisingTimer = 240;
+                                sds.coffinY = 290;
                             }
                         }
                     } else {
@@ -23196,46 +23465,54 @@ function update() {
                     }
                 }
             }
-            // Phase 5: coffin rising (3 seconds = 180 frames)
-            else if(sds.devilState === 'coffin_rising') {
-                sds.coffinRisingTimer++;
-                // Coffin rises from 490 to 318 (just above floor at 380, coffin is 62px tall)
-                sds.coffinY = 490 - (sds.coffinRisingTimer / 180) * 172;
-                if(sds.coffinRisingTimer >= 180) {
-                    // Coffin fully risen — devil attacks if player didn't shoot
+            // Phase 5: coffin lid swings open (45 frames)
+            else if(sds.devilState === 'lid_opening') {
+                sds.lidOpenAmt = Math.min(1, (sds.lidOpenAmt || 0) + 1/45);
+                if(sds.lidOpenAmt >= 1) {
+                    sds.devilState = 'kill_window';
+                    sds.killWindowTimer = 0;
+                }
+            }
+            // Phase 6: 3-second kill-or-be-killed window
+            else if(sds.devilState === 'kill_window') {
+                sds.killWindowTimer++;
+                if(sds.killWindowTimer >= 180) {
+                    // Window expired — devil attacks
                     sds.devilState = 'attacking';
                     sds.stabAnimTimer = 0;
                 }
             }
-            // Phase 6: stab attack
+            // Phase 7: stab attack
             else if(sds.devilState === 'attacking') {
                 sds.stabAnimTimer++;
                 if(sds.stabAnimTimer >= 40) {
-                    // Stab connects — player grace teleport to safe room
+                    // Stab connects — player teleport to safe room
                     sds.room = 'safeRoom';
+                    sds.deathBySafeRoom = true;
                     player.x = 350; player.y = floorY; player.facing = 'forward';
                     SFX.play('hurt');
                 }
             }
 
-            // ACTION on throne (if throneActionAvailable — after coffin fully descended)
+            // ACTION on throne (after coffin fully descended)
             if(sds.throneActionAvailable && !sds.coffinDescending && (keys[' '] || keys['action']) && player.x > 530) {
                 sds.hellCardShowing = true;
                 sds.hellCardTimer = 0;
                 keys[' '] = false; keys['action'] = false;
+                // Cue hellmode music
+                playMusic('hellmode');
             }
             // Hell card timer → transition to hell mode level 1
             if(sds.hellCardShowing) {
                 sds.hellCardTimer += 1000/60;
                 if(sds.hellCardTimer > 3000 || ((keys[' '] || keys['action']) && sds.hellCardTimer > 500)) {
-                    // Transition to hell mode level 1 pipe room
                     keys[' '] = false; keys['action'] = false;
                     hellMode = true;
+                    hellModeStartTime = Date.now();
                     level = 1;
-                    player.x = 350; player.y = 380; player.facing = 'right';
-                    state = 'playing';
-                    timer = 60;
-                    // Reset level 1 with hell mode flag set
+                    state = 'levelCard';
+                    cardTimer = 0;
+                    timer = 180; // 3 minutes
                     initLevel(1);
                     sds.hellCardShowing = false;
                     sds.hellCardTimer = 0;
@@ -23243,40 +23520,47 @@ function update() {
                 }
             }
 
-            // Fire revolver with ACTION key (if armed, not in dialogue)
-            if(level6.revolverAmmo > 0 && !sds.devilDialogue && sds.devilState !== 'dead') {
+            // Fire revolver with ACTION key (only during kill_window or after, while devil alive)
+            const canShoot = (sds.devilState === 'kill_window' || sds.devilState === 'attacking');
+            if(canShoot && level6.revolverAmmo > 0 && sds.devilState !== 'dead') {
                 if((keys[' '] || keys['action']) && !sds.throneActionAvailable) {
                     keys[' '] = false; keys['action'] = false;
                     level6.revolverAmmo--;
                     player.shootTimer = 20;
                     SFX.play('shoot');
-                    // Check if bullet hits devil
                     const bulletRight = player.facing !== 'left';
                     const towardDevil = (bulletRight && player.x < sds.devilX) || (!bulletRight && player.x > sds.devilX);
-                    if(towardDevil && Math.abs(player.x - sds.devilX) < 400) {
+                    if(towardDevil && Math.abs(player.x - sds.devilX) < 500) {
                         sds.devilHp--;
                         SFX.play('enemyDie');
                         if(sds.devilHp <= 0) {
                             sds.devilState = 'dead';
                             sds.devilDialogue = false;
                             sds.devilDialogueComplete = true;
-                            // Start coffin descending with devil in it
-                            sds.coffinRisingTimer = 180;
-                            sds.coffinY = 318;
-                            sds.coffinDescending = true;
+                            sds.lidSlamTimer = 0;
+                            sds.coffinDescending = false;
                         }
                     }
                 }
             }
-            // Decrement shoot timer
             if(player.shootTimer > 0) player.shootTimer--;
 
-            // Phase 7: coffin descending with dead devil back into earth
+            // Phase 8: devil dead — lid slams shut, then coffin descends quickly
+            if(sds.devilState === 'dead') {
+                sds.lidSlamTimer = (sds.lidSlamTimer || 0) + 1;
+                // Lid slams shut over 15 frames
+                sds.lidOpenAmt = Math.max(0, 1 - sds.lidSlamTimer / 15);
+                if(sds.lidSlamTimer === 15) SFX.play('hatchOpen');
+                // Then descend quickly
+                if(sds.lidSlamTimer > 20) {
+                    sds.coffinDescending = true;
+                }
+            }
             if(sds.coffinDescending) {
-                sds.coffinY += 1.2; // slowly descend
-                if(sds.coffinY >= 490) {
+                sds.coffinY += 4; // descend quickly
+                if(sds.coffinY >= 480) {
                     sds.coffinDescending = false;
-                    sds.coffinRisingTimer = 0;
+                    sds.coffinY = 480;
                     sds.throneActionAvailable = true;
                 }
             }
@@ -23299,6 +23583,27 @@ function update() {
                 // Increment TV timer
                 sds.tvEndTimer += 1000/60;
             }
+            // Mouse AI — wanders from right entrance toward kitchen, then explores
+            const m = sds.mouse;
+            if(m.state === 'entering') {
+                m.x += m.vx;
+                if(m.x <= 130) { m.state = 'wandering'; m.wanderTimer = 0; }
+            } else if(m.state === 'wandering') {
+                m.wanderTimer++;
+                const dx = m.targetX - m.x, dy = m.targetY - m.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist < 4 || m.wanderTimer > 240) {
+                    // Pick a new wander target around kitchen area
+                    m.targetX = 20 + Math.random() * 130;
+                    m.targetY = 365 + Math.random() * 18;
+                    m.wanderTimer = 0;
+                }
+                m.x += (dx / Math.max(0.1, dist)) * 0.45;
+                m.y += (dy / Math.max(0.1, dist)) * 0.25;
+                m.vx = dx < 0 ? -0.45 : 0.45;
+            }
+            // Roach antennae twitch
+            sds.roach.antennaPhase += 0.18;
         }
         return;
     }
@@ -26235,17 +26540,23 @@ function update() {
                             Object.assign(selfDestructSeq, {
                                 room: 'hatch', hatchOpenAnim: 0, countdown: 10,
                                 countdownTimer: 0, countdownStarted: false,
-                                playerY: 200, chuteArrivedCave: false,
+                                playerY: 200, chuteArrivedCave: false, chuteAtBottom: false,
                                 devilState: 'seated', devilX: 600, devilRiseTimer: 0,
                                 devilWaitTimer: 0, devilFrame: 0, devilHp: 3,
                                 devilDialogue: false, devilDialogueLine: 0,
                                 devilDialogueChars: 0, devilDialogueComplete: false,
-                                coffinRisingTimer: 0, coffinY: 500, coffinDescending: false,
+                                coffinRisingTimer: 0, coffinY: 480, coffinDescending: false,
+                                lidOpenAmt: 0, lidSlamTimer: 0, killWindowTimer: 0,
+                                weaponSwapped: false, armSwapShown: false,
                                 stabAnimTimer: 0, throneActionAvailable: false,
                                 hellCardShowing: false, hellCardTimer: 0,
-                                chairSitting: false, tvEndTimer: 0, tvEndStarted: false
+                                chairSitting: false, tvEndTimer: 0, tvEndStarted: false,
+                                deathBySafeRoom: false,
+                                mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
+                                roach: {x: 80, y: 295, antennaPhase: 0}
                             });
-                            player.x = 185; player.y = 380;
+                            player.y = 380;
+                            // Player stays at last position — no jump
                             state = 'selfDestructSeq';
                             SFX.play('hatchOpen');
                         } else {
@@ -27853,7 +28164,8 @@ if (keys[' '] || keys['action']) {
             }
             
             for(let npc of npcs) {
-                if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && npc.color.name === player.holding) {
+                // In hell mode, any doc satisfies any PM (no color matching)
+                if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && (hellMode || npc.color.name === player.holding)) {
                     npc.needsDoc = false;
                     npc.state = 'climbing_up';
                     npc.climbStartTime = Date.now();
@@ -27953,13 +28265,9 @@ function winGame() {
 
 function nextLevel() {
     SFX.play('levelClear');
-    // Hell mode level 1 — completing it triggers the end card
-    if(hellMode && level === 1) {
-        hellMode = false;
-        hellLevelComplete = true;
-        state = 'theend';
-        cardTimer = 0;
-        playMusic('menu');
+    // Hell mode never advances — it's a 3-minute time-locked loop ending in disintegration.
+    if(hellMode) {
+        // Just stay in level 1, don't advance.
         return;
     }
     if(level < 4) {
@@ -28006,7 +28314,12 @@ function gameLoop() {
         counter = 0;
         document.getElementById('timer').textContent = timer;
         if(timer <= 0) {
-            if(level === 5) {
+            if(hellMode) {
+                // Hell mode complete — disintegration animation already played, transition to end
+                hellMode = false;
+                state = 'theend';
+                menuChoice = 0;
+            } else if(level === 5) {
                 state = 'gameover'; // Didn't burn 6 documents in time
                 menuChoice = 0;
             } else if(level === 6) {
