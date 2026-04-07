@@ -6386,10 +6386,18 @@ function drawLevel5PipeRoom() {
     // Acid burst dissolve effects
     for(let ab of acidBursts) { drawAcidBurst(ab); }
 
-    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
+    // Mullet Pro NPC — in hell mode endgame (last 3 seconds of timer) the helper is
+    // immolated by his own meltdown. Use the unique death animatic instead of the
+    // standard acid burst, since acid is for PM pipe deaths.
+    if(hellMode && timer <= 3 && timer >= 0 && !level5.mulletPro.deathDone) {
+        if(!level5.mulletPro.deathStartTime) level5.mulletPro.deathStartTime = Date.now();
+        drawMulletProDeathAnimatic(level5.mulletPro);
+    } else if(!level5.mulletPro.deathDone) {
+        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
 
-    if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
-        drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
+        if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
+            drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
+        }
     }
 
     // Overhead ceiling fixtures (drawn after pipes so they render in front)
@@ -19035,7 +19043,9 @@ function getLevel6Weapons() {
 // Lets the player tap to switch between unarmed and armed (revolver drawn).
 function drawEquipToggleButton() {
     if(state !== 'selfDestructSeq') return;
-    if(typeof level6 === 'undefined' || !level6.hasRevolver) return;
+    if(typeof level6 === 'undefined') return;
+    // Show whenever player carries any usable weapon — revolver or ghost gun
+    if(!level6.hasRevolver && !level6.hasGhostGun) return;
 
     const btnW = 78, btnH = 50;
     const btnX = -GX + CANVAS_W - 90 - btnW - 8;
@@ -19081,7 +19091,10 @@ function drawHolsterButton() {
     if(typeof level6 === 'undefined' || !level6.hasWrenchGun || !(level6.hasRevolver || level6.hasGhostGun)) return;
 
     const btnW = 70, btnH = 50;
-    const btnX = -GX + CANVAS_W - 90 - btnW - 8;
+    // During the self-destruct sequence, the equip toggle button (78px) sits next
+    // to mute, so push the holster button further left to avoid overlap.
+    const equipOffset = (state === 'selfDestructSeq') ? (78 + 8) : 0;
+    const btnX = -GX + CANVAS_W - 90 - btnW - 8 - equipOffset;
     const btnY = -GY + 5;
     const cx = btnX + btnW / 2, cy = btnY + btnH / 2;
 
@@ -19204,98 +19217,213 @@ function drawHolsterUI() {
 
 // Render the acid-burst + PM-dissolve animation — Raiders of the Lost Ark / Wicked Witch style
 function drawHellMeltPlayer(px, py, t) {
-    // t: 0..1 disintegration progress
+    // t: 0..1 — body disintegrates into outward-flying chunks like the level 4 boss kill,
+    // not an acid drip melt. Uses deterministic per-particle math so the animation is
+    // stable frame-to-frame.
     ctx.save();
-    const sinkY = t * 28;
-    const splayX = 1 + t * 1.4;
-    const shrinkY = 1 - t * 0.7;
-    const alpha = Math.max(0, 1 - t * 0.85);
-    ctx.globalAlpha = alpha;
-    ctx.translate(px, py + sinkY);
-    ctx.scale(splayX, shrinkY);
+    const bodyAlpha = Math.max(0, 1 - t * 1.6);
 
-    // Acid puddle below
-    const puddleR = 12 + t * 32;
-    const pgrd = ctx.createRadialGradient(0, 28, 0, 0, 28, puddleR);
-    pgrd.addColorStop(0, `rgba(180,30,0,${0.85 * (1-alpha*0.3)})`);
-    pgrd.addColorStop(0.5, `rgba(120,10,0,${0.5 * (1-alpha*0.3)})`);
-    pgrd.addColorStop(1, 'rgba(60,0,0,0)');
-    ctx.fillStyle = pgrd;
-    ctx.beginPath(); ctx.ellipse(0, 28, puddleR, 6 + t*8, 0, 0, Math.PI*2); ctx.fill();
+    // ── INTACT BODY FADE ── still visible early; gone by t≈0.6
+    if(bodyAlpha > 0.02) {
+        ctx.globalAlpha = bodyAlpha;
+        // Slight upward jolt as the disintegration kicks in
+        ctx.translate(px, py - t * 4);
+        // Fade from solid to charred outline
+        const charR = Math.round(245 - t * 200);
+        const charG = Math.round(200 - t * 180);
+        const charB = Math.round(154 - t * 140);
+        // Shoes
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-12, 46, 10, 4);
+        ctx.fillRect(2, 46, 10, 4);
+        // Trousers
+        ctx.fillStyle = '#2a2a3a';
+        ctx.fillRect(-10, 30, 8, 18);
+        ctx.fillRect(2, 30, 8, 18);
+        // Belt
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-14, 22, 28, 6);
+        // Shirt (white fading to soot)
+        const shirtCol = Math.round(232 - t * 200);
+        ctx.fillStyle = `rgb(${shirtCol},${shirtCol},${shirtCol})`;
+        ctx.fillRect(-14, 2, 28, 20);
+        // Tie (red fading to black)
+        ctx.fillStyle = `rgb(${Math.round(128 - t*120)},0,${Math.round(20 - t*20)})`;
+        ctx.fillRect(-4, 2, 8, 20);
+        // Head (skin fading to ash)
+        ctx.fillStyle = `rgb(${charR},${charG},${charB})`;
+        ctx.fillRect(-10, -20, 20, 20);
+        ctx.globalAlpha = 1;
+        ctx.translate(-px, -(py - t * 4));
+    }
 
-    // Torso (disintegrating)
-    ctx.fillStyle = '#800020';
-    ctx.fillRect(-14, -2, 28, 24 - t*10);
-    // Drips off torso
-    ctx.fillStyle = `rgb(${Math.round(160 - t*100)},${Math.round(20)},${Math.round(20)})`;
-    for(let d = 0; d < 6; d++) {
-        const dx = -12 + d * 5;
-        const dlen = t * (16 + d * 3);
+    // ── EXPLOSION PARTICLES ── radial spray of body chunks
+    const PARTICLE_COUNT = 36;
+    const liftT = Math.min(1, t * 1.3);
+    for(let i = 0; i < PARTICLE_COUNT; i++) {
+        // Deterministic per-particle angle and speed
+        const ang = (i / PARTICLE_COUNT) * Math.PI * 2 + (i * 0.37);
+        const speed = 50 + ((i * 53) % 70);
+        const dist = speed * liftT;
+        const drift = -22 * liftT * liftT; // gravity arc upward then settle
+        const cx = px + Math.cos(ang) * dist;
+        const cy = py - 18 + Math.sin(ang) * dist * 0.65 + drift + (liftT * liftT * 28);
+        // Particle palette: hot orange → red → ember → ash
+        const phase = liftT;
+        let r, g, b;
+        if(phase < 0.35) { r = 255; g = 200 - phase * 280; b = 60 - phase * 80; }
+        else if(phase < 0.7) { r = 220 - (phase - 0.35) * 280; g = 60; b = 20; }
+        else { r = 60 - (phase - 0.7) * 100; g = 30 - (phase - 0.7) * 60; b = 30 - (phase - 0.7) * 60; }
+        const pAlpha = Math.max(0, 1 - liftT * 1.05);
+        ctx.fillStyle = `rgba(${Math.max(0,r|0)},${Math.max(0,g|0)},${Math.max(0,b|0)},${pAlpha})`;
+        const pr = 2.2 + ((i * 7) % 4) * 0.6;
         ctx.beginPath();
-        ctx.ellipse(dx, 22 + dlen/2, 2.2, dlen/2 + 1, 0, 0, Math.PI*2);
+        ctx.arc(cx, cy, pr * (1 - liftT * 0.3), 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // Head (sliding/melting down)
-    const headDrop = t * 12;
-    ctx.fillStyle = `rgba(245,200,154,${alpha})`;
-    ctx.beginPath(); ctx.ellipse(0, -16 + headDrop, 9, 9 - t*3, 0, 0, Math.PI*2); ctx.fill();
-    // Eyes streaming down
-    ctx.fillStyle = '#000';
-    ctx.fillRect(-3, -18 + headDrop, 1.5, 3 + t*8);
-    ctx.fillRect(2, -18 + headDrop, 1.5, 3 + t*8);
-    // Gaping mouth
-    ctx.fillStyle = '#1a0000';
-    ctx.beginPath(); ctx.ellipse(0, -10 + headDrop, 2 + t*3, 2 + t*4, 0, 0, Math.PI*2); ctx.fill();
-
-    // Smoke wisps
-    for(let s = 0; s < 6; s++) {
-        const sa = (Math.sin(Date.now()/180 + s) + 1) * 0.5 * (1-t);
-        ctx.fillStyle = `rgba(60,30,30,${0.3 * sa})`;
+    // ── CENTRAL FLASH ── bright initial blast
+    if(t < 0.5) {
+        const flashAlpha = Math.max(0, 0.85 - t * 1.7);
+        const fg = ctx.createRadialGradient(px, py - 12, 0, px, py - 12, 60);
+        fg.addColorStop(0, `rgba(255,240,160,${flashAlpha})`);
+        fg.addColorStop(0.4, `rgba(255,140,40,${flashAlpha * 0.6})`);
+        fg.addColorStop(1, 'rgba(120,20,0,0)');
+        ctx.fillStyle = fg;
         ctx.beginPath();
-        ctx.arc(-10 + s*4, -30 - s*4 - t*10, 3 + s*0.4, 0, Math.PI*2);
+        ctx.arc(px, py - 12, 60, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // ── RISING SMOKE WISPS ── lingering darkness
+    for(let s = 0; s < 8; s++) {
+        const sa = Math.max(0, t - 0.2) * (1 - t) * 1.4;
+        if(sa <= 0) break;
+        ctx.fillStyle = `rgba(40,20,20,${0.35 * sa})`;
+        const sx = px + Math.sin(s * 1.1 + t * 4) * 14 - 14 + s * 4;
+        const sy = py - 20 - s * 6 - t * 30;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 4 + s * 0.5, 0, Math.PI * 2);
         ctx.fill();
     }
 
     ctx.restore();
 }
 
+// Unique death animatic for the Mullet Pro NPC — a shockwave + scattering ash silhouette
+// (distinct from the green PM acid burst). Used at the end of hell mode.
+function drawMulletProDeathAnimatic(npc) {
+    const t = Math.min(1, (Date.now() - npc.deathStartTime) / 2500);
+    const px = npc.x, py = npc.y;
+    ctx.save();
+    // Shockwave ring
+    if(t < 0.6) {
+        const ringR = t * 140;
+        const ringA = 1 - t / 0.6;
+        ctx.strokeStyle = `rgba(255,230,120,${ringA})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(px, py - 10, ringR, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,140,40,${ringA * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py - 10, ringR * 0.7, 0, Math.PI * 2); ctx.stroke();
+    }
+    // Ash silhouette (Mullet Pro's outline frozen, then crumbling)
+    const silAlpha = Math.max(0, 1 - t * 1.2);
+    if(silAlpha > 0.01) {
+        ctx.fillStyle = `rgba(20,10,8,${silAlpha})`;
+        // Body silhouette
+        ctx.fillRect(px - 12, py + 2, 24, 22);
+        ctx.fillRect(px - 10, py + 22, 6, 22);
+        ctx.fillRect(px + 4, py + 22, 6, 22);
+        ctx.beginPath(); ctx.arc(px, py - 14, 11, 0, Math.PI * 2); ctx.fill();
+        // Mullet (the signature flowing hair) — back of head
+        ctx.fillStyle = `rgba(60,40,20,${silAlpha})`;
+        ctx.beginPath();
+        ctx.moveTo(px - 11, py - 14);
+        ctx.quadraticCurveTo(px - 18, py + 4, px - 8, py + 12);
+        ctx.lineTo(px - 4, py - 8);
+        ctx.closePath(); ctx.fill();
+        // Cracks across silhouette (deepening)
+        if(t > 0.25) {
+            ctx.strokeStyle = `rgba(255,180,40,${(1 - t) * 0.9})`;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(px - 8, py - 14); ctx.lineTo(px + 4, py + 16); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(px + 6, py - 8); ctx.lineTo(px - 6, py + 20); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(px - 10, py + 4); ctx.lineTo(px + 10, py + 8); ctx.stroke();
+        }
+    }
+    // Ascending ash particles — the spirit drifting upward
+    const ASH_COUNT = 24;
+    for(let i = 0; i < ASH_COUNT; i++) {
+        const seed = i * 37.1;
+        const ang = (i / ASH_COUNT) * Math.PI * 2 + seed * 0.1;
+        const rise = t * (40 + (i % 6) * 8);
+        const sway = Math.sin(t * 4 + seed) * 10;
+        const ax = px + Math.cos(ang) * 12 + sway;
+        const ay = py - 14 - rise;
+        const aAlpha = Math.max(0, (1 - t) * 0.9);
+        ctx.fillStyle = `rgba(180,160,140,${aAlpha})`;
+        ctx.beginPath(); ctx.arc(ax, ay, 1.6 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // Final glowing ember at the base
+    if(t > 0.3 && t < 0.9) {
+        const eg = ctx.createRadialGradient(px, py + 24, 0, px, py + 24, 22);
+        eg.addColorStop(0, `rgba(255,140,40,${(1 - t) * 0.6})`);
+        eg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = eg;
+        ctx.beginPath(); ctx.ellipse(px, py + 24, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    if(t >= 1) npc.deathDone = true;
+}
+
 function drawAcidBurst(ab) {
     const elapsed = Date.now() - ab.startTime;
     const t = ab.life; // 0..1
+    // In hell mode the death isn't an acid spray — it's a charred ash collapse.
+    const hell = !!hellMode;
 
-    // --- Acid spray burst from pipe ---
+    // --- Acid spray burst from pipe (or ash plume in hell) ---
     for (let d = 0; d < 12; d++) {
         const dripPhase = (d / 12 + elapsed / 600) % 1;
         const spreadX = Math.sin(d * 1.9 + d * 0.4) * 28;
         const dripX = ab.x + spreadX;
         const dripY = ab.pipeY + dripPhase * (392 - ab.pipeY);
         const dripLen = 5 + (d % 4) * 2;
-        ctx.fillStyle = `rgba(120,255,20,${(1 - dripPhase) * 0.9})`;
+        ctx.fillStyle = hell
+            ? `rgba(20,20,20,${(1 - dripPhase) * 0.9})`
+            : `rgba(120,255,20,${(1 - dripPhase) * 0.9})`;
         ctx.beginPath();
         ctx.ellipse(dripX, dripY, 2.5, dripLen, 0, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // --- Spreading acid puddle (hissing, bubbling) ---
+    // --- Spreading puddle (acid green / hell tar) ---
     const puddleRx = 18 + t * 100;
     const puddleRy = 8 + t * 32;
     const acidGrad = ctx.createRadialGradient(ab.npcX, 396, 0, ab.npcX, 396, puddleRx);
-    acidGrad.addColorStop(0,    `rgba(210,255,20,${0.92 - t * 0.18})`);
-    acidGrad.addColorStop(0.45, `rgba(110,230,10,${0.72 - t * 0.10})`);
-    acidGrad.addColorStop(1,    'rgba(30,140,0,0)');
+    if(hell) {
+        acidGrad.addColorStop(0,    `rgba(40,0,0,${0.92 - t * 0.18})`);
+        acidGrad.addColorStop(0.45, `rgba(15,5,5,${0.72 - t * 0.10})`);
+        acidGrad.addColorStop(1,    'rgba(0,0,0,0)');
+    } else {
+        acidGrad.addColorStop(0,    `rgba(210,255,20,${0.92 - t * 0.18})`);
+        acidGrad.addColorStop(0.45, `rgba(110,230,10,${0.72 - t * 0.10})`);
+        acidGrad.addColorStop(1,    'rgba(30,140,0,0)');
+    }
     ctx.fillStyle = acidGrad;
     ctx.beginPath();
     ctx.ellipse(ab.npcX, 396, puddleRx, puddleRy, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // --- Bubbling foam (hissing acid) ---
+    // --- Bubbling foam / smoldering ash ---
     for (let b = 0; b < 14; b++) {
         const bPhase = (b / 14 * 2.5 + elapsed / 400) % 2;
         if (bPhase > 1) continue;
         const bx = ab.npcX + Math.sin(b * 2.3) * (puddleRx * 0.75);
         const by = 396 - bPhase * 34;
-        ctx.fillStyle = `rgba(220,255,80,${(1 - bPhase) * 0.80})`;
+        ctx.fillStyle = hell
+            ? `rgba(180,40,10,${(1 - bPhase) * 0.55})`
+            : `rgba(220,255,80,${(1 - bPhase) * 0.80})`;
         ctx.beginPath();
         ctx.arc(bx, by, 1.5 + (b % 4), 0, Math.PI * 2);
         ctx.fill();
@@ -19320,12 +19448,13 @@ function drawAcidBurst(ab) {
         const splayX  = 1 + dissolveT * 1.6;  // body widens as it collapses
         const shrinkY = 1 - dissolveT * 0.78; // body shortens vertically
 
-        // Melt color: skin→acid green
-        const skinR = Math.round(200 - dissolveT * 130);
-        const skinG = Math.round(160 + dissolveT * 80);
-        const skinB = Math.round(100 - dissolveT * 90);
+        // Melt color: skin→acid green (or skin→ash in hell)
+        const skinR = hell ? Math.round(180 - dissolveT * 160) : Math.round(200 - dissolveT * 130);
+        const skinG = hell ? Math.round(140 - dissolveT * 130) : Math.round(160 + dissolveT * 80);
+        const skinB = hell ? Math.round(110 - dissolveT * 100) : Math.round(100 - dissolveT * 90);
         const bodyAlpha = Math.max(0, 1 - dissolveT * 0.88);
-        const jumpsuit  = ab.npc ? ab.npc.color.hex : '#cc4444';
+        // In hell mode every PM jumpsuit reads as charred black, not its original color.
+        const jumpsuit  = hell ? '#0a0a0a' : (ab.npc ? ab.npc.color.hex : '#cc4444');
 
         ctx.globalAlpha = bodyAlpha;
         ctx.translate(meltX, bodyTop + sinkY);
@@ -23512,26 +23641,27 @@ function drawScene() {
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText(hellMode ? 'SELECT VOID:' : 'SELECT COLOR:', 30, 375);
+            ctx.fillText('SELECT COLOR:', 30, 375);
 
             for(let i = 0; i < 4; i++) {
                 const selected = i === ui.selectedColor;
                 ctx.strokeStyle = selected ? '#cc0000' : '#666';
                 ctx.lineWidth = selected ? 4 : 2;
+                // In hell mode all four options render as solid black with the color name still labeled.
                 ctx.fillStyle = hellMode ? '#0a0a0a' : COLORS[i].hex;
                 ctx.fillRect(30 + i * 160, 390, 140, 70);
                 ctx.strokeRect(30 + i * 160, 390, 140, 70);
                 ctx.fillStyle = hellMode ? '#660000' : '#2b2b2b';
                 ctx.font = 'bold 16px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(hellMode ? '\u2620' : COLORS[i].name, 100 + i * 160, 430);
+                ctx.fillText(COLORS[i].name, 100 + i * 160, 430);
             }
         } else {
             const col = COLORS[ui.selectedColor];
             ctx.fillStyle = '#f5f2ec';
             ctx.font = 'bold 28px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(hellMode ? 'PRINT VOID DOC?' : ('PRINT ' + col.name + ' DOC?'), 350, 385);
+            ctx.fillText('PRINT ' + col.name + ' DOC?', 350, 385);
             ctx.fillStyle = hellMode ? '#0a0a0a' : col.hex;
             ctx.fillRect(270, 410, 160, 60);
             ctx.fillStyle = hellMode ? '#990000' : '#2b2b2b';
@@ -23646,6 +23776,9 @@ function drawScene() {
     if(state === 'selfDestructSeq') {
         drawMuteIndicator();
         drawEquipToggleButton();
+        // Standard wrench/gun holster button (level 6 carry-over) also visible
+        drawHolsterButton();
+        drawHolsterUI();
     }
     ctx.restore();
 }
@@ -23884,6 +24017,11 @@ function update() {
                     state = 'levelCard';
                     cardTimer = 0;
                     timer = 180; // 3 minutes
+                    // Reset Mullet Pro NPC death animatic state for the hell run
+                    if(typeof level5 !== 'undefined' && level5.mulletPro) {
+                        level5.mulletPro.deathDone = false;
+                        level5.mulletPro.deathStartTime = 0;
+                    }
                     initLevel(1);
                     sds.hellCardShowing = false;
                     sds.hellCardTimer = 0;
@@ -28835,7 +28973,8 @@ function handleMuteClick(e) {
 
     // Holster button — left of mute button, only when 2+ weapons
     const holsterBtnW = 70, holsterBtnH = 50;
-    const holsterBtnX = muteBtnX - holsterBtnW - 8;
+    const equipOffset = (state === 'selfDestructSeq') ? (78 + 8) : 0;
+    const holsterBtnX = muteBtnX - holsterBtnW - 8 - equipOffset;
     const holsterBtnY = muteBtnY;
     const weapons = getLevel6Weapons();
 
