@@ -1099,8 +1099,11 @@ let selfDestructSeq = {
     devilDialogueComplete: false,
     coffinRisingTimer: 0,     // 0..180 frames = 3 seconds
     coffinY: 500,
+    coffinDescending: false,
     stabAnimTimer: 0,
     throneActionAvailable: false,
+    hellCardShowing: false,
+    hellCardTimer: 0,
     chairSitting: false,
     tvEndTimer: 0,
     tvEndStarted: false
@@ -1134,9 +1137,15 @@ let fadeIn = false;
 let fadeOut = false;
 let resetting = false;
 
+// Hell mode — set when player completes self-destruct sequence and sits on devil throne
+// Causes level 1 pipe room to render with black pipes/docs, mullet pro PMs, "welcome to hell" board
+let hellMode = false;
+let hellLevelComplete = false;
+
 
 let level5 = {
     room: 'furnaceRoom',
+    hellMode: false,
     currentOffice: null,
     viewingEmail: false,
     viewingLetter: false,
@@ -1679,7 +1688,8 @@ function drawAmmoCounter(x, y, ammo) {
 }
 
 function drawHeldDoc(x, y, colorName) {
-    const col = COLORS.find(c => c.name === colorName);
+    let col = COLORS.find(c => c.name === colorName);
+    if(hellMode) col = {hex: '#0a0a0a'};
 
     // Realistic manila folder appearance
     const folderWidth = 28;
@@ -3693,6 +3703,11 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
     const pipeR   = 7;
     const elbowX  = npc.x + 25;
     const horizY  = pipeY + 25;
+    // Hell mode: render pipes black
+    const _origColor = npc.color;
+    if(hellMode) {
+        npc = Object.assign({}, npc, {color: {hex: '#0a0a0a', shadow: '#000000'}});
+    }
 
     // --- Drop shadow path ---
     ctx.strokeStyle = 'rgba(0,0,0,0.20)';
@@ -4115,9 +4130,11 @@ function drawComputer(x, y) {
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(x - 22, y - 27, 44, 24);
     
-    if(ui.show || player.holding) {
-        const displayColor = player.holding ? 
-            COLORS.find(c => c.name === player.holding).hex : 
+    if(hellMode) {
+        ctx.fillStyle = '#0a0a0a';
+    } else if(ui.show || player.holding) {
+        const displayColor = player.holding ?
+            COLORS.find(c => c.name === player.holding).hex :
             COLORS[ui.selectedColor].hex;
         ctx.fillStyle = displayColor;
     } else {
@@ -5854,7 +5871,37 @@ function drawMarkerBoard(x, y, boardLv) {
     ctx.fillStyle = '#eee'; ctx.fillRect(x + 40, y + 45, 18, 4);
     ctx.fillStyle = '#ddd'; ctx.fillRect(x + 41, y + 46, 16, 2);
 
-    if(boardLv === 1) {
+    if(boardLv === 'hell') {
+        // Hell mode — "WELCOME TO HELL" in dripping red marker
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x - 66, y - 46, 132, 92); ctx.clip();
+        ctx.fillStyle = '#f0f0ee';
+        ctx.fillRect(x - 66, y - 46, 132, 92);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#a80000';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('WELCOME', x, y - 18);
+        ctx.fillText('TO HELL', x, y);
+        // Drip lines
+        ctx.strokeStyle = '#a80000'; ctx.lineWidth = 2;
+        for(let d = 0; d < 5; d++) {
+            const dx = x - 30 + d * 15;
+            const dlen = 6 + ((d * 7) % 12);
+            ctx.beginPath(); ctx.moveTo(dx, y + 4); ctx.lineTo(dx, y + 4 + dlen); ctx.stroke();
+        }
+        // Pentagram doodle below
+        ctx.strokeStyle = '#a80000'; ctx.lineWidth = 1.2;
+        const pcx = x, pcy = y + 28, pr = 9;
+        ctx.beginPath();
+        for(let p = 0; p < 5; p++) {
+            const a = -Math.PI/2 + p * (Math.PI * 4 / 5);
+            const px = pcx + Math.cos(a) * pr;
+            const py = pcy + Math.sin(a) * pr;
+            if(p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath(); ctx.stroke();
+        ctx.restore();
+    } else if(boardLv === 1) {
         // Level 1 welcome message — blue dry-erase marker, large and readable
         ctx.save();
         ctx.beginPath(); ctx.rect(x - 66, y - 46, 132, 92); ctx.clip();
@@ -19516,7 +19563,9 @@ function drawSelfDestructChute() {
     // ── PLAYER ON LADDER (back-facing) ────────────────────────────────────────
     const py = selfDestructSeq.playerY;
     const bx = 350;
-    const climbPhase = Math.sin(Date.now() / 220);
+    // Only animate limbs when actively climbing (pressing up/down)
+    const isClimbing = !!(keys['ArrowDown'] || keys['down'] || keys['ArrowUp'] || keys['up']);
+    const climbPhase = isClimbing ? Math.sin(Date.now() / 220) : 0;
 
     // Shadow on rung below
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -19526,7 +19575,7 @@ function drawSelfDestructChute() {
     ctx.fillStyle = '#111';
     ctx.fillRect(bx - 6*s, py + 23*s, 5*s, 2*s);
     ctx.fillRect(bx + s, py + 23*s, 5*s, 2*s);
-    // Trouser legs (alternating with climb)
+    // Trouser legs (alternating with climb only when moving)
     ctx.fillStyle = '#2a2a3a';
     ctx.fillRect(bx - 5*s, py + 15*s + climbPhase*2, 4*s, 9*s);
     ctx.fillRect(bx + s, py + 15*s - climbPhase*2, 4*s, 9*s);
@@ -19534,20 +19583,18 @@ function drawSelfDestructChute() {
     ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx - 7*s, py + 11*s, 14*s, 3*s);
     // Shirt back (white with dark shadow)
     ctx.fillStyle = '#e8e8e8'; ctx.fillRect(bx - 7*s, py + s, 14*s, 11*s);
-    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(bx - 7*s, py + s, 2*s, 11*s); // left shadow
-    // Tie (visible from back as small stripe)
-    ctx.fillStyle = '#800020'; ctx.fillRect(bx - s, py + 2*s, 2*s, 9*s);
-    // Arms reaching up to rungs — alternating
+    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(bx - 7*s, py + s, 2*s, 11*s);
+    // Arms gripping rungs (only animate when climbing)
     ctx.fillStyle = '#e8e8e8';
     ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3, 2*s, 9*s);
-    ctx.fillRect(bx + 7*s, py - 8*s - climbPhase*3, 2*s, 9*s);
+    ctx.fillRect(bx + 7*s, py - 4*s - climbPhase*3, 2*s, 9*s);
     // Hands (skin)
     ctx.fillStyle = '#f5c89a';
     ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3 - 2, 2*s, 3);
-    ctx.fillRect(bx + 7*s, py - 8*s - climbPhase*3 - 2, 2*s, 3);
-    // Neck (back — just a small flesh strip)
+    ctx.fillRect(bx + 7*s, py - 4*s - climbPhase*3 - 2, 2*s, 3);
+    // Neck (back)
     ctx.fillStyle = '#f0c080'; ctx.fillRect(bx - 2*s, py - 2*s, 4*s, 3*s);
-    // Bald head (back view — round, skin color with slight shine)
+    // Bald head (back view — round, skin color with shine)
     ctx.fillStyle = '#f5c89a';
     ctx.beginPath(); ctx.arc(bx, py - 9*s, 5*s, 0, Math.PI * 2); ctx.fill();
     // Head highlight
@@ -19728,26 +19775,33 @@ function drawSelfDestructCave2() {
         ctx.beginPath(); ctx.moveTo(sx,sy+sh-12); ctx.lineTo(sx+1,sy+sh); ctx.lineTo(sx-2,sy+sh-14); ctx.closePath(); ctx.fill();
     });
 
-    // ── AMBIENT FIRE CURTAIN — spread across full floor (slow, steady) ────────
+    // ── PERIMETER FLAMES — along back wall and floor edges ──────────────────
     const t = Date.now();
-    for(let fi = 0; fi < 18; fi++) {
-        const fx = fi * 40 + 12;
+    // Back wall flames (along bottom of cave walls)
+    for(let fi = 0; fi < 24; fi++) {
+        const fx = fi * 30 + 6;
         const seed = fi * 137.5;
-        const fh = 22 + 14 * Math.sin(t / (400 + seed % 200) + seed);
-        const fw = 8 + 3 * Math.sin(t / (600 + seed % 150) + seed + 1);
+        const fh = 30 + 20 * Math.sin(t / (350 + seed % 180) + seed);
+        const fw = 9 + 4 * Math.sin(t / (500 + seed % 120) + seed + 1);
         const ff = ctx.createLinearGradient(fx, floorY, fx, floorY - fh);
-        const alpha1 = 0.4 + 0.15 * Math.sin(t / (500 + fi * 71));
-        const alpha2 = 0.2 + 0.1 * Math.sin(t / (600 + fi * 43) + 1);
-        ff.addColorStop(0, `rgba(255,${80 + fi*5 % 40},0,${alpha1})`);
-        ff.addColorStop(0.4, `rgba(255,40,0,${alpha2})`);
-        ff.addColorStop(1, 'rgba(180,10,0,0)');
+        ff.addColorStop(0, `rgba(255,${90 + fi*4 % 50},10,0.7)`);
+        ff.addColorStop(0.3, `rgba(255,50,0,0.45)`);
+        ff.addColorStop(0.7, `rgba(200,20,0,0.15)`);
+        ff.addColorStop(1, 'rgba(120,5,0,0)');
         ctx.fillStyle = ff;
         ctx.beginPath(); ctx.ellipse(fx, floorY, fw, fh, 0, 0, Math.PI*2); ctx.fill();
     }
-    // Fire floor glow (steady)
-    const fgGrd = ctx.createLinearGradient(0, floorY-30, 0, floorY+10);
-    fgGrd.addColorStop(0, 'rgba(255,60,0,0)'); fgGrd.addColorStop(1, 'rgba(255,80,10,0.12)');
-    ctx.fillStyle = fgGrd; ctx.fillRect(0, floorY-30, 700, 40);
+    // Bright fire glow on floor
+    const fgGrd = ctx.createLinearGradient(0, floorY-50, 0, floorY+8);
+    fgGrd.addColorStop(0, 'rgba(255,40,0,0)');
+    fgGrd.addColorStop(0.6, 'rgba(255,60,0,0.12)');
+    fgGrd.addColorStop(1, 'rgba(255,100,20,0.25)');
+    ctx.fillStyle = fgGrd; ctx.fillRect(0, floorY-50, 700, 58);
+    // Ambient red light on cave walls from fire
+    const wallGlow = ctx.createLinearGradient(0, floorY-120, 0, floorY);
+    wallGlow.addColorStop(0, 'rgba(200,30,0,0)');
+    wallGlow.addColorStop(1, 'rgba(255,60,10,0.08)');
+    ctx.fillStyle = wallGlow; ctx.fillRect(0, floorY-120, 700, 120);
 
     // ── STONE FLOOR ───────────────────────────────────────────────────────────
     const flGrd = ctx.createLinearGradient(0, floorY, 0, 500);
@@ -19807,13 +19861,14 @@ function drawSelfDestructCave2() {
 
     // ── COFFIN ────────────────────────────────────────────────────────────────
     const coffinX = 490;
-    if(sds.coffinRisingTimer > 0 || sds.devilState === 'dead') {
+    if(sds.coffinRisingTimer > 0 || sds.devilState === 'dead' || sds.coffinDescending) {
         const cy = sds.coffinY;
-        // Black backing behind coffin to prevent fire bleed-through
-        ctx.fillStyle = '#0a0604'; ctx.fillRect(coffinX-20, cy-2, 40, 66);
+        // Clip coffin to only show above the floor (emerges from earth)
+        ctx.save();
+        ctx.beginPath(); ctx.rect(coffinX-22, 0, 44, floorY); ctx.clip();
         // Shadow on floor
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(coffinX, floorY+4, 22, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(coffinX, floorY-2, 22, 6, 0, 0, Math.PI*2); ctx.fill();
         // Coffin body (solid, opaque)
         const cg = ctx.createLinearGradient(coffinX-18, cy, coffinX+18, cy);
         cg.addColorStop(0,'#1e0e06'); cg.addColorStop(0.4,'#2e1a0c'); cg.addColorStop(1,'#180c04');
@@ -19833,6 +19888,14 @@ function drawSelfDestructCave2() {
         // Lid seam
         ctx.strokeStyle = '#5a3010'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(coffinX,cy); ctx.lineTo(coffinX,cy+60); ctx.stroke();
+        ctx.restore();
+        // Disturbed earth mound around coffin emergence point
+        if(cy < floorY) {
+            ctx.fillStyle = '#3a2010';
+            ctx.beginPath(); ctx.ellipse(coffinX, floorY, 26, 8, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#2a1608';
+            ctx.beginPath(); ctx.ellipse(coffinX, floorY+2, 22, 5, 0, 0, Math.PI*2); ctx.fill();
+        }
     }
 
     // ── DEVIL NPC ─────────────────────────────────────────────────────────────
@@ -19971,7 +20034,11 @@ function drawSelfDestructCave2() {
         drawDevilBody(dvx, dvy, false, 1);
     }
 
-    // ── LOWER-THIRD DIALOGUE ──────────────────────────────────────────────────
+    // ── PLAYER (drawn before dialogue so dialogue overlays on top) ──────────
+    drawBaldManager(player.x, player.y, player.facing);
+    if(level6.hasRevolver || level6.revolverAmmo > 0) drawAmmoCounter();
+
+    // ── LOWER-THIRD DIALOGUE (highest z-order) ───────────────────────────────
     if(sds.devilDialogue) {
         const dlgLines = ["Your chariot awaits, sir.", "Step right up..."];
         const curLine = dlgLines[sds.devilDialogueLine] || '';
@@ -19981,15 +20048,14 @@ function drawSelfDestructCave2() {
 
         const dlgX = 0, dlgY = 340, dlgW = 700, dlgH = 160;
         ctx.save();
-        // Solid opaque background to prevent fire bleed-through
+        // Solid opaque background
         ctx.fillStyle = '#0e0302'; ctx.fillRect(dlgX, dlgY, dlgW, dlgH);
         ctx.fillStyle = 'rgba(30,8,5,0.98)'; ctx.fillRect(dlgX, dlgY, dlgW, dlgH);
-        ctx.fillStyle = '#8b0000'; ctx.fillRect(dlgX, dlgY, dlgW, 3); // red border top
+        ctx.fillStyle = '#8b0000'; ctx.fillRect(dlgX, dlgY, dlgW, 3);
         ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillStyle = '#cc2200';
         ctx.fillText('DEVIL', dlgX + 20, dlgY + 26);
-        // Dialogue text
         ctx.font = '20px Arial'; ctx.fillStyle = '#f0d0c8';
-        const maxW = CANVAS_W - 50;
+        const maxW = 650;
         const words = displayText.split(' ');
         let lineA = '', lineB = '';
         for(const w of words) {
@@ -20006,7 +20072,6 @@ function drawSelfDestructCave2() {
                 ctx.fillStyle = '#f0d0c8'; ctx.fillRect(cx2, cy2-16, 2, 18);
             }
         } else {
-            // Steady action prompt (no rapid blink)
             const isLast = sds.devilDialogueLine >= dlgLines.length - 1;
             ctx.font = 'bold 17px Arial'; ctx.textAlign = 'right'; ctx.fillStyle = '#ff6644';
             ctx.fillText(isLast ? '[ ACTION ]' : '[ ACTION ] \u25ba', dlgX + dlgW - 16, dlgY + 136);
@@ -20014,9 +20079,25 @@ function drawSelfDestructCave2() {
         ctx.restore();
     }
 
-    // ── PLAYER ────────────────────────────────────────────────────────────────
-    drawBaldManager(player.x, player.y, player.facing);
-    if(level6.hasRevolver || level6.revolverAmmo > 0) drawAmmoCounter();
+    // ── HELL CARD OVERLAY ─────────────────────────────────────────────────────
+    if(sds.hellCardShowing) {
+        const alpha = Math.min(1, sds.hellCardTimer / 600);
+        ctx.save();
+        ctx.fillStyle = `rgba(0,0,0,${0.85 * alpha})`; ctx.fillRect(0, 0, 700, 500);
+        ctx.globalAlpha = alpha;
+        // Red glow
+        const grd = ctx.createRadialGradient(350, 250, 20, 350, 250, 250);
+        grd.addColorStop(0, 'rgba(180,0,0,0.3)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grd; ctx.fillRect(0, 0, 700, 500);
+        // Text
+        ctx.fillStyle = '#cc0000'; ctx.font = 'bold 32px serif'; ctx.textAlign = 'center';
+        ctx.fillText('WELCOME TO YOUR', 350, 220);
+        ctx.fillText('OWN PERSONAL HELL', 350, 265);
+        ctx.fillStyle = '#ff4400'; ctx.font = '16px serif';
+        ctx.fillText('[ ACTION ]', 350, 340);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
 }
 
 function drawSelfDestructSafeRoom() {
@@ -20100,24 +20181,13 @@ function drawSelfDestructSafeRoom() {
         }
         if(elapsed > 6000) { state = 'theend'; menuChoice = 0; }
     } else {
-        // TV showing title card screen
-        const titleBg = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
-        titleBg.addColorStop(0, '#0a0a1a'); titleBg.addColorStop(0.5, '#1a1428'); titleBg.addColorStop(1, '#0a0a1a');
-        ctx.fillStyle = titleBg; ctx.fillRect(scrX, scrY, scrW, scrH);
-        // Subtle vignette
-        const vig = ctx.createRadialGradient(scrX+scrW/2, scrY+scrH/2, scrW*0.2, scrX+scrW/2, scrY+scrH/2, scrW*0.55);
-        vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)');
-        ctx.fillStyle = vig; ctx.fillRect(scrX, scrY, scrW, scrH);
-        // Title text
-        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 28px serif'; ctx.textAlign = 'center';
-        ctx.fillText('MULLET PRO', scrX+scrW/2, scrY+scrH/2-6);
-        ctx.fillStyle = '#c0b080'; ctx.font = '12px serif';
-        ctx.fillText('PRESS  START', scrX+scrW/2, scrY+scrH/2+18);
-        // Scanline overlay
-        ctx.fillStyle = 'rgba(0,0,0,0.08)';
-        for(let sl = scrY; sl < scrY+scrH; sl += 3) ctx.fillRect(scrX, sl, scrW, 1);
-        // Power LED (on — green)
-        ctx.fillStyle = 'rgba(0,180,0,0.9)'; ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
+        // TV off — dark black screen
+        ctx.fillStyle = '#060608'; ctx.fillRect(scrX, scrY, scrW, scrH);
+        // Faint reflection on glass
+        ctx.fillStyle = 'rgba(40,40,50,0.08)';
+        ctx.fillRect(scrX+4, scrY+4, scrW*0.3, scrH*0.2);
+        // Power LED (red standby)
+        ctx.fillStyle = 'rgba(180,0,0,0.8)'; ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
     }
 
     // ── KITCHENETTE — left wall ───────────────────────────────────────────────
@@ -20154,43 +20224,34 @@ function drawSelfDestructSafeRoom() {
     // Toaster
     ctx.fillStyle = '#b8b8b8'; ctx.fillRect(135, 286, 16, 14); ctx.fillStyle = '#888'; ctx.fillRect(136,284,14,4);
 
-    // ── LAZY BOY CHAIR — center, facing TV (back toward viewer) ────────────────
+    // ── LAZY BOY CHAIR — center, facing TV (we see the back of the chair) ─────
     const chairX = 350, chairY = floorY;
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath(); ctx.ellipse(chairX, chairY+5, 52, 14, 0, 0, Math.PI*2); ctx.fill();
-    // Chair base/legs
+    ctx.beginPath(); ctx.ellipse(chairX, chairY+5, 48, 12, 0, 0, Math.PI*2); ctx.fill();
+    // Chair legs
     ctx.fillStyle = '#5a2808';
-    ctx.fillRect(chairX-44, chairY-8, 8, 8); ctx.fillRect(chairX+36, chairY-8, 8, 8);
-    // Back of chair — faces the viewer (bottom), prominent thick cushion
-    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-40, chairY-38, 80, 32);
-    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-36, chairY-36, 72, 26);
-    // Back cushion crease
-    ctx.strokeStyle = '#7a3008'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(chairX, chairY-36); ctx.lineTo(chairX, chairY-12); ctx.stroke();
-    // Headrest — visible peeking above the back (toward viewer side)
-    ctx.fillStyle = '#9b4a20'; ctx.fillRect(chairX-24, chairY-46, 48, 12);
-    // Seat — above back, facing TV (top)
-    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-42, chairY-92, 84, 48);
-    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-38, chairY-90, 76, 42);
-    // Seat crease
-    ctx.beginPath(); ctx.moveTo(chairX, chairY-90); ctx.lineTo(chairX, chairY-50); ctx.stroke();
+    ctx.fillRect(chairX-38, chairY-6, 6, 6); ctx.fillRect(chairX+32, chairY-6, 6, 6);
+    // Chair back (prominent — faces the viewer)
+    ctx.fillStyle = '#8b3a10'; ctx.fillRect(chairX-38, chairY-80, 76, 74);
+    ctx.fillStyle = '#a04818'; ctx.fillRect(chairX-34, chairY-78, 68, 68);
+    // Back cushion tufting (horizontal crease)
+    ctx.strokeStyle = '#7a3008'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(chairX-32, chairY-48); ctx.lineTo(chairX+32, chairY-48); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(chairX-32, chairY-28); ctx.lineTo(chairX+32, chairY-28); ctx.stroke();
+    // Vertical center crease
+    ctx.beginPath(); ctx.moveTo(chairX, chairY-78); ctx.lineTo(chairX, chairY-12); ctx.stroke();
+    // Headrest (pillow at top of back)
+    ctx.fillStyle = '#9b4a20'; ctx.fillRect(chairX-22, chairY-90, 44, 14);
+    ctx.fillStyle = '#a85828'; ctx.fillRect(chairX-20, chairY-88, 40, 10);
     // Arm rests — sides
     ctx.fillStyle = '#7a3008';
-    ctx.fillRect(chairX-46, chairY-92, 12, 86); ctx.fillRect(chairX+34, chairY-92, 12, 86);
+    ctx.fillRect(chairX-44, chairY-68, 10, 62); ctx.fillRect(chairX+34, chairY-68, 10, 62);
     ctx.fillStyle = '#9a4018';
-    ctx.fillRect(chairX-46, chairY-94, 12, 6); ctx.fillRect(chairX+34, chairY-94, 12, 6);
-    // Footrest (extended toward TV when sitting)
-    if(sds.chairSitting) {
-        ctx.fillStyle = '#7a3008'; ctx.fillRect(chairX-32, chairY-108, 64, 14);
-        ctx.fillStyle = '#9a4018'; ctx.fillRect(chairX-30, chairY-106, 60, 10);
-    }
+    ctx.fillRect(chairX-44, chairY-70, 10, 5); ctx.fillRect(chairX+34, chairY-70, 10, 5);
     // Remote on right armrest
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(chairX+36, chairY-62, 8, 18);
-    ctx.fillStyle = '#cc2200'; ctx.beginPath(); ctx.arc(chairX+40, chairY-58, 3, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#444';
-    ctx.fillRect(chairX+37, chairY-52, 2.5, 2.5); ctx.fillRect(chairX+41, chairY-52, 2.5, 2.5);
-    ctx.fillRect(chairX+37, chairY-47, 2.5, 2.5); ctx.fillRect(chairX+41, chairY-47, 2.5, 2.5);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(chairX+36, chairY-52, 6, 14);
+    ctx.fillStyle = '#cc2200'; ctx.beginPath(); ctx.arc(chairX+39, chairY-48, 2, 0, Math.PI*2); ctx.fill();
 
     // Ceiling pendant light
     ctx.fillStyle = '#888'; ctx.fillRect(348, 0, 4, 18);
@@ -20201,38 +20262,33 @@ function drawSelfDestructSafeRoom() {
 
     // Action prompt on chair
     if(!sds.chairSitting && Math.abs(player.x - chairX) < 55) {
-        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(chairX-58, chairY-118, 116, 22);
+        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(chairX-58, chairY-106, 116, 22);
         ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] SIT DOWN', chairX, chairY-102);
+        ctx.fillText('[ ACTION ] SIT DOWN', chairX, chairY-90);
     }
 
     // ── PLAYER ────────────────────────────────────────────────────────────────
     if(!sds.chairSitting) {
         drawBaldManager(player.x, player.y, player.facing);
     } else {
-        // Player seated in chair facing TV (back of head visible to viewer)
-        const px = chairX, py = chairY - 72;
-        // Feet on footrest (toward TV / top)
-        ctx.fillStyle = '#111'; ctx.fillRect(px-6*s, py-12*s, 5*s, 2*s); ctx.fillRect(px+s, py-12*s, 5*s, 2*s);
-        // Seated legs (extending toward TV)
-        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(px-6*s, py-10*s, 12*s, 7*s);
-        // Belt
-        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(px-7*s, py-3*s, 14*s, 2*s);
-        // Shirt (back view — white with slight shadow)
-        ctx.fillStyle = '#e8e8e8'; ctx.fillRect(px-7*s, py-s, 14*s, 11*s);
-        ctx.fillStyle = '#c8c8c8'; ctx.fillRect(px-7*s, py-s, 2*s, 11*s);
-        // Arms on armrests
-        ctx.fillStyle = '#e8e8e8'; ctx.fillRect(px-9*s, py+s, 2*s, 8*s); ctx.fillRect(px+7*s, py+s, 2*s, 8*s);
-        // Hands (skin)
-        ctx.fillStyle = '#f5c89a'; ctx.fillRect(px-9*s, py+9*s, 2*s, 2*s); ctx.fillRect(px+7*s, py+9*s, 2*s, 2*s);
-        // Neck (back view)
-        ctx.fillStyle = '#f0c080'; ctx.fillRect(px-2*s, py-3*s, 4*s, 3*s);
-        // Bald head (back view — round, skin color with shine)
+        // Player seated — only bald head visible above chair back, arms on rests
+        const px = chairX;
+        // Arms resting on armrests (white shirt sleeves, back view)
+        ctx.fillStyle = '#e8e8e8';
+        ctx.fillRect(chairX-43, chairY-56, 8, 14);
+        ctx.fillRect(chairX+35, chairY-56, 8, 14);
+        // Hands on armrests
         ctx.fillStyle = '#f5c89a';
-        ctx.beginPath(); ctx.arc(px, py-7*s, 5*s, 0, Math.PI*2); ctx.fill();
-        // Head highlight
-        ctx.fillStyle = 'rgba(255,230,190,0.5)';
-        ctx.beginPath(); ctx.arc(px-s, py-9*s, 2*s, 0, Math.PI); ctx.fill();
+        ctx.fillRect(chairX-43, chairY-56, 8, 4);
+        ctx.fillRect(chairX+35, chairY-56, 8, 4);
+        // Neck (back view — just above headrest)
+        ctx.fillStyle = '#f0c080'; ctx.fillRect(px-3, chairY-96, 6, 6);
+        // Bald head (back view — peeking above headrest)
+        ctx.fillStyle = '#f5c89a';
+        ctx.beginPath(); ctx.arc(px, chairY-106, 10, 0, Math.PI*2); ctx.fill();
+        // Head highlight (bald shine)
+        ctx.fillStyle = 'rgba(255,230,190,0.45)';
+        ctx.beginPath(); ctx.arc(px-1, chairY-109, 4, 0, Math.PI); ctx.fill();
     }
 }
 
@@ -22637,7 +22693,7 @@ function drawScene() {
     if(level !== 4) drawToolCabinet(65, 400);
 
     // Marker board — below PipeTech sign on wall (sign bottom y=160, board at y=240)
-    drawMarkerBoard(150, 240, level);
+    drawMarkerBoard(150, 240, hellMode ? 'hell' : level);
 
     // Right wall gasket + boss door BEFORE pipes so gasket renders behind
     // pipeY=210, horizontal pipe runs at pipeY+25=235 — gasket centered on pipe
@@ -22705,8 +22761,12 @@ function drawScene() {
         // Skip NPC sprite while its acid-burst melt animation is playing
         const isMelting = acidBursts.some(ab => ab.npc === npc);
         if (!isMelting) {
-            drawStepLadder(npc.x, npc.y, npc.color);
-            drawNPC(npc);
+            drawStepLadder(npc.x, npc.y, hellMode ? {hex: '#0a0a0a', shadow: '#000'} : npc.color);
+            if(hellMode) {
+                drawMulletPro(npc.x, npc.y, 'forward', false, false, null);
+            } else {
+                drawNPC(npc);
+            }
         }
     }
 
@@ -23158,18 +23218,39 @@ function update() {
                 }
             }
 
-            // ACTION on throne (if throneActionAvailable — after devil shot dead)
-            if(sds.throneActionAvailable && (keys[' '] || keys['action']) && player.x > 530) {
-                sds.room = 'safeRoom';
-                player.x = 350; player.y = floorY; player.facing = 'forward';
+            // ACTION on throne (if throneActionAvailable — after coffin fully descended)
+            if(sds.throneActionAvailable && !sds.coffinDescending && (keys[' '] || keys['action']) && player.x > 530) {
+                sds.hellCardShowing = true;
+                sds.hellCardTimer = 0;
                 keys[' '] = false; keys['action'] = false;
             }
+            // Hell card timer → transition to hell mode level 1
+            if(sds.hellCardShowing) {
+                sds.hellCardTimer += 1000/60;
+                if(sds.hellCardTimer > 3000 || ((keys[' '] || keys['action']) && sds.hellCardTimer > 500)) {
+                    // Transition to hell mode level 1 pipe room
+                    keys[' '] = false; keys['action'] = false;
+                    hellMode = true;
+                    level = 1;
+                    player.x = 350; player.y = 380; player.facing = 'right';
+                    state = 'playing';
+                    timer = 60;
+                    // Reset level 1 with hell mode flag set
+                    initLevel(1);
+                    sds.hellCardShowing = false;
+                    sds.hellCardTimer = 0;
+                    return;
+                }
+            }
 
-            // Shoot devil during coffin_rising phase
-            const canShoot = sds.devilState === 'coffin_rising' || sds.devilState === 'attacking' || sds.devilState === 'talking';
-            if(canShoot && sds.devilState !== 'dead' && (level6.hasRevolver || level6.revolverAmmo > 0)) {
-                if(player.shootTimer > 0 && !player._devilShotFrame) {
-                    player._devilShotFrame = true;
+            // Fire revolver with ACTION key (if armed, not in dialogue)
+            if(level6.revolverAmmo > 0 && !sds.devilDialogue && sds.devilState !== 'dead') {
+                if((keys[' '] || keys['action']) && !sds.throneActionAvailable) {
+                    keys[' '] = false; keys['action'] = false;
+                    level6.revolverAmmo--;
+                    player.shootTimer = 20;
+                    SFX.play('shoot');
+                    // Check if bullet hits devil
                     const bulletRight = player.facing !== 'left';
                     const towardDevil = (bulletRight && player.x < sds.devilX) || (!bulletRight && player.x > sds.devilX);
                     if(towardDevil && Math.abs(player.x - sds.devilX) < 400) {
@@ -23177,11 +23258,26 @@ function update() {
                         SFX.play('enemyDie');
                         if(sds.devilHp <= 0) {
                             sds.devilState = 'dead';
-                            sds.throneActionAvailable = true;
+                            sds.devilDialogue = false;
+                            sds.devilDialogueComplete = true;
+                            // Start coffin descending with devil in it
+                            sds.coffinRisingTimer = 180;
+                            sds.coffinY = 318;
+                            sds.coffinDescending = true;
                         }
                     }
-                } else if(player.shootTimer <= 0) {
-                    player._devilShotFrame = false;
+                }
+            }
+            // Decrement shoot timer
+            if(player.shootTimer > 0) player.shootTimer--;
+
+            // Phase 7: coffin descending with dead devil back into earth
+            if(sds.coffinDescending) {
+                sds.coffinY += 1.2; // slowly descend
+                if(sds.coffinY >= 490) {
+                    sds.coffinDescending = false;
+                    sds.coffinRisingTimer = 0;
+                    sds.throneActionAvailable = true;
                 }
             }
 
@@ -26144,11 +26240,12 @@ function update() {
                                 devilWaitTimer: 0, devilFrame: 0, devilHp: 3,
                                 devilDialogue: false, devilDialogueLine: 0,
                                 devilDialogueChars: 0, devilDialogueComplete: false,
-                                coffinRisingTimer: 0, coffinY: 500, stabAnimTimer: 0,
-                                throneActionAvailable: false,
+                                coffinRisingTimer: 0, coffinY: 500, coffinDescending: false,
+                                stabAnimTimer: 0, throneActionAvailable: false,
+                                hellCardShowing: false, hellCardTimer: 0,
                                 chairSitting: false, tvEndTimer: 0, tvEndStarted: false
                             });
-                            player.y = 380;
+                            player.x = 185; player.y = 380;
                             state = 'selfDestructSeq';
                             SFX.play('hatchOpen');
                         } else {
@@ -27856,6 +27953,15 @@ function winGame() {
 
 function nextLevel() {
     SFX.play('levelClear');
+    // Hell mode level 1 — completing it triggers the end card
+    if(hellMode && level === 1) {
+        hellMode = false;
+        hellLevelComplete = true;
+        state = 'theend';
+        cardTimer = 0;
+        playMusic('menu');
+        return;
+    }
     if(level < 4) {
         level++;
         timer = level === 4 ? 120 : 60; // Level 4 gets 120 seconds
