@@ -942,6 +942,7 @@ let player = {
     y: 380,
     holding: null,
     facing: 'forward',
+    lastHorizFacing: 'right',
     lastMove: 0,
     shootTimer: 0
 };
@@ -1912,6 +1913,88 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = 
     }
 }
 
+// Hell mode: render a Mullet Pro that behaves like a PM — climbing/fixing
+// pipes depending on npc.state. Back-facing when at the pipe so the mullet
+// hair silhouette reads clearly.
+function drawMulletProAsPM(npc) {
+    const x = npc.x;
+    let y = npc.y;
+
+    // Jitter animations for stress states (same as drawNPC)
+    if(npc.needsDoc) {
+        let pct = 0;
+        const crack = cracks.find(c => c.npc === npc);
+        if(crack) pct = Math.min((Date.now() - crack.time) / crack.max, 1);
+        if(pct >= 0.66) y += (Math.cos(Date.now() / 60) - 1) * 7;
+    }
+
+    const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
+    const isFix = npc.state === 'fixing';
+
+    if(isClimbing || isFix) {
+        // Back-facing mullet pro clinging to the ladder
+        const s = 2;
+        const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
+        const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
+
+        // Shadow at ladder base
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.ellipse(x, y + 34, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Wrench rocking behind sprite during fixing
+        if(isFix) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
+            const rock = Math.sin(npc.fixAnim * 5) * 0.45;
+            ctx.translate(x, y - 2);
+            ctx.rotate(rock);
+            ctx.fillStyle = '#e03020';
+            ctx.beginPath();
+            ctx.moveTo(4, -5); ctx.lineTo(56, -3.5); ctx.lineTo(58, 0);
+            ctx.lineTo(56, 3.5); ctx.lineTo(4, 5); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ff5544'; ctx.fillRect(8, -3.5, 46, 2);
+            ctx.fillStyle = '#555';
+            ctx.beginPath(); ctx.arc(2, 0, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        // Back of head — skin patch + mullet hair cascading down the neck
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        // Dark brown mullet from behind — crown + neck cascade
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(x - 6*s, y - 16*s, 12*s, 6*s); // top/crown
+        ctx.fillRect(x - 5*s, y - 10*s, 10*s, 3*s); // mullet neckline
+        ctx.fillRect(x - 3*s, y - 7*s, 6*s, 4*s);   // mullet tail on neck
+        // Jumpsuit back (dark hell-red) — torso
+        ctx.fillStyle = '#3a0a0a';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#1a0505';
+        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        // Arms reaching up to ladder rungs (or pipe while fixing)
+        ctx.fillStyle = '#3a0a0a';
+        const armRaise = isFix ? -18 : (-14 + climbCycle);
+        ctx.fillRect(x - 9*s + torque, y + armRaise, 2*s, 16*s + (isFix ? 6 : 0));
+        ctx.fillRect(x + 7*s - torque, y + armRaise, 2*s, 16*s + (isFix ? 6 : 0));
+        // Hands on rungs/pipe
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 9*s + torque, y + armRaise, 2*s, 2*s);
+        ctx.fillRect(x + 7*s - torque, y + armRaise, 2*s, 2*s);
+        // Legs on rungs — alternating climb
+        ctx.fillStyle = '#a4c2db';
+        const legOffA = isClimbing ? climbCycle : 0;
+        const legOffB = isClimbing ? -climbCycle : 0;
+        ctx.fillRect(x - 5*s, y + 8*s + legOffA, 4*s, 8*s);
+        ctx.fillRect(x + s, y + 8*s + legOffB, 4*s, 8*s);
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 5*s, y + 16*s + legOffA, 4*s, 2*s);
+        ctx.fillRect(x + s, y + 16*s + legOffB, 4*s, 2*s);
+    } else {
+        // Idle / stressed / happy — forward-facing mullet pro sprite
+        drawMulletPro(x, y, 'forward', false, false, false);
+    }
+}
+
 function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
     const isWalking = Date.now() - player.lastMove < 150;
@@ -2361,6 +2444,42 @@ function drawBoss(x, y, facing) {
     }
 }
 
+// Advance PM pipe-state machine: climbing_up → fixing → climbing_down → happy.
+// Extracted so hell mode can render mullet pros while the state still advances.
+function updateNPCPipeAnimation(npc) {
+    const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
+    if(isClimbing && npc.climbStartTime) {
+        const elapsed = Date.now() - npc.climbStartTime;
+        const duration = 1500;
+        const t = Math.min(elapsed / duration, 1);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        npc.y = npc.climbStartY + (npc.climbTargetY - npc.climbStartY) * eased;
+        if(t >= 1) {
+            npc.y = npc.climbTargetY;
+            if(npc.state === 'climbing_up') {
+                npc.state = 'fixing';
+                npc.fixAnim = 0;
+                npc.fixStartTime = Date.now();
+            } else {
+                npc.state = 'happy';
+            }
+        }
+    }
+    if(npc.state === 'fixing' && npc.fixStartTime) {
+        const _prevWa = Math.floor((npc.fixAnim || 0) / 0.4);
+        npc.fixAnim = (npc.fixAnim || 0) + 0.02;
+        if(Math.floor(npc.fixAnim / 0.4) !== _prevWa) SFX.play('wrench');
+        const fixElapsed = Date.now() - npc.fixStartTime;
+        if(fixElapsed >= 2000) {
+            cracks = cracks.filter(c => c.npc !== npc);
+            npc.state = 'climbing_down';
+            npc.climbStartTime = Date.now();
+            npc.climbStartY = npc.y;
+            npc.climbTargetY = npc.groundY || 368;
+        }
+    }
+}
+
 function drawNPC(npc) {
     let x = npc.x;
     let y = npc.y;
@@ -2392,29 +2511,10 @@ function drawNPC(npc) {
         }
     }
 
-    // Animate climbing position
+    // Climb/fix state is advanced by updateNPCPipeAnimation() before drawing;
+    // read the updated npc.y for rendering.
+    y = npc.y;
     const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
-    if(isClimbing && npc.climbStartTime) {
-        const elapsed = Date.now() - npc.climbStartTime;
-        const duration = 1500; // 1.5s to climb
-        const t = Math.min(elapsed / duration, 1);
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // ease in-out
-        y = npc.climbStartY + (npc.climbTargetY - npc.climbStartY) * eased;
-        npc.y = y; // update actual position for ladder standing-rung calc
-        if(t >= 1) {
-            npc.y = npc.climbTargetY;
-            if(npc.state === 'climbing_up') {
-                // Reached the top — start fixing
-                npc.state = 'fixing';
-                npc.fixAnim = 0;
-                npc.fixStartTime = Date.now();
-            } else {
-                // Reached the bottom — done
-                npc.state = 'happy';
-            }
-        }
-        x = npc.x;
-    }
 
     // Shadow at foot level — relative to NPC y position (feet at y + 16*s = y + 32)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -2433,21 +2533,6 @@ function drawNPC(npc) {
     // Fade in wrench over first ~10 frames to avoid hard pop on state transition
     if(npc.state === 'fixing') {
         ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
-        // Animate fix timer and trigger climb-down when done
-        if(npc.fixStartTime) {
-            const _prevWa = Math.floor(npc.fixAnim / 0.4);
-            npc.fixAnim += 0.02;
-            // Wrench ratchet every ~20 frames while fixing
-            if(Math.floor(npc.fixAnim / 0.4) !== _prevWa) SFX.play('wrench');
-            const fixElapsed = Date.now() - npc.fixStartTime;
-            if(fixElapsed >= 2000) {
-                cracks = cracks.filter(c => c.npc !== npc);
-                npc.state = 'climbing_down';
-                npc.climbStartTime = Date.now();
-                npc.climbStartY = npc.y;
-                npc.climbTargetY = npc.groundY || 368;
-            }
-        }
         // Pipe wrench clamped on the pipe — handle sticks out with strong rocking motion
         const wrenchX = npc.x;
         const wrenchY = y - 2;
@@ -4301,6 +4386,11 @@ function drawGhostGun(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
+    // Normalize up/down facing to the most recent horizontal facing so the
+    // shoulder/arm anchors stay consistent with the torso.
+    if(facing !== 'left' && facing !== 'right') {
+        facing = player.lastHorizFacing || 'right';
+    }
     const skinColor = '#f5c89a';
     const sleeveColor = '#800020'; // Red jacket sleeve
 
@@ -4539,6 +4629,12 @@ function drawWrenchShatter(pieces) {
 function drawWrenchGun(x, y, facing) {
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 || level6.wrenchBolts.length > 0;
     if(!isActive) return;
+    // Wrench gun has no up/down sprite; fall back to the last horizontal
+    // facing so the arm stays anchored to the shoulder instead of clipping
+    // through the torso.
+    if(facing !== 'left' && facing !== 'right') {
+        facing = player.lastHorizFacing || 'right';
+    }
     const skinColor = '#f5c89a';
     const sleeveColor = '#800020';
     const dir = (facing === 'left') ? -1 : 1;
@@ -4581,6 +4677,10 @@ function drawRevolver(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
+    // Normalize up/down facing to horizontal so the arm anchors cleanly.
+    if(facing !== 'left' && facing !== 'right') {
+        facing = player.lastHorizFacing || 'right';
+    }
     const s = 2;
     const skinColor = '#d4a882';
 
@@ -5959,17 +6059,10 @@ function drawMarkerBoard(x, y, boardLv) {
             const dlen = 6 + ((d * 7) % 12);
             ctx.beginPath(); ctx.moveTo(dx, y + 4); ctx.lineTo(dx, y + 4 + dlen); ctx.stroke();
         }
-        // Pentagram doodle below
-        ctx.strokeStyle = '#a80000'; ctx.lineWidth = 1.2;
-        const pcx = x, pcy = y + 28, pr = 9;
-        ctx.beginPath();
-        for(let p = 0; p < 5; p++) {
-            const a = -Math.PI/2 + p * (Math.PI * 4 / 5);
-            const px = pcx + Math.cos(a) * pr;
-            const py = pcy + Math.sin(a) * pr;
-            if(p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.stroke();
+        // Small scrawled "forever." beneath
+        ctx.fillStyle = '#6b0000';
+        ctx.font = 'italic bold 11px "Georgia", serif';
+        ctx.fillText('forever.', x, y + 32);
         ctx.restore();
     } else if(boardLv === 1) {
         // Level 1 welcome message — blue dry-erase marker, large and readable
@@ -20067,48 +20160,109 @@ function drawSelfDestructCave1() {
 
 // Back-view player drawn climbing a ladder — no front-facing tie/face elements
 function drawBackViewPlayerOnLadder(bx, py) {
-    const s = 2;
+    // Elegant back-view climber. py is the player anchor point (waist level).
+    // Proportions match drawBaldManager so the player doesn't appear to
+    // change size when stepping onto the ladder.
     const isClimbing = !!(keys['ArrowDown'] || keys['down'] || keys['ArrowUp'] || keys['up']);
-    const climbPhase = isClimbing ? Math.sin(Date.now() / 220) : 0;
-    // Shadow on rung below
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.ellipse(bx, py + 47, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    const phase = isClimbing ? Math.sin(Date.now() / 220) : 0;
+    const lArmUp = phase > 0 ? 1 : 0;   // which arm is reaching up
+    const rArmUp = phase > 0 ? 0 : 1;
+    const skin   = '#f5c89a';
+    const skinSh = '#e0b088';
+    const shirt  = '#f0f0ec';
+    const shirtSh= '#c8c8c0';
+    const pants  = '#2a2f46';
+    const pantsSh= '#181c2c';
+    const belt   = '#181818';
+    const shoe   = '#101010';
+
+    // Drop shadow on the rung under the feet
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';
+    ctx.beginPath(); ctx.ellipse(bx, py + 46, 10, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ── Legs (back view) — alternating step
+    // Reference: feet at py+44, knees at py+28, hips at py+12
+    const lFootLift = phase > 0 ?  2 + phase * 4 : 0;
+    const rFootLift = phase < 0 ? -phase * 4 + 2 : 0;
+    // Left trouser
+    ctx.fillStyle = pants;
+    ctx.fillRect(bx - 8, py + 12, 7, 32 - lFootLift);
+    ctx.fillStyle = pantsSh;
+    ctx.fillRect(bx - 8, py + 12, 2, 32 - lFootLift);
+    // Right trouser
+    ctx.fillStyle = pants;
+    ctx.fillRect(bx + 1, py + 12, 7, 32 - rFootLift);
+    ctx.fillStyle = pantsSh;
+    ctx.fillRect(bx + 1, py + 12, 2, 32 - rFootLift);
     // Shoes
-    ctx.fillStyle = '#111';
-    ctx.fillRect(bx - 6*s, py + 23*s, 5*s, 2*s);
-    ctx.fillRect(bx + s, py + 23*s, 5*s, 2*s);
-    // Trouser legs
-    ctx.fillStyle = '#2a2a3a';
-    ctx.fillRect(bx - 5*s, py + 15*s + climbPhase*2, 4*s, 9*s);
-    ctx.fillRect(bx + s, py + 15*s - climbPhase*2, 4*s, 9*s);
-    // Belt
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx - 7*s, py + 11*s, 14*s, 3*s);
-    // Shirt back — solid white with shadow stripe down left side, NO tie, NO collar
-    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(bx - 7*s, py + s, 14*s, 11*s);
-    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(bx - 7*s, py + s, 2*s, 11*s);
-    // Shoulder seam line
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(bx - 7*s, py + 2*s); ctx.lineTo(bx + 7*s, py + 2*s); ctx.stroke();
-    // Arms gripping rungs
-    ctx.fillStyle = '#e8e8e8';
-    ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3, 2*s, 9*s);
-    ctx.fillRect(bx + 7*s, py - 4*s - climbPhase*3, 2*s, 9*s);
-    // Hands (skin)
-    ctx.fillStyle = '#f5c89a';
-    ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3 - 2, 2*s, 3);
-    ctx.fillRect(bx + 7*s, py - 4*s - climbPhase*3 - 2, 2*s, 3);
-    // Neck (back)
-    ctx.fillStyle = '#f0c080'; ctx.fillRect(bx - 2*s, py - 2*s, 4*s, 3*s);
-    // Bald head — back view: round skin-colored circle, NO eyes, NO face features
-    ctx.fillStyle = '#f5c89a';
-    ctx.beginPath(); ctx.arc(bx, py - 9*s, 5*s, 0, Math.PI * 2); ctx.fill();
-    // Head highlight at top
-    ctx.fillStyle = 'rgba(255,230,190,0.5)';
-    ctx.beginPath(); ctx.arc(bx - s, py - 11*s, 2*s, 0, Math.PI); ctx.fill();
-    // Subtle ear shapes on the sides
-    ctx.fillStyle = '#e0b088';
-    ctx.beginPath(); ctx.arc(bx - 5*s, py - 9*s, 1.2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(bx + 5*s, py - 9*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = shoe;
+    ctx.fillRect(bx - 9, py + 44 - lFootLift, 8, 3);
+    ctx.fillRect(bx + 1, py + 44 - rFootLift, 8, 3);
+
+    // ── Belt across hips
+    ctx.fillStyle = belt;
+    ctx.fillRect(bx - 9, py + 9, 18, 4);
+    // Tiny buckle highlight
+    ctx.fillStyle = '#c8a040';
+    ctx.fillRect(bx - 1, py + 10, 2, 2);
+
+    // ── Torso — dress shirt back with smooth shoulder curve
+    // Main shirt rectangle
+    ctx.fillStyle = shirt;
+    ctx.fillRect(bx - 10, py - 10, 20, 20);
+    // Shadow down the left side (consistent with back-view lighting)
+    ctx.fillStyle = shirtSh;
+    ctx.fillRect(bx - 10, py - 10, 3, 20);
+    // Curved shoulders — round the top corners
+    ctx.fillStyle = shirt;
+    ctx.beginPath();
+    ctx.moveTo(bx - 10, py - 10);
+    ctx.quadraticCurveTo(bx - 12, py - 14, bx - 6, py - 14);
+    ctx.lineTo(bx + 6, py - 14);
+    ctx.quadraticCurveTo(bx + 12, py - 14, bx + 10, py - 10);
+    ctx.closePath(); ctx.fill();
+    // Spine seam line down the back
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx, py - 10); ctx.lineTo(bx, py + 9); ctx.stroke();
+
+    // ── Arms — reaching up to ladder rungs, alternating
+    // Left arm
+    const lArmY = py - 14 - lArmUp * 6;
+    ctx.fillStyle = shirt;
+    ctx.fillRect(bx - 13, lArmY, 4, py - 10 - lArmY + 4);
+    ctx.fillStyle = shirtSh;
+    ctx.fillRect(bx - 13, lArmY, 1, py - 10 - lArmY + 4);
+    // Left hand
+    ctx.fillStyle = skin;
+    ctx.fillRect(bx - 13, lArmY - 3, 4, 4);
+
+    // Right arm
+    const rArmY = py - 14 - rArmUp * 6;
+    ctx.fillStyle = shirt;
+    ctx.fillRect(bx + 9, rArmY, 4, py - 10 - rArmY + 4);
+    ctx.fillStyle = shirtSh;
+    ctx.fillRect(bx + 9, rArmY, 1, py - 10 - rArmY + 4);
+    // Right hand
+    ctx.fillStyle = skin;
+    ctx.fillRect(bx + 9, rArmY - 3, 4, 4);
+
+    // ── Neck (back view)
+    ctx.fillStyle = skinSh;
+    ctx.fillRect(bx - 3, py - 16, 6, 3);
+
+    // ── Bald head — clean back-view oval, no face features
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.ellipse(bx, py - 22, 8, 9, 0, 0, Math.PI * 2); ctx.fill();
+    // Subtle crown highlight
+    ctx.fillStyle = 'rgba(255,235,200,0.35)';
+    ctx.beginPath(); ctx.ellipse(bx - 1, py - 26, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+    // Ears peeking at the sides
+    ctx.fillStyle = skinSh;
+    ctx.beginPath(); ctx.arc(bx - 8, py - 22, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx + 8, py - 22, 1.8, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
 }
 
 function drawSelfDestructCave2() {
@@ -20139,33 +20293,123 @@ function drawSelfDestructCave2() {
         ctx.beginPath(); ctx.moveTo(sx,sy+sh-12); ctx.lineTo(sx+1,sy+sh); ctx.lineTo(sx-2,sy+sh-14); ctx.closePath(); ctx.fill();
     });
 
-    // ── PERIMETER FLAMES — along back wall and floor edges ──────────────────
+    // ── LAVA POOLS ────────────────────────────────────────────────────────
     const t = Date.now();
+    // Three lava pools recessed into the floor — bubbling orange light
+    const pools = [[90, 28, 14], [260, 34, 16], [450, 26, 12]];
+    for(const [lx, lw, lh] of pools) {
+        // Dark rim
+        ctx.fillStyle = '#1a0a04';
+        ctx.beginPath(); ctx.ellipse(lx, floorY+6, lw+4, lh+3, 0, 0, Math.PI*2); ctx.fill();
+        // Lava body — bright orange with animated gradient
+        const lg = ctx.createRadialGradient(lx, floorY+4, 2, lx, floorY+4, lw);
+        lg.addColorStop(0, '#ffe040');
+        lg.addColorStop(0.35, '#ff6010');
+        lg.addColorStop(0.75, '#b02000');
+        lg.addColorStop(1, '#4a0800');
+        ctx.fillStyle = lg;
+        ctx.beginPath(); ctx.ellipse(lx, floorY+4, lw, lh, 0, 0, Math.PI*2); ctx.fill();
+        // Bubbles bursting through surface
+        for(let b = 0; b < 3; b++) {
+            const bt = (t / 300 + lx + b * 100) % 40;
+            if(bt < 18) {
+                const bx = lx + Math.sin((lx + b) * 2.3) * (lw * 0.5);
+                const by = floorY + 4 - bt * 0.4;
+                const br = Math.max(0, 3 - bt * 0.15);
+                ctx.fillStyle = `rgba(255,220,80,${Math.max(0, 1 - bt/18)})`;
+                ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+            }
+        }
+        // Glow halo
+        const haloG = ctx.createRadialGradient(lx, floorY+2, 4, lx, floorY+2, lw*3);
+        haloG.addColorStop(0, 'rgba(255,120,20,0.35)');
+        haloG.addColorStop(1, 'rgba(255,60,0,0)');
+        ctx.fillStyle = haloG;
+        ctx.beginPath(); ctx.arc(lx, floorY+2, lw*3, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ── WALL TORCHES — iron brackets flanking back wall ───────────────────
+    const torchPositions = [[50, 200], [230, 180], [400, 180], [580, 200], [650, 220]];
+    for(const [tx, ty] of torchPositions) {
+        // Iron bracket
+        ctx.fillStyle = '#2a1a10';
+        ctx.fillRect(tx-3, ty, 6, 14);
+        ctx.fillStyle = '#4a3020';
+        ctx.fillRect(tx-4, ty, 1, 14);
+        // Torch bowl
+        ctx.fillStyle = '#3a2010';
+        ctx.beginPath(); ctx.ellipse(tx, ty, 7, 3, 0, 0, Math.PI*2); ctx.fill();
+        // Flame
+        const flick = Math.sin(t / (140 + tx % 40) + tx) * 3;
+        const fh2 = 22 + flick;
+        const ff2 = ctx.createLinearGradient(tx, ty - fh2, tx, ty);
+        ff2.addColorStop(0, 'rgba(255,220,80,0)');
+        ff2.addColorStop(0.2, 'rgba(255,220,80,0.85)');
+        ff2.addColorStop(0.5, 'rgba(255,120,20,0.9)');
+        ff2.addColorStop(1, 'rgba(200,40,0,0.95)');
+        ctx.fillStyle = ff2;
+        ctx.beginPath();
+        ctx.moveTo(tx-5, ty);
+        ctx.quadraticCurveTo(tx-3+flick*0.5, ty-fh2*0.6, tx, ty-fh2);
+        ctx.quadraticCurveTo(tx+3+flick*0.5, ty-fh2*0.6, tx+5, ty);
+        ctx.closePath(); ctx.fill();
+        // Inner bright core
+        ctx.fillStyle = 'rgba(255,255,180,0.7)';
+        ctx.beginPath();
+        ctx.moveTo(tx-2, ty);
+        ctx.quadraticCurveTo(tx, ty-fh2*0.5, tx+2, ty);
+        ctx.closePath(); ctx.fill();
+        // Halo
+        const thG = ctx.createRadialGradient(tx, ty-10, 4, tx, ty-10, 60);
+        thG.addColorStop(0, 'rgba(255,160,40,0.25)');
+        thG.addColorStop(1, 'rgba(255,60,0,0)');
+        ctx.fillStyle = thG;
+        ctx.beginPath(); ctx.arc(tx, ty-10, 60, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ── PERIMETER FLAMES — along back wall and floor edges ──────────────────
     // Back wall flames (along bottom of cave walls)
     for(let fi = 0; fi < 24; fi++) {
         const fx = fi * 30 + 6;
         const seed = fi * 137.5;
-        const fh = 30 + 20 * Math.sin(t / (350 + seed % 180) + seed);
-        const fw = 9 + 4 * Math.sin(t / (500 + seed % 120) + seed + 1);
+        const fh = 40 + 26 * Math.sin(t / (350 + seed % 180) + seed);
+        const fw = 11 + 5 * Math.sin(t / (500 + seed % 120) + seed + 1);
         const ff = ctx.createLinearGradient(fx, floorY, fx, floorY - fh);
-        ff.addColorStop(0, `rgba(255,${90 + fi*4 % 50},10,0.7)`);
-        ff.addColorStop(0.3, `rgba(255,50,0,0.45)`);
-        ff.addColorStop(0.7, `rgba(200,20,0,0.15)`);
+        ff.addColorStop(0, `rgba(255,${110 + fi*4 % 60},20,0.85)`);
+        ff.addColorStop(0.3, `rgba(255,60,0,0.6)`);
+        ff.addColorStop(0.7, `rgba(200,20,0,0.22)`);
         ff.addColorStop(1, 'rgba(120,5,0,0)');
         ctx.fillStyle = ff;
         ctx.beginPath(); ctx.ellipse(fx, floorY, fw, fh, 0, 0, Math.PI*2); ctx.fill();
     }
+
+    // Rising embers drifting upward across the scene
+    for(let e = 0; e < 40; e++) {
+        const seed = e * 91.7;
+        const ex = (seed * 17.3 + t * 0.008) % 700;
+        const ey = 500 - ((t * (0.03 + (seed % 5) * 0.01) + seed * 7) % 540);
+        const er = 0.8 + (e % 3) * 0.5;
+        const ea = 0.3 + 0.3 * Math.sin(t / 400 + seed);
+        ctx.fillStyle = `rgba(255,${120 + (e % 8) * 15},20,${ea})`;
+        ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Heat haze — subtle wavy red overlay on upper half
+    const hazePulse = 0.06 + 0.03 * Math.sin(t / 600);
+    ctx.fillStyle = `rgba(180,30,0,${hazePulse})`;
+    ctx.fillRect(0, 0, 700, floorY);
+
     // Bright fire glow on floor
-    const fgGrd = ctx.createLinearGradient(0, floorY-50, 0, floorY+8);
+    const fgGrd = ctx.createLinearGradient(0, floorY-60, 0, floorY+8);
     fgGrd.addColorStop(0, 'rgba(255,40,0,0)');
-    fgGrd.addColorStop(0.6, 'rgba(255,60,0,0.12)');
-    fgGrd.addColorStop(1, 'rgba(255,100,20,0.25)');
-    ctx.fillStyle = fgGrd; ctx.fillRect(0, floorY-50, 700, 58);
+    fgGrd.addColorStop(0.5, 'rgba(255,80,0,0.18)');
+    fgGrd.addColorStop(1, 'rgba(255,140,30,0.35)');
+    ctx.fillStyle = fgGrd; ctx.fillRect(0, floorY-60, 700, 68);
     // Ambient red light on cave walls from fire
-    const wallGlow = ctx.createLinearGradient(0, floorY-120, 0, floorY);
+    const wallGlow = ctx.createLinearGradient(0, floorY-160, 0, floorY);
     wallGlow.addColorStop(0, 'rgba(200,30,0,0)');
-    wallGlow.addColorStop(1, 'rgba(255,60,10,0.08)');
-    ctx.fillStyle = wallGlow; ctx.fillRect(0, floorY-120, 700, 120);
+    wallGlow.addColorStop(1, 'rgba(255,70,10,0.14)');
+    ctx.fillStyle = wallGlow; ctx.fillRect(0, floorY-160, 700, 160);
 
     // ── STONE FLOOR ───────────────────────────────────────────────────────────
     const flGrd = ctx.createLinearGradient(0, floorY, 0, 500);
@@ -20306,22 +20550,30 @@ function drawSelfDestructCave2() {
     const dvy = floorY;
 
     function drawDevilBody(dx, dy, seated, riseAmt) {
+        // Walking/pursuit gait bob — sinusoidal body rise/fall plus leg stagger
+        const isWalkingDevil = (ds === 'walking' || ds === 'attacking');
+        const gait = isWalkingDevil ? Math.sin(sds.devilFrame * 0.25) : 0;
+        const bodyBob = isWalkingDevil ? Math.abs(gait) * -3 : 0;
+        const legStagger = isWalkingDevil ? gait * 4 : 0;
+
         // riseAmt 0=seated, 1=standing
-        const bodyOfsY = seated ? 22 * (1 - riseAmt) : 0;
+        const bodyOfsY = (seated ? 22 * (1 - riseAmt) : 0) + bodyBob;
         const legFold = seated ? (1 - riseAmt) : 0;
 
-        // Shadow
+        // Shadow — pulses with the bob
         ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.beginPath(); ctx.ellipse(dx, dy+3, 18+4*riseAmt, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(dx, dy+3, 18+4*riseAmt - Math.abs(bodyBob)*0.3, 5, 0, 0, Math.PI*2); ctx.fill();
 
         // Legs/lower body
         if(!seated || riseAmt > 0) {
             ctx.fillStyle = '#4a0808';
-            ctx.fillRect(dx-7*s, dy-10*s+bodyOfsY, 6*s, 10*s); // left leg
-            ctx.fillRect(dx+s, dy-10*s+bodyOfsY, 6*s, 10*s);   // right leg
+            const lLegLift = isWalkingDevil ? Math.max(0, legStagger) : 0;
+            const rLegLift = isWalkingDevil ? Math.max(0, -legStagger) : 0;
+            ctx.fillRect(dx-7*s, dy-10*s+bodyOfsY - lLegLift, 6*s, 10*s); // left leg
+            ctx.fillRect(dx+s, dy-10*s+bodyOfsY - rLegLift, 6*s, 10*s);   // right leg
             ctx.fillStyle = '#1a0404';
-            ctx.fillRect(dx-7*s, dy-2*s, 6*s, 2*s); // left boot
-            ctx.fillRect(dx+s, dy-2*s, 6*s, 2*s);   // right boot
+            ctx.fillRect(dx-7*s, dy-2*s - lLegLift, 6*s, 2*s); // left boot
+            ctx.fillRect(dx+s, dy-2*s - rLegLift, 6*s, 2*s);   // right boot
         } else {
             // Seated legs — knees bent forward, feet on ground
             ctx.fillStyle = '#4a0808';
@@ -20443,11 +20695,42 @@ function drawSelfDestructCave2() {
         drawRevolver(player.x, player.y, player.facing);
         drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
     }
-    // Muzzle flash
-    if(player.shootTimer > 12) {
-        const mfx = player.facing === 'left' ? player.x - 28 : player.x + 28;
-        ctx.fillStyle = 'rgba(255,220,80,0.85)';
-        ctx.beginPath(); ctx.arc(mfx, player.y - 6, 8, 0, Math.PI*2); ctx.fill();
+    // Muzzle flash + bullet streak toward the devil
+    if(player.shootTimer > 0) {
+        const faceRight = player.x < dvx;
+        const mfx = faceRight ? player.x + 28 : player.x - 28;
+        const mfy = player.y - 6;
+        // Bullet streak: a bright tracer from muzzle toward devil torso
+        if(player.shootTimer > 6) {
+            const dxTo = dvx - mfx;
+            const dyTo = (dvy - 40) - mfy;
+            const len = Math.hypot(dxTo, dyTo) || 1;
+            const nx = dxTo / len, ny = dyTo / len;
+            // Progress along the shot (0 at fire, 1 at hit) — fast travel
+            const travel = Math.min(1, (20 - player.shootTimer) / 4);
+            const bx = mfx + nx * len * travel;
+            const by = mfy + ny * len * travel;
+            // Tracer line (tail)
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,230,120,0.85)';
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(bx - nx * 22, by - ny * 22);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+            // Bullet head (bright pellet)
+            ctx.fillStyle = '#ffffcc';
+            ctx.beginPath(); ctx.arc(bx, by, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+        // Muzzle flash
+        if(player.shootTimer > 12) {
+            ctx.fillStyle = 'rgba(255,220,80,0.9)';
+            ctx.beginPath(); ctx.arc(mfx, mfy, 10, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,200,0.6)';
+            ctx.beginPath(); ctx.arc(mfx, mfy, 5, 0, Math.PI*2); ctx.fill();
+        }
     }
 
     // Kill window UI
@@ -20457,6 +20740,13 @@ function drawSelfDestructCave2() {
         ctx.strokeStyle = '#ff2200'; ctx.lineWidth = 2; ctx.strokeRect(220, 60, 260, 32);
         ctx.fillStyle = '#ff4422'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
         ctx.fillText('KILL OR BE KILLED: ' + remaining + 's', 350, 82);
+    } else if(sds.devilState === 'attacking') {
+        // Pursuit warning — devil is coming for you
+        const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 120);
+        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(220, 60, 260, 32);
+        ctx.strokeStyle = `rgba(255,30,0,${pulse})`; ctx.lineWidth = 2; ctx.strokeRect(220, 60, 260, 32);
+        ctx.fillStyle = `rgba(255,60,30,${pulse})`; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('HE HUNTS YOU!', 350, 82);
     }
 
     // ── LOWER-THIRD DIALOGUE (highest z-order) ───────────────────────────────
@@ -21158,45 +21448,69 @@ function drawScene() {
 
         if(hellMode) {
             // ── HELL MODE TITLE CARD ────────────────────────────────────
-            // Red glow background
-            const hgrd = ctx.createRadialGradient(350, 250, 30, 350, 250, 320);
-            hgrd.addColorStop(0, 'rgba(120,0,0,0.55)');
-            hgrd.addColorStop(0.6, 'rgba(40,0,0,0.3)');
+            // Deep ember background — vignette of rising heat, no symbols
+            const bgHell = ctx.createLinearGradient(0, 0, 0, 500);
+            bgHell.addColorStop(0, '#0a0000');
+            bgHell.addColorStop(0.55, '#1a0402');
+            bgHell.addColorStop(1, '#3a0a02');
+            ctx.fillStyle = bgHell; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+            // Rising ember particles (deterministic, per-frame seeded)
+            for(let e = 0; e < 60; e++) {
+                const seed = e * 57.3;
+                const ex = (seed * 13.7) % 700;
+                const ey = 500 - ((frame * (1 + (seed % 3)) + seed * 9) % 520);
+                const er = 1 + (e % 3) * 0.6;
+                const ea = 0.25 + 0.35 * Math.sin(frame / 20 + seed);
+                ctx.fillStyle = `rgba(255,${80 + (e % 6) * 20},20,${ea})`;
+                ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Radial red glow centered on title
+            const hgrd = ctx.createRadialGradient(350, 240, 40, 350, 240, 340);
+            hgrd.addColorStop(0, 'rgba(180,20,0,0.5)');
+            hgrd.addColorStop(0.6, 'rgba(60,0,0,0.25)');
             hgrd.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = hgrd; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-            ctx.font = 'bold 44px serif';
+            // Title stack — blood-red serif with heavy black outline
             ctx.textAlign = 'center';
             ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
-            ctx.strokeText('WELCOME TO YOUR', 350, 180);
-            ctx.fillStyle = '#cc0000';
-            ctx.fillText('WELCOME TO YOUR', 350, 180);
 
-            ctx.font = 'bold 56px serif';
-            ctx.strokeText('OWN PERSONAL', 350, 250);
-            ctx.fillText('OWN PERSONAL', 350, 250);
+            ctx.font = 'bold 40px Georgia, serif';
+            ctx.strokeText('WELCOME TO YOUR', 350, 160);
+            ctx.fillStyle = '#8b0000';
+            ctx.fillText('WELCOME TO YOUR', 350, 160);
 
-            ctx.font = 'bold 84px serif';
+            ctx.font = 'bold 52px Georgia, serif';
+            ctx.strokeText('OWN PERSONAL', 350, 230);
+            ctx.fillStyle = '#b00000';
+            ctx.fillText('OWN PERSONAL', 350, 230);
+
+            // HELL — big, with dripping blood beneath
+            ctx.font = 'bold 110px Georgia, serif';
+            ctx.lineWidth = 8;
             ctx.strokeText('HELL', 350, 340);
-            ctx.fillStyle = '#ff1a00';
+            const hellGrd = ctx.createLinearGradient(0, 270, 0, 350);
+            hellGrd.addColorStop(0, '#ff2a00');
+            hellGrd.addColorStop(1, '#6b0000');
+            ctx.fillStyle = hellGrd;
             ctx.fillText('HELL', 350, 340);
 
-            // Pentagram doodle
-            ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 2;
-            const pcx = 350, pcy = 400, pr = 22;
-            ctx.beginPath();
-            for(let p = 0; p < 5; p++) {
-                const a = -Math.PI/2 + p * (Math.PI * 4 / 5);
-                const px = pcx + Math.cos(a) * pr;
-                const py = pcy + Math.sin(a) * pr;
-                if(p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            // Blood drips from the bottom of "HELL"
+            ctx.fillStyle = '#6b0000';
+            const dripXs = [300, 322, 345, 368, 390, 330, 360];
+            for(let d = 0; d < dripXs.length; d++) {
+                const dx = dripXs[d];
+                const dl = 10 + ((d * 7 + Math.floor(frame / 3)) % 18);
+                ctx.fillRect(dx, 344, 3, dl);
+                ctx.beginPath(); ctx.arc(dx + 1.5, 344 + dl, 2.5, 0, Math.PI * 2); ctx.fill();
             }
-            ctx.closePath(); ctx.stroke();
 
             if(cardTimer > 60 && Math.floor(frame / 30) % 2 === 0) {
                 ctx.fillStyle = '#ff6644';
                 ctx.font = '14px "Press Start 2P", monospace';
-                ctx.fillText('ABANDON HOPE', 350, 460);
+                ctx.fillText('ABANDON HOPE', 350, 430);
             }
         } else {
             const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
@@ -23460,25 +23774,21 @@ function drawScene() {
         // Hand wheel turn-valve on horizontal pipe section (right of elbow)
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
+        // Advance climb/fix state BEFORE drawing so npc.y reflects the
+        // current animation frame regardless of which sprite we render.
+        updateNPCPipeAnimation(npc);
+
         // Color-coordinated step-ladder (drawn behind NPC)
         // Skip NPC sprite while its acid-burst melt animation is playing
         const isMelting = acidBursts.some(ab => ab.npc === npc);
         if (!isMelting) {
             drawStepLadder(npc.x, npc.y, hellMode ? {hex: '#0a0a0a', shadow: '#000'} : npc.color);
             if(hellMode) {
-                // Render PM with hell-mode dark coloring but preserve all
-                // climbing/fixing animation logic from drawNPC. drawNPC also
-                // updates npc.y based on climbStartTime, so it must be called
-                // for the climb-up/fix/climb-down state machine to advance.
-                const _origColor = npc.color;
-                npc.color = {hex: '#0a0a0a', shadow: '#000'};
-                drawNPC(npc);
-                npc.color = _origColor;
-                // When idle (happy at ground), overlay a static Mullet Pro
-                // sprite so the user sees the mullet pro identity.
-                if(npc.state === 'happy' || npc.state === 'stressed') {
-                    drawMulletPro(npc.x, npc.y, 'forward', false, false, null);
-                }
+                // Hell mode: PM IS a mullet pro. Draw only the mullet pro
+                // sprite (no PM underneath), and overlay wrench + pipe-crack
+                // animation states so the mullet pro itself appears to climb
+                // and fix the pipe.
+                drawMulletProAsPM(npc);
             } else {
                 drawNPC(npc);
             }
@@ -23782,6 +24092,11 @@ function drawScene() {
 
 // SECTION 13: Update Function - Level 5 Logic
 function update() {
+    // Track the most recent horizontal facing so weapons without up/down
+    // sprites can fall back to a sensible left/right pose.
+    if(player.facing === 'left' || player.facing === 'right') {
+        player.lastHorizFacing = player.facing;
+    }
     // RT Games presents screen - audio is now handled in event handlers for proper autoplay support
     if(state === 'rtPresents') {
         // State transition is now handled in handleRTPresentsInteraction() called from event handlers
@@ -23887,6 +24202,15 @@ function update() {
                 if(player.x >= 685) {
                     sds.room = 'cave2';
                     player.x = 80; player.y = floorY; player.facing = 'right';
+                    // Ensure player is armed for the devil duel. Carry over any
+                    // revolver from level 6; otherwise grant one with 6 rounds.
+                    if(!level6.hasRevolver) {
+                        level6.hasRevolver = true;
+                        level6.revolverAmmo = 6;
+                    } else if((level6.revolverAmmo|0) <= 0) {
+                        level6.revolverAmmo = 6;
+                    }
+                    level6.pistolHolstered = false;
                 }
             }
 
@@ -23982,11 +24306,26 @@ function update() {
                     sds.stabAnimTimer = 0;
                 }
             }
-            // Phase 7: stab attack
+            // Phase 7: devil pursues player. Only a pitchfork-tine contact kills.
             else if(sds.devilState === 'attacking') {
                 sds.stabAnimTimer++;
-                if(sds.stabAnimTimer >= 40) {
-                    // Stab connects — player teleport to safe room
+                // Chase player horizontally at a menacing clip
+                const chaseSpeed = 2.4;
+                if(sds.devilX > player.x + 22)      sds.devilX -= chaseSpeed;
+                else if(sds.devilX < player.x - 22) sds.devilX += chaseSpeed;
+                // Pitchfork reach: tip extends ~20px in the facing direction
+                const pfReach = 24;
+                const devilFaceRight = sds.devilX < player.x;
+                const tipX = sds.devilX + (devilFaceRight ? pfReach : -pfReach);
+                const contact = Math.abs(tipX - player.x) < 14;
+                // Short stab animation every ~25 frames when in range
+                if(Math.abs(sds.devilX - player.x) < 60) {
+                    sds.stabAnimTimer = Math.min(sds.stabAnimTimer, 40);
+                } else {
+                    sds.stabAnimTimer = 0;
+                }
+                if(contact) {
+                    // Pitchfork strikes — teleport to safe room
                     sds.room = 'safeRoom';
                     sds.deathBySafeRoom = true;
                     player.x = 350; player.y = floorY; player.facing = 'forward';
@@ -24023,6 +24362,7 @@ function update() {
                     keys[' '] = false; keys['action'] = false;
                     level6.revolverAmmo--;
                     player.shootTimer = 20;
+                    player.facing = player.x < sds.devilX ? 'right' : 'left';
                     SFX.play('shoot');
                     // Devil is always to the right of the player in this room — always hit while alive
                     sds.devilHp--;
