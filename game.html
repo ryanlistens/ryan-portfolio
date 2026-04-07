@@ -2074,6 +2074,64 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
     }
 
+    // === POLISH OVERLAYS — applied to all facings to soften the rectangular sprite ===
+    {
+        const headTop = y - 12*s;
+        const headBot = y - 2*s;
+        const headCx = x;
+        // Rounded skull cap — covers the boxy top corners with a curved dome
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(headCx - 5*s, headTop + 1);
+        ctx.quadraticCurveTo(headCx - 5*s, headTop - 4, headCx, headTop - 4);
+        ctx.quadraticCurveTo(headCx + 5*s, headTop - 4, headCx + 5*s, headTop + 1);
+        ctx.lineTo(headCx + 5*s, headTop + 4);
+        ctx.lineTo(headCx - 5*s, headTop + 4);
+        ctx.closePath();
+        ctx.fillStyle = skinColor; ctx.fill();
+        // Bald shine highlight
+        ctx.fillStyle = 'rgba(255,240,210,0.55)';
+        ctx.beginPath();
+        ctx.ellipse(headCx - s, headTop - 1, 2.5, 1.5, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+        // Soft chin shadow
+        ctx.fillStyle = 'rgba(180,120,80,0.35)';
+        ctx.fillRect(headCx - 4*s, headBot - 1, 8*s, 1);
+        // Ears — small skin-tone bumps on the sides (front view only — facing 'forward'/undefined or hat)
+        if(facing !== 'left' && facing !== 'right') {
+            ctx.fillStyle = '#e8b890';
+            ctx.beginPath(); ctx.arc(headCx - 5*s, y - 7*s, 1.4*s, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(headCx + 5*s, y - 7*s, 1.4*s, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(140,80,50,0.4)';
+            ctx.beginPath(); ctx.arc(headCx - 5*s, y - 7*s, 0.7*s, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(headCx + 5*s, y - 7*s, 0.7*s, 0, Math.PI*2); ctx.fill();
+        }
+        // Tie knot — small triangle at the top of the tie (front and side facings)
+        ctx.fillStyle = '#5a0010';
+        ctx.beginPath();
+        ctx.moveTo(headCx - 2*s, y);
+        ctx.lineTo(headCx + 2*s, y);
+        ctx.lineTo(headCx, y + 2*s);
+        ctx.closePath();
+        ctx.fill();
+        // Tie knot highlight
+        ctx.fillStyle = 'rgba(255,180,180,0.25)';
+        ctx.fillRect(headCx - s, y + 1, 2, 1);
+        // Collar wings (white shirt) framing tie
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(headCx - 4*s, y);
+        ctx.lineTo(headCx - 1*s, y);
+        ctx.lineTo(headCx - 2*s, y + 2*s);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(headCx + 4*s, y);
+        ctx.lineTo(headCx + 1*s, y);
+        ctx.lineTo(headCx + 2*s, y + 2*s);
+        ctx.closePath(); ctx.fill();
+    }
+
     // === DETECTIVE FEDORA HAT — drawn on top when wearing ===
     if(typeof level6 !== 'undefined' && level6.hasDetectiveHat) {
         const hatTopY = y - 13*s; // Just above bald head
@@ -18973,6 +19031,51 @@ function getLevel6Weapons() {
     return weapons;
 }
 
+// Self-destruct equip toggle button — sits next to the mute button.
+// Lets the player tap to switch between unarmed and armed (revolver drawn).
+function drawEquipToggleButton() {
+    if(state !== 'selfDestructSeq') return;
+    if(typeof level6 === 'undefined' || !level6.hasRevolver) return;
+
+    const btnW = 78, btnH = 50;
+    const btnX = -GX + CANVAS_W - 90 - btnW - 8;
+    const btnY = -GY + 5;
+    const cx = btnX + btnW / 2, cy = btnY + btnH / 2;
+
+    const armed = !level6.pistolHolstered;
+
+    // Background
+    ctx.fillStyle = armed ? 'rgba(70,10,10,0.92)' : 'rgba(0,0,0,0.55)';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.strokeStyle = armed ? '#ff5050' : '#666';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+
+    // Status label
+    ctx.fillStyle = armed ? '#ff8080' : '#aaaaaa';
+    ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+    ctx.fillText(armed ? 'ARMED' : 'UNARMED', cx, btnY + 12);
+
+    // Icon
+    if(armed) {
+        // Mini revolver
+        ctx.fillStyle = '#bbb'; ctx.fillRect(cx - 10, cy - 2, 18, 5);
+        ctx.fillStyle = '#888'; ctx.fillRect(cx + 2, cy + 3, 6, 8);
+        ctx.fillStyle = '#666'; ctx.fillRect(cx - 12, cy - 3, 3, 6);
+        ctx.fillStyle = '#999'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
+    } else {
+        // Empty hand silhouette
+        ctx.fillStyle = '#f5c89a';
+        ctx.beginPath(); ctx.arc(cx, cy + 1, 5, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#888'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx, cy + 1, 7, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // Tap hint
+    ctx.fillStyle = '#888'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('tap to swap', cx, btnY + btnH - 4);
+}
+
 function drawHolsterButton() {
     // Only show when player has both wrench AND a gun — simple A/B toggle
     if(typeof level6 === 'undefined' || !level6.hasWrenchGun || !(level6.hasRevolver || level6.hasGhostGun)) return;
@@ -19670,11 +19773,11 @@ function drawSelfDestructChute() {
     ctx.fillStyle = 'rgba(255,230,190,0.5)';
     ctx.beginPath(); ctx.arc(bx - s, py - 11*s, 2*s, 0, Math.PI); ctx.fill();
 
-    // Action prompt at bottom of ladder
-    if(selfDestructSeq.chuteAtBottom) {
-        ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.fillRect(245, 405, 210, 24);
-        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] STEP OFF LADDER', 350, 421);
+    // Hint to keep descending — chute auto-transitions to cave1 at the bottom
+    if(selfDestructSeq.playerY > 380) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(245, 405, 210, 22);
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u2193  KEEP CLIMBING DOWN  \u2193', 350, 420);
     }
 }
 
@@ -19819,8 +19922,64 @@ function drawSelfDestructCave1() {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     for(let r = 0; r < Math.ceil(floorY/22); r++) ctx.fillRect(22, floorY-3-r*22, 29, 2);
 
-    // Player
-    drawBaldManager(player.x, player.y, player.facing);
+    // Player — back view on ladder, normal walking sprite otherwise
+    if(selfDestructSeq.cave1OnLadder) {
+        drawBackViewPlayerOnLadder(36, selfDestructSeq.cave1LadderY);
+        // Action prompt at bottom of ladder
+        if(selfDestructSeq.cave1AtBottom) {
+            ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.fillRect(80, 350, 220, 24);
+            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+            ctx.fillText('[ ACTION ] STEP OFF LADDER', 190, 366);
+        }
+    } else {
+        drawBaldManager(player.x, player.y, player.facing);
+    }
+}
+
+// Back-view player drawn climbing a ladder — no front-facing tie/face elements
+function drawBackViewPlayerOnLadder(bx, py) {
+    const s = 2;
+    const isClimbing = !!(keys['ArrowDown'] || keys['down'] || keys['ArrowUp'] || keys['up']);
+    const climbPhase = isClimbing ? Math.sin(Date.now() / 220) : 0;
+    // Shadow on rung below
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(bx, py + 47, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // Shoes
+    ctx.fillStyle = '#111';
+    ctx.fillRect(bx - 6*s, py + 23*s, 5*s, 2*s);
+    ctx.fillRect(bx + s, py + 23*s, 5*s, 2*s);
+    // Trouser legs
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fillRect(bx - 5*s, py + 15*s + climbPhase*2, 4*s, 9*s);
+    ctx.fillRect(bx + s, py + 15*s - climbPhase*2, 4*s, 9*s);
+    // Belt
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx - 7*s, py + 11*s, 14*s, 3*s);
+    // Shirt back — solid white with shadow stripe down left side, NO tie, NO collar
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(bx - 7*s, py + s, 14*s, 11*s);
+    ctx.fillStyle = '#c8c8c8'; ctx.fillRect(bx - 7*s, py + s, 2*s, 11*s);
+    // Shoulder seam line
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx - 7*s, py + 2*s); ctx.lineTo(bx + 7*s, py + 2*s); ctx.stroke();
+    // Arms gripping rungs
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3, 2*s, 9*s);
+    ctx.fillRect(bx + 7*s, py - 4*s - climbPhase*3, 2*s, 9*s);
+    // Hands (skin)
+    ctx.fillStyle = '#f5c89a';
+    ctx.fillRect(bx - 9*s, py - 4*s + climbPhase*3 - 2, 2*s, 3);
+    ctx.fillRect(bx + 7*s, py - 4*s - climbPhase*3 - 2, 2*s, 3);
+    // Neck (back)
+    ctx.fillStyle = '#f0c080'; ctx.fillRect(bx - 2*s, py - 2*s, 4*s, 3*s);
+    // Bald head — back view: round skin-colored circle, NO eyes, NO face features
+    ctx.fillStyle = '#f5c89a';
+    ctx.beginPath(); ctx.arc(bx, py - 9*s, 5*s, 0, Math.PI * 2); ctx.fill();
+    // Head highlight at top
+    ctx.fillStyle = 'rgba(255,230,190,0.5)';
+    ctx.beginPath(); ctx.arc(bx - s, py - 11*s, 2*s, 0, Math.PI); ctx.fill();
+    // Subtle ear shapes on the sides
+    ctx.fillStyle = '#e0b088';
+    ctx.beginPath(); ctx.arc(bx - 5*s, py - 9*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx + 5*s, py - 9*s, 1.2*s, 0, Math.PI*2); ctx.fill();
 }
 
 function drawSelfDestructCave2() {
@@ -19970,13 +20129,18 @@ function drawSelfDestructCave2() {
         }
         ctx.restore();
 
-        // Lid (drawn separately, can swing open)
+        // Lid (drawn separately, swings open like a door — hinged on left edge)
         ctx.save();
-        ctx.beginPath(); ctx.rect(coffinX-60, 0, 120, floorY); ctx.clip();
-        const hingeY = cy + 4; // top hinge
-        const lidAngle = -lidOpen * Math.PI * 0.85; // swings backward
-        ctx.translate(coffinX, hingeY);
+        ctx.beginPath(); ctx.rect(coffinX-100, 0, 200, floorY); ctx.clip();
+        // Hinge on the left edge of the lid (visible side hinge)
+        const hingeX = coffinX - 22;
+        const hingeY = cy + 36;
+        // Swing toward viewer (left and down) — up to ~95 degrees
+        const lidAngle = -lidOpen * Math.PI * 0.55;
+        ctx.translate(hingeX, hingeY);
         ctx.rotate(lidAngle);
+        // Restore lid's local origin (top-center of coffin)
+        ctx.translate(22, -36);
         // Lid body
         const lg = ctx.createLinearGradient(-18, 0, 18, 0);
         lg.addColorStop(0,'#241208'); lg.addColorStop(0.5,'#3a1e0e'); lg.addColorStop(1,'#1a0c04');
@@ -19992,6 +20156,11 @@ function drawSelfDestructCave2() {
         ctx.fillStyle = '#c8a010'; ctx.fillRect(-2, 14, 4, 30); ctx.fillRect(-10, 24, 20, 4);
         // Lid edge bevel
         ctx.fillStyle = 'rgba(255,180,80,0.18)'; ctx.fillRect(-18, 2, 36, 3);
+        // Visible hinge plates on left edge
+        ctx.fillStyle = '#6a4818';
+        ctx.fillRect(-23, 8, 3, 8); ctx.fillRect(-23, 56, 3, 8);
+        ctx.fillStyle = '#c8a020';
+        ctx.fillRect(-22, 10, 1, 4); ctx.fillRect(-22, 58, 1, 4);
         ctx.restore();
         // Disturbed earth mound around coffin emergence point
         if(cy < floorY) {
@@ -20221,6 +20390,167 @@ function drawSelfDestructCave2() {
         ctx.globalAlpha = 1;
         ctx.restore();
     }
+}
+
+// Skeleton player — same proportions as drawBaldManager so positioning is unchanged.
+// Drawn as a bone-white humanoid with rib cage, pelvis, and skull.
+function drawSkeletonPlayer(x, y, facing) {
+    const s = 2;
+    const isWalking = Date.now() - player.lastMove < 150;
+    const stride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
+    const legBob = stride * 0.67;
+    const bone = '#f0e8d0';
+    const boneShade = '#c8bc98';
+    const boneDark = '#8a7a50';
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(x, y + 50, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ── LEGS — femur + tibia bones with knee joint ──
+    // Left leg
+    ctx.fillStyle = bone;
+    ctx.fillRect(x - 5*s, y + 15*s + legBob, 3*s, 8*s);
+    ctx.fillStyle = boneShade;
+    ctx.fillRect(x - 5*s, y + 15*s + legBob, 1, 8*s);
+    // Right leg
+    ctx.fillStyle = bone;
+    ctx.fillRect(x + 2*s, y + 15*s - legBob, 3*s, 8*s);
+    ctx.fillStyle = boneShade;
+    ctx.fillRect(x + 2*s, y + 15*s - legBob, 1, 8*s);
+    // Knee joints (small circles)
+    ctx.fillStyle = bone;
+    ctx.beginPath(); ctx.arc(x - 3.5*s, y + 19*s + legBob, 1.5*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 3.5*s, y + 19*s - legBob, 1.5*s, 0, Math.PI*2); ctx.fill();
+    // Foot bones
+    ctx.fillStyle = boneShade;
+    ctx.fillRect(x - 6*s, y + 23*s + legBob, 5*s, 2*s);
+    ctx.fillRect(x + s, y + 23*s - legBob, 5*s, 2*s);
+
+    // ── PELVIS — hip bone ──
+    ctx.fillStyle = bone;
+    ctx.beginPath();
+    ctx.moveTo(x - 6*s, y + 11*s);
+    ctx.lineTo(x + 6*s, y + 11*s);
+    ctx.lineTo(x + 5*s, y + 15*s);
+    ctx.lineTo(x - 5*s, y + 15*s);
+    ctx.closePath(); ctx.fill();
+    // Pelvis hole (eye-shaped opening)
+    ctx.fillStyle = '#1a1408';
+    ctx.beginPath(); ctx.ellipse(x, y + 13*s, 2.5*s, 1.2*s, 0, 0, Math.PI*2); ctx.fill();
+
+    // ── RIB CAGE ──
+    // Sternum
+    ctx.fillStyle = bone;
+    ctx.fillRect(x - s, y + s, 2*s, 10*s);
+    // Spine peeking behind ribs
+    ctx.fillStyle = boneDark;
+    ctx.fillRect(x - 0.5*s, y + s, s, 10*s);
+    // Ribs — curved horizontal bones on each side
+    ctx.strokeStyle = bone; ctx.lineWidth = 1.6;
+    for(let r = 0; r < 4; r++) {
+        const ry = y + (2 + r*2.2)*s;
+        ctx.beginPath();
+        ctx.moveTo(x - 6*s, ry);
+        ctx.quadraticCurveTo(x, ry - 1, x + 6*s, ry);
+        ctx.stroke();
+    }
+    // Ribcage outer outline
+    ctx.strokeStyle = boneShade; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - 7*s, y + s);
+    ctx.quadraticCurveTo(x - 8*s, y + 6*s, x - 6*s, y + 11*s);
+    ctx.moveTo(x + 7*s, y + s);
+    ctx.quadraticCurveTo(x + 8*s, y + 6*s, x + 6*s, y + 11*s);
+    ctx.stroke();
+    // Clavicles (collarbones)
+    ctx.strokeStyle = bone; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x - 6*s, y + s); ctx.quadraticCurveTo(x, y - s, x + 6*s, y + s);
+    ctx.stroke();
+
+    // ── ARMS — humerus + radius ──
+    ctx.fillStyle = bone;
+    ctx.fillRect(x - 8*s + stride, y + 2*s, 1.5*s, 9*s);
+    ctx.fillRect(x + 6.5*s - stride, y + 2*s, 1.5*s, 9*s);
+    // Elbow joints
+    ctx.beginPath(); ctx.arc(x - 7.2*s + stride, y + 6*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 7.2*s - stride, y + 6*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+    // Skeletal hands
+    ctx.fillStyle = boneShade;
+    ctx.beginPath(); ctx.arc(x - 7.2*s + stride, y + 12*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 7.2*s - stride, y + 12*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+
+    // ── NECK VERTEBRAE ──
+    ctx.fillStyle = bone;
+    ctx.fillRect(x - 1.5*s, y - 2*s, 3*s, 3*s);
+    ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(x - 1.5*s, y - 0.5*s); ctx.lineTo(x + 1.5*s, y - 0.5*s); ctx.stroke();
+
+    // ── SKULL ──
+    const skullCx = x;
+    const skullCy = y - 8*s;
+    // Cranium dome
+    ctx.fillStyle = bone;
+    ctx.beginPath();
+    ctx.arc(skullCx, skullCy, 6*s, Math.PI, 0);
+    // Jaw rectangle
+    ctx.lineTo(skullCx + 5*s, skullCy + 5*s);
+    ctx.lineTo(skullCx - 5*s, skullCy + 5*s);
+    ctx.closePath();
+    ctx.fill();
+    // Cranium shading
+    ctx.fillStyle = 'rgba(140,120,80,0.25)';
+    ctx.beginPath(); ctx.arc(skullCx, skullCy, 5.5*s, Math.PI*0.1, Math.PI*0.9); ctx.fill();
+    // Skull highlight
+    ctx.fillStyle = 'rgba(255,250,230,0.5)';
+    ctx.beginPath(); ctx.ellipse(skullCx - 2*s, skullCy - 3*s, 1.6*s, s, -0.4, 0, Math.PI*2); ctx.fill();
+
+    if(facing === 'left') {
+        // Side-view eye socket and nose hole
+        ctx.fillStyle = '#08060a';
+        ctx.beginPath(); ctx.ellipse(skullCx - 2*s, skullCy, 1.8, 2.2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#08060a';
+        ctx.fillRect(skullCx - 5*s, skullCy + s, 1.5, 1.5);
+        // Jaw line
+        ctx.strokeStyle = boneDark; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.moveTo(skullCx - 5*s, skullCy + 3*s); ctx.lineTo(skullCx + 4*s, skullCy + 3*s); ctx.stroke();
+    } else if(facing === 'right') {
+        ctx.fillStyle = '#08060a';
+        ctx.beginPath(); ctx.ellipse(skullCx + 2*s, skullCy, 1.8, 2.2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(skullCx + 4*s, skullCy + s, 1.5, 1.5);
+        ctx.strokeStyle = boneDark; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.moveTo(skullCx - 4*s, skullCy + 3*s); ctx.lineTo(skullCx + 5*s, skullCy + 3*s); ctx.stroke();
+    } else {
+        // Front view — two eye sockets, nose hole, teeth
+        ctx.fillStyle = '#08060a';
+        ctx.beginPath(); ctx.ellipse(skullCx - 2.2*s, skullCy, 1.6, 2.2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(skullCx + 2.2*s, skullCy, 1.6, 2.2, 0, 0, Math.PI*2); ctx.fill();
+        // Inner eye socket glint
+        ctx.fillStyle = 'rgba(180,40,20,0.55)';
+        ctx.fillRect(skullCx - 2.5*s, skullCy - 0.5, 1, 1);
+        ctx.fillRect(skullCx + 1.8*s, skullCy - 0.5, 1, 1);
+        // Nose triangle
+        ctx.fillStyle = '#08060a';
+        ctx.beginPath();
+        ctx.moveTo(skullCx, skullCy + s);
+        ctx.lineTo(skullCx - s, skullCy + 3*s);
+        ctx.lineTo(skullCx + s, skullCy + 3*s);
+        ctx.closePath(); ctx.fill();
+        // Teeth row
+        ctx.fillStyle = bone;
+        ctx.fillRect(skullCx - 4*s, skullCy + 3.6*s, 8*s, 1.4*s);
+        ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
+        for(let tt = 0; tt < 5; tt++) {
+            ctx.beginPath();
+            ctx.moveTo(skullCx - 4*s + tt*2*s, skullCy + 3.6*s);
+            ctx.lineTo(skullCx - 4*s + tt*2*s, skullCy + 5*s);
+            ctx.stroke();
+        }
+    }
+    // Cranial suture
+    ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(skullCx, skullCy - 6*s); ctx.lineTo(skullCx, skullCy - 2*s); ctx.stroke();
 }
 
 function drawSelfDestructSafeRoom() {
@@ -20467,26 +20797,44 @@ function drawSelfDestructSafeRoom() {
 
     // ── PLAYER ────────────────────────────────────────────────────────────────
     if(!sds.chairSitting) {
-        drawBaldManager(player.x, player.y, player.facing);
+        // Player walks around the safe room as a skeleton (the devil killed the bald boss)
+        drawSkeletonPlayer(player.x, player.y, player.facing);
     } else {
-        // Player seated — only bald head visible above chair back, arms on rests
+        // Player seated as a SKELETON (the safe room body is no longer flesh).
+        // Only the back of the skull and bony arms peek above the chair.
         const px = chairX;
-        // Arms resting on armrests (white shirt sleeves, back view)
-        ctx.fillStyle = '#e8e8e8';
-        ctx.fillRect(chairX-43, chairY-56, 8, 14);
-        ctx.fillRect(chairX+35, chairY-56, 8, 14);
-        // Hands on armrests
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(chairX-43, chairY-56, 8, 4);
-        ctx.fillRect(chairX+35, chairY-56, 8, 4);
-        // Neck (back view — just above headrest)
-        ctx.fillStyle = '#f0c080'; ctx.fillRect(px-3, chairY-96, 6, 6);
-        // Bald head (back view — peeking above headrest)
-        ctx.fillStyle = '#f5c89a';
-        ctx.beginPath(); ctx.arc(px, chairY-106, 10, 0, Math.PI*2); ctx.fill();
-        // Head highlight (bald shine)
-        ctx.fillStyle = 'rgba(255,230,190,0.45)';
-        ctx.beginPath(); ctx.arc(px-1, chairY-109, 4, 0, Math.PI); ctx.fill();
+        // Bony arms resting on armrests
+        ctx.fillStyle = '#e6e0c8';
+        ctx.fillRect(chairX-42, chairY-58, 6, 16);
+        ctx.fillRect(chairX+36, chairY-58, 6, 16);
+        // Knuckled hands on armrests
+        ctx.fillStyle = '#f0e8d0';
+        ctx.beginPath(); ctx.arc(chairX-39, chairY-44, 3.6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(chairX+39, chairY-44, 3.6, 0, Math.PI*2); ctx.fill();
+        // Finger lines
+        ctx.strokeStyle = '#9a8a60'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(chairX-41, chairY-42); ctx.lineTo(chairX-37, chairY-40); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(chairX+37, chairY-42); ctx.lineTo(chairX+41, chairY-40); ctx.stroke();
+        // Spine peeking above chair (3 vertebrae)
+        ctx.fillStyle = '#e6e0c8';
+        for(let v = 0; v < 3; v++) {
+            ctx.fillRect(px-3, chairY-94 - v*5, 6, 4);
+            ctx.strokeStyle = '#8a7a50'; ctx.lineWidth = 0.6;
+            ctx.strokeRect(px-3, chairY-94 - v*5, 6, 4);
+        }
+        // Skull (back view — clean dome with subtle suture line)
+        const skullY = chairY - 108;
+        ctx.fillStyle = '#f0e8d0';
+        ctx.beginPath(); ctx.arc(px, skullY, 11, 0, Math.PI*2); ctx.fill();
+        // Slight occipital shading
+        ctx.fillStyle = 'rgba(140,120,80,0.35)';
+        ctx.beginPath(); ctx.arc(px, skullY+3, 9, 0, Math.PI); ctx.fill();
+        // Cranial suture line down the middle
+        ctx.strokeStyle = '#8a7a50'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(px, skullY-10); ctx.lineTo(px, skullY+10); ctx.stroke();
+        // Highlight at top of skull
+        ctx.fillStyle = 'rgba(255,250,230,0.55)';
+        ctx.beginPath(); ctx.arc(px-1, skullY-5, 3, 0, Math.PI*2); ctx.fill();
     }
 }
 
@@ -23294,6 +23642,11 @@ function drawScene() {
     if(state === 'playing') {
         drawMuteIndicator();
     }
+    // Equip toggle button — visible during the self-destruct sequence next to mute
+    if(state === 'selfDestructSeq') {
+        drawMuteIndicator();
+        drawEquipToggleButton();
+    }
     ctx.restore();
 }
 
@@ -23322,7 +23675,7 @@ function update() {
     // ── SELF-DESTRUCT SEQUENCE UPDATE ────────────────────────────────────────
     if(state === 'selfDestructSeq') {
         const sds = selfDestructSeq;
-        const speed = 2;
+        const speed = 3.4;
         const floorY = 380;
 
         if(sds.room === 'hatch') {
@@ -23358,36 +23711,54 @@ function update() {
             }
 
         } else if(sds.room === 'chute') {
-            // Vertical descent only — player climbs down (playerY increases toward floor)
+            // Vertical descent only — player climbs down through narrow shaft
             if(keys['ArrowDown'] || keys['down']) {
-                sds.playerY = Math.min(460, sds.playerY + speed * 1.5);
+                sds.playerY = Math.min(480, sds.playerY + speed * 1.4);
             }
             if(keys['ArrowUp'] || keys['up']) {
                 sds.playerY = Math.max(40, sds.playerY - speed);
             }
-            // At bottom of ladder — wait for action prompt to step into cave
-            if(sds.playerY >= 460 && !sds.chuteArrivedCave) {
-                sds.chuteAtBottom = true;
-                if((keys[' '] || keys['action'])) {
-                    keys[' '] = false; keys['action'] = false;
-                    sds.chuteArrivedCave = true;
-                    sds.room = 'cave1';
-                    player.x = 80; player.y = floorY; player.facing = 'right';
-                }
-            } else {
-                sds.chuteAtBottom = false;
+            // Auto-transition to cave1 — player continues on the ladder
+            if(sds.playerY >= 470) {
+                sds.room = 'cave1';
+                sds.cave1OnLadder = true;
+                sds.cave1LadderY = 20; // top of cave1 ladder (just below ceiling)
+                player.x = 36; player.y = 20; player.facing = 'back';
             }
 
         } else if(sds.room === 'cave1') {
-            // Normal horizontal movement
-            if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
-            if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
-            player.x = Math.max(10, Math.min(690, player.x));
-            player.y = floorY;
-            // Walk right to cave2
-            if(player.x >= 685) {
-                sds.room = 'cave2';
-                player.x = 80; player.y = floorY; player.facing = 'right';
+            if(sds.cave1OnLadder) {
+                // Player descends cave1's left-wall ladder
+                if(keys['ArrowDown'] || keys['down']) {
+                    sds.cave1LadderY = Math.min(floorY - 24, sds.cave1LadderY + speed * 1.4);
+                }
+                if(keys['ArrowUp'] || keys['up']) {
+                    sds.cave1LadderY = Math.max(20, sds.cave1LadderY - speed);
+                }
+                player.x = 36; player.y = sds.cave1LadderY; player.facing = 'back';
+                // At bottom of ladder — show action prompt to step off
+                if(sds.cave1LadderY >= floorY - 24) {
+                    sds.cave1AtBottom = true;
+                    if((keys[' '] || keys['action'])) {
+                        keys[' '] = false; keys['action'] = false;
+                        sds.cave1OnLadder = false;
+                        sds.cave1AtBottom = false;
+                        player.x = 70; player.y = floorY; player.facing = 'right';
+                    }
+                } else {
+                    sds.cave1AtBottom = false;
+                }
+            } else {
+                // Normal horizontal movement
+                if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
+                if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
+                player.x = Math.max(60, Math.min(690, player.x));
+                player.y = floorY;
+                // Walk right to cave2
+                if(player.x >= 685) {
+                    sds.room = 'cave2';
+                    player.x = 80; player.y = floorY; player.facing = 'right';
+                }
             }
 
         } else if(sds.room === 'cave2') {
@@ -23520,29 +23891,29 @@ function update() {
                 }
             }
 
-            // Fire revolver with ACTION key (only during kill_window or after, while devil alive)
-            const canShoot = (sds.devilState === 'kill_window' || sds.devilState === 'attacking');
-            if(canShoot && level6.revolverAmmo > 0 && sds.devilState !== 'dead') {
-                if((keys[' '] || keys['action']) && !sds.throneActionAvailable) {
+            // Fire revolver with ACTION key — allowed any time devil is alive after dialogue
+            const aliveStates = ['lid_opening', 'kill_window', 'attacking', 'walking'];
+            const canShoot = aliveStates.indexOf(sds.devilState) >= 0;
+            if(canShoot && (level6.revolverAmmo|0) > 0 && sds.devilState !== 'dead' && !sds.throneActionAvailable) {
+                if((keys[' '] || keys['action'])) {
                     keys[' '] = false; keys['action'] = false;
                     level6.revolverAmmo--;
                     player.shootTimer = 20;
                     SFX.play('shoot');
-                    const bulletRight = player.facing !== 'left';
-                    const towardDevil = (bulletRight && player.x < sds.devilX) || (!bulletRight && player.x > sds.devilX);
-                    if(towardDevil && Math.abs(player.x - sds.devilX) < 500) {
-                        sds.devilHp--;
-                        SFX.play('enemyDie');
-                        if(sds.devilHp <= 0) {
-                            sds.devilState = 'dead';
-                            sds.devilDialogue = false;
-                            sds.devilDialogueComplete = true;
-                            sds.lidSlamTimer = 0;
-                            sds.coffinDescending = false;
-                        }
+                    // Devil is always to the right of the player in this room — always hit while alive
+                    sds.devilHp--;
+                    sds.devilHitFlash = 12;
+                    SFX.play('enemyDie');
+                    if(sds.devilHp <= 0) {
+                        sds.devilState = 'dead';
+                        sds.devilDialogue = false;
+                        sds.devilDialogueComplete = true;
+                        sds.lidSlamTimer = 0;
+                        sds.coffinDescending = false;
                     }
                 }
             }
+            if(sds.devilHitFlash > 0) sds.devilHitFlash--;
             if(player.shootTimer > 0) player.shootTimer--;
 
             // Phase 8: devil dead — lid slams shut, then coffin descends quickly
@@ -26555,8 +26926,11 @@ function update() {
                                 mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
                                 roach: {x: 80, y: 295, antennaPhase: 0}
                             });
+                            // Position player next to the hatch (centered on x=200) so they
+                            // are on the correct side of the desk and can immediately descend.
+                            player.x = 230;
                             player.y = 380;
-                            // Player stays at last position — no jump
+                            player.facing = 'left';
                             state = 'selfDestructSeq';
                             SFX.play('hatchOpen');
                         } else {
@@ -28471,6 +28845,18 @@ function handleMuteClick(e) {
         level6.pistolHolstered = !level6.pistolHolstered;
         if(e.cancelable) e.preventDefault();
         return;
+    }
+
+    // Equip toggle button — visible during self-destruct sequence next to mute
+    if(state === 'selfDestructSeq' && typeof level6 !== 'undefined' && level6.hasRevolver) {
+        const equipBtnW = 78, equipBtnH = 50;
+        const equipBtnX = muteBtnX - equipBtnW - 8;
+        const equipBtnY = muteBtnY;
+        if(x >= equipBtnX && x <= equipBtnX + equipBtnW && y >= equipBtnY && y <= equipBtnY + equipBtnH) {
+            level6.pistolHolstered = !level6.pistolHolstered;
+            if(e.cancelable) e.preventDefault();
+            return;
+        }
     }
 
     // End/result screen menu option taps — large hit areas for thumb use
