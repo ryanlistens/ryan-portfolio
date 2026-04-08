@@ -927,6 +927,7 @@ const SAFE_CODE = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
 let state = 'rtPresents'; // Start with RT Games presentation screen
 let level = 1;
 let score = 0;
+let livesRuined = 0; // Total enemies the player has killed — shown on the end card
 let timer = 60;
 let lives = 3;
 let fountainLastCycle = -1; // tracks water cooler usage (one drink per 30s bubble cycle)
@@ -1574,6 +1575,7 @@ function startGame() {
     state = 'levelCard';
     level = 1;
     score = 0;
+    livesRuined = 0;
     timer = 60;
     lives = 3;
     fountainLastCycle = -1;
@@ -20988,42 +20990,149 @@ function drawSelfDestructCave2() {
     //  immediately after the throne action, so a pre-card overlay would be redundant.)
 }
 
-// Skeleton player — same proportions as drawBaldManager so positioning is unchanged.
-// Drawn as a bone-white humanoid with rib cage, pelvis, and skull.
+// Skeleton player.
+//   • Default (standing still)  → FRONT-FACING, like every other playable character.
+//   • Walking (left/right held)  → PROFILE view with horde-style animated limbs.
 function drawSkeletonPlayer(x, y, facing) {
-    const s = 2;
+    const BONE = '#e8e2c8';
+    const BONE_DARK = '#9a9480';
     const isWalking = Date.now() - player.lastMove < 150;
-    const stride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
-    const legBob = stride * 0.67;
+
+    // Shared anchor — body is built up from the feet baseline.
+    const sx = x;
+    const sy = y + 24;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+    if(isWalking && (facing === 'left' || facing === 'right')) {
+        // ══ WALKING PROFILE — polyline limbs driven by walkCycle (matches hordes) ══
+        const f = (facing === 'right') ? 1 : -1;
+        const walkCycle = Math.sin(Date.now() / 110);
+        const legSwing = walkCycle * 7;
+        const armSwing = -walkCycle * 6;
+
+        // Legs
+        ctx.strokeStyle = BONE; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(sx - 3, sy - 10);
+        ctx.lineTo(sx - 5 - legSwing, sy);
+        ctx.lineTo(sx - 4 - legSwing, sy + 14);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx + 3, sy - 10);
+        ctx.lineTo(sx + 5 + legSwing, sy);
+        ctx.lineTo(sx + 4 + legSwing, sy + 14);
+        ctx.stroke();
+        // Feet — point in the direction of travel
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sx - 4 - legSwing, sy + 14);
+        ctx.lineTo(sx - 4 - legSwing + f * 6, sy + 14);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx + 4 + legSwing, sy + 14);
+        ctx.lineTo(sx + 4 + legSwing + f * 6, sy + 14);
+        ctx.stroke();
+
+        // Pelvis
+        ctx.fillStyle = BONE;
+        ctx.fillRect(sx - 6, sy - 12, 12, 5);
+        ctx.fillStyle = BONE_DARK;
+        ctx.fillRect(sx - 1, sy - 11, 2, 3);
+
+        // Spine
+        ctx.strokeStyle = BONE; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(sx, sy - 12); ctx.lineTo(sx, sy - 34); ctx.stroke();
+
+        // Ribcage — curved ribs
+        ctx.strokeStyle = BONE; ctx.lineWidth = 2;
+        for (let r = 0; r < 3; r++) {
+            const ry = sy - 28 + r * 5;
+            ctx.beginPath();
+            ctx.moveTo(sx, ry);
+            ctx.bezierCurveTo(sx - 12, ry - 2, sx - 12, ry + 3, sx, ry + 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(sx, ry);
+            ctx.bezierCurveTo(sx + 12, ry - 2, sx + 12, ry + 3, sx, ry + 2);
+            ctx.stroke();
+        }
+
+        // Arms — swing opposite of legs
+        ctx.strokeStyle = BONE; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(sx - 6, sy - 30);
+        ctx.lineTo(sx - 14 + armSwing, sy - 22 + armSwing * 0.5);
+        ctx.lineTo(sx - 8 + armSwing, sy - 12);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx + 6, sy - 30);
+        ctx.lineTo(sx + 14 - armSwing, sy - 22 - armSwing * 0.5);
+        ctx.lineTo(sx + 8 - armSwing, sy - 12);
+        ctx.stroke();
+
+        // Skull — profile
+        const skullCx = sx + f * 1.5;
+        const skullCy = sy - 42;
+        ctx.fillStyle = BONE;
+        ctx.beginPath(); ctx.arc(skullCx, skullCy, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(140,120,80,0.25)';
+        ctx.beginPath(); ctx.arc(skullCx, skullCy + 2, 8, 0, Math.PI); ctx.fill();
+        ctx.fillStyle = 'rgba(255,250,230,0.45)';
+        ctx.beginPath(); ctx.arc(skullCx + f * 3, skullCy - 4, 2, 0, Math.PI * 2); ctx.fill();
+        // Jaw wedge — points toward facing direction
+        ctx.fillStyle = BONE;
+        ctx.beginPath();
+        ctx.moveTo(skullCx - f * 4, skullCy + 4);
+        ctx.lineTo(skullCx + f * 5, skullCy + 4);
+        ctx.lineTo(skullCx + f * 4, skullCy + 9);
+        ctx.lineTo(skullCx - f * 3, skullCy + 8);
+        ctx.closePath(); ctx.fill();
+        // Single profile eye socket
+        ctx.fillStyle = '#08060a';
+        ctx.beginPath(); ctx.ellipse(skullCx + f * 2, skullCy - 1, 2.2, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+        // Nasal cavity
+        ctx.beginPath();
+        ctx.moveTo(skullCx + f * 6, skullCy + 2);
+        ctx.lineTo(skullCx + f * 4, skullCy + 1);
+        ctx.lineTo(skullCx + f * 4, skullCy + 4);
+        ctx.closePath(); ctx.fill();
+        // Teeth marks
+        ctx.fillRect(skullCx + f * 0.5, skullCy + 5, 1.2, 2);
+        ctx.fillRect(skullCx + f * 2.5, skullCy + 5, 1.2, 2);
+        // Cranial suture
+        ctx.strokeStyle = BONE_DARK; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.moveTo(skullCx - 3, skullCy - 7); ctx.lineTo(skullCx + 3, skullCy - 6); ctx.stroke();
+        return;
+    }
+
+    // ══ STANDING STILL — FRONT-FACING DEFAULT (matches other playable characters) ══
+    const s = 2;
     const bone = '#f0e8d0';
     const boneShade = '#c8bc98';
     const boneDark = '#8a7a50';
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.ellipse(x, y + 50, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
-
     // ── LEGS — femur + tibia bones with knee joint ──
-    // Left leg
     ctx.fillStyle = bone;
-    ctx.fillRect(x - 5*s, y + 15*s + legBob, 3*s, 8*s);
+    ctx.fillRect(x - 5*s, y + 15*s, 3*s, 8*s);
     ctx.fillStyle = boneShade;
-    ctx.fillRect(x - 5*s, y + 15*s + legBob, 1, 8*s);
-    // Right leg
+    ctx.fillRect(x - 5*s, y + 15*s, 1, 8*s);
     ctx.fillStyle = bone;
-    ctx.fillRect(x + 2*s, y + 15*s - legBob, 3*s, 8*s);
+    ctx.fillRect(x + 2*s, y + 15*s, 3*s, 8*s);
     ctx.fillStyle = boneShade;
-    ctx.fillRect(x + 2*s, y + 15*s - legBob, 1, 8*s);
-    // Knee joints (small circles)
+    ctx.fillRect(x + 2*s, y + 15*s, 1, 8*s);
+    // Knee joints
     ctx.fillStyle = bone;
-    ctx.beginPath(); ctx.arc(x - 3.5*s, y + 19*s + legBob, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 3.5*s, y + 19*s - legBob, 1.5*s, 0, Math.PI*2); ctx.fill();
-    // Foot bones
+    ctx.beginPath(); ctx.arc(x - 3.5*s, y + 19*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 3.5*s, y + 19*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+    // Feet
     ctx.fillStyle = boneShade;
-    ctx.fillRect(x - 6*s, y + 23*s + legBob, 5*s, 2*s);
-    ctx.fillRect(x + s, y + 23*s - legBob, 5*s, 2*s);
+    ctx.fillRect(x - 6*s, y + 23*s, 5*s, 2*s);
+    ctx.fillRect(x + s, y + 23*s, 5*s, 2*s);
 
-    // ── PELVIS — hip bone ──
+    // ── PELVIS ──
     ctx.fillStyle = bone;
     ctx.beginPath();
     ctx.moveTo(x - 6*s, y + 11*s);
@@ -21031,18 +21140,14 @@ function drawSkeletonPlayer(x, y, facing) {
     ctx.lineTo(x + 5*s, y + 15*s);
     ctx.lineTo(x - 5*s, y + 15*s);
     ctx.closePath(); ctx.fill();
-    // Pelvis hole (eye-shaped opening)
     ctx.fillStyle = '#1a1408';
     ctx.beginPath(); ctx.ellipse(x, y + 13*s, 2.5*s, 1.2*s, 0, 0, Math.PI*2); ctx.fill();
 
     // ── RIB CAGE ──
-    // Sternum
     ctx.fillStyle = bone;
     ctx.fillRect(x - s, y + s, 2*s, 10*s);
-    // Spine peeking behind ribs
     ctx.fillStyle = boneDark;
     ctx.fillRect(x - 0.5*s, y + s, s, 10*s);
-    // Ribs — curved horizontal bones on each side
     ctx.strokeStyle = bone; ctx.lineWidth = 1.6;
     for(let r = 0; r < 4; r++) {
         const ry = y + (2 + r*2.2)*s;
@@ -21051,7 +21156,6 @@ function drawSkeletonPlayer(x, y, facing) {
         ctx.quadraticCurveTo(x, ry - 1, x + 6*s, ry);
         ctx.stroke();
     }
-    // Ribcage outer outline
     ctx.strokeStyle = boneShade; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x - 7*s, y + s);
@@ -21059,90 +21163,65 @@ function drawSkeletonPlayer(x, y, facing) {
     ctx.moveTo(x + 7*s, y + s);
     ctx.quadraticCurveTo(x + 8*s, y + 6*s, x + 6*s, y + 11*s);
     ctx.stroke();
-    // Clavicles (collarbones)
+    // Clavicles
     ctx.strokeStyle = bone; ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(x - 6*s, y + s); ctx.quadraticCurveTo(x, y - s, x + 6*s, y + s);
     ctx.stroke();
 
-    // ── ARMS — humerus + radius ──
+    // ── ARMS ──
     ctx.fillStyle = bone;
-    ctx.fillRect(x - 8*s + stride, y + 2*s, 1.5*s, 9*s);
-    ctx.fillRect(x + 6.5*s - stride, y + 2*s, 1.5*s, 9*s);
-    // Elbow joints
-    ctx.beginPath(); ctx.arc(x - 7.2*s + stride, y + 6*s, 1.2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 7.2*s - stride, y + 6*s, 1.2*s, 0, Math.PI*2); ctx.fill();
-    // Skeletal hands
+    ctx.fillRect(x - 8*s, y + 2*s, 1.5*s, 9*s);
+    ctx.fillRect(x + 6.5*s, y + 2*s, 1.5*s, 9*s);
+    ctx.beginPath(); ctx.arc(x - 7.2*s, y + 6*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 7.2*s, y + 6*s, 1.2*s, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = boneShade;
-    ctx.beginPath(); ctx.arc(x - 7.2*s + stride, y + 12*s, 1.6*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 7.2*s - stride, y + 12*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x - 7.2*s, y + 12*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 7.2*s, y + 12*s, 1.6*s, 0, Math.PI*2); ctx.fill();
 
-    // ── NECK VERTEBRAE ──
+    // ── NECK ──
     ctx.fillStyle = bone;
     ctx.fillRect(x - 1.5*s, y - 2*s, 3*s, 3*s);
     ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
     ctx.beginPath(); ctx.moveTo(x - 1.5*s, y - 0.5*s); ctx.lineTo(x + 1.5*s, y - 0.5*s); ctx.stroke();
 
-    // ── SKULL ──
+    // ── SKULL — front view ──
     const skullCx = x;
     const skullCy = y - 8*s;
-    // Cranium dome
     ctx.fillStyle = bone;
     ctx.beginPath();
     ctx.arc(skullCx, skullCy, 6*s, Math.PI, 0);
-    // Jaw rectangle
     ctx.lineTo(skullCx + 5*s, skullCy + 5*s);
     ctx.lineTo(skullCx - 5*s, skullCy + 5*s);
     ctx.closePath();
     ctx.fill();
-    // Cranium shading
     ctx.fillStyle = 'rgba(140,120,80,0.25)';
     ctx.beginPath(); ctx.arc(skullCx, skullCy, 5.5*s, Math.PI*0.1, Math.PI*0.9); ctx.fill();
-    // Skull highlight
     ctx.fillStyle = 'rgba(255,250,230,0.5)';
     ctx.beginPath(); ctx.ellipse(skullCx - 2*s, skullCy - 3*s, 1.6*s, s, -0.4, 0, Math.PI*2); ctx.fill();
-
-    if(facing === 'left') {
-        // Side-view eye socket and nose hole
-        ctx.fillStyle = '#08060a';
-        ctx.beginPath(); ctx.ellipse(skullCx - 2*s, skullCy, 1.8, 2.2, 0, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#08060a';
-        ctx.fillRect(skullCx - 5*s, skullCy + s, 1.5, 1.5);
-        // Jaw line
-        ctx.strokeStyle = boneDark; ctx.lineWidth = 0.7;
-        ctx.beginPath(); ctx.moveTo(skullCx - 5*s, skullCy + 3*s); ctx.lineTo(skullCx + 4*s, skullCy + 3*s); ctx.stroke();
-    } else if(facing === 'right') {
-        ctx.fillStyle = '#08060a';
-        ctx.beginPath(); ctx.ellipse(skullCx + 2*s, skullCy, 1.8, 2.2, 0, 0, Math.PI*2); ctx.fill();
-        ctx.fillRect(skullCx + 4*s, skullCy + s, 1.5, 1.5);
-        ctx.strokeStyle = boneDark; ctx.lineWidth = 0.7;
-        ctx.beginPath(); ctx.moveTo(skullCx - 4*s, skullCy + 3*s); ctx.lineTo(skullCx + 5*s, skullCy + 3*s); ctx.stroke();
-    } else {
-        // Front view — two eye sockets, nose hole, teeth
-        ctx.fillStyle = '#08060a';
-        ctx.beginPath(); ctx.ellipse(skullCx - 2.2*s, skullCy, 1.6, 2.2, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(skullCx + 2.2*s, skullCy, 1.6, 2.2, 0, 0, Math.PI*2); ctx.fill();
-        // Inner eye socket glint
-        ctx.fillStyle = 'rgba(180,40,20,0.55)';
-        ctx.fillRect(skullCx - 2.5*s, skullCy - 0.5, 1, 1);
-        ctx.fillRect(skullCx + 1.8*s, skullCy - 0.5, 1, 1);
-        // Nose triangle
-        ctx.fillStyle = '#08060a';
+    // Two eye sockets
+    ctx.fillStyle = '#08060a';
+    ctx.beginPath(); ctx.ellipse(skullCx - 2.2*s, skullCy, 1.6, 2.2, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(skullCx + 2.2*s, skullCy, 1.6, 2.2, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(180,40,20,0.55)';
+    ctx.fillRect(skullCx - 2.5*s, skullCy - 0.5, 1, 1);
+    ctx.fillRect(skullCx + 1.8*s, skullCy - 0.5, 1, 1);
+    // Nose triangle
+    ctx.fillStyle = '#08060a';
+    ctx.beginPath();
+    ctx.moveTo(skullCx, skullCy + s);
+    ctx.lineTo(skullCx - s, skullCy + 3*s);
+    ctx.lineTo(skullCx + s, skullCy + 3*s);
+    ctx.closePath(); ctx.fill();
+    // Teeth row
+    ctx.fillStyle = bone;
+    ctx.fillRect(skullCx - 4*s, skullCy + 3.6*s, 8*s, 1.4*s);
+    ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
+    for(let tt = 0; tt < 5; tt++) {
         ctx.beginPath();
-        ctx.moveTo(skullCx, skullCy + s);
-        ctx.lineTo(skullCx - s, skullCy + 3*s);
-        ctx.lineTo(skullCx + s, skullCy + 3*s);
-        ctx.closePath(); ctx.fill();
-        // Teeth row
-        ctx.fillStyle = bone;
-        ctx.fillRect(skullCx - 4*s, skullCy + 3.6*s, 8*s, 1.4*s);
-        ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
-        for(let tt = 0; tt < 5; tt++) {
-            ctx.beginPath();
-            ctx.moveTo(skullCx - 4*s + tt*2*s, skullCy + 3.6*s);
-            ctx.lineTo(skullCx - 4*s + tt*2*s, skullCy + 5*s);
-            ctx.stroke();
-        }
+        ctx.moveTo(skullCx - 4*s + tt*2*s, skullCy + 3.6*s);
+        ctx.lineTo(skullCx - 4*s + tt*2*s, skullCy + 5*s);
+        ctx.stroke();
     }
     // Cranial suture
     ctx.strokeStyle = boneDark; ctx.lineWidth = 0.6;
@@ -21229,14 +21308,87 @@ function drawSelfDestructSafeRoom() {
             ctx.globalAlpha = 1;
         }
         if(elapsed > 6000) { state = 'theend'; menuChoice = 0; }
+
+        // ── DIM-ROOM GLOW — the active scene lights up the area around the TV
+        const glowA = Math.min(0.55, elapsed / 2500);
+        const glowGrd = ctx.createRadialGradient(
+            tvX + tvW/2, tvY + tvH/2, 20,
+            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.9
+        );
+        glowGrd.addColorStop(0, `rgba(255,190,120,${glowA * 0.45})`);
+        glowGrd.addColorStop(0.5, `rgba(120,90,180,${glowA * 0.25})`);
+        glowGrd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = glowGrd;
+        ctx.fillRect(tvX - 120, tvY - 30, tvW + 240, tvH + 160);
+        ctx.restore();
     } else {
-        // TV off — dark black screen
-        ctx.fillStyle = '#060608'; ctx.fillRect(scrX, scrY, scrW, scrH);
-        // Faint reflection on glass
-        ctx.fillStyle = 'rgba(40,40,50,0.08)';
+        // TV idle — mirrors the end title card (sunrise "THE END / Mullet Pro"),
+        // only rendered as a dim glow the way a turned-on TV lights a darker room.
+        // Gentle breathing shimmer so the screen feels alive, not a still image.
+        const t = Date.now() / 1000;
+        const shimmer = 0.85 + Math.sin(t * 1.3) * 0.06;
+
+        // Base sunrise sky, darkened — same stops as the active scene but muted
+        const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
+        sky.addColorStop(0, '#050912');
+        sky.addColorStop(0.5, '#0c1a2a');
+        sky.addColorStop(0.8, '#1a2e3e');
+        sky.addColorStop(1, '#2a3a28');
+        ctx.fillStyle = sky; ctx.fillRect(scrX, scrY, scrW, scrH);
+
+        // Faint sun — low on the horizon, barely rising
+        const sunY = scrY + scrH * 0.78;
+        const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, 48);
+        sunGrd.addColorStop(0, `rgba(255,200,90,${0.45 * shimmer})`);
+        sunGrd.addColorStop(0.35, `rgba(220,120,50,${0.28 * shimmer})`);
+        sunGrd.addColorStop(1, 'rgba(140,40,0,0)');
+        ctx.fillStyle = sunGrd;
+        ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, 48, 0, Math.PI*2); ctx.fill();
+
+        // Horizon band — warm but very dim
+        const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
+        hzGrd.addColorStop(0, 'rgba(180,90,30,0)');
+        hzGrd.addColorStop(1, `rgba(200,80,20,${0.22 * shimmer})`);
+        ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
+
+        // Dim "THE END / Mullet Pro" text — same layout as active end card, low alpha
+        ctx.save();
+        ctx.globalAlpha = 0.35 * shimmer;
+        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
+        ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
+        ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
+        ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
+        ctx.restore();
+
+        // Scanline overlay — sells the "glowing CRT in a dark room" feel
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        for(let sl = scrY; sl < scrY + scrH; sl += 3) {
+            ctx.fillRect(scrX, sl, scrW, 1);
+        }
+
+        // Faint specular reflection on glass
+        ctx.fillStyle = 'rgba(120,140,180,0.06)';
         ctx.fillRect(scrX+4, scrY+4, scrW*0.3, scrH*0.2);
-        // Power LED (red standby)
-        ctx.fillStyle = 'rgba(180,0,0,0.8)'; ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
+
+        // ── DIM-ROOM GLOW — soft amber/blue bloom spills off the screen
+        const glowGrd = ctx.createRadialGradient(
+            tvX + tvW/2, tvY + tvH/2, 20,
+            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.85
+        );
+        glowGrd.addColorStop(0, `rgba(255,170,90,${0.22 * shimmer})`);
+        glowGrd.addColorStop(0.5, `rgba(90,80,140,${0.12 * shimmer})`);
+        glowGrd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = glowGrd;
+        ctx.fillRect(tvX - 120, tvY - 30, tvW + 240, tvH + 160);
+        ctx.restore();
+
+        // Power LED (tiny amber "on" pilot)
+        ctx.fillStyle = `rgba(255,180,60,${0.8 * shimmer})`;
+        ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
     }
 
     // ── KITCHENETTE — left wall ───────────────────────────────────────────────
@@ -21824,10 +21976,18 @@ function drawScene() {
             ctx.strokeText('THE END', 350, 200);
             ctx.fillStyle = '#ffd700';
             ctx.fillText('THE END', 350, 200);
-            
-            ctx.fillStyle = '#f5f2ec';
-            ctx.font = '28px Arial';
-            ctx.fillText('Documents Destroyed: ' + level5.docsCollected, 350, 270);
+
+            if(hellMode) {
+                // Hell mode ending is bleaker — all of that carnage amounted to nothing.
+                ctx.fillStyle = '#8a0000';
+                ctx.font = 'italic 26px Arial';
+                ctx.fillText('It was all for nothing.', 350, 270);
+            } else {
+                // Regular "the end" — body count instead of level 5 documents metric.
+                ctx.fillStyle = '#f5f2ec';
+                ctx.font = '28px Arial';
+                ctx.fillText('Lives Ruined: ' + livesRuined, 350, 270);
+            }
         } else if(state === 'victory') {
             // Simplified victory screen - less crowded
             ctx.fillStyle = '#f5f2ec';
@@ -24414,10 +24574,13 @@ function update() {
                 // Lock devil position so it doesn't drift during the stab
                 sds.devilX = sds.stabLockX;
                 if(sds.stabAnimTimer >= 60) {
-                    // Stab complete — black out and teleport to safe room
+                    // Stab complete — black out and teleport to safe room.
+                    // Spawn facing forward (standing-still default) — skeleton turns
+                    // to profile only when the player actually walks.
                     sds.room = 'safeRoom';
                     sds.deathBySafeRoom = true;
-                    player.x = 350; player.y = floorY; player.facing = 'forward';
+                    player.x = 350; player.y = floorY;
+                    player.facing = 'forward';
                 }
             }
 
@@ -24500,8 +24663,8 @@ function update() {
         } else if(sds.room === 'safeRoom') {
             if(!sds.chairSitting) {
                 const prevX = player.x;
-                if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; }
-                if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; }
+                if(keys['ArrowLeft'] || keys['left']) { player.x -= speed; player.facing = 'left'; player.lastHorizFacing = 'left'; }
+                if(keys['ArrowRight'] || keys['right']) { player.x += speed; player.facing = 'right'; player.lastHorizFacing = 'right'; }
                 player.x = Math.max(10, Math.min(680, player.x));
                 player.y = floorY;
                 if(player.x !== prevX) player.lastMove = Date.now();
@@ -26643,7 +26806,7 @@ function update() {
                                 level6.keycardX = cb.x;
                                 level6.keycardY = 385;
                             }
-                            SFX.play('enemyDie'); score += 2000;
+                            SFX.play('enemyDie'); score += 2000; livesRuined++;
                             // Awaken the Red PM clone — boss death shakes him out of trance
                             if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
                                 SFX.play('bossAlert'); level6.cloneAwakened = true;
@@ -27191,7 +27354,7 @@ function update() {
                                 for(let s = 0; s < 6; s++) {
                                     level6.cashSacks.push({ x: 350 + (s - 2.5) * 18, y: 200 + Math.floor(s / 3) * 20, claimed: false, reserved: false, extracted: false });
                                 }
-                                score += 5000;
+                                score += 5000; livesRuined++;
                             } else {
                                 level6.moneyLives = 0;
                                 updateLives();
@@ -27908,7 +28071,7 @@ if (keys[' '] || keys['action']) {
                         bcb.fallY = bcb.y;  // starting Y for fall animation
                         bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
-                        score += 3000;
+                        score += 3000; livesRuined++;
                         // Drop 3 ammo rounds from bridge boss
                         if(!level6.bridgeDrops) level6.bridgeDrops = [];
                         level6.bridgeDrops.push(
@@ -27927,7 +28090,7 @@ if (keys[' '] || keys['action']) {
                         hallCB.deathTime = Date.now();
                         bulletImpact(bullets[i].x, bullets[i].y);
                         bullets.splice(i, 1);
-                        score += 3000;
+                        score += 3000; livesRuined++;
                         // Drop ammo (single pickup, consistent with bridge boss)
                         if(!level6.hallwayDrops) level6.hallwayDrops = [];
                         level6.hallwayDrops.push(
@@ -27953,7 +28116,7 @@ if (keys[' '] || keys['action']) {
                             bulletImpact(bullets[i].x, bullets[i].y);
                             // Drop 1 ammo bullet at skeleton's position
                             level6.skeletonHorde.drops.push({ x: sk.x, y: 385, claimed: false, amount: 1 });
-                            score += 100;
+                            score += 100; livesRuined++;
                             skHit = true;
                             break;
                         }
@@ -27974,7 +28137,7 @@ if (keys[' '] || keys['action']) {
                                 sk.dustParticles.push({ x: sk.x, y: sk.y - 25, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1.5, life: 25 });
                             }
                             bulletImpact(bullets[i].x, bullets[i].y);
-                            score += 100;
+                            score += 100; livesRuined++;
                             skHit2 = true;
                             break;
                         }
@@ -28470,7 +28633,7 @@ if (keys[' '] || keys['action']) {
                                 level6.ceoDefeated = true;
                                 level6.safeUnlocked = true;
                                 createExplosion(ceo.x, ceo.y);
-                                score += 5000;
+                                score += 5000; livesRuined++;
                             } else if(ceo.state === 'admiring' || ceo.state === 'offering') {
                                 ceo.state = 'hunting';
                                 level6.ceoEnteredMurderMode = true;
@@ -28495,7 +28658,7 @@ if (keys[' '] || keys['action']) {
                                 level6.ceoPursuing = false;
                                 level6.safeUnlocked = true;
                                 createExplosion(ceo.x, ceo.y);
-                                score += 5000;
+                                score += 5000; livesRuined++;
                             }
                             wb.going = false;
                             { const dx=wb.originX-wb.x, dy=wb.originY-wb.y, dn=Math.sqrt(dx*dx+dy*dy)||1; wb.vx=dx/dn*9; wb.vy=dy/dn*9; }
@@ -28568,7 +28731,7 @@ if (keys[' '] || keys['action']) {
                                     sk.dustParticles.push({ x: sk.x, y: sk.y - 20, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd - 1, life: 20 });
                                 }
                                 hordeRef.drops.push({ x: sk.x, y: 385, claimed: false, amount: 1 });
-                                score += 100;
+                                score += 100; livesRuined++;
                             }
                         }
                     }
@@ -28585,7 +28748,7 @@ if (keys[' '] || keys['action']) {
                                 level6.keycardX = cb.x;
                                 level6.keycardY = 385;
                             }
-                            SFX.play('enemyDie'); score += 2000;
+                            SFX.play('enemyDie'); score += 2000; livesRuined++;
                             // Awaken the Red PM clone — boss death shakes him out of trance
                             if(!level6.cloneFollower.active && !level6.factoryReset && !level6.cloneAwakened) {
                                 SFX.play('bossAlert'); level6.cloneAwakened = true;
@@ -28605,7 +28768,7 @@ if (keys[' '] || keys['action']) {
                             bulletImpact(wb.x, hallCB.y);
                             if(!level6.hallwayDrops) level6.hallwayDrops = [];
                             level6.hallwayDrops.push({ type: 'ammo', x: hallCB.x, y: 385, claimed: false, amount: 3 });
-                            score += 3000;
+                            score += 3000; livesRuined++;
                             wb.going = false;
                             { const dx=wb.originX-wb.x, dy=wb.originY-wb.y, dn=Math.sqrt(dx*dx+dy*dy)||1; wb.vx=dx/dn*9; wb.vy=dy/dn*9; }
                         }
@@ -28628,7 +28791,7 @@ if (keys[' '] || keys['action']) {
                             bulletImpact(wb.x, bcb.y);
                             if(!level6.bridgeDrops) level6.bridgeDrops = [];
                             level6.bridgeDrops.push({ type: 'ammo', x: Math.max(220, Math.min(bcb.x, 500)), y: 145, claimed: false, amount: 3 });
-                            score += 3000;
+                            score += 3000; livesRuined++;
                             wb.going = false;
                             { const dx=wb.originX-wb.x, dy=wb.originY-wb.y, dn=Math.sqrt(dx*dx+dy*dy)||1; wb.vx=dx/dn*9; wb.vy=dy/dn*9; }
                         }
@@ -28669,7 +28832,7 @@ if (keys[' '] || keys['action']) {
                                     level6.safeUnlocked = true;  // fix: was missing
                                     level6.ceoPursuing = false;
                                     createExplosion(ceo.x, ceo.y);
-                                    score += 5000;
+                                    score += 5000; livesRuined++;
                                 }
                             }
                         }
@@ -28908,6 +29071,7 @@ if (keys[' '] || keys['action']) {
             boss.walking = false;
             boss.angry = false;
             boss.bossKills++;
+            livesRuined++;
             score += 500 * level;
             bullets.splice(i, 1);
             createExplosion(boss.x, boss.y);
@@ -29006,6 +29170,7 @@ if (keys[' '] || keys['action']) {
                     boss.walking = false;
                     boss.angry = false;
                     boss.bossKills++;
+                    livesRuined++;
                     score += 500 * level;
                     createExplosion(boss.x, boss.y);
                     // No life gain for wrench kills
