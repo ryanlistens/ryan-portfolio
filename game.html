@@ -21426,74 +21426,59 @@ function drawSelfDestructSafeRoom() {
         ctx.fillRect(tvX - 120, tvY - 30, tvW + 240, tvH + 160);
         ctx.restore();
     } else {
-        // TV idle — the TV is ON, looping the end title card at normal brightness.
-        // This is the clearly-visible "sunrise + THE END / Mullet Pro" image the
-        // player is watching from the LazyBoy, not a dim ghost of it.
-        const t = Date.now() / 1000;
-        const shimmer = 0.94 + Math.sin(t * 1.6) * 0.05; // subtle breathing
+        // TV idle — literal replication of the end title card animation, on
+        // loop. Uses the exact same render code as the active `tvEndStarted`
+        // branch above; only the timing source differs (Date.now() modulo).
+        // A 7-second window lets the sunrise, horizon glow and "THE END /
+        // Mullet Pro" text play through, then repeats.
+        const LOOP_MS = 7000;
+        const elapsed = Date.now() % LOOP_MS;
 
-        // Full sunrise sky — same stops as the active end card
+        // Warm sunrise scene — identical gradient to the active end card
         const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
-        sky.addColorStop(0, '#0a1a2e');
-        sky.addColorStop(0.5, '#1a3a5a');
-        sky.addColorStop(0.8, '#3a6a8a');
-        sky.addColorStop(1, '#8aaa80');
+        sky.addColorStop(0,'#0a1a2e'); sky.addColorStop(0.5,'#1a3a5a'); sky.addColorStop(0.8,'#3a6a8a'); sky.addColorStop(1,'#8aaa80');
         ctx.fillStyle = sky; ctx.fillRect(scrX, scrY, scrW, scrH);
-
-        // Sun — loops a gentle rise/fall over ~8 seconds
-        const sunCycle = (Math.sin(t * 0.4) + 1) * 0.5;           // 0..1
-        const sunRise = 0.55 + sunCycle * 0.25;                    // 0.55..0.80
-        const sunY = scrY + scrH - sunRise * scrH * 0.55;
-        const sunR = 56;
-        const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, sunR);
-        sunGrd.addColorStop(0, `rgba(255,235,120,${0.95 * shimmer})`);
-        sunGrd.addColorStop(0.3, `rgba(255,170,50,${0.7 * shimmer})`);
-        sunGrd.addColorStop(1, 'rgba(255,80,0,0)');
-        ctx.fillStyle = sunGrd;
-        ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, sunR, 0, Math.PI*2); ctx.fill();
-
-        // Horizon glow — warm, strong
-        const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
-        hzGrd.addColorStop(0, 'rgba(255,180,50,0)');
-        hzGrd.addColorStop(1, `rgba(255,140,30,${0.5 * shimmer})`);
-        ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
-
-        // "THE END / Mullet Pro" title card — fully visible
-        ctx.save();
-        ctx.globalAlpha = shimmer;
-        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
-        ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
-        ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
-        ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
-        ctx.restore();
-
-        // Scanline overlay — subtle CRT texture
-        ctx.fillStyle = 'rgba(0,0,0,0.12)';
-        for(let sl = scrY; sl < scrY + scrH; sl += 3) {
-            ctx.fillRect(scrX, sl, scrW, 1);
+        // Sun rising
+        if(elapsed > 500) {
+            const sunRise = Math.min(1, (elapsed-500)/2000);
+            const sunY = scrY+scrH - sunRise*scrH*0.55;
+            const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, 60*sunRise);
+            sunGrd.addColorStop(0,`rgba(255,230,100,${sunRise})`);
+            sunGrd.addColorStop(0.3,`rgba(255,160,40,${0.7*sunRise})`);
+            sunGrd.addColorStop(1,'rgba(255,80,0,0)');
+            ctx.fillStyle = sunGrd; ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, 60*sunRise, 0, Math.PI*2); ctx.fill();
         }
+        // Horizon glow
+        const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
+        hzGrd.addColorStop(0,'rgba(255,180,50,0)'); hzGrd.addColorStop(1,`rgba(255,140,30,${Math.min(0.5, elapsed/3000)})`);
+        ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
+        // Text
+        if(elapsed > 2500) {
+            const alpha = Math.min(1, (elapsed-2500)/1000);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
+            ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
+            ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
+            ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
+            ctx.globalAlpha = 1;
+        }
+        // NOTE: no `state = 'theend'` transition in the idle path — the TV
+        // just keeps looping until the player sits in the chair.
 
-        // Glass specular sheen
-        ctx.fillStyle = 'rgba(180,200,240,0.08)';
-        ctx.fillRect(scrX+4, scrY+4, scrW*0.3, scrH*0.2);
-
-        // Room bloom — the TV's warm/amber light spills off the screen
+        // ── DIM-ROOM GLOW — identical to the active scene
+        const glowA = Math.min(0.55, elapsed / 2500);
         const glowGrd = ctx.createRadialGradient(
             tvX + tvW/2, tvY + tvH/2, 20,
-            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.95
+            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.9
         );
-        glowGrd.addColorStop(0, `rgba(255,190,120,${0.35 * shimmer})`);
-        glowGrd.addColorStop(0.5, `rgba(120,90,180,${0.18 * shimmer})`);
+        glowGrd.addColorStop(0, `rgba(255,190,120,${glowA * 0.45})`);
+        glowGrd.addColorStop(0.5, `rgba(120,90,180,${glowA * 0.25})`);
         glowGrd.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.fillStyle = glowGrd;
         ctx.fillRect(tvX - 120, tvY - 30, tvW + 240, tvH + 160);
         ctx.restore();
-
-        // Power LED (tiny amber "on" pilot)
-        ctx.fillStyle = `rgba(255,180,60,${0.9 * shimmer})`;
-        ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
     }
 
     // ── KITCHENETTE — left wall ───────────────────────────────────────────────
