@@ -1116,6 +1116,8 @@ let selfDestructSeq = {
     tvEndTimer: 0,
     tvEndStarted: false,
     deathBySafeRoom: false,
+    throneTransitionTimer: 0, // >0 while "YOUR OWN PERSONAL HELL" card plays before safe-room teleport
+    coffinConsumeTimer: 0,    // >0 while player is being pulled into the coffin after a devil stab
     mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
     roach: {x: 80, y: 295, antennaPhase: 0}
 };
@@ -1976,24 +1978,47 @@ function drawMulletProAsPM(npc) {
         ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
 
         // Arms reaching up to the pipe (or ladder rungs while climbing).
-        // While fixing, both hands bob vertically in OPPOSITION to sell the
-        // wrench rotation — no horizontal torque (that produced the odd
-        // expand/contract motion). Shoulders stay locked at the torso; the
-        // hand-end of each arm moves.
-        ctx.fillStyle = '#3a0a0a';
-        const shoulderY = y - 2*s;          // bottom of arm = torso shoulder
-        const wrenchBob = isFix ? Math.sin(npc.fixAnim * 5) * 3 : 0;
-        const climbOff = isClimbing ? climbCycle : 0;
-        const leftHandY  = (isFix ? (y - 18) - wrenchBob : (y - 14) - climbOff);
-        const rightHandY = (isFix ? (y - 18) + wrenchBob : (y - 14) + climbOff);
-        // Left arm (shoulder → hand)
-        ctx.fillRect(x - 9*s, leftHandY,  2*s, Math.max(2, shoulderY - leftHandY));
-        // Right arm (shoulder → hand)
-        ctx.fillRect(x + 7*s, rightHandY, 2*s, Math.max(2, shoulderY - rightHandY));
-        // Skin-cuff hands — visible, gripping the wrench / rung
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 9*s, leftHandY,  2*s, 2*s);
-        ctx.fillRect(x + 7*s, rightHandY, 2*s, 2*s);
+        // FIX state: both hands grip the rotating wrench at two points along
+        // its handle so they track the rotation in world space (no more
+        // floating hands above the tool). Arms are stroked lines from the
+        // shoulders down to the grip points on the wrench.
+        const shoulderY = y - 2*s;                 // top of torso
+        const leftShoulderX  = x - 7*s;
+        const rightShoulderX = x + 7*s;
+        if(isFix) {
+            const rock = Math.sin(npc.fixAnim * 5) * 0.45;
+            const pivotX = x, pivotY = y - 2;
+            // Grip points along the wrench handle (near head + further down)
+            const g1 = 12;  // inner hand near wrench jaw
+            const g2 = 38;  // outer hand for leverage
+            const c = Math.cos(rock), sn = Math.sin(rock);
+            const leftHandX  = pivotX + g1 * c;
+            const leftHandY  = pivotY + g1 * sn;
+            const rightHandX = pivotX + g2 * c;
+            const rightHandY = pivotY + g2 * sn;
+            ctx.strokeStyle = '#3a0a0a';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'square';
+            ctx.beginPath();
+            ctx.moveTo(leftShoulderX, shoulderY);  ctx.lineTo(leftHandX,  leftHandY);
+            ctx.moveTo(rightShoulderX, shoulderY); ctx.lineTo(rightHandX, rightHandY);
+            ctx.stroke();
+            // Skin-cuff hands gripping the wrench handle
+            ctx.fillStyle = '#f5c89a';
+            ctx.fillRect(leftHandX  - 2, leftHandY  - 2, 4, 4);
+            ctx.fillRect(rightHandX - 2, rightHandY - 2, 4, 4);
+        } else {
+            // Climbing — vertical arm rects reaching up to the rung
+            ctx.fillStyle = '#3a0a0a';
+            const climbOff = climbCycle;
+            const leftHandY  = (y - 14) - climbOff;
+            const rightHandY = (y - 14) + climbOff;
+            ctx.fillRect(x - 9*s, leftHandY,  2*s, Math.max(2, shoulderY - leftHandY));
+            ctx.fillRect(x + 7*s, rightHandY, 2*s, Math.max(2, shoulderY - rightHandY));
+            ctx.fillStyle = '#f5c89a';
+            ctx.fillRect(x - 9*s, leftHandY,  2*s, 2*s);
+            ctx.fillRect(x + 7*s, rightHandY, 2*s, 2*s);
+        }
 
         // Legs on rungs — alternating climb (unchanged from previous back pose)
         ctx.fillStyle = '#a4c2db';
@@ -20548,11 +20573,12 @@ function drawSelfDestructCave2() {
         ctx.beginPath(); ctx.arc(skx-2,sky-5,1.5,0,Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(skx+2,sky-5,1.5,0,Math.PI*2); ctx.fill();
     });
-    // Throne action prompt (if available)
-    if(sds.throneActionAvailable) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(thrX-58, thrY-130, 116, 22);
+    // Throne action prompt (if available) — kill-the-devil path ends here,
+    // the throne leads to "your own personal hell" (the safe room apartment).
+    if(sds.throneActionAvailable && sds.throneTransitionTimer === 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(thrX-68, thrY-130, 136, 22);
         ctx.fillStyle = '#ffd700'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] SAFE ROOM', thrX, thrY-115);
+        ctx.fillText('[ ACTION ] TAKE THE THRONE', thrX, thrY-115);
     }
 
     // ── COFFIN ────────────────────────────────────────────────────────────────
@@ -20560,7 +20586,7 @@ function drawSelfDestructCave2() {
     const coffinVisible = sds.coffinRisingTimer > 0 || sds.devilState === 'dead' || sds.coffinDescending ||
                           sds.devilState === 'walking' || sds.devilState === 'talking' ||
                           sds.devilState === 'lid_opening' || sds.devilState === 'kill_window' ||
-                          sds.devilState === 'attacking';
+                          sds.devilState === 'attacking' || sds.devilState === 'consumed';
     if(coffinVisible) {
         const cy = sds.coffinY;
         const lidOpen = sds.lidOpenAmt || 0; // 0=closed, 1=open
@@ -20835,11 +20861,14 @@ function drawSelfDestructCave2() {
     }
 
     // ── PLAYER (drawn before dialogue so dialogue overlays on top) ──────────
+    // Hidden during 'consumed' state — the coffin has pulled the body in.
     const playerArmed = level6.hasRevolver && level6.revolverAmmo > 0;
-    drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
-    if(playerArmed) {
-        drawRevolver(player.x, player.y, player.facing);
-        drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
+    if(sds.devilState !== 'consumed') {
+        drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
+        if(playerArmed) {
+            drawRevolver(player.x, player.y, player.facing);
+            drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
+        }
     }
     // Pitchfork impale overlay — blood spurt and tine punch-through on the player during the stab
     if(ds === 'stabbing') {
@@ -20974,9 +21003,84 @@ function drawSelfDestructCave2() {
         ctx.restore();
     }
 
-    // ── HELL CARD OVERLAY ─────────────────────────────────────────────────────
-    // (Removed: the level card itself displays "WELCOME TO YOUR OWN PERSONAL HELL"
-    //  immediately after the throne action, so a pre-card overlay would be redundant.)
+    // ── COFFIN CONSUME FADE ──────────────────────────────────────────────────
+    // Ramp black over the scene during the devil-stab-path coffin consume:
+    // the lid slams, the coffin sinks, and the picture dims out with it.
+    if(sds.devilState === 'consumed') {
+        const cT = sds.coffinConsumeTimer;
+        // 1..20: 0.4 (carry-over from stab fade)  →  0.55
+        // 20..90: 0.55 → 1.0 (deepening as the coffin sinks)
+        let fadeA;
+        if(cT <= 20) fadeA = 0.4 + (cT / 20) * 0.15;
+        else         fadeA = Math.min(1, 0.55 + ((cT - 20) / 70) * 0.45);
+        ctx.fillStyle = `rgba(0,0,0,${fadeA})`;
+        ctx.fillRect(0, 0, 700, 520);
+    }
+
+    // ── THRONE TRANSITION CARD ("YOUR OWN PERSONAL HELL") ────────────────────
+    // Plays after the player takes the throne, before dropping into the safe
+    // room apartment. Full-screen overlay, fades in/out over ~180 frames.
+    if(sds.throneTransitionTimer > 0) {
+        const t = sds.throneTransitionTimer;
+        let alpha;
+        if(t < 30)       alpha = t / 30;          // fade in
+        else if(t < 150) alpha = 1;               // hold
+        else             alpha = (180 - t) / 30;  // fade out
+        alpha = Math.max(0, Math.min(1, alpha));
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        // Deep ember background
+        const bgHell = ctx.createLinearGradient(0, 0, 0, 500);
+        bgHell.addColorStop(0, '#0a0000');
+        bgHell.addColorStop(0.55, '#1a0402');
+        bgHell.addColorStop(1, '#3a0a02');
+        ctx.fillStyle = bgHell; ctx.fillRect(0, 0, 700, 500);
+        // Rising ember particles
+        for(let e = 0; e < 60; e++) {
+            const seed = e * 57.3;
+            const ex = (seed * 13.7) % 700;
+            const ey = 500 - ((t * (1 + (seed % 3)) + seed * 9) % 520);
+            const er = 1 + (e % 3) * 0.6;
+            const ea = 0.25 + 0.35 * Math.sin(t / 20 + seed);
+            ctx.fillStyle = `rgba(255,${80 + (e % 6) * 20},20,${ea})`;
+            ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI * 2); ctx.fill();
+        }
+        // Radial red glow
+        const hgrd = ctx.createRadialGradient(350, 240, 40, 350, 240, 340);
+        hgrd.addColorStop(0, 'rgba(180,20,0,0.5)');
+        hgrd.addColorStop(0.6, 'rgba(60,0,0,0.25)');
+        hgrd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = hgrd; ctx.fillRect(0, 0, 700, 500);
+        // Title stack
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
+        ctx.font = 'bold 40px Georgia, serif';
+        ctx.strokeText('YOUR OWN', 350, 160);
+        ctx.fillStyle = '#8b0000';
+        ctx.fillText('YOUR OWN', 350, 160);
+        ctx.font = 'bold 52px Georgia, serif';
+        ctx.strokeText('PERSONAL', 350, 230);
+        ctx.fillStyle = '#b00000';
+        ctx.fillText('PERSONAL', 350, 230);
+        ctx.font = 'bold 110px Georgia, serif';
+        ctx.lineWidth = 8;
+        ctx.strokeText('HELL', 350, 340);
+        const hellGrd = ctx.createLinearGradient(0, 270, 0, 350);
+        hellGrd.addColorStop(0, '#ff2a00');
+        hellGrd.addColorStop(1, '#6b0000');
+        ctx.fillStyle = hellGrd;
+        ctx.fillText('HELL', 350, 340);
+        // Blood drips from the bottom of "HELL"
+        ctx.fillStyle = '#6b0000';
+        const dripXs = [300, 322, 345, 368, 390, 330, 360];
+        for(let d = 0; d < dripXs.length; d++) {
+            const dx = dripXs[d];
+            const dl = 10 + ((d * 7 + Math.floor(t / 3)) % 18);
+            ctx.fillRect(dx, 344, 3, dl);
+            ctx.beginPath(); ctx.arc(dx + 1.5, 344 + dl, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+    }
 }
 
 // Skeleton player.
@@ -20987,58 +21091,67 @@ function drawSkeletonPlayer(x, y, facing) {
     const BONE_DARK = '#9a9480';
     const isWalking = Date.now() - player.lastMove < 150;
 
-    // Shared anchor — body is built up from the feet baseline.
+    // Shared anchors — feet baseline y+50 matches the standing skeleton
+    // (front-facing branch uses y+25*s = y+50 for bottom of feet). This keeps
+    // the walking profile the same silhouette size as the idle pose.
     const sx = x;
-    const sy = y + 24;
+    const sy = y + 50; // feet baseline
 
-    // Shadow
+    // Shadow — at the foot
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
 
     if(isWalking && (facing === 'left' || facing === 'right')) {
         // ══ WALKING PROFILE — polyline limbs driven by walkCycle (matches hordes) ══
+        // Measurement tie-points (all relative to sy = feet baseline, matching
+        // the standing skeleton so the figure doesn't shrink on move):
+        //   feet:     sy        (y + 50)
+        //   knee:     sy - 12   (y + 38)
+        //   hip/pelvis: sy - 28 (y + 22)
+        //   shoulder: sy - 50   (y)
+        //   skull ctr:sy - 66   (y - 16)
         const f = (facing === 'right') ? 1 : -1;
         const walkCycle = Math.sin(Date.now() / 110);
         const legSwing = walkCycle * 7;
         const armSwing = -walkCycle * 6;
 
-        // Legs
+        // Legs — hip → knee → foot
         ctx.strokeStyle = BONE; ctx.lineWidth = 4; ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(sx - 3, sy - 10);
-        ctx.lineTo(sx - 5 - legSwing, sy);
-        ctx.lineTo(sx - 4 - legSwing, sy + 14);
+        ctx.moveTo(sx - 3, sy - 28);
+        ctx.lineTo(sx - 5 - legSwing, sy - 14);
+        ctx.lineTo(sx - 4 - legSwing, sy);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(sx + 3, sy - 10);
-        ctx.lineTo(sx + 5 + legSwing, sy);
-        ctx.lineTo(sx + 4 + legSwing, sy + 14);
+        ctx.moveTo(sx + 3, sy - 28);
+        ctx.lineTo(sx + 5 + legSwing, sy - 14);
+        ctx.lineTo(sx + 4 + legSwing, sy);
         ctx.stroke();
         // Feet — point in the direction of travel
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(sx - 4 - legSwing, sy + 14);
-        ctx.lineTo(sx - 4 - legSwing + f * 6, sy + 14);
+        ctx.moveTo(sx - 4 - legSwing, sy);
+        ctx.lineTo(sx - 4 - legSwing + f * 6, sy);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(sx + 4 + legSwing, sy + 14);
-        ctx.lineTo(sx + 4 + legSwing + f * 6, sy + 14);
+        ctx.moveTo(sx + 4 + legSwing, sy);
+        ctx.lineTo(sx + 4 + legSwing + f * 6, sy);
         ctx.stroke();
 
         // Pelvis
         ctx.fillStyle = BONE;
-        ctx.fillRect(sx - 6, sy - 12, 12, 5);
+        ctx.fillRect(sx - 6, sy - 30, 12, 5);
         ctx.fillStyle = BONE_DARK;
-        ctx.fillRect(sx - 1, sy - 11, 2, 3);
+        ctx.fillRect(sx - 1, sy - 29, 2, 3);
 
-        // Spine
+        // Spine — pelvis top to shoulder
         ctx.strokeStyle = BONE; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(sx, sy - 12); ctx.lineTo(sx, sy - 34); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy - 30); ctx.lineTo(sx, sy - 54); ctx.stroke();
 
-        // Ribcage — curved ribs
+        // Ribcage — curved ribs spanning the thorax
         ctx.strokeStyle = BONE; ctx.lineWidth = 2;
-        for (let r = 0; r < 3; r++) {
-            const ry = sy - 28 + r * 5;
+        for (let r = 0; r < 4; r++) {
+            const ry = sy - 50 + r * 5;
             ctx.beginPath();
             ctx.moveTo(sx, ry);
             ctx.bezierCurveTo(sx - 12, ry - 2, sx - 12, ry + 3, sx, ry + 2);
@@ -21049,22 +21162,22 @@ function drawSkeletonPlayer(x, y, facing) {
             ctx.stroke();
         }
 
-        // Arms — swing opposite of legs
+        // Arms — shoulder → elbow → hand, swinging opposite of legs
         ctx.strokeStyle = BONE; ctx.lineWidth = 3; ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(sx - 6, sy - 30);
-        ctx.lineTo(sx - 14 + armSwing, sy - 22 + armSwing * 0.5);
-        ctx.lineTo(sx - 8 + armSwing, sy - 12);
+        ctx.moveTo(sx - 6, sy - 50);
+        ctx.lineTo(sx - 14 + armSwing, sy - 38 + armSwing * 0.5);
+        ctx.lineTo(sx - 8 + armSwing, sy - 24);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(sx + 6, sy - 30);
-        ctx.lineTo(sx + 14 - armSwing, sy - 22 - armSwing * 0.5);
-        ctx.lineTo(sx + 8 - armSwing, sy - 12);
+        ctx.moveTo(sx + 6, sy - 50);
+        ctx.lineTo(sx + 14 - armSwing, sy - 38 - armSwing * 0.5);
+        ctx.lineTo(sx + 8 - armSwing, sy - 24);
         ctx.stroke();
 
-        // Skull — profile
+        // Skull — profile, centered at y - 16 = sy - 66 (matches standing skull)
         const skullCx = sx + f * 1.5;
-        const skullCy = sy - 42;
+        const skullCy = sy - 66;
         ctx.fillStyle = BONE;
         ctx.beginPath(); ctx.arc(skullCx, skullCy, 9, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(140,120,80,0.25)';
@@ -21313,61 +21426,64 @@ function drawSelfDestructSafeRoom() {
         ctx.fillRect(tvX - 120, tvY - 30, tvW + 240, tvH + 160);
         ctx.restore();
     } else {
-        // TV idle — mirrors the end title card (sunrise "THE END / Mullet Pro"),
-        // only rendered as a dim glow the way a turned-on TV lights a darker room.
-        // Gentle breathing shimmer so the screen feels alive, not a still image.
+        // TV idle — the TV is ON, looping the end title card at normal brightness.
+        // This is the clearly-visible "sunrise + THE END / Mullet Pro" image the
+        // player is watching from the LazyBoy, not a dim ghost of it.
         const t = Date.now() / 1000;
-        const shimmer = 0.85 + Math.sin(t * 1.3) * 0.06;
+        const shimmer = 0.94 + Math.sin(t * 1.6) * 0.05; // subtle breathing
 
-        // Base sunrise sky, darkened — same stops as the active scene but muted
+        // Full sunrise sky — same stops as the active end card
         const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
-        sky.addColorStop(0, '#050912');
-        sky.addColorStop(0.5, '#0c1a2a');
-        sky.addColorStop(0.8, '#1a2e3e');
-        sky.addColorStop(1, '#2a3a28');
+        sky.addColorStop(0, '#0a1a2e');
+        sky.addColorStop(0.5, '#1a3a5a');
+        sky.addColorStop(0.8, '#3a6a8a');
+        sky.addColorStop(1, '#8aaa80');
         ctx.fillStyle = sky; ctx.fillRect(scrX, scrY, scrW, scrH);
 
-        // Faint sun — low on the horizon, barely rising
-        const sunY = scrY + scrH * 0.78;
-        const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, 48);
-        sunGrd.addColorStop(0, `rgba(255,200,90,${0.45 * shimmer})`);
-        sunGrd.addColorStop(0.35, `rgba(220,120,50,${0.28 * shimmer})`);
-        sunGrd.addColorStop(1, 'rgba(140,40,0,0)');
+        // Sun — loops a gentle rise/fall over ~8 seconds
+        const sunCycle = (Math.sin(t * 0.4) + 1) * 0.5;           // 0..1
+        const sunRise = 0.55 + sunCycle * 0.25;                    // 0.55..0.80
+        const sunY = scrY + scrH - sunRise * scrH * 0.55;
+        const sunR = 56;
+        const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, sunR);
+        sunGrd.addColorStop(0, `rgba(255,235,120,${0.95 * shimmer})`);
+        sunGrd.addColorStop(0.3, `rgba(255,170,50,${0.7 * shimmer})`);
+        sunGrd.addColorStop(1, 'rgba(255,80,0,0)');
         ctx.fillStyle = sunGrd;
-        ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, 48, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, sunR, 0, Math.PI*2); ctx.fill();
 
-        // Horizon band — warm but very dim
+        // Horizon glow — warm, strong
         const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
-        hzGrd.addColorStop(0, 'rgba(180,90,30,0)');
-        hzGrd.addColorStop(1, `rgba(200,80,20,${0.22 * shimmer})`);
+        hzGrd.addColorStop(0, 'rgba(255,180,50,0)');
+        hzGrd.addColorStop(1, `rgba(255,140,30,${0.5 * shimmer})`);
         ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
 
-        // Dim "THE END / Mullet Pro" text — same layout as active end card, low alpha
+        // "THE END / Mullet Pro" title card — fully visible
         ctx.save();
-        ctx.globalAlpha = 0.35 * shimmer;
+        ctx.globalAlpha = shimmer;
         ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
         ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
         ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
         ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
         ctx.restore();
 
-        // Scanline overlay — sells the "glowing CRT in a dark room" feel
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        // Scanline overlay — subtle CRT texture
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
         for(let sl = scrY; sl < scrY + scrH; sl += 3) {
             ctx.fillRect(scrX, sl, scrW, 1);
         }
 
-        // Faint specular reflection on glass
-        ctx.fillStyle = 'rgba(120,140,180,0.06)';
+        // Glass specular sheen
+        ctx.fillStyle = 'rgba(180,200,240,0.08)';
         ctx.fillRect(scrX+4, scrY+4, scrW*0.3, scrH*0.2);
 
-        // ── DIM-ROOM GLOW — soft amber/blue bloom spills off the screen
+        // Room bloom — the TV's warm/amber light spills off the screen
         const glowGrd = ctx.createRadialGradient(
             tvX + tvW/2, tvY + tvH/2, 20,
-            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.85
+            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.95
         );
-        glowGrd.addColorStop(0, `rgba(255,170,90,${0.22 * shimmer})`);
-        glowGrd.addColorStop(0.5, `rgba(90,80,140,${0.12 * shimmer})`);
+        glowGrd.addColorStop(0, `rgba(255,190,120,${0.35 * shimmer})`);
+        glowGrd.addColorStop(0.5, `rgba(120,90,180,${0.18 * shimmer})`);
         glowGrd.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
@@ -21376,7 +21492,7 @@ function drawSelfDestructSafeRoom() {
         ctx.restore();
 
         // Power LED (tiny amber "on" pilot)
-        ctx.fillStyle = `rgba(255,180,60,${0.8 * shimmer})`;
+        ctx.fillStyle = `rgba(255,180,60,${0.9 * shimmer})`;
         ctx.beginPath(); ctx.arc(tvX+tvW-10, tvY+tvH-6, 2, 0, Math.PI*2); ctx.fill();
     }
 
@@ -21807,44 +21923,35 @@ function drawScene() {
             hgrd.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = hgrd; ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
-            // Title stack — blood-red serif with heavy black outline
+            // Title — the nebulous "HELL" work simulation. Single stark word,
+            // no dramatic stack (the "YOUR OWN PERSONAL HELL" card belongs to
+            // the throne/safe-room ending; this path is the coffin-consume death).
             ctx.textAlign = 'center';
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 10;
 
-            ctx.font = 'bold 40px Georgia, serif';
-            ctx.strokeText('WELCOME TO YOUR', 350, 160);
-            ctx.fillStyle = '#8b0000';
-            ctx.fillText('WELCOME TO YOUR', 350, 160);
-
-            ctx.font = 'bold 52px Georgia, serif';
-            ctx.strokeText('OWN PERSONAL', 350, 230);
-            ctx.fillStyle = '#b00000';
-            ctx.fillText('OWN PERSONAL', 350, 230);
-
-            // HELL — big, with dripping blood beneath
-            ctx.font = 'bold 110px Georgia, serif';
-            ctx.lineWidth = 8;
-            ctx.strokeText('HELL', 350, 340);
-            const hellGrd = ctx.createLinearGradient(0, 270, 0, 350);
+            // HELL — huge, centered, with dripping blood beneath
+            ctx.font = 'bold 140px Georgia, serif';
+            ctx.strokeText('HELL', 350, 290);
+            const hellGrd = ctx.createLinearGradient(0, 190, 0, 300);
             hellGrd.addColorStop(0, '#ff2a00');
             hellGrd.addColorStop(1, '#6b0000');
             ctx.fillStyle = hellGrd;
-            ctx.fillText('HELL', 350, 340);
+            ctx.fillText('HELL', 350, 290);
 
             // Blood drips from the bottom of "HELL"
             ctx.fillStyle = '#6b0000';
-            const dripXs = [300, 322, 345, 368, 390, 330, 360];
+            const dripXs = [280, 310, 335, 360, 388, 418, 345];
             for(let d = 0; d < dripXs.length; d++) {
                 const dx = dripXs[d];
-                const dl = 10 + ((d * 7 + Math.floor(frame / 3)) % 18);
-                ctx.fillRect(dx, 344, 3, dl);
-                ctx.beginPath(); ctx.arc(dx + 1.5, 344 + dl, 2.5, 0, Math.PI * 2); ctx.fill();
+                const dl = 12 + ((d * 7 + Math.floor(frame / 3)) % 22);
+                ctx.fillRect(dx, 300, 4, dl);
+                ctx.beginPath(); ctx.arc(dx + 2, 300 + dl, 3, 0, Math.PI * 2); ctx.fill();
             }
 
             if(cardTimer > 60 && Math.floor(frame / 30) % 2 === 0) {
                 ctx.fillStyle = '#ff6644';
                 ctx.font = '14px "Press Start 2P", monospace';
-                ctx.fillText('ABANDON HOPE', 350, 430);
+                ctx.fillText('ABANDON HOPE', 350, 420);
             }
         } else {
             const lvlGrad = ctx.createLinearGradient(200, 150, 500, 250);
@@ -24558,40 +24665,68 @@ function update() {
                     SFX.play('hurt');
                 }
             }
-            // Phase 7b: stab animation — pitchfork plunges into player, then teleport
+            // Phase 7b: stab animation — pitchfork plunges into player, then the
+            // coffin rises up to consume them and descend into hell (the nebulous
+            // work simulation). This is the DEATH path → work sim level 1.
             else if(sds.devilState === 'stabbing') {
                 sds.stabAnimTimer++;
                 // Lock devil position so it doesn't drift during the stab
                 sds.devilX = sds.stabLockX;
                 if(sds.stabAnimTimer >= 60) {
-                    // Stab complete — black out and teleport to safe room.
-                    // Spawn facing forward (standing-still default) — skeleton turns
-                    // to profile only when the player actually walks.
-                    sds.room = 'safeRoom';
-                    sds.deathBySafeRoom = true;
-                    player.x = 350; player.y = floorY;
-                    player.facing = 'forward';
+                    // Stab complete — start the coffin-consume phase
+                    sds.coffinConsumeTimer = 1;
+                    sds.devilState = 'consumed';
+                }
+            }
+            // Phase 7c: coffin consumes the stabbed player — lid slams shut,
+            // coffin sinks, then transition into the nebulous hell work sim.
+            else if(sds.devilState === 'consumed') {
+                sds.coffinConsumeTimer++;
+                // 0..20:  lid slams shut over the player's body
+                // 20..90: coffin sinks into the floor
+                // 90+:    transition to hell mode work sim (level 1)
+                if(sds.coffinConsumeTimer <= 20) {
+                    sds.lidOpenAmt = Math.max(0, 1 - sds.coffinConsumeTimer / 20);
+                    if(sds.coffinConsumeTimer === 20) SFX.play('hatchOpen');
+                } else if(sds.coffinConsumeTimer <= 90) {
+                    sds.coffinY += 3;
+                } else {
+                    // Transition to nebulous hell work sim
+                    playMusic('hellmode');
+                    hellMode = true;
+                    hellModeStartTime = Date.now();
+                    level = 1;
+                    state = 'levelCard';
+                    cardTimer = 0;
+                    timer = 180;
+                    if(typeof level5 !== 'undefined' && level5.mulletPro) {
+                        level5.mulletPro.deathDone = false;
+                        level5.mulletPro.deathStartTime = 0;
+                    }
+                    initLevel(1);
+                    sds.coffinConsumeTimer = 0;
+                    return;
                 }
             }
 
-            // ACTION on throne (after coffin fully descended) — go straight to the
-            // hell mode level card, no intermediate "welcome to hell" overlay.
-            if(sds.throneActionAvailable && !sds.coffinDescending && (keys[' '] || keys['action']) && player.x > 530) {
+            // ACTION on throne (after coffin fully descended) — TAKE THE THRONE:
+            // the kill-devil ending. Plays the "YOUR OWN PERSONAL HELL" transitional
+            // title card, then drops the player into the safe-room apartment.
+            if(sds.throneActionAvailable && !sds.coffinDescending && sds.throneTransitionTimer === 0 &&
+               (keys[' '] || keys['action']) && player.x > 530) {
                 keys[' '] = false; keys['action'] = false;
-                playMusic('hellmode');
-                hellMode = true;
-                hellModeStartTime = Date.now();
-                level = 1;
-                state = 'levelCard';
-                cardTimer = 0;
-                timer = 180; // 3 minutes
-                if(typeof level5 !== 'undefined' && level5.mulletPro) {
-                    level5.mulletPro.deathDone = false;
-                    level5.mulletPro.deathStartTime = 0;
+                sds.throneTransitionTimer = 1;
+            }
+            // Throne transition card — plays for ~180 frames (3 sec), then teleport
+            if(sds.throneTransitionTimer > 0) {
+                sds.throneTransitionTimer++;
+                if(sds.throneTransitionTimer >= 180) {
+                    sds.room = 'safeRoom';
+                    sds.deathBySafeRoom = false; // this is the KILL-devil ending
+                    player.x = 350; player.y = floorY;
+                    player.facing = 'forward';
+                    sds.throneTransitionTimer = 0;
                 }
-                initLevel(1);
-                sds.hellCardShowing = false;
-                sds.hellCardTimer = 0;
                 return;
             }
 
@@ -27639,6 +27774,7 @@ function update() {
                                 hellCardShowing: false, hellCardTimer: 0,
                                 chairSitting: false, tvEndTimer: 0, tvEndStarted: false,
                                 deathBySafeRoom: false,
+                                throneTransitionTimer: 0, coffinConsumeTimer: 0,
                                 mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
                                 roach: {x: 80, y: 295, antennaPhase: 0}
                             });
