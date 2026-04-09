@@ -1115,6 +1115,9 @@ let selfDestructSeq = {
     chairSitting: false,
     tvEndTimer: 0,
     tvEndStarted: false,
+    tvSubtitleIndex: -1,       // -1 = not yet shown; 0..2 = subtitles; 3 = fade to black; 4 = end card
+    tvSubtitleShownAt: 0,      // Date.now() when current subtitle started (for fade-in)
+    tvFadeStartedAt: 0,        // Date.now() when fade-to-black started
     deathBySafeRoom: false,
     throneTransitionTimer: 0, // >0 while "YOUR OWN PERSONAL HELL" card plays before safe-room teleport
     coffinConsumeTimer: 0,    // >0 while player is being pulled into the coffin after a devil stab
@@ -2296,32 +2299,34 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
 
     if(sideView) {
         // === SIDE-VIEW POSE ===
-        // Helmet dome (narrower — we're seeing it from the side)
+        // Helmet dome — properly mirrored around bx. backX is behind, frontX in front of face.
+        const backX  = bx - 12 * dir;
+        const frontX = bx + 12 * dir;
         ctx.fillStyle = '#f0f0f0';
         ctx.beginPath();
-        ctx.moveTo(bx - 10, by - 50 - bob);
-        ctx.quadraticCurveTo(bx - 10, by - 66 - bob, bx + 2*dir, by - 66 - bob);
-        ctx.quadraticCurveTo(bx + 12*dir, by - 66 - bob, bx + 12*dir, by - 50 - bob);
+        ctx.moveTo(backX, by - 50 - bob);
+        ctx.quadraticCurveTo(backX, by - 66 - bob, bx, by - 66 - bob);
+        ctx.quadraticCurveTo(frontX, by - 66 - bob, frontX, by - 50 - bob);
         ctx.closePath();
         ctx.fill();
-        // Dome highlight on the front-facing side
+        // Dome highlight on the top-front side
         ctx.fillStyle = '#fafafa';
-        ctx.fillRect(bx + 4*dir - 2, by - 62 - bob, 6, 8);
+        ctx.fillRect(bx + 2 * dir, by - 62 - bob, 6 * dir, 8);
         // Brim — longer on the front
         ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(bx - 12, by - 52 - bob, 28, 3);
+        ctx.fillRect(bx - 14 * dir, by - 52 - bob, 28 * dir, 3);
         ctx.fillStyle = '#ccc';
-        ctx.fillRect(bx - 11, by - 49 - bob, 26, 1);
+        ctx.fillRect(bx - 13 * dir, by - 49 - bob, 26 * dir, 1);
 
         // Head — narrow profile
         ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx - 8, by - 50 - bob, 18, 22);
+        ctx.fillRect(bx - 10 * dir, by - 50 - bob, 20 * dir, 22);
         // Nose bump poking out the front
         ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx + 10*dir, by - 42 - bob, 2, 4);
+        ctx.fillRect(bx + 10 * dir, by - 42 - bob, 2 * dir, 4);
         // Single eye on the facing side
         ctx.fillStyle = '#000';
-        ctx.fillRect(bx + 3*dir, by - 44 - bob, 4, 4);
+        ctx.fillRect(bx + 3 * dir, by - 44 - bob, 4 * dir, 4);
         // Angry brow
         ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 2;
         ctx.beginPath();
@@ -2339,7 +2344,7 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
         ctx.fillRect(bx - 10, by - 28 - bob, 20, 36);
         // Shirt depth shading on the back side
         ctx.fillStyle = '#9a1a1a';
-        ctx.fillRect(bx - 10*dir, by - 28 - bob, 4, 36);
+        ctx.fillRect(bx - 10*dir, by - 28 - bob, 4 * dir, 36);
         // Tie (visible on front side of torso)
         ctx.fillStyle = '#111';
         ctx.beginPath();
@@ -2355,28 +2360,32 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
         const armSwing = walkCycle * 0.6;
         // Back arm (trails behind, partially hidden by torso)
         ctx.fillStyle = '#a01818';
-        ctx.fillRect(bx - 4*dir, by - 26 - bob - armSwing, 5, 18);
+        ctx.fillRect(bx - 6*dir, by - 26 - bob - armSwing, 5 * dir, 18);
         ctx.fillStyle = '#e8c090';
-        ctx.fillRect(bx - 4*dir, by - 8 - bob - armSwing, 5, 7);
+        ctx.fillRect(bx - 6*dir, by - 8 - bob - armSwing, 5 * dir, 7);
         // Front arm (leads swing — extended if hasGun)
         if(hasGun) {
-            // Arm extended forward with revolver
+            // Arm extended forward with revolver at shoulder height
             ctx.fillStyle = '#cc2222';
-            ctx.fillRect(bx + 4*dir, by - 14 - bob, 12*dir, 6);
+            ctx.fillRect(bx + 4*dir, by - 14 - bob, 12 * dir, 6);
             ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(bx + (4 + 12)*dir - (dir > 0 ? 0 : 4), by - 12 - bob, 4, 4);
-            // Revolver
+            ctx.fillRect(bx + 16*dir, by - 14 - bob, 4 * dir, 6);
+            // Revolver barrel extends forward from hand
             ctx.fillStyle = '#3a3a3a';
-            ctx.fillRect(bx + (16 + 0)*dir - (dir > 0 ? 0 : 14), by - 11 - bob, 14, 4);
+            ctx.fillRect(bx + 20*dir, by - 13 - bob, 14 * dir, 4);
+            // Cylinder behind barrel
             ctx.fillStyle = '#5a5a5a';
             ctx.beginPath();
-            ctx.arc(bx + (18)*dir - (dir > 0 ? 0 : 4), by - 8 - bob, 3, 0, Math.PI * 2);
+            ctx.arc(bx + 20*dir, by - 11 - bob, 3, 0, Math.PI * 2);
             ctx.fill();
+            // Grip beneath hand
+            ctx.fillStyle = '#222';
+            ctx.fillRect(bx + 16*dir, by - 8 - bob, 3 * dir, 5);
         } else {
             ctx.fillStyle = '#cc2222';
-            ctx.fillRect(bx + 4*dir, by - 26 - bob + armSwing, 5, 18);
+            ctx.fillRect(bx + 4*dir, by - 26 - bob + armSwing, 5 * dir, 18);
             ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(bx + 4*dir, by - 8 - bob + armSwing, 5, 7);
+            ctx.fillRect(bx + 4*dir, by - 8 - bob + armSwing, 5 * dir, 7);
         }
 
         // Legs — alternating stride
@@ -2394,7 +2403,7 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
         return;
     }
 
-    // === FRONT-FACING POSE (unchanged default) ===
+    // === FRONT-FACING POSE (default when paused without a target) ===
     // Helmet dome
     ctx.fillStyle = '#f0f0f0';
     ctx.beginPath();
@@ -2443,16 +2452,40 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
     ctx.lineTo(bx - 3, by - 6 - bob); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#222'; ctx.fillRect(bx - 3, by - 28 - bob, 6, 4);
 
-    // Arms
+    // Arms — if armed, right arm is held across the chest with revolver at ready;
+    // otherwise both arms hang at the sides and gently swing.
     const armSwing = walkCycle * 0.6;
+    // Left arm — always at side
     ctx.fillStyle = '#cc2222';
     ctx.fillRect(bx - 20, by - 26 - bob + armSwing, 6, 18);
     ctx.fillStyle = '#f5d5a8';
     ctx.fillRect(bx - 20, by - 8 - bob + armSwing, 6, 8);
-    ctx.fillStyle = '#cc2222';
-    ctx.fillRect(bx + 14, by - 26 - bob - armSwing, 6, 18);
-    ctx.fillStyle = '#f5d5a8';
-    ctx.fillRect(bx + 14, by - 8 - bob - armSwing, 6, 8);
+    if(hasGun) {
+        // Right arm bent across body gripping revolver — muzzle pointed outward right
+        ctx.fillStyle = '#cc2222';
+        // Upper arm (shoulder down)
+        ctx.fillRect(bx + 14, by - 26 - bob, 6, 12);
+        // Forearm extended right (across chest toward muzzle direction)
+        ctx.fillRect(bx + 14, by - 18 - bob, 14, 6);
+        // Hand
+        ctx.fillStyle = '#f5d5a8';
+        ctx.fillRect(bx + 28, by - 18 - bob, 4, 6);
+        // Revolver — barrel pointing right, ready to fire
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(bx + 32, by - 17 - bob, 14, 4);
+        ctx.fillStyle = '#5a5a5a';
+        ctx.beginPath();
+        ctx.arc(bx + 32, by - 15 - bob, 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Grip beneath hand
+        ctx.fillStyle = '#222';
+        ctx.fillRect(bx + 28, by - 12 - bob, 3, 5);
+    } else {
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(bx + 14, by - 26 - bob - armSwing, 6, 18);
+        ctx.fillStyle = '#f5d5a8';
+        ctx.fillRect(bx + 14, by - 8 - bob - armSwing, 6, 8);
+    }
 
     // Dark pants
     ctx.fillStyle = '#2a2a2a';
@@ -2465,17 +2498,6 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
     ctx.fillStyle = '#444';
     ctx.fillRect(bx - 12, by + 26 - bob + legOffset, 4, 3);
     ctx.fillRect(bx + 8, by + 26 - bob - legOffset, 4, 3);
-
-    // Front-facing gun (held at side)
-    if(hasGun) {
-        const gunX = facing === 'left' ? bx - 28 : bx + 28;
-        const gunY = by - 10;
-        ctx.fillStyle = '#4a4a4a';
-        if(facing === 'left') { ctx.fillRect(gunX - 12, gunY, 14, 4); }
-        else { ctx.fillRect(gunX - 2, gunY, 14, 4); }
-        ctx.fillStyle = '#5a5a5a';
-        ctx.beginPath(); ctx.arc(facing === 'left' ? gunX - 2 : gunX, gunY + 2, 3, 0, Math.PI * 2); ctx.fill();
-    }
 }
 
 
@@ -4673,9 +4695,9 @@ function drawGhostGun(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
-    // Normalize up/down facing to the most recent horizontal facing so the
-    // shoulder/arm anchors stay consistent with the torso.
-    if(facing !== 'left' && facing !== 'right') {
+    // Only 'forward' (idle, no cardinal direction) falls back to last horizontal
+    // facing so the arm still anchors cleanly; up/down/left/right render directly.
+    if(facing !== 'left' && facing !== 'right' && facing !== 'up' && facing !== 'down') {
         facing = player.lastHorizFacing || 'right';
     }
     const skinColor = '#f5c89a';
@@ -4916,56 +4938,94 @@ function drawWrenchShatter(pieces) {
 function drawWrenchGun(x, y, facing) {
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 || level6.wrenchBolts.length > 0;
     if(!isActive) return;
-    // Wrench gun has no up/down sprite; fall back to the last horizontal
-    // facing so the arm stays anchored to the shoulder instead of clipping
-    // through the torso.
-    if(facing !== 'left' && facing !== 'right') {
+    // 'forward' (idle) falls back to last horizontal facing so the arm stays
+    // anchored; up/down/left/right all render their own clean pose.
+    if(facing !== 'left' && facing !== 'right' && facing !== 'up' && facing !== 'down') {
         facing = player.lastHorizFacing || 'right';
     }
     const skinColor = '#f5c89a';
     const sleeveColor = '#800020';
-    const dir = (facing === 'left') ? -1 : 1;
-    const shoulderX = x + dir * 9;
 
-    // Sleeve
+    if(facing === 'left' || facing === 'right') {
+        const dir = (facing === 'left') ? -1 : 1;
+        // Sleeve
+        ctx.fillStyle = sleeveColor;
+        if(facing === 'left') {
+            ctx.fillRect(x - 20, y - 4, 12, 7);
+            ctx.fillRect(x - 32, y - 6, 14, 6);
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(x - 33, y - 6, 7, 8);
+        } else {
+            ctx.fillRect(x + 8, y - 4, 12, 7);
+            ctx.fillRect(x + 18, y - 6, 14, 6);
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(x + 26, y - 6, 7, 8);
+        }
+        // Wrench (gun-barrel style, pointing in direction)
+        const wx = (facing === 'left') ? x - 34 : x + 28;
+        ctx.fillStyle = '#7a7a7a';
+        if(facing === 'left') {
+            ctx.fillRect(wx - 10, y - 8, 18, 5);
+            ctx.fillRect(wx - 10, y - 13, 8, 12);
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(wx - 9, y - 12, 3, 7);
+            ctx.fillRect(wx - 6, y - 12, 3, 7);
+        } else {
+            ctx.fillRect(wx - 8, y - 8, 18, 5);
+            ctx.fillRect(wx + 2, y - 13, 8, 12);
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(wx + 3, y - 12, 3, 7);
+            ctx.fillRect(wx + 6, y - 12, 3, 7);
+        }
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillRect(facing === 'left' ? wx - 9 : wx - 7, y - 6, 2, 4);
+        return;
+    }
+
+    if(facing === 'up') {
+        // Arm raised straight up, wrench barrel pointing upward
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(x + 5, y - 2, 6, 14);   // upper arm
+        ctx.fillRect(x + 5, y - 16, 6, 14);  // forearm
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x + 5, y - 22, 6, 7);   // hand
+        // Wrench head jaws pointing up
+        ctx.fillStyle = '#7a7a7a';
+        ctx.fillRect(x + 4, y - 38, 8, 16);  // barrel
+        ctx.fillRect(x + 1, y - 42, 14, 6);  // head
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(x + 2, y - 42, 4, 4);   // jaw gap L
+        ctx.fillRect(x + 10, y - 42, 3, 4);  // jaw gap R
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillRect(x + 7, y - 36, 2, 8);   // shine
+        return;
+    }
+
+    // Down
+    // Arm straight down, wrench barrel pointing downward
     ctx.fillStyle = sleeveColor;
-    if(facing === 'left') {
-        ctx.fillRect(x - 20, y - 4, 12, 7);
-        ctx.fillRect(x - 32, y - 6, 14, 6);
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 33, y - 6, 7, 8);
-    } else {
-        ctx.fillRect(x + 8, y - 4, 12, 7);
-        ctx.fillRect(x + 18, y - 6, 14, 6);
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x + 26, y - 6, 7, 8);
-    }
-    // Wrench (gun-barrel style, pointing in direction)
-    const wx = (facing === 'left') ? x - 34 : x + 28;
+    ctx.fillRect(x + 5, y, 6, 12);       // upper arm
+    ctx.fillRect(x + 5, y + 10, 6, 10);  // forearm
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(x + 5, y + 18, 6, 6);   // hand
+    // Wrench head jaws pointing down
     ctx.fillStyle = '#7a7a7a';
-    if(facing === 'left') {
-        ctx.fillRect(wx - 10, y - 8, 18, 5);
-        ctx.fillRect(wx - 10, y - 13, 8, 12);
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(wx - 9, y - 12, 3, 7);
-        ctx.fillRect(wx - 6, y - 12, 3, 7);
-    } else {
-        ctx.fillRect(wx - 8, y - 8, 18, 5);
-        ctx.fillRect(wx + 2, y - 13, 8, 12);
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(wx + 3, y - 12, 3, 7);
-        ctx.fillRect(wx + 6, y - 12, 3, 7);
-    }
+    ctx.fillRect(x + 4, y + 24, 8, 14);  // barrel
+    ctx.fillRect(x + 1, y + 36, 14, 6);  // head
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(x + 2, y + 38, 4, 4);   // jaw gap L
+    ctx.fillRect(x + 10, y + 38, 3, 4);  // jaw gap R
     ctx.fillStyle = '#aaaaaa';
-    ctx.fillRect(facing === 'left' ? wx - 9 : wx - 7, y - 6, 2, 4);
+    ctx.fillRect(x + 7, y + 26, 2, 8);   // shine
 }
 
 function drawRevolver(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
-    // Normalize up/down facing to horizontal so the arm anchors cleanly.
-    if(facing !== 'left' && facing !== 'right') {
+    // Only 'forward' (idle, no cardinal direction) falls back to last horizontal
+    // facing so the arm still anchors cleanly; up/down/left/right render directly.
+    if(facing !== 'left' && facing !== 'right' && facing !== 'up' && facing !== 'down') {
         facing = player.lastHorizFacing || 'right';
     }
     const s = 2;
@@ -6754,6 +6814,10 @@ function drawLevel5PipeRoom() {
         // Hand wheel turn-valve on horizontal pipe section (right of elbow)
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
+        // Advance climb/fix state BEFORE drawing so npc.y reflects the
+        // current animation frame (PM: climbing_up → fixing → climbing_down → happy).
+        updateNPCPipeAnimation(npc);
+
         // Color-coordinated step-ladder (drawn behind NPC)
         // Skip NPC sprite while its acid-burst melt animation is playing
         const isMeltingL5 = acidBursts.some(ab => ab.npc === npc);
@@ -6981,6 +7045,10 @@ function drawLevel6EmployeePipeRoom() {
         }
         drawPipeSection(npc, pipeY, gasketY, l6epStressPct);
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
+
+        // Advance climb/fix state BEFORE drawing so npc.y reflects the
+        // current animation frame (PM: climbing_up → fixing → climbing_down → happy).
+        updateNPCPipeAnimation(npc);
 
         // RED PM is now a clone in the cloning room — pipe stays, NPC absent (unless factory reset)
         // After factory reset, Red PM returns to work; skip drawing if Red PM is armed & following
@@ -20723,23 +20791,29 @@ function drawSelfDestructCave2() {
         // Arms
         // During the stabbing lockout the side is fixed to whichever way the devil faced at contact
         const pfSide = isStabbing ? (sds.stabFaceRight ? 1 : -1) : (dx < player.x ? 1 : -1);
+        const pfAimed = (ds === 'attacking' || isStabbing);
         ctx.fillStyle = '#cc2200';
-        // Arm toward player (pitchfork arm) — normal rocking during pursuit, huge plunge during stab
-        let pfAnim = 0;
+        // Plunge offset along the horizontal aim axis (forward toward player).
+        // attacking: small lean forward with the wind-up, stabbing: hard thrust.
+        let plunge = 0;
         if(ds === 'attacking') {
-            pfAnim = Math.min(sds.stabAnimTimer/20, 1) * 18 * pfSide;
+            plunge = Math.min(sds.stabAnimTimer/20, 1) * 10;
         } else if(isStabbing) {
-            // Anticipation pull-back (0..8) then forward plunge (8..22), then linger (22..60)
             const stT = sds.stabAnimTimer;
-            let plunge = 0;
-            if(stT < 8)       plunge = -6 * (stT / 8);                 // wind up
-            else if(stT < 22) plunge = -6 + ((stT - 8) / 14) * 56;     // drive forward
+            if(stT < 8)       plunge = -8 * (stT / 8);                 // wind up
+            else if(stT < 22) plunge = -8 + ((stT - 8) / 14) * 58;     // drive forward
             else              plunge = 50;                             // held in the player
-            pfAnim = plunge * pfSide;
         }
-        ctx.fillRect(dx + pfSide*8*s, torsoY+2, 2*s, 12*s);
-        // Other arm
-        ctx.fillRect(dx - pfSide*10*s, torsoY+2, 2*s, 10*s);
+        if(pfAimed) {
+            // Arm extended horizontally toward the player at torso height
+            ctx.fillRect(dx + pfSide*4*s, torsoY+4, pfSide*10*s, 2*s);
+            // Back arm tucked at side
+            ctx.fillRect(dx - pfSide*8*s, torsoY+2, 2*s, 10*s);
+        } else {
+            // Both arms hanging at sides
+            ctx.fillRect(dx + pfSide*8*s, torsoY+2, 2*s, 12*s);
+            ctx.fillRect(dx - pfSide*10*s, torsoY+2, 2*s, 10*s);
+        }
 
         // Head
         const headY = torsoY - 12*s;
@@ -20773,26 +20847,59 @@ function drawSelfDestructCave2() {
         ctx.fillStyle = '#6b0000';
         ctx.beginPath(); ctx.moveTo(dx+14*s,dy-2*s); ctx.lineTo(dx+18*s,dy-2*s); ctx.lineTo(dx+16*s,dy+2*s); ctx.closePath(); ctx.fill();
 
-        // Pitchfork — in arm on player side
-        const pfX = dx + pfSide*10*s + pfAnim;
-        const pfTopY = headY - 4*s;
-        ctx.fillStyle = '#8a6000';
-        ctx.fillRect(pfX-2, pfTopY, 4, 52); // handle
-        ctx.fillStyle = '#c8a010';
-        ctx.fillRect(pfX-2, pfTopY, 4, 44); // handle (gold tipped)
-        // Tines
-        const tineY = pfTopY - 2;
-        ctx.fillRect(pfX-10, tineY, 3, 10); ctx.fillRect(pfX-2, tineY, 3, 10); ctx.fillRect(pfX+6, tineY, 3, 10);
-        // Tine tips
-        ctx.fillStyle = '#e8c020';
-        [[pfX-10, tineY], [pfX-2, tineY], [pfX+6, tineY]].forEach(([tx2,ty2]) => {
-            ctx.beginPath(); ctx.moveTo(tx2, ty2); ctx.lineTo(tx2+3, ty2); ctx.lineTo(tx2+1.5, ty2-6); ctx.closePath(); ctx.fill();
-        });
-        // Stab effect
-        if(ds === 'attacking' && sds.stabAnimTimer > 20) {
-            const stabAlpha = Math.min(1, (sds.stabAnimTimer-20)/15);
-            ctx.fillStyle = `rgba(255,220,80,${stabAlpha*0.7})`;
-            ctx.beginPath(); ctx.arc(pfX + pfSide*20, pfTopY-4, 16*stabAlpha, 0, Math.PI*2); ctx.fill();
+        // Pitchfork — when attacking or stabbing, held horizontal pointing at
+        // the player; otherwise, planted vertically in the hand beside the body.
+        if(pfAimed) {
+            // Hand position (end of extended arm) + horizontal plunge toward player
+            const handX = dx + pfSide*14*s + pfSide*plunge;
+            const handY = torsoY + 5;
+            // Handle extends BEHIND the hand away from the player direction.
+            // Use negative width so the shaft is always anchored at handX,
+            // regardless of pfSide (avoids a detached gap on the left side).
+            ctx.fillStyle = '#8a6000';
+            ctx.fillRect(handX, handY - 2, -pfSide*28, 4);          // wooden shaft
+            ctx.fillStyle = '#c8a010';
+            ctx.fillRect(handX - pfSide*2, handY - 2, -pfSide*24, 4); // gold inlay
+            // Tines at the FAR end (player side)
+            const tineBaseX = handX + pfSide*2;
+            ctx.fillStyle = '#c8a010';
+            ctx.fillRect(tineBaseX, handY - 8, pfSide*3, 3);  // upper tine base
+            ctx.fillRect(tineBaseX, handY - 1, pfSide*3, 3);  // middle tine base
+            ctx.fillRect(tineBaseX, handY + 6, pfSide*3, 3);  // lower tine base
+            // Tine points (triangles aimed at the player)
+            ctx.fillStyle = '#e8c020';
+            const tipLen = 10;
+            [-8, -1, 6].forEach(oy => {
+                ctx.beginPath();
+                ctx.moveTo(tineBaseX + pfSide*3, handY + oy);
+                ctx.lineTo(tineBaseX + pfSide*3, handY + oy + 3);
+                ctx.lineTo(tineBaseX + pfSide*(3 + tipLen), handY + oy + 1.5);
+                ctx.closePath();
+                ctx.fill();
+            });
+            // Glint at the tip when mid-stab
+            if(ds === 'attacking' && sds.stabAnimTimer > 20) {
+                const stabAlpha = Math.min(1, (sds.stabAnimTimer-20)/15);
+                ctx.fillStyle = `rgba(255,220,80,${stabAlpha*0.7})`;
+                ctx.beginPath();
+                ctx.arc(tineBaseX + pfSide*(3 + tipLen + 2), handY + 1, 8*stabAlpha, 0, Math.PI*2);
+                ctx.fill();
+            }
+        } else {
+            const pfX = dx + pfSide*10*s;
+            const pfTopY = headY - 4*s;
+            ctx.fillStyle = '#8a6000';
+            ctx.fillRect(pfX-2, pfTopY, 4, 52); // handle
+            ctx.fillStyle = '#c8a010';
+            ctx.fillRect(pfX-2, pfTopY, 4, 44); // handle (gold tipped)
+            // Tines
+            const tineY = pfTopY - 2;
+            ctx.fillRect(pfX-10, tineY, 3, 10); ctx.fillRect(pfX-2, tineY, 3, 10); ctx.fillRect(pfX+6, tineY, 3, 10);
+            // Tine tips
+            ctx.fillStyle = '#e8c020';
+            [[pfX-10, tineY], [pfX-2, tineY], [pfX+6, tineY]].forEach(([tx2,ty2]) => {
+                ctx.beginPath(); ctx.moveTo(tx2, ty2); ctx.lineTo(tx2+3, ty2); ctx.lineTo(tx2+1.5, ty2-6); ctx.closePath(); ctx.fill();
+            });
         }
     }
 
@@ -21379,100 +21486,224 @@ function drawSelfDestructSafeRoom() {
     // Screen
     const scrX = tvX+8, scrY = tvY+8, scrW = tvW-16, scrH = tvH-16;
 
+    // ── B&W CCTV CEMETERY SCENE ─────────────────────────────────────────────
+    // A French-art-film style static shot: lone headstone marked "XXX" in an
+    // open field, the occasional leaf drifting across on a stream of wind. The
+    // scene plays continuously — both idle (before the player sits) and active
+    // (after they sit, with subtitles layered on). When the player has
+    // advanced past the last subtitle, the TV fades to black and the end title
+    // card appears.
+    const drawCemeteryScene = () => {
+        // Grayscale sky gradient (overcast, slightly graded)
+        const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY + scrH * 0.7);
+        sky.addColorStop(0, '#6a6a6a');
+        sky.addColorStop(1, '#9a9a9a');
+        ctx.fillStyle = sky;
+        ctx.fillRect(scrX, scrY, scrW, scrH * 0.7);
+        // Distant low hill line
+        ctx.fillStyle = '#545454';
+        ctx.beginPath();
+        ctx.moveTo(scrX, scrY + scrH * 0.7);
+        for(let i = 0; i <= 20; i++) {
+            const hx = scrX + (scrW * i / 20);
+            const hy = scrY + scrH * 0.7 - 6 - Math.sin(i * 0.8) * 4 - Math.sin(i * 0.33) * 3;
+            ctx.lineTo(hx, hy);
+        }
+        ctx.lineTo(scrX + scrW, scrY + scrH * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        // Field (grass) — grayscale
+        const fieldGrd = ctx.createLinearGradient(scrX, scrY + scrH * 0.7, scrX, scrY + scrH);
+        fieldGrd.addColorStop(0, '#4a4a4a');
+        fieldGrd.addColorStop(1, '#2a2a2a');
+        ctx.fillStyle = fieldGrd;
+        ctx.fillRect(scrX, scrY + scrH * 0.7, scrW, scrH * 0.3);
+        // Grass tufts — static stippling
+        ctx.fillStyle = '#3a3a3a';
+        for(let g = 0; g < 40; g++) {
+            const gx = scrX + ((g * 53) % scrW);
+            const gy = scrY + scrH * 0.75 + ((g * 31) % (scrH * 0.24));
+            ctx.fillRect(gx, gy, 2, 2);
+        }
+        ctx.fillStyle = '#585858';
+        for(let g = 0; g < 22; g++) {
+            const gx = scrX + ((g * 83 + 11) % scrW);
+            const gy = scrY + scrH * 0.8 + ((g * 47) % (scrH * 0.18));
+            ctx.fillRect(gx, gy, 1, 1);
+        }
+
+        // Headstone — centered, planted in the field
+        const hsCx = scrX + scrW / 2;
+        const hsBaseY = scrY + scrH * 0.88;
+        const hsW = 58, hsH = 72;
+        // Shadow cast to the left
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(hsCx - 18, hsBaseY + 2, 42, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Stone body — slightly tapered rounded-top slab
+        ctx.fillStyle = '#b0b0b0';
+        ctx.beginPath();
+        ctx.moveTo(hsCx - hsW/2, hsBaseY);
+        ctx.lineTo(hsCx - hsW/2, hsBaseY - hsH + 18);
+        ctx.quadraticCurveTo(hsCx - hsW/2, hsBaseY - hsH, hsCx, hsBaseY - hsH);
+        ctx.quadraticCurveTo(hsCx + hsW/2, hsBaseY - hsH, hsCx + hsW/2, hsBaseY - hsH + 18);
+        ctx.lineTo(hsCx + hsW/2, hsBaseY);
+        ctx.closePath();
+        ctx.fill();
+        // Stone shading (left rim brighter, right darker)
+        ctx.fillStyle = '#c8c8c8';
+        ctx.fillRect(hsCx - hsW/2 + 2, hsBaseY - hsH + 22, 3, hsH - 24);
+        ctx.fillStyle = '#8a8a8a';
+        ctx.fillRect(hsCx + hsW/2 - 4, hsBaseY - hsH + 22, 3, hsH - 24);
+        // Top arch shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(hsCx - hsW/2 + 4, hsBaseY - hsH + 20);
+        ctx.quadraticCurveTo(hsCx, hsBaseY - hsH + 4, hsCx + hsW/2 - 4, hsBaseY - hsH + 20);
+        ctx.lineTo(hsCx + hsW/2 - 4, hsBaseY - hsH + 22);
+        ctx.quadraticCurveTo(hsCx, hsBaseY - hsH + 8, hsCx - hsW/2 + 4, hsBaseY - hsH + 22);
+        ctx.closePath();
+        ctx.fill();
+        // Small engraved cross near the top
+        ctx.fillStyle = '#6a6a6a';
+        ctx.fillRect(hsCx - 1, hsBaseY - hsH + 14, 2, 10);
+        ctx.fillRect(hsCx - 4, hsBaseY - hsH + 17, 8, 2);
+        // "XXX" carved in the center face
+        ctx.fillStyle = '#2a2a2a';
+        ctx.font = 'bold 26px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('XXX', hsCx, hsBaseY - hsH/2 + 6);
+        ctx.textBaseline = 'alphabetic';
+        // Slight mound of dirt at the base
+        ctx.fillStyle = '#1e1e1e';
+        ctx.beginPath();
+        ctx.ellipse(hsCx, hsBaseY, hsW/2 + 4, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Drifting leaf — crosses the frame on a wind stream roughly every
+        // 6 seconds. Uses time-based offset so the leaf position is consistent
+        // with or without sds.tvEndTimer driving it.
+        const leafT = (Date.now() / 6000) % 1;
+        if(leafT < 0.85) {
+            const lx = scrX - 20 + leafT * (scrW + 40) / 0.85;
+            const baseY = scrY + scrH * 0.5;
+            const ly = baseY + Math.sin(leafT * 9) * 10 + Math.sin(leafT * 21) * 3;
+            const lr = leafT * 8;
+            ctx.save();
+            ctx.translate(lx, ly);
+            ctx.rotate(lr);
+            ctx.fillStyle = '#d0d0d0';
+            ctx.beginPath();
+            ctx.moveTo(0, -4);
+            ctx.quadraticCurveTo(5, -1, 4, 4);
+            ctx.quadraticCurveTo(0, 2, -4, 4);
+            ctx.quadraticCurveTo(-5, -1, 0, -4);
+            ctx.closePath();
+            ctx.fill();
+            // Leaf vein
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(0, -4); ctx.lineTo(0, 4);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // CCTV overlay — faint horizontal scan lines and a timestamp
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        for(let sl = 0; sl < scrH; sl += 3) {
+            ctx.fillRect(scrX, scrY + sl, scrW, 1);
+        }
+        // Corner timestamp
+        ctx.fillStyle = '#c0c0c0';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'left';
+        const tNow = new Date();
+        const hh = String(tNow.getHours()).padStart(2, '0');
+        const mm = String(tNow.getMinutes()).padStart(2, '0');
+        const ssv = String(tNow.getSeconds()).padStart(2, '0');
+        ctx.fillText('CAM 07  ' + hh + ':' + mm + ':' + ssv, scrX + 10, scrY + 18);
+        // REC dot (blinks once a second)
+        if(Math.floor(Date.now() / 600) % 2 === 0) {
+            ctx.fillStyle = '#c0c0c0';
+            ctx.beginPath();
+            ctx.arc(scrX + scrW - 20, scrY + 16, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#888';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText('REC', scrX + scrW - 48, scrY + 19);
+        }
+    };
+
+    drawCemeteryScene();
+
     if(sds.tvEndStarted) {
-        const elapsed = sds.tvEndTimer;
-        // Warm sunrise scene
-        const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
-        sky.addColorStop(0,'#0a1a2e'); sky.addColorStop(0.5,'#1a3a5a'); sky.addColorStop(0.8,'#3a6a8a'); sky.addColorStop(1,'#8aaa80');
-        ctx.fillStyle = sky; ctx.fillRect(scrX, scrY, scrW, scrH);
-        // Sun rising
-        if(elapsed > 500) {
-            const sunRise = Math.min(1, (elapsed-500)/2000);
-            const sunY = scrY+scrH - sunRise*scrH*0.55;
-            const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, 60*sunRise);
-            sunGrd.addColorStop(0,`rgba(255,230,100,${sunRise})`);
-            sunGrd.addColorStop(0.3,`rgba(255,160,40,${0.7*sunRise})`);
-            sunGrd.addColorStop(1,'rgba(255,80,0,0)');
-            ctx.fillStyle = sunGrd; ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, 60*sunRise, 0, Math.PI*2); ctx.fill();
-        }
-        // Horizon glow
-        const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
-        hzGrd.addColorStop(0,'rgba(255,180,50,0)'); hzGrd.addColorStop(1,`rgba(255,140,30,${Math.min(0.5, elapsed/3000)})`);
-        ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
-        // Text
-        if(elapsed > 2500) {
-            const alpha = Math.min(1, (elapsed-2500)/1000);
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
-            ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
-            ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
-            ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
-            ctx.globalAlpha = 1;
-        }
-        if(elapsed > 6000) { state = 'theend'; menuChoice = 0; }
+        // Subtitles layered on the cemetery scene, then fade-to-black, then end card.
+        const subtitles = [
+            'Once a triple threat — liar, thief, and cheat — here you only lie.',
+            'A bastard in vein, in death you are finally selfless.',
+            'Enjoy your own private hell.'
+        ];
 
-        // ── DIM-ROOM GLOW — the active scene lights up the area around the TV
-        const glowA = Math.min(0.55, elapsed / 2500);
+        if(sds.tvFadeStartedAt === 0 && sds.tvSubtitleIndex >= 0 && sds.tvSubtitleIndex < subtitles.length) {
+            // Draw current subtitle with fade-in
+            const sinceShown = Date.now() - sds.tvSubtitleShownAt;
+            const subAlpha = Math.min(1, sinceShown / 600);
+            const subText = subtitles[sds.tvSubtitleIndex];
+            const subY = scrY + scrH - 22;
+            // Soft backing bar
+            ctx.fillStyle = `rgba(0,0,0,${0.55 * subAlpha})`;
+            ctx.fillRect(scrX + 10, subY - 18, scrW - 20, 30);
+            ctx.globalAlpha = subAlpha;
+            ctx.fillStyle = '#f0f0f0';
+            ctx.font = 'italic bold 16px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(subText, scrX + scrW/2, subY);
+            ctx.globalAlpha = 1;
+            // Small "press action to continue" hint after subtitle has settled
+            if(sinceShown > 1200) {
+                const hintFl = (Math.sin(Date.now() / 300) + 1) / 2;
+                ctx.globalAlpha = 0.3 + 0.3 * hintFl;
+                ctx.fillStyle = '#a0a0a0';
+                ctx.font = '10px monospace';
+                ctx.fillText('[ ACTION ]', scrX + scrW/2, subY + 16);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // Fade TV to black after last subtitle dismissed
+        if(sds.tvFadeStartedAt > 0) {
+            const fadeElapsed = Date.now() - sds.tvFadeStartedAt;
+            const fadeAlpha = Math.min(1, fadeElapsed / 1500);
+            ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+            ctx.fillRect(scrX, scrY, scrW, scrH);
+            // End title card after full black
+            if(fadeElapsed > 1800) {
+                const cardAlpha = Math.min(1, (fadeElapsed - 1800) / 900);
+                ctx.globalAlpha = cardAlpha;
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 36px serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('THE END', scrX + scrW/2, scrY + scrH/2 + 8);
+                ctx.font = '18px serif';
+                ctx.fillStyle = '#e0e8ff';
+                ctx.fillText('Mullet Pro', scrX + scrW/2, scrY + scrH/2 + 36);
+                ctx.globalAlpha = 1;
+            }
+            if(fadeElapsed > 4500) { state = 'theend'; menuChoice = 0; }
+        }
+    }
+
+    // ── DIM-ROOM GLOW — the TV lights up the area around itself
+    {
         const glowGrd = ctx.createRadialGradient(
             tvX + tvW/2, tvY + tvH/2, 20,
             tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.9
         );
-        glowGrd.addColorStop(0, `rgba(255,190,120,${glowA * 0.45})`);
-        glowGrd.addColorStop(0.5, `rgba(120,90,180,${glowA * 0.25})`);
-        glowGrd.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = glowGrd;
-        ctx.fillRect(tvX - 120, tvY - 30, tvW + 240, tvH + 160);
-        ctx.restore();
-    } else {
-        // TV idle — literal replication of the end title card animation, on
-        // loop. Uses the exact same render code as the active `tvEndStarted`
-        // branch above; only the timing source differs (Date.now() modulo).
-        // A 7-second window lets the sunrise, horizon glow and "THE END /
-        // Mullet Pro" text play through, then repeats.
-        const LOOP_MS = 7000;
-        const elapsed = Date.now() % LOOP_MS;
-
-        // Warm sunrise scene — identical gradient to the active end card
-        const sky = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH);
-        sky.addColorStop(0,'#0a1a2e'); sky.addColorStop(0.5,'#1a3a5a'); sky.addColorStop(0.8,'#3a6a8a'); sky.addColorStop(1,'#8aaa80');
-        ctx.fillStyle = sky; ctx.fillRect(scrX, scrY, scrW, scrH);
-        // Sun rising
-        if(elapsed > 500) {
-            const sunRise = Math.min(1, (elapsed-500)/2000);
-            const sunY = scrY+scrH - sunRise*scrH*0.55;
-            const sunGrd = ctx.createRadialGradient(scrX+scrW/2, sunY, 0, scrX+scrW/2, sunY, 60*sunRise);
-            sunGrd.addColorStop(0,`rgba(255,230,100,${sunRise})`);
-            sunGrd.addColorStop(0.3,`rgba(255,160,40,${0.7*sunRise})`);
-            sunGrd.addColorStop(1,'rgba(255,80,0,0)');
-            ctx.fillStyle = sunGrd; ctx.beginPath(); ctx.arc(scrX+scrW/2, sunY, 60*sunRise, 0, Math.PI*2); ctx.fill();
-        }
-        // Horizon glow
-        const hzGrd = ctx.createLinearGradient(scrX, scrY+scrH*0.7, scrX, scrY+scrH);
-        hzGrd.addColorStop(0,'rgba(255,180,50,0)'); hzGrd.addColorStop(1,`rgba(255,140,30,${Math.min(0.5, elapsed/3000)})`);
-        ctx.fillStyle = hzGrd; ctx.fillRect(scrX, scrY+scrH*0.7, scrW, scrH*0.3);
-        // Text
-        if(elapsed > 2500) {
-            const alpha = Math.min(1, (elapsed-2500)/1000);
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px serif'; ctx.textAlign = 'center';
-            ctx.fillText('THE END', scrX+scrW/2, scrY+scrH/2+8);
-            ctx.font = '18px serif'; ctx.fillStyle = '#e0e8ff';
-            ctx.fillText('Mullet Pro', scrX+scrW/2, scrY+scrH/2+36);
-            ctx.globalAlpha = 1;
-        }
-        // NOTE: no `state = 'theend'` transition in the idle path — the TV
-        // just keeps looping until the player sits in the chair.
-
-        // ── DIM-ROOM GLOW — identical to the active scene
-        const glowA = Math.min(0.55, elapsed / 2500);
-        const glowGrd = ctx.createRadialGradient(
-            tvX + tvW/2, tvY + tvH/2, 20,
-            tvX + tvW/2, tvY + tvH/2, Math.max(tvW, tvH) * 0.9
-        );
-        glowGrd.addColorStop(0, `rgba(255,190,120,${glowA * 0.45})`);
-        glowGrd.addColorStop(0.5, `rgba(120,90,180,${glowA * 0.25})`);
+        glowGrd.addColorStop(0, 'rgba(200,200,220,0.18)');
+        glowGrd.addColorStop(0.5, 'rgba(120,120,150,0.10)');
         glowGrd.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
@@ -24778,17 +25009,32 @@ function update() {
                 player.x = Math.max(10, Math.min(680, player.x));
                 player.y = floorY;
                 if(player.x !== prevX) player.lastMove = Date.now();
-                // Sit in chair
+                // Sit in chair — shows the first subtitle. Subsequent action
+                // presses advance through the subtitle sequence.
                 if((keys[' '] || keys['action']) && Math.abs(player.x - 350) < 55) {
                     sds.chairSitting = true;
                     sds.tvEndStarted = true;
                     sds.tvEndTimer = 0;
+                    sds.tvSubtitleIndex = 0;
+                    sds.tvSubtitleShownAt = Date.now();
                     SFX.play('pickup');
                     keys[' '] = false; keys['action'] = false;
                 }
             } else {
-                // Increment TV timer
+                // Increment TV timer (used for cemetery ambient motion)
                 sds.tvEndTimer += 1000/60;
+                // Action advances subtitles through the fade → end card sequence
+                if((keys[' '] || keys['action']) && sds.tvFadeStartedAt === 0) {
+                    keys[' '] = false; keys['action'] = false;
+                    if(sds.tvSubtitleIndex < 2) {
+                        sds.tvSubtitleIndex++;
+                        sds.tvSubtitleShownAt = Date.now();
+                        SFX.play('pickup');
+                    } else {
+                        // Last subtitle dismissed — begin fade to black
+                        sds.tvFadeStartedAt = Date.now();
+                    }
+                }
             }
             // Mouse AI — wanders from right entrance toward kitchen, then explores
             const m = sds.mouse;
@@ -27684,6 +27930,9 @@ function update() {
                         keys[' '] = false;
                         keys['action'] = false;
 
+                        // Keypad tap feedback on every button press
+                        SFX.play('keypadTone');
+
                         if(level6.selectedButton === 4) {
                             // ESC button — close safe
                             level6.safeUI = false;
@@ -27758,6 +28007,7 @@ function update() {
                                 stabAnimTimer: 0, throneActionAvailable: false,
                                 hellCardShowing: false, hellCardTimer: 0,
                                 chairSitting: false, tvEndTimer: 0, tvEndStarted: false,
+                                tvSubtitleIndex: -1, tvSubtitleShownAt: 0, tvFadeStartedAt: 0,
                                 deathBySafeRoom: false,
                                 throneTransitionTimer: 0, coffinConsumeTimer: 0,
                                 mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
@@ -27920,23 +28170,45 @@ if (keys[' '] || keys['action']) {
     }
     if (level6.hasRevolver && level6.revolverAmmo > 0 && !level6.pistolHolstered) {
         let vx = 0, vy = 0;
+        let facingUsed = player.facing;
         if (player.facing === 'left') vx = -12;
         else if (player.facing === 'right') vx = 12;
         else if (player.facing === 'up') vy = -12;
         else if (player.facing === 'down') vy = 12;
-
-        if (vx !== 0 || vy !== 0) {
-            bullets.push({
-                x: player.x + (vx > 0 ? 44 : vx < 0 ? -44 : 0),
-                y: vy !== 0 ? player.y - 25 : player.y - 10,
-                vx: vx,
-                vy: vy,
-                fromCEO: false
-            });
-            level6.revolverAmmo--;
-            muzzleFlashes.push({ x: player.x + (vx > 0 ? 44 : vx < 0 ? -44 : 0), y: vy !== 0 ? player.y - 25 + (vy > 0 ? 12 : -12) : player.y - 10, life: 6, facing: vx > 0 ? 'right' : vx < 0 ? 'left' : player.facing });
-            player.shootTimer = 20;
+        else {
+            // No cardinal facing — fall back to last horizontal facing (same
+            // default convention used by drawRevolver when idle).
+            facingUsed = player.lastHorizFacing || 'right';
+            vx = facingUsed === 'left' ? -12 : 12;
         }
+
+        // Barrel-tip origin for each direction (matches drawRevolver sprite).
+        let bulletX, bulletY;
+        if (vx !== 0) {
+            bulletX = player.x + (vx > 0 ? 44 : -44);
+            bulletY = player.y - 10;
+        } else if (vy < 0) {       // up
+            bulletX = player.x + 8;
+            bulletY = player.y - 46;
+        } else {                   // down
+            bulletX = player.x + 8;
+            bulletY = player.y + 30;
+        }
+        bullets.push({
+            x: bulletX,
+            y: bulletY,
+            vx: vx,
+            vy: vy,
+            fromCEO: false
+        });
+        level6.revolverAmmo--;
+        muzzleFlashes.push({
+            x: bulletX,
+            y: bulletY,
+            life: 6,
+            facing: vx > 0 ? 'right' : vx < 0 ? 'left' : (vy < 0 ? 'up' : 'down')
+        });
+        player.shootTimer = 20;
         return;
     }
 
@@ -27949,9 +28221,21 @@ if (keys[' '] || keys['action']) {
             else if(player.facing === 'right') bvx = 9;
             else if(player.facing === 'up')   bvy = -9;
             else if(player.facing === 'down') bvy = 9;
-            else bvx = player.x < 350 ? 9 : -9;
+            else bvx = (player.lastHorizFacing === 'left') ? -9 : 9;
+            // Barrel-tip origin matching drawWrenchGun
+            let bx, by;
+            if(bvx !== 0) {
+                bx = player.x + (bvx > 0 ? 38 : -44);
+                by = player.y - 7;
+            } else if(bvy < 0) {
+                bx = player.x + 8;
+                by = player.y - 44;
+            } else {
+                bx = player.x + 8;
+                by = player.y + 40;
+            }
             level6.wrenchBolts.push({
-                x: player.x + (bvx > 0 ? 38 : bvx < 0 ? -44 : 0), y: player.y - 7,
+                x: bx, y: by,
                 originX: player.x, originY: player.y,
                 vx: bvx, vy: bvy,
                 going: true,
@@ -28586,7 +28870,8 @@ if (keys[' '] || keys['action']) {
             if (level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
                 const cb = level6.cloningBoss;
                 if (cb.paused) {
-                    cb.facing = cb.x > 360 ? 'left' : cb.x < 340 ? 'right' : 'left';
+                    // Unarmed: default to front-facing while standing still (examining unit)
+                    cb.facing = 'forward';
                     cb.pauseTimer--;
                     if (cb.pauseTimer <= 0) {
                         cb.paused = false;
@@ -28607,8 +28892,12 @@ if (keys[' '] || keys['action']) {
             if (level6.room === 'nuclearBridge' && level6.bridgeCloningBoss && level6.bridgeCloningBoss.alive) {
                 const bcb = level6.bridgeCloningBoss;
                 if (bcb.paused) {
-                    // Face toward player during pause (menacing)
-                    bcb.facing = player.x < bcb.x ? 'left' : 'right';
+                    // Armed & dangerous: always turn toward the player during pause
+                    // so the revolver is pointed ready-to-fire. If player is directly
+                    // above/below, pick the side the player last came from.
+                    const dx = player.x - bcb.x;
+                    bcb.facing = Math.abs(dx) < 1 ? (bcb.walkDir > 0 ? 'right' : 'left')
+                                                  : (dx < 0 ? 'left' : 'right');
                     bcb.pauseTimer--;
                     if (bcb.pauseTimer <= 0) {
                         bcb.paused = false;
@@ -28650,7 +28939,15 @@ if (keys[' '] || keys['action']) {
             if (level6.room === 'employeeHallway' && level6.hallwayCloningBoss && level6.hallwayCloningBoss.alive) {
                 const hallCB = level6.hallwayCloningBoss;
                 if (hallCB.paused) {
-                    hallCB.facing = hallCB.x > 360 ? 'left' : hallCB.x < 340 ? 'right' : 'left';
+                    if(level6.hasDetectiveHat) {
+                        // Armed: turn toward the player, ready-to-fire sideways pose
+                        const dx = player.x - hallCB.x;
+                        hallCB.facing = Math.abs(dx) < 1 ? (hallCB.walkDir > 0 ? 'right' : 'left')
+                                                         : (dx < 0 ? 'left' : 'right');
+                    } else {
+                        // Unarmed: default to front-facing while paused
+                        hallCB.facing = 'forward';
+                    }
                     hallCB.pauseTimer--;
                     if (hallCB.pauseTimer <= 0) {
                         hallCB.paused = false;
@@ -28685,24 +28982,31 @@ if (keys[' '] || keys['action']) {
 
             // === AUTO-WRENCH — fire and boomerang update (all rooms) ===
             if(level6.hasWrenchGun && !level6.pipeRoomPrinterUI && !level6.pipeRoomPrinting && level6.wrenchBolts.length === 0) {
-                // Only fire when action pressed and NOT near pipe room printer
+                // Only fire when action pressed and NOT near pipe room printer.
+                // Side-scrolling rooms only fire horizontally — match the revolver's
+                // default of "face the last horizontal direction you moved, else
+                // pick the side your player is furthest from" (see line ~26684).
+                // The CEO office has its own vertical firing path; this branch is
+                // for all OTHER rooms where only left/right shots make sense.
                 const nearPrinter = level6.room === 'pipeRoom' && Math.abs(player.x - 500) < 55;
-                if(!nearPrinter && (keys[' '] || keys['action'])) {
-                    // Check if any other action key use consumed this frame (ghost gun, etc.) - only fire if no gun
-                    // Pistol in holster (detective backup) does not block wrench fire
+                const inCEOOffice = level6.room === 'ceoOffice';
+                if(!nearPrinter && !inCEOOffice && (keys[' '] || keys['action'])) {
                     const hasOtherWeapon = (!level6.pistolHolstered && level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun;
                     if(!hasOtherWeapon) {
                         keys[' '] = false; keys['action'] = false;
-                        let bvx = 0, bvy = 0;
-                        if(player.facing === 'left')  bvx = -9;
+                        // Horizontal-only fire: prefer explicit facing, else last
+                        // horizontal facing, else position-based fallback (same
+                        // behavior as the revolver in side-scrolling rooms).
+                        let bvx;
+                        if(player.facing === 'left') bvx = -9;
                         else if(player.facing === 'right') bvx = 9;
-                        else if(player.facing === 'up')   bvy = -9;
-                        else if(player.facing === 'down') bvy = 9;
+                        else if(player.lastHorizFacing === 'left') bvx = -9;
+                        else if(player.lastHorizFacing === 'right') bvx = 9;
                         else bvx = player.x < 350 ? 9 : -9;
                         level6.wrenchBolts.push({
-                            x: player.x, y: player.y,
+                            x: player.x + (bvx > 0 ? 38 : -44), y: player.y - 7,
                             originX: player.x, originY: player.y,
-                            vx: bvx, vy: bvy,
+                            vx: bvx, vy: 0,
                             going: true,
                             rotation: 0,
                             hitCEO: false,
