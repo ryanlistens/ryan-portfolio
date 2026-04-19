@@ -1924,15 +1924,30 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = 
 // pipes depending on npc.state. Back-facing when at the pipe so the mullet
 // hair silhouette reads clearly.
 function drawMulletProAsPM(npc) {
-    const x = npc.x;
+    let x = npc.x;
     let y = npc.y;
 
-    // Jitter animations for stress states (same as drawNPC)
+    // Three escalating stress states between crack and burst:
+    // pace → jump → Edvard Munch Scream pose. Mirrors drawNPC thresholds so
+    // hell-mode mullet pros animate consistently with regular PMs.
+    let isPacing = false, isJumping = false, isScreaming = false;
     if(npc.needsDoc) {
         let pct = 0;
         const crack = cracks.find(c => c.npc === npc);
         if(crack) pct = Math.min((Date.now() - crack.time) / crack.max, 1);
-        if(pct >= 0.66) y += (Math.cos(Date.now() / 60) - 1) * 7;
+        else if(npc.crackStartTime) pct = Math.min((Date.now() - npc.crackStartTime) / 15000, 1);
+
+        if(pct >= 0.67) {
+            isScreaming = true;
+            x += Math.sin(Date.now() / 40) * 1.4;
+            y += Math.sin(Date.now() / 55) * 0.9;
+        } else if(pct >= 0.33) {
+            isJumping = true;
+            y += (Math.cos(Date.now() / 60) - 1) * 7;
+        } else if(pct > 0) {
+            isPacing = true;
+            x += Math.sin(Date.now() / 250) * 12;
+        }
     }
 
     const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
@@ -2032,9 +2047,64 @@ function drawMulletProAsPM(npc) {
         ctx.fillStyle = '#654321';
         ctx.fillRect(x - 5*s, y + 16*s + legOffA, 4*s, 2*s);
         ctx.fillRect(x + s,   y + 16*s + legOffB, 4*s, 2*s);
+    } else if(isScreaming) {
+        // === MUNCH SCREAM POSE — forward-facing mullet pro, hands at cheeks ===
+        const s = 2;
+
+        // Shadow at foot level
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(x, y + 36, 10, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hair (brown mullet) — top + sides + neck cascade
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
+        ctx.fillRect(x - 7*s, y - 12*s, 14*s, 10*s);
+
+        // Face skin (covers most of head)
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+
+        // === SCREAM FACE — wide horror eyes + gaping O mouth ===
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.ellipse(x - 2*s, y - 8*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 2*s, y - 8*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x - 2*s, y - 9*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 2*s, y - 9*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(15,0,0,0.95)';
+        ctx.beginPath(); ctx.ellipse(x, y - 4*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+
+        // Hell-red jumpsuit torso
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
+        ctx.fillStyle = '#600018';
+        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+
+        // Arms bent up — forearms vertical alongside head
+        ctx.fillStyle = '#800020';
+        ctx.fillRect(x - 9*s, y - 11*s, 2*s, 9*s); // left forearm rising
+        ctx.fillRect(x + 7*s, y - 11*s, 2*s, 9*s); // right forearm rising
+        // Hands cupping cheeks (skin)
+        ctx.fillStyle = '#f5c89a';
+        ctx.fillRect(x - 7*s, y - 12*s, 2*s, 3*s);
+        ctx.fillRect(x + 5*s, y - 12*s, 2*s, 3*s);
+
+        // Legs (blue jeans) planted, no stride
+        ctx.fillStyle = '#a4c2db';
+        ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
+        ctx.fillRect(x + s,   y + 8*s, 4*s, 8*s);
+        // Brown shoes
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 2*s);
+        ctx.fillRect(x + s,   y + 16*s, 4*s, 2*s);
     } else {
-        // Idle / stressed / happy — forward-facing mullet pro sprite
-        drawMulletPro(x, y, 'forward', false, false, false);
+        // Idle / pacing / jumping — forward-facing mullet pro sprite.
+        // Pacing forces a walking arm/leg swing; jumping just bobs y in-place.
+        drawMulletPro(x, y, 'forward', false, false, isPacing);
     }
 }
 
@@ -2795,8 +2865,10 @@ function drawNPC(npc) {
     const s = 2;
 
     // Pipe manager animations based on pipe stress level
+    // Three escalating states between crack and burst: pace → jump → Scream pose
     let isJumping = false;
     let isPacing = false;
+    let isScreaming = false;
     if(npc.needsDoc) {
         let pct = 0;
         // Check cracks array (levels 1-4, level 6 employee pipe room)
@@ -2809,12 +2881,17 @@ function drawNPC(npc) {
             pct = Math.min((Date.now() - npc.crackStartTime) / 15000, 1);
         }
 
-        if(pct >= 0.66) {
-            // About to burst - jumping up and down frantically
+        if(pct >= 0.67) {
+            // Final phase — frozen Edvard Munch Scream pose, body trembling in horror
+            isScreaming = true;
+            x += Math.sin(Date.now() / 40) * 1.4;
+            y += Math.sin(Date.now() / 55) * 0.9;
+        } else if(pct >= 0.33) {
+            // Mid phase — jumping up and down frantically
             isJumping = true;
             y += (Math.cos(Date.now() / 60) - 1) * 7;
         } else if(pct > 0) {
-            // Pipe starting to swell - pacing back and forth
+            // Early phase — pacing back and forth
             isPacing = true;
             x += Math.sin(Date.now() / 250) * 12;
         }
@@ -2964,7 +3041,19 @@ function drawNPC(npc) {
 
         // Face
         ctx.fillStyle = '#000';
-        if(npc.state === 'stressed' && !isPacing && !isJumping) {
+        if(isScreaming) {
+            // Edvard Munch SCREAM face — wide horror eyes + gaping O mouth
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.ellipse(x - 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
+            // Pinprick pupils high in socket (frozen upward stare)
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(x - 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+            // Gaping O mouth — tall dark oval
+            ctx.fillStyle = 'rgba(15,0,0,0.95)';
+            ctx.beginPath(); ctx.ellipse(x, y - 6*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+        } else if(npc.state === 'stressed' && !isPacing && !isJumping) {
             ctx.fillRect(x - 3*s, y - 10*s, 2*s, 3*s);
             ctx.fillRect(x + s, y - 10*s, 2*s, 3*s);
             ctx.fillRect(x - s, y - 7*s, 2*s, s);
@@ -2985,7 +3074,23 @@ function drawNPC(npc) {
         ctx.fillStyle = npc.color.hex;
         ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
 
-        if(isPacing) {
+        if(isScreaming) {
+            // Munch's Scream — both arms bent up alongside head, hands pressed to cheeks
+            ctx.fillRect(x - 8*s, y - 11*s, 2*s, 8*s); // left forearm rising along left cheek
+            ctx.fillRect(x + 6*s, y - 11*s, 2*s, 8*s); // right forearm rising along right cheek
+            // Hands cupping the cheeks (skin)
+            ctx.fillStyle = '#f5c89a';
+            ctx.fillRect(x - 6*s, y - 12*s, 2*s, 3*s); // left hand on left cheek
+            ctx.fillRect(x + 4*s, y - 12*s, 2*s, 3*s); // right hand on right cheek
+            // Legs planted underneath (frozen in horror — no stride)
+            ctx.fillStyle = npc.color.hex;
+            ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
+            ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
+            // Shoes
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
+            ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+        } else if(isPacing) {
             // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
             const stride = Math.sin(Date.now() / 125) * 3;
             // Arms — shift horizontally with stride, anchored to torso
