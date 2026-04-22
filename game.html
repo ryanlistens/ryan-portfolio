@@ -110,6 +110,64 @@
         }
         .empty { background: none !important; border: none !important; pointer-events: none; }
 
+        /* Full-screen tap-and-slide touch zones: left half = floating joystick,
+           right half = action. Sit under the visual controls so the visual
+           d-pad/action can still serve as hints, and above the canvas so taps
+           route through the new handlers. */
+        #touch-zones {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 15;
+            display: none;
+            pointer-events: none;
+        }
+        #touch-zones > div {
+            position: absolute;
+            top: 0; bottom: 0;
+            pointer-events: auto;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+            background: transparent;
+        }
+        #joystick-zone { left: 0; width: 50%; }
+        #action-zone   { right: 0; width: 50%; }
+
+        /* Floating joystick visual — drawn at the initial touch point */
+        #joystick-visual {
+            position: fixed;
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.35);
+            background: rgba(0,60,100,0.25);
+            pointer-events: none;
+            z-index: 16;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+        #joystick-visual::after {
+            content: '';
+            position: absolute;
+            left: var(--stickX, 50%);
+            top:  var(--stickY, 50%);
+            width: 52px; height: 52px;
+            border-radius: 50%;
+            background: rgba(0,140,220,0.75);
+            border: 2px solid rgba(255,255,255,0.55);
+            transform: translate(-50%, -50%);
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            #touch-zones { display: block; }
+            /* Old d-pad + action-btn become visual hints only on touch devices */
+            #dpad-container { pointer-events: none; opacity: 0.45; }
+            #action-btn { pointer-events: none; opacity: 0.55; }
+        }
+        @media (max-width: 600px) {
+            #touch-zones { display: block; }
+            #dpad-container { pointer-events: none; opacity: 0.45; }
+            #action-btn { pointer-events: none; opacity: 0.55; }
+        }
+
         /* Show touch controls on touch devices or small screens */
         @media (hover: none) and (pointer: coarse) {
             #controls-section { display: block; }
@@ -156,6 +214,11 @@
             </div>
         </div>
     </div>
+    <div id="touch-zones">
+        <div id="joystick-zone"></div>
+        <div id="action-zone"></div>
+    </div>
+    <div id="joystick-visual"></div>
 <script>
 
 
@@ -30368,7 +30431,8 @@ document.addEventListener('touchend', (e) => {
         if (!dpadHeld) setDpadDir(null);
     }
     // Check action: only clear if no remaining finger is on it
-    if (keys['action']) {
+    // (skip when the new tap-anywhere action zone is actively tracking a finger)
+    if (keys['action'] && !(typeof actionState !== 'undefined' && actionState.active)) {
         const r = actionBtn.getBoundingClientRect();
         let actionHeld = false;
         for (let i = 0; i < remaining.length; i++) {
@@ -30450,6 +30514,272 @@ document.getElementById('action-btn').addEventListener('mouseup', e => {
     if(e.cancelable) e.preventDefault();
     keys['action'] = false;
 });
+
+// ============================================================
+// Tap-and-slide touch controls
+//   - Left half of the screen is a floating joystick (the knob appears
+//     at the first touch point and tracks the finger).
+//   - Right half of the screen is a tap-anywhere ACTION button.
+//   - In-canvas UIs (keypad, safe, CEO computer, doc printer, 3D printer)
+//     are hit-tested first so players can tap choices directly.
+// ============================================================
+
+// Convert a client (x, y) into game-world canvas coordinates, matching the
+// math used by handleMuteClick so every UI sees the same coordinate space.
+function clientToCanvas(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = CANVAS_H / rect.height;
+    const freshGX = Math.floor((CANVAS_W - GAME_W) / 2);
+    const freshGY = Math.floor((CANVAS_H - GAME_H) / 2);
+    return {
+        x: (clientX - rect.left) * scaleX - freshGX,
+        y: (clientY - rect.top) * scaleY - freshGY
+    };
+}
+
+// Tap-dispatch for in-canvas modal UIs. Returns true when the tap was consumed.
+// Each branch matches the draw-function coordinates exactly and then either
+// mutates the UI state directly or queues keys['action'] so the regular
+// update() logic confirms the choice.
+function handleCanvasUITap(clientX, clientY) {
+    const {x, y} = clientToCanvas(clientX, clientY);
+    const hit = (px, py, pw, ph) => (x >= px && x <= px + pw && y >= py && y <= py + ph);
+
+    // Level 6 keypad — digits 1..6 plus ESC / HINT / CLR row
+    if(typeof level6 !== 'undefined' && level6.keypadUI) {
+        const gridX = 240, gridY = 210, btnW = 70, btnH = 50, gap = 10;
+        for(let i = 0; i < 6; i++) {
+            const col = i % 3, row = Math.floor(i / 3);
+            if(hit(gridX + col * (btnW + gap), gridY + row * (btnH + gap), btnW, btnH)) {
+                level6.keypadSelected = i;
+                keys['action'] = true;
+                return true;
+            }
+        }
+        const escY = gridY + 2 * (btnH + gap) + 10;
+        for(let i = 0; i < 3; i++) {
+            if(hit(gridX + i * (btnW + gap), escY, btnW, 36)) {
+                level6.keypadSelected = 6 + i;
+                keys['action'] = true;
+                return true;
+            }
+        }
+        return true; // absorb taps while keypad is open
+    }
+
+    // Level 6 safe — either code entry (colors) or post-unlock item select
+    if(typeof level6 !== 'undefined' && level6.safeUI) {
+        if(level6.selectingItem) {
+            const rects = [[100,160],[280,160],[460,160]];
+            for(let i = 0; i < 3; i++) {
+                if(hit(rects[i][0], rects[i][1], 140, 120)) {
+                    level6.itemSelection = i;
+                    keys['action'] = true;
+                    return true;
+                }
+            }
+        } else {
+            // 4 color buttons in 2x2 grid
+            for(let i = 0; i < 4; i++) {
+                const col = i % 2, row = Math.floor(i / 2);
+                if(hit(250 + col * 100, 280 + row * 70, 80, 50)) {
+                    level6.selectedButton = i;
+                    keys['action'] = true;
+                    return true;
+                }
+            }
+            // ESC (4) / HINT (5) row
+            if(hit(250, 420, 80, 32)) { level6.selectedButton = 4; keys['action'] = true; return true; }
+            if(hit(350, 420, 80, 32)) { level6.selectedButton = 5; keys['action'] = true; return true; }
+        }
+        return true;
+    }
+
+    // Level 6 CEO computer — Self-Destruct vs Deliver Means
+    if(typeof level6 !== 'undefined' && level6.computerUI) {
+        if(hit(120, 200, 180, 110)) { level6.computerChoice = 0; keys['action'] = true; return true; }
+        if(hit(400, 200, 180, 110)) { level6.computerChoice = 1; keys['action'] = true; return true; }
+        return true;
+    }
+
+    // Doc printer (ui.show) — 4 color swatches, or CONFIRM during confirm step
+    if(typeof ui !== 'undefined' && ui.show) {
+        if(ui.confirming) {
+            if(hit(270, 410, 160, 60)) { keys['action'] = true; return true; }
+        } else {
+            for(let i = 0; i < 4; i++) {
+                if(hit(30 + i * 160, 390, 140, 70)) {
+                    ui.selectedColor = i;
+                    keys['action'] = true;
+                    return true;
+                }
+            }
+        }
+        return true;
+    }
+
+    // 3D printer (ui.gunUI) — wrench / heart choice, or CONFIRM
+    if(typeof ui !== 'undefined' && ui.gunUI) {
+        if(ui.confirming) {
+            if(hit(270, 410, 160, 60)) { keys['action'] = true; return true; }
+        } else {
+            const wrenchOwned = typeof pipeWrench !== 'undefined' && pipeWrench.hasWrench;
+            if(!wrenchOwned && hit(30, 390, 140, 70)) { ui.gunChoice = 0; keys['action'] = true; return true; }
+            if(hit(190, 390, 140, 70)) { ui.gunChoice = 1; keys['action'] = true; return true; }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+// Run the standard first-tap chain (menus, mute, HUD, canvas UIs). Returns
+// true when the tap was consumed by something other than movement/action.
+function routePreGameTap(e, clientX, clientY) {
+    if(handleRTPresentsInteraction()) return true;
+    if(handleMenuInteraction()) return true;
+    if(!audioUnlocked) { audioUnlocked = true; }
+    resumePendingMusic();
+    tryTriggerMusicOnInput();
+    // Re-use handleMuteClick for the HUD buttons + end-screen menu choices
+    const muteResult = handleMuteClick({
+        type: 'touchstart',
+        touches: [{clientX, clientY}],
+        changedTouches: [{clientX, clientY}],
+        cancelable: e && e.cancelable,
+        preventDefault: () => { if(e && e.cancelable) e.preventDefault(); }
+    });
+    // handleMuteClick doesn't return a value; approximate consumption by
+    // checking whether any game-over menu action was armed or a modal opened.
+    // A cheap heuristic: if the tap landed on the visible HUD strip we trust
+    // handleMuteClick and always continue to UI dispatch anyway.
+    if(handleCanvasUITap(clientX, clientY)) return true;
+    return false;
+}
+
+// ---- Joystick zone ---------------------------------------------------------
+const joystickZone = document.getElementById('joystick-zone');
+const joystickVisual = document.getElementById('joystick-visual');
+const actionZone = document.getElementById('action-zone');
+const JOY_DEAD = 14;      // pixel dead zone
+const JOY_RADIUS = 48;    // max knob travel in CSS px
+const joyState = {
+    active: false,
+    touchId: null,
+    originX: 0,
+    originY: 0,
+    dirs: {up: false, down: false, left: false, right: false}
+};
+
+function clearJoystickDirs() {
+    for(const k of ['up','down','left','right']) {
+        if(joyState.dirs[k]) keys[k] = false;
+        joyState.dirs[k] = false;
+    }
+}
+
+function updateJoystickFromDelta(dx, dy) {
+    const mag = Math.sqrt(dx*dx + dy*dy);
+    // Knob visual (clamped to JOY_RADIUS)
+    const clamp = mag > JOY_RADIUS ? JOY_RADIUS / mag : 1;
+    const kx = dx * clamp, ky = dy * clamp;
+    joystickVisual.style.setProperty('--stickX', (50 + kx / 120 * 100) + '%');
+    joystickVisual.style.setProperty('--stickY', (50 + ky / 120 * 100) + '%');
+
+    const wantUp = dy < -JOY_DEAD;
+    const wantDown = dy > JOY_DEAD;
+    const wantLeft = dx < -JOY_DEAD;
+    const wantRight = dx > JOY_DEAD;
+    const apply = (dir, want) => {
+        if(want !== joyState.dirs[dir]) {
+            joyState.dirs[dir] = want;
+            keys[dir] = want;
+        }
+    };
+    apply('up', wantUp);
+    apply('down', wantDown);
+    apply('left', wantLeft);
+    apply('right', wantRight);
+}
+
+joystickZone.addEventListener('touchstart', e => {
+    if(e.cancelable) e.preventDefault();
+    const t = e.changedTouches[0];
+    if(!t) return;
+    // Try menu/mute/UI dispatch first — if any handled the tap, don't start the stick
+    if(routePreGameTap(e, t.clientX, t.clientY)) return;
+    joyState.active = true;
+    joyState.touchId = t.identifier;
+    joyState.originX = t.clientX;
+    joyState.originY = t.clientY;
+    joystickVisual.style.left = t.clientX + 'px';
+    joystickVisual.style.top = t.clientY + 'px';
+    joystickVisual.style.setProperty('--stickX', '50%');
+    joystickVisual.style.setProperty('--stickY', '50%');
+    joystickVisual.style.display = 'block';
+}, {passive: false});
+
+joystickZone.addEventListener('touchmove', e => {
+    if(e.cancelable) e.preventDefault();
+    if(!joyState.active) return;
+    let t = null;
+    for(let i = 0; i < e.changedTouches.length; i++) {
+        if(e.changedTouches[i].identifier === joyState.touchId) { t = e.changedTouches[i]; break; }
+    }
+    if(!t) return;
+    updateJoystickFromDelta(t.clientX - joyState.originX, t.clientY - joyState.originY);
+}, {passive: false});
+
+function endJoystick(e) {
+    if(e && e.cancelable) e.preventDefault();
+    if(!joyState.active) return;
+    if(e && e.changedTouches) {
+        let found = false;
+        for(let i = 0; i < e.changedTouches.length; i++) {
+            if(e.changedTouches[i].identifier === joyState.touchId) { found = true; break; }
+        }
+        if(!found) return;
+    }
+    joyState.active = false;
+    joyState.touchId = null;
+    joystickVisual.style.display = 'none';
+    clearJoystickDirs();
+}
+joystickZone.addEventListener('touchend', endJoystick, {passive: false});
+joystickZone.addEventListener('touchcancel', endJoystick, {passive: false});
+
+// ---- Action zone -----------------------------------------------------------
+const actionState = { active: false, touchId: null };
+
+actionZone.addEventListener('touchstart', e => {
+    if(e.cancelable) e.preventDefault();
+    const t = e.changedTouches[0];
+    if(!t) return;
+    if(routePreGameTap(e, t.clientX, t.clientY)) return;
+    actionState.active = true;
+    actionState.touchId = t.identifier;
+    keys['action'] = true;
+    actionBtn.classList.add('active');
+}, {passive: false});
+
+function endActionZone(e) {
+    if(e && e.cancelable) e.preventDefault();
+    if(!actionState.active) return;
+    if(e && e.changedTouches) {
+        let found = false;
+        for(let i = 0; i < e.changedTouches.length; i++) {
+            if(e.changedTouches[i].identifier === actionState.touchId) { found = true; break; }
+        }
+        if(!found) return;
+    }
+    actionState.active = false;
+    actionState.touchId = null;
+    keys['action'] = false;
+    actionBtn.classList.remove('active');
+}
+actionZone.addEventListener('touchend', endActionZone, {passive: false});
+actionZone.addEventListener('touchcancel', endActionZone, {passive: false});
 
 // Prevent mobile scroll, bounce, and pinch-zoom on the game page
 document.addEventListener('touchmove', e => { if(e.cancelable) e.preventDefault(); }, {passive: false});
