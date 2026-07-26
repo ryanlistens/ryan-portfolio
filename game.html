@@ -280,43 +280,100 @@ function scaledLine(width) {
     return Math.max(0.75, width * LINE_SCALE);
 }
 
-// HD action label helper — draws readable, styled prompt with rounded background
+// HD action prompt — a floating glass chip. Legacy strings like
+// "[ ACTION ] - TAKE AMMO" keep working: the "[ ACTION ]" prefix is rendered
+// as a round golden key-cap (matching the on-screen ACTION button) instead
+// of literal bracket text. Directional prompts without the prefix get the
+// same chip minus the key. Gentle idle float + pulsing key rim.
 function drawActionLabel(text, x, y, options) {
     const opt = options || {};
-    const color = opt.color || '#ffd700';
-    const bgColor = opt.bg || 'rgba(0,0,0,0.82)';
+    const color = opt.color || '#ffe08a';
     const fontSize = opt.fontSize || 16;
     const padding = opt.padding || 8;
 
+    // Split off the [ ACTION ] prefix (any spacing, optional dash after).
+    // Also handles the "[ ACTION TO CLOSE ]" full-bracket form.
+    let label = String(text);
+    let hasKey = false;
+    const km = label.match(/^\s*\[\s*ACTION\s*\]\s*[-—–]?\s*(.*)$/i);
+    const km2 = km ? null : label.match(/^\s*\[\s*ACTION\s+TO\s+(.*?)\s*\]\s*$/i);
+    if(km)       { hasKey = true; label = km[1] || 'ACTION'; }
+    else if(km2) { hasKey = true; label = km2[1]; }
+
     ctx.font = scaledFont(fontSize, 'bold', 'Arial', false);
-    ctx.textAlign = 'center';
-    const metrics = ctx.measureText(text);
-    const tw = metrics.width;
     const th = fontSize * FONT_SCALE;
-    const bw = tw + padding * 2;
-    const bh = th + padding;
-    // Clamp to game-world bounds (drawing is in game coords after ctx.translate(GX,GY))
-    const bx = Math.max(2 - GX, Math.min(x - tw / 2 - padding, CANVAS_W - GX - bw - 2));
-    const by = Math.max(2 - GY, Math.min(y - th - padding / 2, CANVAS_H - GY - bh - 2));
-    const xAdj = bx + bw / 2; // re-center text within clamped box
-    const yAdj = by + th + padding * 0.5;
+    const keyR = hasKey ? Math.max(7, th * 0.58) : 0;
+    const keyW = hasKey ? keyR * 2 + 6 : 0;
+    ctx.textAlign = 'left';
+    const tw = ctx.measureText(label).width;
+    const leftPad = hasKey ? 5 : padding;
+    const bw = leftPad + keyW + tw + padding;
+    const bh = hasKey ? Math.max(th + padding, keyR * 2 + 7) : th + padding;
 
-    // Rounded background with subtle border
-    ctx.fillStyle = bgColor;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, 4);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    // Gentle idle float so prompts read as live UI, not painted-on text
+    const bob = Math.sin(Date.now() / 480) * 1.2;
+
+    // Clamp to game-world bounds (drawing is in game coords after translate)
+    const bx = Math.max(2 - GX, Math.min(x - bw / 2, CANVAS_W - GX - bw - 2));
+    const by = Math.max(2 - GY, Math.min(y - bh + bob, CANVAS_H - GY - bh - 2));
+    const cyMid = by + bh / 2;
+
+    // Soft drop shadow under the chip
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.roundRect(bx + 1.5, by + 2.5, bw, bh, bh / 2); ctx.fill();
+    // Glass pill body (legacy custom bg still honored as a flat fill)
+    if(opt.bg) {
+        ctx.fillStyle = opt.bg;
+    } else {
+        const chipGrad = ctx.createLinearGradient(0, by, 0, by + bh);
+        chipGrad.addColorStop(0, 'rgba(40,40,48,0.93)');
+        chipGrad.addColorStop(1, 'rgba(12,12,16,0.93)');
+        ctx.fillStyle = chipGrad;
+    }
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, bh / 2); ctx.fill();
+    // Hairline gold border + top sheen
+    ctx.strokeStyle = 'rgba(255,214,110,0.35)';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, 4);
-    ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, bh / 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.roundRect(bx + 2, by + 1.5, bw - 4, bh * 0.42, bh * 0.28); ctx.fill();
 
-    // Text with subtle drop shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillText(text, xAdj + 1, yAdj + 1);
+    // Round golden ACTION key-cap with pulsing rim
+    if(hasKey) {
+        const kx = bx + leftPad + keyR, ky = cyMid;
+        const pulse = 0.5 + Math.sin(Date.now() / 420) * 0.5;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.arc(kx, ky + 1, keyR, 0, Math.PI * 2); ctx.fill();
+        const capGrad = ctx.createLinearGradient(0, ky - keyR, 0, ky + keyR);
+        capGrad.addColorStop(0, '#ffe9a8');
+        capGrad.addColorStop(0.5, '#f5c95a');
+        capGrad.addColorStop(1, '#c8942a');
+        ctx.fillStyle = capGrad;
+        ctx.beginPath(); ctx.arc(kx, ky, keyR, 0, Math.PI * 2); ctx.fill();
+        // Cap top highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.beginPath(); ctx.ellipse(kx - keyR * 0.2, ky - keyR * 0.45, keyR * 0.55, keyR * 0.3, -0.3, 0, Math.PI * 2); ctx.fill();
+        // Pulsing rim
+        ctx.strokeStyle = `rgba(255,230,150,${0.25 + pulse * 0.45})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(kx, ky, keyR + 1.4, 0, Math.PI * 2); ctx.stroke();
+        // 'A' legend
+        ctx.fillStyle = '#3a2a08';
+        ctx.font = scaledFont(fontSize * 0.74, 'bold', 'Arial', true);
+        ctx.textAlign = 'center';
+        ctx.fillText('A', kx, ky + keyR * 0.42);
+        ctx.font = scaledFont(fontSize, 'bold', 'Arial', false);
+        ctx.textAlign = 'left';
+    }
+
+    // Label text with drop shadow
+    const tx = bx + leftPad + keyW;
+    const ty = cyMid + th * 0.36;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(label, tx + 1, ty + 1);
     ctx.fillStyle = color;
-    ctx.fillText(text, xAdj, yAdj);
+    ctx.fillText(label, tx, ty);
+    ctx.textAlign = 'center';
 }
 
 // Load photorealistic images
@@ -19253,7 +19310,7 @@ function drawEmailUI(officeName) {
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', 350, 481);
+    drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', 350, 489, {fontSize: 14});
 }
 
 function drawLetterUI() {
@@ -19279,7 +19336,7 @@ function drawLetterUI() {
         ctx.fillRect(0, viewH, CANVAS_W, instrH);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', CANVAS_W / 2, viewH + 33);
+        drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, viewH + 40, {fontSize: 14});
     }
     ctx.restore();
 }
@@ -19307,7 +19364,7 @@ function drawDetectiveNoteUI() {
         ctx.fillRect(0, viewH, CANVAS_W, instrH);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', CANVAS_W / 2, viewH + 33);
+        drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, viewH + 40, {fontSize: 14});
     } else {
         // Fallback: render detective's case notes as styled canvas text
         const instrH = 50;
@@ -19376,7 +19433,7 @@ function drawDetectiveNoteUI() {
         ctx.fillRect(0, viewH, CANVAS_W, instrH);
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
-        ctx.fillText('ACTION TO CLOSE    ▲▼ SCROLL', CANVAS_W / 2, viewH + 33);
+        drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, viewH + 40, {fontSize: 14});
     }
     ctx.restore();
 }
@@ -20681,7 +20738,7 @@ function drawPortraitUI() {
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PRESS ACTION TO CLOSE', 350, 485);
+    drawActionLabel('[ ACTION ] CLOSE', 350, 491, {fontSize: 14});
 }
 
 
@@ -21601,9 +21658,7 @@ function drawSelfDestructHatch() {
 
     // Action prompt near open hatch
     if(openAmt >= 1 && Math.abs(player.x - hx) < 60) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(hx - 55, hy - 36, 110, 22);
-        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] DESCEND', hx, hy - 20);
+        drawActionLabel('[ ACTION ] DESCEND', hx, hy - 18, {fontSize: 12});
     }
 }
 
@@ -21886,9 +21941,7 @@ function drawSelfDestructCave1() {
         drawBackViewPlayerOnLadder(36, selfDestructSeq.cave1LadderY);
         // Action prompt at bottom of ladder
         if(selfDestructSeq.cave1AtBottom) {
-            ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.fillRect(80, 350, 220, 24);
-            ctx.fillStyle = '#ffd700'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-            ctx.fillText('[ ACTION ] STEP OFF LADDER', 190, 366);
+            drawActionLabel('[ ACTION ] STEP OFF LADDER', 190, 370, {fontSize: 12});
         }
     } else {
         drawBaldManager(player.x, player.y, player.facing);
@@ -22200,9 +22253,7 @@ function drawSelfDestructCave2() {
     // Throne action prompt (if available) — kill-the-devil path ends here,
     // the throne leads to "your own personal hell" (the safe room apartment).
     if(sds.throneActionAvailable && sds.throneTransitionTimer === 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(thrX-68, thrY-130, 136, 22);
-        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] TAKE THE THRONE', thrX, thrY-115);
+        drawActionLabel('[ ACTION ] TAKE THE THRONE', thrX, thrY - 112, {fontSize: 11});
     }
 
     // ── COFFIN ────────────────────────────────────────────────────────────────
@@ -23384,9 +23435,7 @@ function drawSelfDestructSafeRoom() {
 
     // Action prompt on chair
     if(!sds.chairSitting && Math.abs(player.x - chairX) < 55) {
-        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(chairX-58, chairY-106, 116, 22);
-        ctx.fillStyle = '#ffd700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('[ ACTION ] SIT DOWN', chairX, chairY-90);
+        drawActionLabel('[ ACTION ] SIT DOWN', chairX, chairY - 88, {fontSize: 12});
     }
 
     // ── MOUSE on the floor (drawn before player) ─────────────────────────────
@@ -24612,35 +24661,16 @@ function drawScene() {
             if(level6.npcExitSequence && !level6.endingTriggered) {
                 const mp = level6.exitingNPCs && level6.exitingNPCs.find(n => n.isMulletPro);
                 if(mp && mp.mpPhase === 'at_player') {
-                    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-                    ctx.fillRect(190, 375, 320, 46);
-                    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
-                    ctx.strokeRect(190, 375, 320, 46);
-                    ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillText('[ ACTION ] — Accept Your Share', 350, 395);
-                    ctx.font = '11px Arial'; ctx.fillStyle = '#ccaa55';
-                    ctx.fillText('The means of production — yours!', 350, 413);
+                    drawActionLabel('[ ACTION ] — Accept Your Share', 350, 398, {fontSize: 14});
+                    drawActionLabel('The means of production — yours!', 350, 421, {fontSize: 10, color: '#ccaa55'});
                 }
             }
 
             // CEO office exit prompt
             if(level6.ceoExitPrompt) {
-                const promptY = 430;
-                ctx.fillStyle = 'rgba(0,0,0,0.82)';
-                ctx.fillRect(240, promptY, 220, 40);
-                ctx.strokeStyle = '#ffd700';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(240, promptY, 220, 40);
-                ctx.font = 'bold 14px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#ffd700';
-                ctx.fillText('[ ACTION ] \u2014 LEAVE OFFICE', 350, promptY + 16);
-                ctx.font = '10px Arial';
-                ctx.fillStyle = '#cc8800';
-                const exitHint = ceo.state === 'dead' ? 'Exit to entryway' :
-                    ceo.state === 'hunting' ? '\u26a0 CEO will pursue you' : 'Exit to entryway';
-                ctx.fillText(exitHint, 350, promptY + 32);
+                drawActionLabel('[ ACTION ] \u2014 LEAVE OFFICE', 350, 448, {fontSize: 14});
+                const exitHint = ceo.state === 'hunting' ? '\u26a0 CEO will pursue you' : 'Exit to entryway';
+                drawActionLabel(exitHint, 350, 470, {fontSize: 10, color: ceo.state === 'hunting' ? '#ff9944' : '#cc8800'});
             }
 
             // End screen shake
