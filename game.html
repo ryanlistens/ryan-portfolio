@@ -3037,10 +3037,19 @@ function drawNPC(npc) {
         ctx.lineTo(x + 6*s, y - 5*s);           // right where torso starts
         ctx.closePath();
         ctx.fill();
+        // Hood fabric shading — crown highlight + shaded left rim for form
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.beginPath();
+        ctx.ellipse(x, y - 14.3*s, 3.4*s, 1.0*s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.fillRect(x - 6*s, y - 12*s, 1.2*s, 7*s);
 
-        // Face opening (skin-colored inset)
+        // Face opening (skin-colored inset) — soft cheek shading below eyes
         ctx.fillStyle = '#f5c89a';
         ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+        ctx.fillStyle = 'rgba(120,70,40,0.14)';
+        ctx.fillRect(x - 4*s, y - 7*s, 8*s, 2*s);
 
         // Face
         ctx.fillStyle = '#000';
@@ -3073,9 +3082,19 @@ function drawNPC(npc) {
             ctx.fillRect(x - 2*s, y - 7*s, 4*s, s);
         }
 
-        // Torso
-        ctx.fillStyle = npc.color.hex;
+        // Torso — jumpsuit fabric with top-lit vertical gradient
+        const torsoGrad = ctx.createLinearGradient(0, y - 5*s, 0, y + 6*s);
+        torsoGrad.addColorStop(0, npc.color.hex);
+        torsoGrad.addColorStop(1, npc.color.shadow || npc.color.hex);
+        ctx.fillStyle = torsoGrad;
         ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+        // Side shade + center zipper seam
+        ctx.fillStyle = 'rgba(0,0,0,0.10)';
+        ctx.fillRect(x - 6*s, y - 5*s, 1.4*s, 11*s);
+        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        ctx.lineWidth = Math.max(1, 0.5*s);
+        ctx.beginPath(); ctx.moveTo(x, y - 4*s); ctx.lineTo(x, y + 5*s); ctx.stroke();
+        ctx.fillStyle = npc.color.hex;
 
         if(isScreaming) {
             // Munch's Scream — both arms bent up alongside head, hands pressed to cheeks
@@ -3091,8 +3110,8 @@ function drawNPC(npc) {
             ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
             // Shoes
             ctx.fillStyle = '#fff';
-            ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
-            ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+            pathRoundRect(x - 5*s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
+            pathRoundRect(x + s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
         } else if(isPacing) {
             // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
             const stride = Math.sin(Date.now() / 125) * 3;
@@ -3115,8 +3134,8 @@ function drawNPC(npc) {
             ctx.fillRect(x + s, y + 6*s - npcLegBob, 4*s, 7*s);
             // Shoes
             ctx.fillStyle = '#fff';
-            ctx.fillRect(x - 5*s, y + 13*s + npcLegBob, 4*s, 3*s);
-            ctx.fillRect(x + s, y + 13*s - npcLegBob, 4*s, 3*s);
+            pathRoundRect(x - 5*s, y + 13*s + npcLegBob, 4*s, 3.2*s, 1.4*s); ctx.fill();
+            pathRoundRect(x + s, y + 13*s - npcLegBob, 4*s, 3.2*s, 1.4*s); ctx.fill();
         } else if(isJumping) {
             // Jumping: arms raised up, flush with torso edge
             ctx.fillRect(x - 8*s, y - 6*s, 2*s, 6*s);
@@ -3131,8 +3150,8 @@ function drawNPC(npc) {
             ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
             // Shoes
             ctx.fillStyle = '#fff';
-            ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
-            ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+            pathRoundRect(x - 5*s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
+            pathRoundRect(x + s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
         } else {
             // Static pose — arms (left arm extended up when stressed to connect worried hand)
             if(!npc.skipArms) {
@@ -3154,8 +3173,8 @@ function drawNPC(npc) {
             ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
             ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
             ctx.fillStyle = '#fff';
-            ctx.fillRect(x - 5*s, y + 13*s, 4*s, 3*s);
-            ctx.fillRect(x + s, y + 13*s, 4*s, 3*s);
+            pathRoundRect(x - 5*s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
+            pathRoundRect(x + s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
         }
     }
 
@@ -4293,17 +4312,28 @@ function drawPipeSection(npc, pipeY, gasketY, stressPct) {
     ctx.lineTo(700, pipeY + 29);
     ctx.stroke();
 
-    // --- Main colored pipe ---
-    ctx.strokeStyle = npc.color.hex;
+    // --- Main colored pipe — layered strokes give it a cylindrical read:
+    // shadow color fills the barrel, the lit body sits biased toward the
+    // light (top-left), and a soft core highlight rounds it off.
+    const _pipePath = (off) => {
+        ctx.beginPath();
+        ctx.moveTo(npc.x + off, gasketY);
+        ctx.lineTo(npc.x + off, pipeY);
+        ctx.quadraticCurveTo(npc.x + off, pipeY + 25 + off, npc.x + 25, pipeY + 25 + off);
+        ctx.lineTo(700, pipeY + 25 + off);
+        ctx.stroke();
+    };
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = npc.color.shadow || npc.color.hex;
     ctx.lineWidth   = 14;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctx.beginPath();
-    ctx.moveTo(npc.x, gasketY);
-    ctx.lineTo(npc.x, pipeY);
-    ctx.quadraticCurveTo(npc.x, pipeY + 25, npc.x + 25, pipeY + 25);
-    ctx.lineTo(700, pipeY + 25);
-    ctx.stroke();
+    _pipePath(0);
+    ctx.strokeStyle = npc.color.hex;
+    ctx.lineWidth   = 10.5;
+    _pipePath(-1.2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth   = 5.5;
+    _pipePath(-2.4);
 
     // --- Bendy-straw grooves ---
     // Vertical section: thin horizontal rings every 15 px
@@ -5827,13 +5857,21 @@ function drawFluorescentLight(cx, ceilingY, len) {
     ctx.fillRect(cx - hw - 5, fy - 7, 2, 8);
     ctx.fillRect(cx + hw, fy - 7, 2, 8);
 
-    // Soft downward illumination cone
-    const glow = ctx.createLinearGradient(cx, fy, cx, fy + 80);
-    glow.addColorStop(0, 'rgba(200,220,255,0.13)');
-    glow.addColorStop(0.5, 'rgba(200,220,255,0.05)');
-    glow.addColorStop(1, 'rgba(200,220,255,0)');
+    // Volumetric light cone — trapezoid widening toward the floor, so the
+    // industrial rooms visibly hang their light from the fixtures
+    const coneH = 240;
+    const glow = ctx.createLinearGradient(cx, fy, cx, fy + coneH);
+    glow.addColorStop(0, 'rgba(212,228,255,0.17)');
+    glow.addColorStop(0.45, 'rgba(212,228,255,0.07)');
+    glow.addColorStop(1, 'rgba(212,228,255,0)');
     ctx.fillStyle = glow;
-    ctx.fillRect(cx - hw - 30, fy, len + 60, 80);
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, fy);
+    ctx.lineTo(cx + hw, fy);
+    ctx.lineTo(cx + hw + 44, fy + coneH);
+    ctx.lineTo(cx - hw - 44, fy + coneH);
+    ctx.closePath();
+    ctx.fill();
 
     // Subtle lens flare dot at center
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
@@ -22416,37 +22454,55 @@ function drawSelfDestructSafeRoom() {
 // Each room type gets a mood: ambient color tint, overhead light glow, floor
 // depth shading, edge vignette, and optional flicker/pulse animation.
 // Cost: 3-5 gradient/flat fills per frame; static gradients are cached.
+// Intensities are deliberately kept in a narrow band so every room reads as
+// the SAME grade with a different color — no room washed out, none untouched.
+// (vig 0.24-0.34, tint alpha 0.07-0.10, floor 0.12-0.18)
 const ATMOS_MOODS = {
     // Pipe rooms / plant floors — cool industrial blue-grey, harsh overheads
-    industrial: { tint: 'rgba(46,74,112,0.06)',  glow: '214,232,255', glowA: 0.07, floor: 0.16, vig: 0.30 },
+    industrial: { tint: 'rgba(52,84,124,0.10)',   glow: '216,234,255', glowA: 0.11, floor: 0.17, vig: 0.30 },
     // Hallways & lobbies — warm corporate fluorescents
-    corporate:  { tint: 'rgba(255,220,160,0.05)', glow: '255,240,205', glowA: 0.07, floor: 0.12, vig: 0.24 },
+    corporate:  { tint: 'rgba(255,214,150,0.08)', glow: '255,240,205', glowA: 0.09, floor: 0.13, vig: 0.25 },
     // PM offices — cozy desk-lamp warmth
-    office:     { tint: 'rgba(255,208,144,0.07)', glow: '255,228,170', glowA: 0.08, floor: 0.12, vig: 0.26 },
+    office:     { tint: 'rgba(255,208,144,0.08)', glow: '255,228,170', glowA: 0.09, floor: 0.12, vig: 0.25 },
     // Furnace rooms — hot amber, firelight flicker from below
-    furnace:    { tint: 'rgba(255,116,32,0.08)',  glow: '255,150,60',  glowA: 0.05, floor: 0.20, vig: 0.40,
-                  flicker: { c: '255,138,42', base: 0.05, amp: 0.045, speed: 95 } },
+    furnace:    { tint: 'rgba(255,120,36,0.07)',  glow: '255,150,60',  glowA: 0.05, floor: 0.16, vig: 0.32,
+                  flicker: { c: '255,138,42', base: 0.04, amp: 0.035, speed: 95 } },
     // Cloning lab — sci-fi horror green, slow pulsing glow
-    cloning:    { tint: 'rgba(64,255,150,0.055)', glow: '120,255,180', glowA: 0.05, floor: 0.22, vig: 0.42,
-                  pulse:   { c: '90,255,170', base: 0.035, amp: 0.035, period: 2400 } },
+    cloning:    { tint: 'rgba(64,255,150,0.05)',  glow: '120,255,180', glowA: 0.05, floor: 0.16, vig: 0.32,
+                  pulse:   { c: '90,255,170', base: 0.025, amp: 0.03, period: 2400 } },
     // Marble room / entryway / CEO office — rich golden luxury light
-    luxury:     { tint: 'rgba(255,198,104,0.075)', glow: '255,216,140', glowA: 0.09, floor: 0.14, vig: 0.28 },
+    luxury:     { tint: 'rgba(255,198,104,0.08)', glow: '255,216,140', glowA: 0.10, floor: 0.13, vig: 0.27 },
     // Megacomputer / nuclear bridge — deep tech blue, monitor cast
-    techBlue:   { tint: 'rgba(58,118,255,0.06)',  glow: '140,190,255', glowA: 0.06, floor: 0.20, vig: 0.36 },
+    techBlue:   { tint: 'rgba(64,124,255,0.08)',  glow: '140,190,255', glowA: 0.08, floor: 0.16, vig: 0.30 },
     // Underbelly — grimy near-dark, single failing bulb
-    underbelly: { tint: 'rgba(34,48,34,0.14)',    glow: '190,205,180', glowA: 0.035, floor: 0.26, vig: 0.50,
-                  flicker: { c: '205,215,190', base: 0.02, amp: 0.025, speed: 55 } },
+    underbelly: { tint: 'rgba(38,52,38,0.12)',    glow: '190,205,180', glowA: 0.05, floor: 0.18, vig: 0.34,
+                  flicker: { c: '205,215,190', base: 0.02, amp: 0.02, speed: 55 } },
     // Hell mode — ember red inferno breathing over everything
-    hell:       { tint: 'rgba(255,44,0,0.09)',    glow: '255,84,20',   glowA: 0.06, floor: 0.24, vig: 0.46,
-                  flicker: { c: '255,66,12', base: 0.06, amp: 0.05, speed: 80 } }
+    hell:       { tint: 'rgba(255,44,0,0.08)',    glow: '255,84,20',   glowA: 0.06, floor: 0.17, vig: 0.34,
+                  flicker: { c: '255,66,12', base: 0.04, amp: 0.04, speed: 80 } }
 };
-const _atmosGradCache = {};
+// Gradient cache — keys include canvas dims so gradients rebuild on resize.
+// Every gradient spans the FULL canvas (letterbox included): rooms paint
+// their walls across the whole canvas, so the grade must too, otherwise the
+// game-area boundary shows up as a visible color frame.
+let _atmosGradCache = {};
+let _atmosCacheDims = '';
+function _atmosCheckDims() {
+    const dims = CANVAS_W + 'x' + CANVAS_H + '@' + GX + ',' + GY;
+    if(dims !== _atmosCacheDims) { _atmosCacheDims = dims; _atmosGradCache = {}; }
+}
 function _atmosVignette(strength) {
     const k = 'v' + strength;
     if(!_atmosGradCache[k]) {
-        const g = ctx.createRadialGradient(350, 250, 235, 350, 250, 465);
+        // Radius reaches the farthest canvas corner so the falloff always
+        // finishes at the physical screen edge, never mid-screen.
+        const cx = 350, cy = 250;
+        const farX = Math.max(cx + GX, CANVAS_W - GX - cx);
+        const farY = Math.max(cy + GY, CANVAS_H - GY - cy);
+        const rOut = Math.sqrt(farX * farX + farY * farY);
+        const g = ctx.createRadialGradient(cx, cy, rOut * 0.42, cx, cy, rOut);
         g.addColorStop(0, 'rgba(0,0,0,0)');
-        g.addColorStop(0.65, `rgba(0,0,0,${strength * 0.45})`);
+        g.addColorStop(0.6, `rgba(0,0,0,${strength * 0.4})`);
         g.addColorStop(1, `rgba(0,0,0,${strength})`);
         _atmosGradCache[k] = g;
     }
@@ -22455,7 +22511,9 @@ function _atmosVignette(strength) {
 function _atmosTopGlow(rgb, a) {
     const k = 'g' + rgb + a;
     if(!_atmosGradCache[k]) {
-        const g = ctx.createLinearGradient(0, 0, 0, 205);
+        // Starts at the canvas top (not the game-area top) so the wash has
+        // no seam where the letterbox meets the room.
+        const g = ctx.createLinearGradient(0, -GY, 0, 205);
         g.addColorStop(0, `rgba(${rgb},${a})`);
         g.addColorStop(1, `rgba(${rgb},0)`);
         _atmosGradCache[k] = g;
@@ -22465,9 +22523,12 @@ function _atmosTopGlow(rgb, a) {
 function _atmosFloorShade(a) {
     const k = 'f' + a;
     if(!_atmosGradCache[k]) {
-        const g = ctx.createLinearGradient(0, 355, 0, 500);
+        // Runs to the canvas bottom so the shading continues under the
+        // touch-controls region instead of stopping at y=500.
+        const g = ctx.createLinearGradient(0, 355, 0, CANVAS_H - GY);
         g.addColorStop(0, 'rgba(0,0,0,0)');
-        g.addColorStop(1, `rgba(0,0,0,${a})`);
+        g.addColorStop(0.55, `rgba(0,0,0,${a})`);
+        g.addColorStop(1, `rgba(0,0,0,${a * 1.25})`);
         _atmosGradCache[k] = g;
     }
     return _atmosGradCache[k];
@@ -22502,32 +22563,36 @@ function currentAtmosMood() {
 function applyRoomAtmosphere() {
     const M = ATMOS_MOODS[currentAtmosMood()];
     if(!M) return;
+    _atmosCheckDims();
+    // Full-canvas rect in translated coordinates — includes the letterbox
+    // regions so the grade never draws a visible frame at the game edges.
+    const fx = -GX, fy = -GY, fw = CANVAS_W, fh = CANVAS_H;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    // 1. Ambient color tint over the whole room
+    // 1. Ambient color tint over the whole canvas
     ctx.fillStyle = M.tint;
-    ctx.fillRect(0, 0, 700, 500);
-    // 2. Overhead light wash from the ceiling
+    ctx.fillRect(fx, fy, fw, fh);
+    // 2. Overhead light wash from the ceiling (canvas top → fades by y=205)
     ctx.fillStyle = _atmosTopGlow(M.glow, M.glowA);
-    ctx.fillRect(0, 0, 700, 205);
-    // 3. Floor depth shading toward the bottom edge
+    ctx.fillRect(fx, fy, fw, 205 + GY);
+    // 3. Floor depth shading (y=355 → canvas bottom)
     ctx.fillStyle = _atmosFloorShade(M.floor);
-    ctx.fillRect(0, 355, 700, 145);
+    ctx.fillRect(fx, 355, fw, fh - GY - 355);
     // 4. Animated flicker (firelight / failing bulb) or slow pulse (lab glow)
     const t = Date.now();
     if(M.flicker) {
         const n = Math.sin(t / M.flicker.speed) * 0.6 + Math.sin(t / (M.flicker.speed * 2.7) + 1.3) * 0.4;
         ctx.fillStyle = `rgba(${M.flicker.c},${Math.max(0, M.flicker.base + n * M.flicker.amp)})`;
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(fx, fy, fw, fh);
     } else if(M.pulse) {
         const p = (Math.sin(t / M.pulse.period * Math.PI * 2) + 1) / 2;
         ctx.fillStyle = `rgba(${M.pulse.c},${M.pulse.base + p * M.pulse.amp})`;
-        ctx.fillRect(0, 0, 700, 500);
+        ctx.fillRect(fx, fy, fw, fh);
     }
-    // 5. Edge vignette for cinematic framing
+    // 5. Edge vignette — falloff finishes at the physical screen corners
     ctx.fillStyle = _atmosVignette(M.vig);
-    ctx.fillRect(0, 0, 700, 500);
+    ctx.fillRect(fx, fy, fw, fh);
     ctx.restore();
 }
 
