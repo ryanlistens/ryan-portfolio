@@ -64,40 +64,69 @@ All boss characters and NPCs now use curved shapes, stroke-based arms, oval head
 
 **Design constraint met**: All NPCs now share consistent foot position (~y+36 shadow) and proportional heads.
 
-### Priority 2: Remaining Sign & Label Quality
+### Priority 2: Remaining Sign & Label Quality ✓ COMPLETE (2026-07 remaster)
 
-Signs that still need clip treatment:
-- `drawLevel6MegacomputerRoom()` PIPETECH sign (line ~8608)
-- `drawNuclearAssemblyBridge()` signs (line ~9970)
-- `drawLevel6EmployeeLobby()` PIPETECH sign (line ~12101)
-- `drawLevel6Entryway()` and `drawLevel6CEOOffice()` various labels
-- Marker board schematic text (lines ~5953-6129) — very small text, needs to either be readable or removed
+- Level 6 pipe-room large-format PIPETECH sign: text clipped to sign face
+- `drawNuclearAssemblyBridge()` factory sign: both normal and detective-mode
+  text clipped to the plate
+- `drawLevel6EmployeeLobby()` PIPETECH logo + tagline: clipped to sign plate
 
-### Priority 3: Environmental Props
+### Priority 3: Environmental Props ✓ COMPLETE (2026-07 remaster)
 
-Props that would benefit from curved shapes:
-- `drawComputer()`: Monitor should use rounded rect, not flat box
-- `drawWaterCooler()`: Bottle should be more cylindrical
-- `drawOfficePlant()`: Leaves should use bezier curves
-- `drawBlueFuton()`: Cushions should be rounded
-- `drawTableDesk()`: Rounded edges
+All done via a shared `pathRoundRect()` helper (hand-rolled rounded-rect path
+for wide browser support):
+- `drawComputer()`: rounded bezel + chassis, gradient screen with glare sweep,
+  status LED, paper slot
+- `drawWaterCooler()`: cylindrical jug with curved shoulders, horizontal
+  glass gradient, water-line ripple, curved highlight
+- `drawOfficePlant()`: side-lit terracotta gradient + gentle per-leaf idle sway
+- `drawBlueFuton()`: rounded tufted cushions with fabric gradients, contact
+  shadow, rounded armrest rolls and throw pillow
+- `drawTableDesk()`: rounded gradient top, tapered legs, rubber feet,
+  elliptical contact shadow
 
-### Priority 4: Room Atmosphere
+### Priority 4: Room Atmosphere ✓ COMPLETE (2026-07 remaster)
 
-Each room type should have a distinct visual mood:
-- **Pipe rooms**: Industrial — overhead light cones, wet floor reflections, steam
-- **Hallways**: Corporate — warm lighting, clean floors, door detail
-- **Cloning room**: Sci-fi horror — green tint, pulsing lights, depth fog
-- **Furnace rooms**: Hot — orange/amber glow, heat shimmer, ember particles
-- **CEO office**: Luxury — warm golden lighting, rich textures
-- **Underbelly**: Dark — minimal lighting, grimy atmosphere, broken fixtures
+Implemented as a global post-pass — `applyRoomAtmosphere()` (called from all
+three drawScene paths: levels 1-4 tail, level 5 block, level 6 block, always
+under full-screen UIs). Per-room moods in `ATMOS_MOODS`, keyed by
+`currentAtmosMood()`:
+- **industrial** (pipe rooms): cool blue-grey tint, overhead wash
+- **corporate** (hallways/lobby): warm fluorescent wash
+- **office** (PM offices): desk-lamp warmth
+- **furnace**: amber tint + animated firelight flicker
+- **cloning**: green horror tint + slow pulsing glow
+- **luxury** (marble/entryway/CEO office): golden light
+- **techBlue** (megacomputer/bridge): monitor blue cast
+- **underbelly**: near-dark grime + failing-bulb flicker
+- **hell**: ember red breathing overlay
+Every mood adds floor depth shading + a cached edge vignette. Cost is 3-5
+gradient/flat fills per frame; all static gradients cached in
+`_atmosGradCache`.
 
-### Priority 5: UI Polish
+### Priority 5: UI Polish ✓ COMPLETE (2026-07 remaster)
 
-- **Holster UI** weapon selection overlay — needs better weapon icons
-- **Safe UI** combination dial — metallic rendering
-- **Elevator UI** — floor indicator, better button panel
-- **Keypad UI** — backlit keys
+- **Holster UI**: tooled-leather panel with stitched border, recessed slot
+  pockets, radial icon halo
+- **Safe UI**: vault-steel plate with machined rivets, recessed code window,
+  glass-sheen code slots, beveled push-buttons with selection halo
+- **Elevator UI**: brushed brass-trimmed panel, corner screws, backlit amber
+  floor-indicator display, rounded call buttons with gold halo
+- **Keypad UI**: backlit keys with cyan underglow, convex key-cap sheen,
+  glowing digits; ESC/?/CLR share the treatment
+- **HUD (DOM)**: gradient bar, glow-tinted heart/money counters
+
+### Verification
+
+Headless Chromium smoke test: level 1 pipe room, level 5 pipe/furnace/office
+rooms, level 6 cloning room/underbelly/CEO office, plus safe/keypad/elevator
+UIs — zero page errors; script passes `node --check`.
+
+### Future ideas
+
+- Wet-floor reflections and steam particles in pipe rooms
+- Ember particles in furnace rooms; depth fog in cloning room
+- Heat shimmer post-effect near the furnace
 
 ---
 
