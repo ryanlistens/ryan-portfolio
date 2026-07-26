@@ -2371,108 +2371,172 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
     ctx.fill();
 
     if(sideView) {
-        // === SIDE-VIEW POSE ===
-        // Helmet dome — properly mirrored around bx. backX is behind, frontX in front of face.
-        const backX  = bx - 12 * dir;
-        const frontX = bx + 12 * dir;
-        ctx.fillStyle = '#f0f0f0';
+        // === SIDE-VIEW POSE — articulated profile with a real gait ===
+        const lean = paused ? 0 : 1.5 * dir;      // slight forward lean while marching
+        const stride = walkCycle;                  // ±5 leg swing
+        const armSwing = walkCycle * 0.7;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // --- Back arm (behind torso, swings opposite the lead leg) ---
+        ctx.strokeStyle = '#a01818';
+        ctx.lineWidth = 5;
         ctx.beginPath();
-        ctx.moveTo(backX, by - 50 - bob);
-        ctx.quadraticCurveTo(backX, by - 66 - bob, bx, by - 66 - bob);
-        ctx.quadraticCurveTo(frontX, by - 66 - bob, frontX, by - 50 - bob);
+        ctx.moveTo(bx - 4 * dir + lean, by - 24 - bob);
+        ctx.quadraticCurveTo(bx + (-6 - armSwing * 0.4) * dir, by - 14 - bob,
+                             bx + (-5 - armSwing) * dir, by - 5 - bob);
+        ctx.stroke();
+        ctx.fillStyle = '#e8c090';
+        ctx.beginPath(); ctx.arc(bx + (-5 - armSwing) * dir, by - 3.5 - bob, 2.6, 0, Math.PI * 2); ctx.fill();
+
+        // --- Legs (stroke-based, knees bend into the stride) ---
+        const hipY = by + 4 - bob;
+        const footY = by + 28;
+        const drawBoot = (fx2, fy2, dark) => {
+            ctx.fillStyle = dark ? '#0c0c0c' : '#161616';
+            ctx.beginPath();
+            ctx.moveTo(fx2 - 3.5 * dir, fy2 - 4);
+            ctx.lineTo(fx2 + 5.5 * dir, fy2 - 4);
+            ctx.quadraticCurveTo(fx2 + 9.5 * dir, fy2 - 3.5, fx2 + 9.5 * dir, fy2 - 0.5);
+            ctx.lineTo(fx2 + 9.5 * dir, fy2 + 2);
+            ctx.lineTo(fx2 - 3.5 * dir, fy2 + 2);
+            ctx.closePath(); ctx.fill();
+            // Steel toe cap on the leading edge
+            ctx.fillStyle = '#5a5a5a';
+            pathRoundRect(dir > 0 ? fx2 + 6.2 : fx2 - 9.8, fy2 - 2.8, 3.6, 4.6, 1.6);
+            ctx.fill();
+        };
+        // Trailing leg (darker, behind)
+        ctx.strokeStyle = '#1c1c1c';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(bx - 2 * dir, hipY);
+        ctx.quadraticCurveTo(bx + (-stride * 0.4 + 1) * dir, by + 17 - bob,
+                             bx + (-stride - 1) * dir, footY - 2);
+        ctx.stroke();
+        drawBoot(bx + (-stride - 1) * dir, footY, true);
+        // Leading leg
+        ctx.strokeStyle = '#2e2e2e';
+        ctx.beginPath();
+        ctx.moveTo(bx + 2 * dir, hipY);
+        ctx.quadraticCurveTo(bx + (stride * 0.4 + 3) * dir, by + 17 - bob,
+                             bx + (stride + 1) * dir, footY - 2);
+        ctx.stroke();
+        drawBoot(bx + (stride + 1) * dir, footY, false);
+
+        // --- Torso — rounded work shirt, side-lit toward the facing side ---
+        const shGrad = ctx.createLinearGradient(bx - 10, 0, bx + 10, 0);
+        shGrad.addColorStop(dir > 0 ? 0 : 1, '#9a1a1a');
+        shGrad.addColorStop(dir > 0 ? 1 : 0, '#d83030');
+        ctx.fillStyle = shGrad;
+        ctx.beginPath();
+        ctx.moveTo(bx - 9 + lean, by - 27 - bob);
+        ctx.quadraticCurveTo(bx - 11 + lean * 0.5, by - 10 - bob, bx - 8, by + 7 - bob);
+        ctx.lineTo(bx + 8, by + 7 - bob);
+        ctx.quadraticCurveTo(bx + 11 + lean * 0.5, by - 10 - bob, bx + 9 + lean, by - 27 - bob);
+        ctx.quadraticCurveTo(bx + lean, by - 31 - bob, bx - 9 + lean, by - 27 - bob);
         ctx.closePath();
         ctx.fill();
-        // Dome highlight on the top-front side
-        ctx.fillStyle = '#fafafa';
-        ctx.fillRect(bx + 2 * dir, by - 62 - bob, 6 * dir, 8);
-        // Brim — longer on the front
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(bx - 14 * dir, by - 52 - bob, 28 * dir, 3);
-        ctx.fillStyle = '#ccc';
-        ctx.fillRect(bx - 13 * dir, by - 49 - bob, 26 * dir, 1);
+        // Belt line
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(bx - 8, by + 4 - bob, 16, 2.5);
 
-        // Head — narrow profile
+        // --- Tie on the front of the shirt, swaying with the gait ---
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.moveTo(bx + 2 * dir + lean, by - 26 - bob);
+        ctx.lineTo(bx + 7 * dir + lean, by - 25 - bob);
+        ctx.quadraticCurveTo(bx + (6 + walkCycle * 0.15) * dir, by - 14 - bob,
+                             bx + (5 + walkCycle * 0.35) * dir, by - 4 - bob);
+        ctx.lineTo(bx + (2.5 + walkCycle * 0.35) * dir, by - 7 - bob);
+        ctx.closePath();
+        ctx.fill();
+
+        // --- Head in profile — curved skull, brow ridge, nose, chin, ear ---
         ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx - 10 * dir, by - 50 - bob, 20 * dir, 22);
-        // Nose bump poking out the front
-        ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(bx + 10 * dir, by - 42 - bob, 2 * dir, 4);
-        // Single eye on the facing side
+        ctx.beginPath();
+        ctx.moveTo(bx - 8 * dir, by - 28 - bob);                                          // nape
+        ctx.quadraticCurveTo(bx - 11 * dir, by - 40 - bob, bx - 8 * dir, by - 49 - bob);  // back of skull
+        ctx.quadraticCurveTo(bx - 2 * dir, by - 53 - bob, bx + 5 * dir, by - 51 - bob);   // crown
+        ctx.quadraticCurveTo(bx + 10 * dir, by - 49 - bob, bx + 10 * dir, by - 44 - bob); // forehead
+        ctx.lineTo(bx + 10 * dir, by - 42 - bob);
+        ctx.lineTo(bx + 12.5 * dir, by - 40 - bob);                                       // nose tip
+        ctx.quadraticCurveTo(bx + 12.5 * dir, by - 37.5 - bob, bx + 9.8 * dir, by - 37 - bob);
+        ctx.lineTo(bx + 9.4 * dir, by - 33 - bob);
+        ctx.quadraticCurveTo(bx + 10 * dir, by - 29.5 - bob, bx + 6 * dir, by - 28.5 - bob); // chin
+        ctx.closePath();
+        ctx.fill();
+        // Ear on the visible side
+        ctx.fillStyle = '#e8c090';
+        ctx.beginPath(); ctx.ellipse(bx - 3 * dir, by - 39 - bob, 2.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#c89a68'; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.arc(bx - 3 * dir, by - 39 - bob, 1.2, 0, Math.PI * 1.4); ctx.stroke();
+        // Eye with iris + angry brow
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.ellipse(bx + 6 * dir, by - 43.5 - bob, 2.2, 1.8, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#000';
-        ctx.fillRect(bx + 3 * dir, by - 44 - bob, 4 * dir, 4);
-        // Angry brow
+        ctx.beginPath(); ctx.arc(bx + 7 * dir, by - 43.5 - bob, 1.1, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(bx + 1*dir, by - 48 - bob);
-        ctx.lineTo(bx + 7*dir, by - 46 - bob);
+        ctx.moveTo(bx + 3 * dir, by - 47.5 - bob);
+        ctx.lineTo(bx + 9 * dir, by - 45.5 - bob);
         ctx.stroke();
-        // Frown — small arc on front of face
-        ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1.5;
+        // Downturned mouth at the jaw
+        ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1.3;
         ctx.beginPath();
-        ctx.arc(bx + 4*dir, by - 34 - bob, 2.5, 0.2, Math.PI - 0.2);
+        ctx.arc(bx + 7.5 * dir, by - 30 - bob, 2, Math.PI + 0.35, Math.PI * 2 - 0.35);
         ctx.stroke();
 
-        // Torso — narrower for side view
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(bx - 10, by - 28 - bob, 20, 36);
-        // Shirt depth shading on the back side
-        ctx.fillStyle = '#9a1a1a';
-        ctx.fillRect(bx - 10*dir, by - 28 - bob, 4 * dir, 36);
-        // Tie (visible on front side of torso)
-        ctx.fillStyle = '#111';
+        // --- Hard hat — dome tilted with the lean, crown ridge, front brim ---
+        ctx.fillStyle = '#f0f0f0';
         ctx.beginPath();
-        ctx.moveTo(bx + 2*dir, by - 28 - bob);
-        ctx.lineTo(bx + 8*dir, by - 28 - bob);
-        ctx.lineTo(bx + 7*dir, by - 6 - bob);
-        ctx.lineTo(bx + 5*dir, by - 1 - bob);
-        ctx.lineTo(bx + 3*dir, by - 6 - bob);
+        ctx.moveTo(bx - 12 * dir, by - 49 - bob);
+        ctx.quadraticCurveTo(bx - 12 * dir, by - 64 - bob, bx + lean, by - 65 - bob);
+        ctx.quadraticCurveTo(bx + 12 * dir, by - 64 - bob, bx + 11 * dir, by - 50 - bob);
         ctx.closePath();
         ctx.fill();
+        ctx.strokeStyle = '#d8d8d8'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx - 6 * dir, by - 63 - bob);
+        ctx.quadraticCurveTo(bx, by - 66.5 - bob, bx + 5 * dir, by - 63.5 - bob);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.ellipse(bx + 4 * dir, by - 59 - bob, 3.4, 5, 0.3 * dir, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#dcdcdc';
+        ctx.beginPath(); ctx.ellipse(bx + 2 * dir, by - 49.5 - bob, 15, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.beginPath(); ctx.ellipse(bx + 2 * dir, by - 48.8 - bob, 15, 1.4, 0, 0, Math.PI * 2); ctx.fill();
 
-        // Arms — one leading, one trailing
-        const armSwing = walkCycle * 0.6;
-        // Back arm (trails behind, partially hidden by torso)
-        ctx.fillStyle = '#a01818';
-        ctx.fillRect(bx - 6*dir, by - 26 - bob - armSwing, 5 * dir, 18);
-        ctx.fillStyle = '#e8c090';
-        ctx.fillRect(bx - 6*dir, by - 8 - bob - armSwing, 5 * dir, 7);
-        // Front arm (leads swing — extended if hasGun)
+        // --- Front arm — swings, or holds the revolver level when armed ---
         if(hasGun) {
-            // Arm extended forward with revolver at shoulder height
-            ctx.fillStyle = '#cc2222';
-            ctx.fillRect(bx + 4*dir, by - 14 - bob, 12 * dir, 6);
-            ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(bx + 16*dir, by - 14 - bob, 4 * dir, 6);
-            // Revolver barrel extends forward from hand
-            ctx.fillStyle = '#3a3a3a';
-            ctx.fillRect(bx + 20*dir, by - 13 - bob, 14 * dir, 4);
-            // Cylinder behind barrel
-            ctx.fillStyle = '#5a5a5a';
+            ctx.strokeStyle = '#d83030';
+            ctx.lineWidth = 5;
             ctx.beginPath();
-            ctx.arc(bx + 20*dir, by - 11 - bob, 3, 0, Math.PI * 2);
-            ctx.fill();
-            // Grip beneath hand
-            ctx.fillStyle = '#222';
-            ctx.fillRect(bx + 16*dir, by - 8 - bob, 3 * dir, 5);
-        } else {
-            ctx.fillStyle = '#cc2222';
-            ctx.fillRect(bx + 4*dir, by - 26 - bob + armSwing, 5 * dir, 18);
+            ctx.moveTo(bx + 4 * dir + lean, by - 24 - bob);
+            ctx.quadraticCurveTo(bx + 10 * dir, by - 20 - bob, bx + 16 * dir, by - 12 - bob);
+            ctx.stroke();
             ctx.fillStyle = '#f5d5a8';
-            ctx.fillRect(bx + 4*dir, by - 8 - bob + armSwing, 5 * dir, 7);
+            ctx.beginPath(); ctx.arc(bx + 17 * dir, by - 12 - bob, 2.8, 0, Math.PI * 2); ctx.fill();
+            // Revolver — barrel, cylinder, grip
+            ctx.fillStyle = '#3a3a3a';
+            pathRoundRect(dir > 0 ? bx + 19 : bx - 33, by - 13.5 - bob, 14, 3.6, 1.5);
+            ctx.fill();
+            ctx.fillStyle = '#5a5a5a';
+            ctx.beginPath(); ctx.arc(bx + 19 * dir, by - 11.5 - bob, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#222';
+            pathRoundRect(dir > 0 ? bx + 15.5 : bx - 18.5, by - 9 - bob, 3, 5.5, 1);
+            ctx.fill();
+        } else {
+            ctx.strokeStyle = '#d83030';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(bx + 4 * dir + lean, by - 24 - bob);
+            ctx.quadraticCurveTo(bx + (7 + armSwing * 0.4) * dir, by - 14 - bob,
+                                 bx + (6 + armSwing) * dir, by - 5 - bob);
+            ctx.stroke();
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(bx + (6 + armSwing) * dir, by - 3.5 - bob, 2.6, 0, Math.PI * 2); ctx.fill();
         }
-
-        // Legs — alternating stride
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(bx - 8, by + 8 - bob, 8, 18 + walkCycle);
-        ctx.fillRect(bx, by + 8 - bob, 8, 18 - walkCycle);
-        // Boots — elongated in direction of travel
-        ctx.fillStyle = '#111';
-        ctx.fillRect(bx - 8 + (dir > 0 ? 0 : -3), by + 26 - bob + walkCycle, 11, 5);
-        ctx.fillRect(bx + (dir > 0 ? 0 : -3), by + 26 - bob - walkCycle, 11, 5);
-        // Steel toe caps (at the leading edge)
-        ctx.fillStyle = '#444';
-        ctx.fillRect(bx + (dir > 0 ? 7 : -11), by + 26 - bob + walkCycle, 3, 3);
-        ctx.fillRect(bx + (dir > 0 ? 15 : -3), by + 26 - bob - walkCycle, 3, 3);
         return;
     }
 
@@ -4286,176 +4350,241 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(wx + 8, lotTop + 3); ctx.lineTo(wx + 8 + 10 * spotW, lotTop + 3); ctx.stroke();
 
-    // === PM COLOR-COORDINATED VW BUGS (yellow absent in level 1 — not hired yet) ===
+    // Parked cars are seen from across the street at a shallow angle, nose-in
+    // to the stalls — so every sprite below is a REAR view (tail lights,
+    // trunk, rear glass), not a top-down plan. Shared ground line per stall.
+    const carBaseY = lotTop + lotH * 0.86;
+
+    // === PM COLOR-COORDINATED VW BUGS, rear view (yellow absent in level 1) ===
     const numBugs = (level === 1) ? 3 : 4;
     for(let pi = 0; pi < numBugs; pi++) {
-        const bugSpot = pi;
-        const bcx = wx + 8 + (bugSpot + 0.5) * spotW;
-        const bcy = lotTop + lotH * 0.52;
-        const bw = spotW * 0.7;
-        const bh = lotH * 0.72;
-        const bugCol = COLORS[pi].hex;
-        // VW Bug body — distinctively rounded shape (top-down)
-        ctx.fillStyle = bugCol;
+        const bcx = wx + 8 + (pi + 0.5) * spotW;
+        const half = spotW * 0.31;
+        const bh2 = lotH * 0.66;
+        // Ground shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(bcx, carBaseY + 1, half + 2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+        // Rear tires peeking out
+        ctx.fillStyle = '#161616';
+        ctx.fillRect(bcx - half - 1, carBaseY - 4, 3.4, 5);
+        ctx.fillRect(bcx + half - 2.4, carBaseY - 4, 3.4, 5);
+        // Beetle dome — one continuous curved silhouette, side-lit
+        const bugGrad = ctx.createLinearGradient(bcx - half, 0, bcx + half, 0);
+        bugGrad.addColorStop(0, COLORS[pi].hex);
+        bugGrad.addColorStop(0.45, COLORS[pi].hex);
+        bugGrad.addColorStop(1, COLORS[pi].shadow || COLORS[pi].hex);
+        ctx.fillStyle = bugGrad;
         ctx.beginPath();
-        // Rounded front (nose at top)
-        ctx.moveTo(bcx - bw*0.3, bcy - bh/2);
-        ctx.quadraticCurveTo(bcx, bcy - bh/2 - 2, bcx + bw*0.3, bcy - bh/2);
-        ctx.lineTo(bcx + bw/2, bcy - bh*0.2);
-        ctx.lineTo(bcx + bw/2, bcy + bh*0.3);
-        // Rounded rear (engine)
-        ctx.quadraticCurveTo(bcx + bw*0.4, bcy + bh/2, bcx, bcy + bh/2 + 1);
-        ctx.quadraticCurveTo(bcx - bw*0.4, bcy + bh/2, bcx - bw/2, bcy + bh*0.3);
-        ctx.lineTo(bcx - bw/2, bcy - bh*0.2);
+        ctx.moveTo(bcx - half, carBaseY - 2);
+        ctx.quadraticCurveTo(bcx - half - 1, carBaseY - bh2 * 0.55, bcx - half * 0.62, carBaseY - bh2 * 0.85);
+        ctx.quadraticCurveTo(bcx - half * 0.3, carBaseY - bh2, bcx, carBaseY - bh2);
+        ctx.quadraticCurveTo(bcx + half * 0.3, carBaseY - bh2, bcx + half * 0.62, carBaseY - bh2 * 0.85);
+        ctx.quadraticCurveTo(bcx + half + 1, carBaseY - bh2 * 0.55, bcx + half, carBaseY - 2);
         ctx.closePath();
         ctx.fill();
-        // Windshield (small, rounded — VW Bug style)
-        ctx.fillStyle = 'rgba(80,120,160,0.6)';
+        // Roof sheen
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
         ctx.beginPath();
-        ctx.ellipse(bcx, bcy - bh*0.18, bw*0.28, bh*0.1, 0, 0, Math.PI * 2);
+        ctx.ellipse(bcx - half * 0.2, carBaseY - bh2 * 0.9, half * 0.42, bh2 * 0.08, -0.1, 0, Math.PI * 2);
         ctx.fill();
-        // Roof (center dome)
-        ctx.fillStyle = bugCol;
-        ctx.globalAlpha = 0.7;
+        // Oval rear window
+        ctx.fillStyle = 'rgba(30,45,60,0.85)';
         ctx.beginPath();
-        ctx.ellipse(bcx, bcy + bh*0.02, bw*0.25, bh*0.18, 0, 0, Math.PI * 2);
+        ctx.ellipse(bcx, carBaseY - bh2 * 0.68, half * 0.44, bh2 * 0.14, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1;
-        // Rear window (small oval — VW style)
-        ctx.fillStyle = 'rgba(80,120,160,0.5)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 0.6;
+        ctx.stroke();
+        // Engine-lid seam + vents
+        ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = 0.7;
         ctx.beginPath();
-        ctx.ellipse(bcx, bcy + bh*0.28, bw*0.2, bh*0.06, 0, 0, Math.PI * 2);
+        ctx.moveTo(bcx - half * 0.55, carBaseY - bh2 * 0.42);
+        ctx.quadraticCurveTo(bcx, carBaseY - bh2 * 0.50, bcx + half * 0.55, carBaseY - bh2 * 0.42);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(bcx - half * 0.3, carBaseY - bh2 * 0.34, half * 0.6, 1);
+        // Round tail lights + chrome bumper + plate
+        ctx.fillStyle = '#e03030';
+        ctx.beginPath(); ctx.arc(bcx - half * 0.68, carBaseY - bh2 * 0.30, 1.4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bcx + half * 0.68, carBaseY - bh2 * 0.30, 1.4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c8c8c8';
+        pathRoundRect(bcx - half * 0.92, carBaseY - 5.5, half * 1.84, 2.4, 1.2);
         ctx.fill();
-        // Center ridge line (body seam)
-        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath(); ctx.moveTo(bcx, bcy - bh/2 - 1); ctx.lineTo(bcx, bcy + bh/2 + 1); ctx.stroke();
-        // Headlights (round, VW style)
-        ctx.fillStyle = '#ffe';
-        ctx.beginPath(); ctx.arc(bcx - bw*0.3, bcy - bh*0.38, 1.5, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(bcx + bw*0.3, bcy - bh*0.38, 1.5, 0, Math.PI*2); ctx.fill();
-        // Tail lights
-        ctx.fillStyle = '#cc2222';
-        ctx.beginPath(); ctx.arc(bcx - bw*0.3, bcy + bh*0.4, 1, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(bcx + bw*0.3, bcy + bh*0.4, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(bcx - 3, carBaseY - 10, 6, 3.4);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(bcx - 2.4, carBaseY - 9.4, 4.8, 2.2);
     }
 
-    // === SILVER CONVERTIBLE (spot 5) ===
+    // === SILVER CONVERTIBLE, rear view (spot 5) — top down, seats visible ===
     {
-        const cvSpot = 5;
-        const cvx = wx + 8 + (cvSpot + 0.5) * spotW;
-        const cvy = lotTop + lotH * 0.52;
-        const cvw = spotW * 0.72;
-        const cvh = lotH * 0.72;
-        // Body — silver, sleek
-        ctx.fillStyle = '#c0c0c0';
-        const cr = 2;
+        const cvx = wx + 8 + 5.5 * spotW;
+        const half = spotW * 0.34;
+        const bh2 = lotH * 0.52;
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(cvx, carBaseY + 1, half + 2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#161616';
+        ctx.fillRect(cvx - half - 1, carBaseY - 4, 3.4, 5);
+        ctx.fillRect(cvx + half - 2.4, carBaseY - 4, 3.4, 5);
+        // Windshield frame visible beyond the open cabin (farther = higher, narrower)
+        ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(cvx - cvw/2 + cr, cvy - cvh/2);
-        ctx.lineTo(cvx + cvw/2 - cr, cvy - cvh/2);
-        ctx.quadraticCurveTo(cvx + cvw/2, cvy - cvh/2, cvx + cvw/2, cvy - cvh/2 + cr);
-        ctx.lineTo(cvx + cvw/2, cvy + cvh/2 - cr);
-        ctx.quadraticCurveTo(cvx + cvw/2, cvy + cvh/2, cvx + cvw/2 - cr, cvy + cvh/2);
-        ctx.lineTo(cvx - cvw/2 + cr, cvy + cvh/2);
-        ctx.quadraticCurveTo(cvx - cvw/2, cvy + cvh/2, cvx - cvw/2, cvy + cvh/2 - cr);
-        ctx.lineTo(cvx - cvw/2, cvy - cvh/2 + cr);
-        ctx.quadraticCurveTo(cvx - cvw/2, cvy - cvh/2, cvx - cvw/2 + cr, cvy - cvh/2);
+        ctx.moveTo(cvx - half * 0.6, carBaseY - bh2 * 1.14);
+        ctx.quadraticCurveTo(cvx, carBaseY - bh2 * 1.26, cvx + half * 0.6, carBaseY - bh2 * 1.14);
+        ctx.stroke();
+        // Tan seat backs (two rounded humps in the open cabin)
+        ctx.fillStyle = '#b8926a';
+        pathRoundRect(cvx - half * 0.62, carBaseY - bh2 * 1.06, half * 0.52, bh2 * 0.30, 2);
         ctx.fill();
-        // No roof — visible interior (tan seats)
-        ctx.fillStyle = '#c8a882';
-        ctx.fillRect(cvx - cvw*0.32, cvy - cvh*0.1, cvw*0.64, cvh*0.35);
-        // Windshield (compact, front only)
-        ctx.fillStyle = 'rgba(150,200,240,0.5)';
-        ctx.fillRect(cvx - cvw*0.3, cvy - cvh/2 + 2, cvw*0.6, cvh*0.12);
-        // Chrome trim along sides
-        ctx.strokeStyle = '#ddd';
-        ctx.lineWidth = 0.7;
-        ctx.beginPath(); ctx.moveTo(cvx - cvw/2 + 1, cvy); ctx.lineTo(cvx + cvw/2 - 1, cvy); ctx.stroke();
-        // Headlights & tail lights
-        ctx.fillStyle = '#ffe';
-        ctx.fillRect(cvx - cvw*0.35, cvy - cvh/2 + 1, cvw*0.12, 1.5);
-        ctx.fillRect(cvx + cvw*0.23, cvy - cvh/2 + 1, cvw*0.12, 1.5);
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cvx - cvw/2 + 1, cvy + cvh/2 - 2, cvw*0.15, 1.5);
-        ctx.fillRect(cvx + cvw/2 - cvw*0.15 - 1, cvy + cvh/2 - 2, cvw*0.15, 1.5);
+        pathRoundRect(cvx + half * 0.10, carBaseY - bh2 * 1.06, half * 0.52, bh2 * 0.30, 2);
+        ctx.fill();
+        // Low wide rear body with sculpted shoulders
+        const cvGrad = ctx.createLinearGradient(cvx - half, 0, cvx + half, 0);
+        cvGrad.addColorStop(0, '#d4d4d8');
+        cvGrad.addColorStop(0.5, '#b8b8bc');
+        cvGrad.addColorStop(1, '#8e8e94');
+        ctx.fillStyle = cvGrad;
+        ctx.beginPath();
+        ctx.moveTo(cvx - half, carBaseY - 2);
+        ctx.quadraticCurveTo(cvx - half - 1, carBaseY - bh2 * 0.7, cvx - half * 0.8, carBaseY - bh2 * 0.82);
+        ctx.lineTo(cvx + half * 0.8, carBaseY - bh2 * 0.82);
+        ctx.quadraticCurveTo(cvx + half + 1, carBaseY - bh2 * 0.7, cvx + half, carBaseY - 2);
+        ctx.closePath();
+        ctx.fill();
+        // Trunk seam + body sheen
+        ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(cvx - half * 0.66, carBaseY - bh2 * 0.5);
+        ctx.lineTo(cvx + half * 0.66, carBaseY - bh2 * 0.5);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.30)';
+        ctx.fillRect(cvx - half * 0.7, carBaseY - bh2 * 0.74, half * 1.4, 1);
+        // Full-width tail light bar + chrome bumper + plate
+        ctx.fillStyle = '#e03030';
+        pathRoundRect(cvx - half * 0.8, carBaseY - bh2 * 0.42, half * 1.6, 1.8, 1);
+        ctx.fill();
+        ctx.fillStyle = '#d8d8dc';
+        pathRoundRect(cvx - half * 0.94, carBaseY - 5.5, half * 1.88, 2.4, 1.2);
+        ctx.fill();
+        ctx.fillStyle = '#555';
+        ctx.fillRect(cvx - 2.6, carBaseY - 9.6, 5.2, 2.4);
     }
 
-    // === BLACK CADILLACS (spots 7 and 8) ===
+    // === BLACK CADILLACS, rear view (spots 7 and 8) — fins + vertical lights ===
     for(let ci = 0; ci < 2; ci++) {
-        const cadSpot = 7 + ci;
-        const cdx = wx + 8 + (cadSpot + 0.5) * spotW;
-        const cdy = lotTop + lotH * 0.50;
-        const cdw = spotW * 0.72;
-        const cdh = lotH * 0.82;
-        // Long body — black luxury sedan
-        ctx.fillStyle = '#1a1a1a';
+        const cdx = wx + 8 + (7.5 + ci) * spotW;
+        const half = spotW * 0.36;
+        const bh2 = lotH * 0.74;
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.beginPath(); ctx.ellipse(cdx, carBaseY + 1, half + 2, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#0c0c0c';
+        ctx.fillRect(cdx - half - 1, carBaseY - 4, 3.6, 5);
+        ctx.fillRect(cdx + half - 2.6, carBaseY - 4, 3.6, 5);
+        // Wide low body with tail fins rising at the corners
+        const cadGrad = ctx.createLinearGradient(cdx - half, 0, cdx + half, 0);
+        cadGrad.addColorStop(0, '#33343a');
+        cadGrad.addColorStop(0.4, '#1c1d22');
+        cadGrad.addColorStop(1, '#0e0f12');
+        ctx.fillStyle = cadGrad;
         ctx.beginPath();
-        ctx.moveTo(cdx - cdw/2 + 1, cdy - cdh/2);
-        ctx.lineTo(cdx + cdw/2 - 1, cdy - cdh/2);
-        ctx.quadraticCurveTo(cdx + cdw/2, cdy - cdh/2, cdx + cdw/2, cdy - cdh/2 + 2);
-        ctx.lineTo(cdx + cdw/2, cdy + cdh/2 - 2);
-        ctx.quadraticCurveTo(cdx + cdw/2, cdy + cdh/2, cdx + cdw/2 - 1, cdy + cdh/2);
-        ctx.lineTo(cdx - cdw/2 + 1, cdy + cdh/2);
-        ctx.quadraticCurveTo(cdx - cdw/2, cdy + cdh/2, cdx - cdw/2, cdy + cdh/2 - 2);
-        ctx.lineTo(cdx - cdw/2, cdy - cdh/2 + 2);
-        ctx.quadraticCurveTo(cdx - cdw/2, cdy - cdh/2, cdx - cdw/2 + 1, cdy - cdh/2);
+        ctx.moveTo(cdx - half, carBaseY - 2);
+        ctx.lineTo(cdx - half - 1, carBaseY - bh2 * 0.62);          // left fin tip
+        ctx.lineTo(cdx - half * 0.72, carBaseY - bh2 * 0.54);
+        ctx.lineTo(cdx - half * 0.6, carBaseY - bh2 * 0.56);
+        ctx.quadraticCurveTo(cdx - half * 0.52, carBaseY - bh2 * 0.94, cdx - half * 0.34, carBaseY - bh2);
+        ctx.lineTo(cdx + half * 0.34, carBaseY - bh2);              // roof
+        ctx.quadraticCurveTo(cdx + half * 0.52, carBaseY - bh2 * 0.94, cdx + half * 0.6, carBaseY - bh2 * 0.56);
+        ctx.lineTo(cdx + half * 0.72, carBaseY - bh2 * 0.54);
+        ctx.lineTo(cdx + half + 1, carBaseY - bh2 * 0.62);          // right fin tip
+        ctx.lineTo(cdx + half, carBaseY - 2);
+        ctx.closePath();
         ctx.fill();
-        // Windshield
-        ctx.fillStyle = 'rgba(40,60,80,0.7)';
-        ctx.fillRect(cdx - cdw*0.35, cdy - cdh/2 + 2, cdw*0.7, cdh*0.14);
-        // Roof panel
-        ctx.fillStyle = '#222';
-        ctx.fillRect(cdx - cdw*0.3, cdy - cdh*0.12, cdw*0.6, cdh*0.28);
-        // Rear windshield
-        ctx.fillStyle = 'rgba(40,60,80,0.6)';
-        ctx.fillRect(cdx - cdw*0.28, cdy + cdh*0.2, cdw*0.56, cdh*0.1);
-        // Chrome trim
-        ctx.strokeStyle = '#888';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath(); ctx.moveTo(cdx - cdw/2 + 1, cdy - cdh*0.05); ctx.lineTo(cdx + cdw/2 - 1, cdy - cdh*0.05); ctx.stroke();
-        // Chrome grille (front)
-        ctx.fillStyle = '#666';
-        ctx.fillRect(cdx - cdw*0.25, cdy - cdh/2 + 1, cdw*0.5, 1);
-        // Headlights
-        ctx.fillStyle = '#ffe';
-        ctx.fillRect(cdx - cdw/2 + 1, cdy - cdh/2 + 1, cdw*0.12, 1.5);
-        ctx.fillRect(cdx + cdw/2 - cdw*0.12 - 1, cdy - cdh/2 + 1, cdw*0.12, 1.5);
-        // Tail lights
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cdx - cdw/2 + 1, cdy + cdh/2 - 2, cdw*0.18, 1.5);
-        ctx.fillRect(cdx + cdw/2 - cdw*0.18 - 1, cdy + cdh/2 - 2, cdw*0.18, 1.5);
+        // Rear glass — wide trapezoid under the roofline
+        ctx.fillStyle = 'rgba(46,66,88,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(cdx - half * 0.40, carBaseY - bh2 * 0.94);
+        ctx.lineTo(cdx + half * 0.40, carBaseY - bh2 * 0.94);
+        ctx.lineTo(cdx + half * 0.50, carBaseY - bh2 * 0.62);
+        ctx.lineTo(cdx - half * 0.50, carBaseY - bh2 * 0.62);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.beginPath();
+        ctx.moveTo(cdx - half * 0.36, carBaseY - bh2 * 0.92);
+        ctx.lineTo(cdx - half * 0.1, carBaseY - bh2 * 0.92);
+        ctx.lineTo(cdx - half * 0.3, carBaseY - bh2 * 0.64);
+        ctx.lineTo(cdx - half * 0.46, carBaseY - bh2 * 0.64);
+        ctx.closePath();
+        ctx.fill();
+        // Vertical fin tail lights
+        ctx.fillStyle = '#e02020';
+        pathRoundRect(cdx - half - 0.4, carBaseY - bh2 * 0.58, 1.8, bh2 * 0.34, 1);
+        ctx.fill();
+        pathRoundRect(cdx + half - 1.4, carBaseY - bh2 * 0.58, 1.8, bh2 * 0.34, 1);
+        ctx.fill();
+        // Trunk seam + chrome bumper + plate
+        ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(cdx - half * 0.6, carBaseY - bh2 * 0.34);
+        ctx.lineTo(cdx + half * 0.6, carBaseY - bh2 * 0.34);
+        ctx.stroke();
+        ctx.fillStyle = '#b8b8bc';
+        pathRoundRect(cdx - half * 0.96, carBaseY - 5.5, half * 1.92, 2.6, 1.2);
+        ctx.fill();
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(cdx - 3, carBaseY - 10, 6, 3.4);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(cdx - 2.4, carBaseY - 9.4, 4.8, 2.2);
     }
 
-    // === WHITE COMPACT CARGO VAN (spot 10) ===
-    const vanSpot = 10;
-    const vanCx = wx + 8 + (vanSpot + 0.3) * spotW;
-    const vanCy = lotTop + lotH * 0.48;
-    const vanW = spotW * 0.82;
-    const vanH = lotH * 0.88;
-    // Van body — white, boxy
-    ctx.fillStyle = '#f0ece4';
-    ctx.fillRect(vanCx - vanW/2, vanCy - vanH/2, vanW, vanH);
-    // Windshield (narrow, cab front)
-    ctx.fillStyle = 'rgba(100,140,180,0.5)';
-    ctx.fillRect(vanCx - vanW*0.35, vanCy - vanH/2 + 2, vanW*0.7, vanH*0.1);
-    // Cab roof (smaller than cargo area)
-    ctx.fillStyle = '#e0dcd0';
-    ctx.fillRect(vanCx - vanW*0.3, vanCy - vanH*0.3, vanW*0.6, vanH*0.15);
-    // Cargo area (solid, no rear window)
-    ctx.fillStyle = '#e8e4d8';
-    ctx.fillRect(vanCx - vanW*0.4, vanCy, vanW*0.8, vanH*0.4);
-    // Side panel line
-    ctx.strokeStyle = '#ccc';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(vanCx - vanW/2 + 1, vanCy - vanH*0.1); ctx.lineTo(vanCx + vanW/2 - 1, vanCy - vanH*0.1); ctx.stroke();
-    // Rear doors (double)
-    ctx.strokeStyle = '#bbb';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(vanCx, vanCy + vanH*0.1); ctx.lineTo(vanCx, vanCy + vanH/2 - 1); ctx.stroke();
-    // Tail lights
-    ctx.fillStyle = '#cc2222';
-    ctx.fillRect(vanCx - vanW/2 + 1, vanCy + vanH/2 - 2, vanW*0.12, 2);
-    ctx.fillRect(vanCx + vanW/2 - vanW*0.12 - 1, vanCy + vanH/2 - 2, vanW*0.12, 2);
+    // === WHITE COMPACT CARGO VAN, rear view (spot 10) — double doors ===
+    {
+        const vnx = wx + 8 + 10.3 * spotW;
+        const half = spotW * 0.36;
+        const bh2 = lotH * 0.94;
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.beginPath(); ctx.ellipse(vnx, carBaseY + 1, half + 2, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#161616';
+        ctx.fillRect(vnx - half - 1, carBaseY - 4, 3.6, 5);
+        ctx.fillRect(vnx + half - 2.6, carBaseY - 4, 3.6, 5);
+        // Tall boxy body, rounded roof corners, side-lit
+        const vanGrad = ctx.createLinearGradient(vnx - half, 0, vnx + half, 0);
+        vanGrad.addColorStop(0, '#f4f0e8');
+        vanGrad.addColorStop(0.55, '#e6e2d6');
+        vanGrad.addColorStop(1, '#c6c2b6');
+        ctx.fillStyle = vanGrad;
+        pathRoundRect(vnx - half, carBaseY - bh2, half * 2, bh2 - 2, 3);
+        ctx.fill();
+        // Double rear doors — center seam, hinges, handles
+        ctx.strokeStyle = 'rgba(0,0,0,0.30)'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(vnx, carBaseY - bh2 + 3); ctx.lineTo(vnx, carBaseY - 5); ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 0.6;
+        pathRoundRect(vnx - half + 2, carBaseY - bh2 + 3, half * 2 - 4, bh2 - 9, 2);
+        ctx.stroke();
+        ctx.fillStyle = '#8a8a82';
+        ctx.fillRect(vnx - 4.5, carBaseY - bh2 * 0.46, 3.4, 1.2);
+        ctx.fillRect(vnx + 1.1, carBaseY - bh2 * 0.46, 3.4, 1.2);
+        for(const hy of [carBaseY - bh2 * 0.8, carBaseY - bh2 * 0.5, carBaseY - bh2 * 0.2]) {
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.fillRect(vnx - half + 1, hy, 1.6, 2.4);
+            ctx.fillRect(vnx + half - 2.6, hy, 1.6, 2.4);
+        }
+        // Roof sheen
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(vnx - half + 2, carBaseY - bh2 + 1, half * 2 - 4, 1.2);
+        // Vertical tail lights + black bumper + plate
+        ctx.fillStyle = '#e02020';
+        pathRoundRect(vnx - half - 0.4, carBaseY - bh2 * 0.30, 1.8, bh2 * 0.18, 1);
+        ctx.fill();
+        pathRoundRect(vnx + half - 1.4, carBaseY - bh2 * 0.30, 1.8, bh2 * 0.18, 1);
+        ctx.fill();
+        ctx.fillStyle = '#3a3a3a';
+        pathRoundRect(vnx - half * 0.98, carBaseY - 5, half * 1.96, 2.6, 1.2);
+        ctx.fill();
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(vnx - 3, carBaseY - 10.5, 6, 3.4);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(vnx - 2.4, carBaseY - 9.9, 4.8, 2.2);
+    }
 
     // Glass tint — subtle darkening for contrast so foreground PMs are more visible
     ctx.fillStyle = 'rgba(20, 40, 60, 0.18)';
@@ -8521,87 +8650,145 @@ function drawBlueFuton(x, y) {
 // Draw boss reclining on futon after a nap
 // Futon center passed as fx,fy (560,360). Seat cushion: y=fy-20..fy-2, x=fx-48..fx+48.
 function drawRecliningBoss(fx, fy) {
+    // The napping player — the bald manager lying on his back on the futon,
+    // head on a pillow at the left, ankles crossed at the right, chest
+    // slowly rising and falling with each breath.
     const skin = '#f5c89a';
-    const shirtColor = '#ffffff';  // boss white dress shirt
-    const shirtShade = '#e0e0e0';  // shirt shadow side
-    const tieColor   = '#1a1a1a';  // black tie
-    const pantsColor = '#2b2b2b';  // dark slacks
-    const shoeColor  = '#1a1a1a';  // dark dress shoes
-    const cy = fy - 11; // vertical center of seat cushion
+    const cy = fy - 11;                       // vertical center of seat cushion
+    const tNow = Date.now();
+    const breath = Math.sin(tNow / 950) * 1.1; // slow sleeping breath
 
-    // Head pillow (cream) at left end of cushion
+    // Head pillow — soft rounded cushion with a dent where the head rests
     ctx.fillStyle = '#f0ede0';
-    ctx.fillRect(fx - 46, cy - 8, 24, 16);
+    pathRoundRect(fx - 48, cy - 9, 26, 18, 6);
+    ctx.fill();
     ctx.strokeStyle = '#c8c4b0'; ctx.lineWidth = 0.8;
-    ctx.strokeRect(fx - 46, cy - 8, 24, 16);
-    ctx.lineWidth = 1;
+    pathRoundRect(fx - 48, cy - 9, 26, 18, 6);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.beginPath(); ctx.ellipse(fx - 35, cy, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
 
-    // Dark slacks — right two-thirds of figure
-    ctx.fillStyle = pantsColor;
-    ctx.fillRect(fx + 2, cy - 7, 46, 14);
-    // Trouser crease
-    ctx.strokeStyle = '#444'; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.moveTo(fx + 2, cy); ctx.lineTo(fx + 48, cy); ctx.stroke();
-    ctx.lineWidth = 1;
+    const hx = fx - 34, hy = cy - 1;
 
-    // Dark dress shoes at right end
-    ctx.fillStyle = shoeColor;
-    ctx.fillRect(fx + 44, cy - 7, 14, 6);
-    ctx.fillRect(fx + 44, cy + 1, 14, 6);
-    // Shoe shine highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(fx + 46, cy - 6, 5, 2);
-    ctx.fillRect(fx + 46, cy + 2, 5, 2);
-
-    // White dress shirt torso
-    ctx.fillStyle = shirtColor;
-    ctx.fillRect(fx - 26, cy - 8, 34, 16);
-    // Shirt shadow edge (transition to pants)
-    ctx.fillStyle = shirtShade;
-    ctx.fillRect(fx + 6, cy - 8, 2, 16);
-    // Collar area (V-shape near neck)
-    ctx.fillStyle = shirtShade;
-    ctx.fillRect(fx - 26, cy - 3, 6, 6);
-    ctx.fillRect(fx - 26, cy - 6, 4, 3);
-    // Black tie running HORIZONTALLY along body (from collar toward waist)
-    ctx.fillStyle = tieColor;
-    ctx.fillRect(fx - 22, cy - 1, 26, 3);
-    // Tie knot (thicker near collar/neck end)
-    ctx.fillStyle = '#333';
-    ctx.fillRect(fx - 23, cy - 2, 4, 5);
-
-    // Shirt sleeves alongside body (skin at cuffs)
-    ctx.fillStyle = shirtColor;
-    ctx.fillRect(fx - 24, cy - 10, 30, 4);  // top arm
-    ctx.fillRect(fx - 24, cy + 6,  30, 4);  // bottom arm
-    // Skin hands — one resting on stomach, one at side
-    ctx.fillStyle = skin;
-    ctx.fillRect(fx - 6, cy - 10, 5, 4);   // hand resting on stomach area
-    ctx.fillRect(fx + 4, cy + 6,  4, 4);    // hand at side
-
-    // Dark hair (back of head) — boss has hair, not a hood
-    const hx = fx - 34, hy = cy;
+    // Legs — dark slacks with a soft bend at the knees, lying to the right
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#2b2b2b';
+    ctx.lineWidth = 6;
+    // Far leg (slightly behind/above)
+    ctx.beginPath();
+    ctx.moveTo(fx + 6, cy - 2);
+    ctx.quadraticCurveTo(fx + 24, cy - 6, fx + 40, cy - 3);
+    ctx.stroke();
+    // Near leg
+    ctx.beginPath();
+    ctx.moveTo(fx + 6, cy + 3);
+    ctx.quadraticCurveTo(fx + 26, cy + 1, fx + 42, cy + 2);
+    ctx.stroke();
+    // Crossed ankles — near foot rests over the far one, toes up
     ctx.fillStyle = '#1a1a1a';
-    ctx.beginPath(); ctx.arc(hx + 4, hy - 2, 9, 0, Math.PI * 2); ctx.fill();
+    pathRoundRect(fx + 38, cy - 10, 7, 9, 3);   // far shoe (toes up)
+    ctx.fill();
+    pathRoundRect(fx + 43, cy - 5, 8, 9, 3);    // near shoe crossed over
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    pathRoundRect(fx + 39, cy - 9, 2.4, 6, 1);
+    ctx.fill();
+    pathRoundRect(fx + 44, cy - 4, 2.4, 6, 1);
+    ctx.fill();
 
-    // Face (skin) — boss face viewed from side
+    // Torso — white shirt, chest rising with breath, belly a soft mound
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(fx - 24, cy + 7);
+    ctx.lineTo(fx - 24, cy - 5);
+    ctx.quadraticCurveTo(fx - 18, cy - 9 - breath, fx - 8, cy - 9 - breath);   // chest
+    ctx.quadraticCurveTo(fx + 2, cy - 9 - breath * 0.6, fx + 7, cy - 4);       // belly slope
+    ctx.quadraticCurveTo(fx + 9, cy + 2, fx + 7, cy + 7);
+    ctx.closePath();
+    ctx.fill();
+    // Shirt shading under the chest curve + button placket
+    ctx.strokeStyle = '#d8d4c8'; ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(fx - 20, cy - 6 - breath * 0.8);
+    ctx.quadraticCurveTo(fx - 8, cy - 8.5 - breath, fx + 4, cy - 5 - breath * 0.5);
+    ctx.stroke();
+    ctx.fillStyle = '#cccccc';
+    for(let bt = 0; bt < 3; bt++) {
+        ctx.beginPath();
+        ctx.arc(fx - 16 + bt * 8, cy - 7.5 - breath * (1 - bt * 0.25), 0.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Collar + burgundy tie flopped sideways across the chest
+    ctx.fillStyle = '#e8e4da';
+    ctx.beginPath();
+    ctx.moveTo(fx - 24, cy - 5);
+    ctx.lineTo(fx - 19, cy - 2);
+    ctx.lineTo(fx - 24, cy + 2);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#722f37';
+    ctx.beginPath();
+    ctx.moveTo(fx - 21, cy - 3);
+    ctx.quadraticCurveTo(fx - 10, cy - 9 - breath, fx - 2, cy - 6.5 - breath * 0.7);
+    ctx.lineTo(fx - 1, cy - 3.5 - breath * 0.7);
+    ctx.quadraticCurveTo(fx - 10, cy - 5.5 - breath, fx - 20, cy + 0.5);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5a232a';
+    pathRoundRect(fx - 23, cy - 4.5, 4, 5, 1.5);   // knot at collar
+    ctx.fill();
+
+    // Near arm — folded, hand resting on the rising chest
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(fx - 20, cy + 4);
+    ctx.quadraticCurveTo(fx - 14, cy + 6, fx - 8, cy + 2 - breath * 0.5);
+    ctx.stroke();
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.arc(fx - 7, cy - 1 - breath * 0.8, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    // Far arm resting along the cushion edge
+    ctx.strokeStyle = '#f2f0ea';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(fx - 18, cy + 6);
+    ctx.lineTo(fx + 2, cy + 7);
+    ctx.stroke();
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.arc(fx + 4, cy + 7, 2.2, 0, Math.PI * 2); ctx.fill();
+
+    // Bald head in profile — polished dome, ear, closed eye, slack jaw
     ctx.fillStyle = skin;
     ctx.beginPath(); ctx.arc(hx, hy, 8, 0, Math.PI * 2); ctx.fill();
-    // Eyes closed
-    ctx.strokeStyle = '#555'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(hx - 2, hy + 1, 2.5, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
-    ctx.beginPath(); ctx.arc(hx + 2, hy + 1, 2.5, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+    // Dome shine
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath(); ctx.ellipse(hx - 2.5, hy - 4, 3.4, 2, -0.5, 0, Math.PI * 2); ctx.fill();
+    // Ear (facing up, since he lies on his back)
+    ctx.fillStyle = '#e8b088';
+    ctx.beginPath(); ctx.ellipse(hx - 1, hy + 5.5, 2.4, 1.7, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#c89468'; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.arc(hx - 1, hy + 5.5, 1, Math.PI * 0.2, Math.PI * 1.2); ctx.stroke();
+    // Nose bump on the upper profile
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.arc(hx + 5, hy - 4.5, 2, 0, Math.PI * 2); ctx.fill();
+    // Closed eye — gentle lash arc
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.arc(hx + 3, hy - 1.5, 2.2, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+    // Slightly open sleeping mouth
+    ctx.fillStyle = 'rgba(90,40,30,0.75)';
+    ctx.beginPath(); ctx.ellipse(hx + 6, hy + 1.5, 1.3, 0.9, 0.3, 0, Math.PI * 2); ctx.fill();
     ctx.lineWidth = 1;
 
-    // ZZZ bubbles pulsing up from head
-    const t = Date.now() / 1000;
+    // ZZZ bubbles — drifting up and fading, timed to the breath
+    const t = tNow / 1000;
     const zz = [{ch:'Z', ox:8, oy:-11}, {ch:'Zz', ox:13, oy:-21}, {ch:'ZZZ', ox:17, oy:-33}];
     ctx.textAlign = 'left';
     for(let i = 0; i < zz.length; i++) {
-        const a = Math.max(0, Math.sin((t * 0.55 + i * 0.38) * Math.PI));
+        const cycle = (t * 0.55 + i * 0.38) % 1;
+        const a = Math.max(0, Math.sin(cycle * Math.PI));
         ctx.fillStyle = `rgba(140,170,255,${(a * 0.75).toFixed(2)})`;
         ctx.font = scaledFont(8, 'bold', 'Arial', true);
-        ctx.fillText(zz[i].ch, hx + zz[i].ox, hy + zz[i].oy);
+        ctx.fillText(zz[i].ch, hx + zz[i].ox + cycle * 3, hy + zz[i].oy - cycle * 5);
     }
 }
 
@@ -10637,42 +10824,95 @@ function drawLevel6MegacomputerRoom() {
         ctx.fill();
         ctx.globalAlpha = 1;
 
-        // ── Back leg (behind body, extending LEFT) ───────────────────────────
-        ctx.fillStyle = '#2a2a3d';
-        ctx.fillRect(detectiveX - 22*s, detectiveY - 3*s, 16*s, 4*s);   // thigh
-        ctx.fillRect(detectiveX - 34*s, detectiveY - 4*s, 14*s, 4*s);   // shin
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(detectiveX - 38*s, detectiveY - 4*s, 5*s, 4*s);    // back shoe
+        // ── Back leg (behind body, extending LEFT) — rounded limb ────────────
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#23233a';
+        ctx.lineWidth = 3.6 * s;
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 8*s, detectiveY - 3*s);
+        ctx.quadraticCurveTo(detectiveX - 20*s, detectiveY - 5.5*s, detectiveX - 27*s, detectiveY - 3*s);
+        ctx.lineTo(detectiveX - 34*s, detectiveY - 2.5*s);
+        ctx.stroke();
+        // Back shoe — heel down, toe splayed slightly outward
+        ctx.fillStyle = '#141414';
+        pathRoundRect(detectiveX - 39.5*s, detectiveY - 4.6*s, 5.8*s, 4.4*s, 3);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        pathRoundRect(detectiveX - 39*s, detectiveY - 4.2*s, 2*s, 3.4*s, 2);
+        ctx.fill();
 
-        // ── Outstretched (far) arm reaching LEFT toward pistol ───────────────
-        // Shoulder/upper hidden behind torso; forearm + hand extend past left edge
-        ctx.fillStyle = '#14143d';
-        ctx.fillRect(detectiveX - 14*s, detectiveY - 13*s, 4*s, 3*s);   // shoulder stub
-        ctx.fillStyle = '#1a1a4d';
-        ctx.fillRect(detectiveX - 26*s, detectiveY - 14*s, 14*s, 3*s);  // forearm sleeve
-        // Cuff
-        ctx.fillStyle = '#14143d';
-        ctx.fillRect(detectiveX - 28*s, detectiveY - 14*s, 3*s, 3*s);
-        // Hand reaching for pistol (x = detectiveX - 40*s = 460 = pistolGX)
-        ctx.fillStyle = detectiveSkin;
-        ctx.fillRect(detectiveX - 40*s, detectiveY - 15*s, 7*s, 4*s);
-
-        // ── Torso lying flat — dark blue suit jacket ─────────────────────────
-        ctx.fillStyle = '#1a1a4d';
-        ctx.fillRect(detectiveX - 12*s, detectiveY - 14*s, 20*s, 14*s);
-        // Jacket lapels (shoulder seams darker)
-        ctx.fillStyle = '#14143d';
-        ctx.fillRect(detectiveX - 12*s, detectiveY - 14*s, 4*s, 10*s);
-        ctx.fillRect(detectiveX + 4*s, detectiveY - 14*s, 4*s, 10*s);
-        // White shirt front
+        // ── Outstretched (far) arm reaching LEFT toward the pistol ───────────
+        ctx.strokeStyle = '#1a1a4d';
+        ctx.lineWidth = 3 * s;
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 10*s, detectiveY - 12*s);
+        ctx.quadraticCurveTo(detectiveX - 22*s, detectiveY - 13.8*s, detectiveX - 31*s, detectiveY - 13*s);
+        ctx.stroke();
+        // Shirt cuff at the wrist
         ctx.fillStyle = '#e8e8e8';
-        ctx.fillRect(detectiveX - 4*s, detectiveY - 12*s, 8*s, 3*s);
-        // Tie (horizontal along body)
+        ctx.fillRect(detectiveX - 33*s, detectiveY - 14.6*s, 2.2*s, 3.4*s);
+        // Hand — palm with fingers splayed toward the grip, just short of it
+        ctx.fillStyle = detectiveSkin;
+        ctx.beginPath();
+        ctx.ellipse(detectiveX - 36.5*s, detectiveY - 13*s, 2.6*s, 1.9*s, -0.15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = detectiveSkin;
+        ctx.lineWidth = 1.5;
+        for(let fg = 0; fg < 3; fg++) {
+            ctx.beginPath();
+            ctx.moveTo(detectiveX - 38.4*s, detectiveY - (13.8 - fg * 0.9)*s);
+            ctx.lineTo(detectiveX - 40.6*s, detectiveY - (14.3 - fg * 1.1)*s);
+            ctx.stroke();
+        }
+
+        // ── Torso lying flat — rounded suit jacket, open lapels over shirt ───
+        const jGrad = ctx.createLinearGradient(0, detectiveY - 14*s, 0, detectiveY);
+        jGrad.addColorStop(0, '#232360');
+        jGrad.addColorStop(1, '#141438');
+        ctx.fillStyle = jGrad;
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 12*s, detectiveY - 2*s);
+        ctx.quadraticCurveTo(detectiveX - 13.5*s, detectiveY - 8*s, detectiveX - 12*s, detectiveY - 12*s);
+        ctx.quadraticCurveTo(detectiveX - 11*s, detectiveY - 14.6*s, detectiveX - 7*s, detectiveY - 14*s);
+        ctx.lineTo(detectiveX + 5*s, detectiveY - 14*s);
+        ctx.quadraticCurveTo(detectiveX + 8.5*s, detectiveY - 14.2*s, detectiveX + 8*s, detectiveY - 10*s);
+        ctx.lineTo(detectiveX + 8*s, detectiveY - 2*s);
+        ctx.quadraticCurveTo(detectiveX + 8*s, detectiveY, detectiveX + 5*s, detectiveY);
+        ctx.lineTo(detectiveX - 9*s, detectiveY);
+        ctx.quadraticCurveTo(detectiveX - 12*s, detectiveY, detectiveX - 12*s, detectiveY - 2*s);
+        ctx.closePath();
+        ctx.fill();
+        // White shirt V between the open lapels
+        ctx.fillStyle = '#e8e8e8';
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 5*s, detectiveY - 14*s);
+        ctx.lineTo(detectiveX + 3*s, detectiveY - 14*s);
+        ctx.lineTo(detectiveX + 1*s, detectiveY - 6*s);
+        ctx.lineTo(detectiveX - 3*s, detectiveY - 6*s);
+        ctx.closePath(); ctx.fill();
+        // Folded lapel triangles
+        ctx.fillStyle = '#14143d';
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 5*s, detectiveY - 14*s);
+        ctx.lineTo(detectiveX - 3*s, detectiveY - 7*s);
+        ctx.lineTo(detectiveX - 7.5*s, detectiveY - 9.5*s);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(detectiveX + 3*s, detectiveY - 14*s);
+        ctx.lineTo(detectiveX + 1*s, detectiveY - 7*s);
+        ctx.lineTo(detectiveX + 5.5*s, detectiveY - 9.5*s);
+        ctx.closePath(); ctx.fill();
+        // Tie flopped askew across the chest toward the near shoulder
         ctx.fillStyle = '#8b1a1a';
-        ctx.fillRect(detectiveX - 3*s, detectiveY - 9*s, 14*s, 2*s);
-        // Tie knot
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 1.5*s, detectiveY - 12*s);
+        ctx.quadraticCurveTo(detectiveX + 5*s, detectiveY - 10.5*s, detectiveX + 10*s, detectiveY - 9*s);
+        ctx.lineTo(detectiveX + 9.5*s, detectiveY - 7*s);
+        ctx.quadraticCurveTo(detectiveX + 4*s, detectiveY - 8.5*s, detectiveX - 1.8*s, detectiveY - 10*s);
+        ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#6b1414';
-        ctx.fillRect(detectiveX - 3*s, detectiveY - 10*s, 3*s, 3*s);
+        pathRoundRect(detectiveX - 3*s, detectiveY - 12.6*s, 3*s, 3*s, 2);
+        ctx.fill();
 
         // ── Six bullet holes across torso ────────────────────────────────────
         for(let i = 0; i < 6; i++) {
@@ -10689,14 +10929,26 @@ function drawLevel6MegacomputerRoom() {
         ctx.fillStyle = detectiveSkin;
         ctx.fillRect(detectiveX + 6*s, detectiveY - 8*s, 4*s, 5*s);
 
-        // ── Head lying flat — to the RIGHT of torso ──────────────────────────
+        // ── Head lying flat — rounded skull, to the RIGHT of torso ───────────
         ctx.fillStyle = detectiveSkin;
-        ctx.fillRect(detectiveX + 8*s, detectiveY - 16*s, 10*s, 11*s);
-        // Dark hair cap + sideburns
+        ctx.beginPath();
+        ctx.ellipse(detectiveX + 13*s, detectiveY - 10.5*s, 5.4*s, 5.7*s, 0.08, 0, Math.PI * 2);
+        ctx.fill();
+        // Dark hair — swept cap over the crown, with sideburns
         ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(detectiveX + 8*s, detectiveY - 17*s, 10*s, 4*s);
-        ctx.fillRect(detectiveX + 7*s, detectiveY - 14*s, 2*s, 6*s);
-        ctx.fillRect(detectiveX + 17*s, detectiveY - 14*s, 2*s, 6*s);
+        ctx.beginPath();
+        ctx.ellipse(detectiveX + 13*s, detectiveY - 14*s, 5.5*s, 3.2*s, 0.08, Math.PI * 0.92, Math.PI * 2.08);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#2a2a2a';
+        pathRoundRect(detectiveX + 7.6*s, detectiveY - 13.5*s, 1.7*s, 4.6*s, 1.5);
+        ctx.fill();
+        pathRoundRect(detectiveX + 16.8*s, detectiveY - 13.5*s, 1.7*s, 4.6*s, 1.5);
+        ctx.fill();
+        // Ears at the temples
+        ctx.fillStyle = '#b59f8a';
+        ctx.beginPath(); ctx.ellipse(detectiveX + 8.2*s, detectiveY - 9.5*s, 1.1*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(detectiveX + 17.8*s, detectiveY - 9.5*s, 1.1*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
 
         // X-eyes (dead) — matching drawDeadCloningBoss convention
         ctx.strokeStyle = '#000';
@@ -10714,9 +10966,11 @@ function drawLevel6MegacomputerRoom() {
         ctx.lineTo(detectiveX + 14*s, detectiveY - 11*s);
         ctx.stroke();
 
-        // Nose
+        // Nose — soft rounded bump
         ctx.fillStyle = '#b59f8a';
-        ctx.fillRect(detectiveX + 12*s, detectiveY - 10*s, 3*s, 2*s);
+        ctx.beginPath();
+        ctx.ellipse(detectiveX + 13.5*s, detectiveY - 9.2*s, 1.5*s, 1.1*s, 0, 0, Math.PI * 2);
+        ctx.fill();
 
         // Slack mouth with blood trickle
         ctx.strokeStyle = '#4a2a2a';
@@ -10758,18 +11012,26 @@ function drawLevel6MegacomputerRoom() {
         }
 
         // ── Near arm folded up across chest, hand clutching note by the face ──
-        // Upper arm sleeve (shoulder to elbow, across chest)
-        ctx.fillStyle = '#1a1a4d';
-        ctx.fillRect(detectiveX + 0*s, detectiveY - 10*s, 11*s, 3*s);
-        // Cuff at wrist
-        ctx.fillStyle = '#14143d';
-        ctx.fillRect(detectiveX + 9*s, detectiveY - 10*s, 3*s, 2*s);
+        ctx.strokeStyle = '#22225a';
+        ctx.lineWidth = 3 * s;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 1*s, detectiveY - 8.5*s);
+        ctx.quadraticCurveTo(detectiveX + 5*s, detectiveY - 10.5*s, detectiveX + 10*s, detectiveY - 8.5*s);
+        ctx.stroke();
+        // Shirt cuff at wrist
+        ctx.fillStyle = '#e8e8e8';
+        ctx.fillRect(detectiveX + 9*s, detectiveY - 10*s, 2*s, 2.6*s);
         // Palm gripping right edge of note
         ctx.fillStyle = detectiveSkin;
-        ctx.fillRect(detectiveX + 11*s, detectiveY - 9*s, 3*s, 4*s);
+        ctx.beginPath();
+        ctx.ellipse(detectiveX + 12.5*s, detectiveY - 7*s, 2*s, 2.4*s, 0, 0, Math.PI * 2);
+        ctx.fill();
         // Knuckle shading
-        ctx.fillStyle = '#a89784';
-        ctx.fillRect(detectiveX + 11*s, detectiveY - 9*s, 3*s, 1);
+        ctx.fillStyle = 'rgba(168,151,132,0.6)';
+        ctx.beginPath();
+        ctx.ellipse(detectiveX + 12.5*s, detectiveY - 8.4*s, 1.6*s, 0.7*s, 0, 0, Math.PI * 2);
+        ctx.fill();
         // Thumb pressing down on top of note (overlaps paper)
         if(!level6.pistol.dropped) {
             ctx.fillStyle = detectiveSkin;
@@ -10784,15 +11046,29 @@ function drawLevel6MegacomputerRoom() {
             ctx.fillRect(noteScreenX - 2, noteScreenY + 17, 2, 2);
         }
 
-        // ── Front leg (on top) extending LEFT ────────────────────────────────
-        ctx.fillStyle = '#2a2a3d';
-        ctx.fillRect(detectiveX - 22*s, detectiveY - 1*s, 16*s, 4*s);   // thigh
-        ctx.fillRect(detectiveX - 34*s, detectiveY - 2*s, 14*s, 4*s);   // shin
+        // ── Front leg (on top) extending LEFT — rounded, knee slightly bent ──
+        ctx.strokeStyle = '#31314a';
+        ctx.lineWidth = 3.8 * s;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 7*s, detectiveY - 1*s);
+        ctx.quadraticCurveTo(detectiveX - 19*s, detectiveY - 3.5*s, detectiveX - 26*s, detectiveY - 0.5*s);
+        ctx.lineTo(detectiveX - 34*s, detectiveY);
+        ctx.stroke();
+        // Pant crease highlight along the shin
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 26*s, detectiveY - 2*s);
+        ctx.lineTo(detectiveX - 33*s, detectiveY - 1.6*s);
+        ctx.stroke();
+        // Front shoe — toe up (foot fallen outward)
         ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(detectiveX - 38*s, detectiveY - 2*s, 5*s, 4*s);    // front shoe
-        // Subtle pant crease highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.04)';
-        ctx.fillRect(detectiveX - 34*s, detectiveY - 2*s, 14*s, 1);
+        pathRoundRect(detectiveX - 39.5*s, detectiveY - 2.4*s, 5.8*s, 4.4*s, 3);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        pathRoundRect(detectiveX - 39*s, detectiveY - 2*s, 2*s, 3.4*s, 2);
+        ctx.fill();
 
         // ── Pistol on ground — just inside radiation zone right edge ─────────
         if(!level6.pistol.pickedUp) {
@@ -10808,9 +11084,24 @@ function drawLevel6MegacomputerRoom() {
                 ctx.beginPath(); ctx.roundRect(-16, -7, 32, 20, 3); ctx.stroke();
                 ctx.shadowBlur = 0;
             }
-            ctx.fillStyle = '#333'; ctx.fillRect(-12, -3, 24, 6);
-            ctx.fillStyle = '#222'; ctx.fillRect(-13, 3, 8, 12);
-            ctx.fillStyle = '#444'; ctx.fillRect(10, -4, 4, 8);
+            // Slide with sheen, angled grip, trigger guard, muzzle
+            ctx.fillStyle = '#3a3a3e';
+            pathRoundRect(-13, -3.5, 25, 6.5, 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.14)';
+            ctx.fillRect(-12, -3, 23, 1.4);
+            ctx.fillStyle = '#26262a';
+            ctx.save();
+            ctx.translate(-9, 3);
+            ctx.rotate(0.18);
+            pathRoundRect(-4, 0, 8, 12.5, 2.5);
+            ctx.fill();
+            ctx.restore();
+            ctx.strokeStyle = '#3a3a3e'; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.arc(-1, 5.5, 4.5, 0.3, Math.PI - 0.7); ctx.stroke();
+            ctx.fillStyle = '#4a4a4e';
+            pathRoundRect(10, -4.2, 4, 8, 1.5);
+            ctx.fill();
             ctx.restore();
         }
 
@@ -12021,72 +12312,100 @@ function drawNuclearAssemblyBridge() {
         return false;
     }
 
-    // ── Main I-beam stringers (two parallel beams supporting the deck) ────────
+    // ── Main I-beam stringers — machined steel with rivets and value contrast
+    // so the structure reads as metal, not a flat dark band ──
     const beamDepth = 14;  // vertical depth of I-beam
     const beamTop = bridgePlatY + 2;
-    // Left stringer
-    ctx.fillStyle = '#1a1818';
+    const beamGrad = ctx.createLinearGradient(0, beamTop, 0, beamTop + beamDepth);
+    beamGrad.addColorStop(0, '#46403c');
+    beamGrad.addColorStop(0.5, '#2c2826');
+    beamGrad.addColorStop(1, '#1c1918');
+    ctx.fillStyle = beamGrad;
     ctx.fillRect(-GX, beamTop, CANVAS_W, beamDepth);
-    // I-beam flanges (top and bottom)
-    ctx.fillStyle = '#252222';
+    // I-beam flanges (top and bottom) with lit edges
+    ctx.fillStyle = '#3a3532';
     ctx.fillRect(-GX, beamTop, CANVAS_W, 4);
     ctx.fillRect(-GX, beamTop + beamDepth - 4, CANVAS_W, 4);
-    // Web (thinner center)
-    ctx.fillStyle = '#1e1b1b';
-    ctx.fillRect(-GX, beamTop + 4, CANVAS_W, beamDepth - 8);
-    // Flange highlight
-    ctx.fillStyle = '#2e2a2a';
-    ctx.fillRect(-GX, beamTop, CANVAS_W, 1);
+    ctx.fillStyle = '#5a524c';
+    ctx.fillRect(-GX, beamTop, CANVAS_W, 1.2);
+    ctx.fillStyle = '#48423e';
     ctx.fillRect(-GX, beamTop + beamDepth - 1, CANVAS_W, 1);
+    // Rivet rows along both flanges
+    ctx.fillStyle = '#57504a';
+    for(let rvx = -GX + 8; rvx < CANVAS_W; rvx += 26) {
+        ctx.beginPath(); ctx.arc(rvx, beamTop + 2, 1.1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rvx + 13, beamTop + beamDepth - 2, 1.1, 0, Math.PI * 2); ctx.fill();
+    }
 
     // ── Diagonal truss bracing under deck (Warren truss pattern) ─────────────
-    ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 3;
+    ctx.strokeStyle = '#3c3632'; ctx.lineWidth = 3;
     for(let bx = -GX; bx < CANVAS_W; bx += 44) {
         // V-pattern truss
         ctx.beginPath(); ctx.moveTo(bx, beamTop + 4); ctx.lineTo(bx + 22, beamTop + beamDepth - 4); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(bx + 44, beamTop + 4); ctx.lineTo(bx + 22, beamTop + beamDepth - 4); ctx.stroke();
     }
     // Horizontal truss chord
-    ctx.strokeStyle = '#222020'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#2e2a28'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(-GX, beamTop + beamDepth / 2); ctx.lineTo(CANVAS_W, beamTop + beamDepth / 2); ctx.stroke();
 
     // ── Vertical support columns from bridge down to factory floor ────────────
     const colBottom = factFloor;
     for(let col = 100; col < 700; col += 150) {
         const colH = colBottom - (beamTop + beamDepth);
-        // Main column
-        ctx.fillStyle = '#141212';
+        // Main column — side-lit steel
+        const colGrad = ctx.createLinearGradient(col - 7, 0, col + 7, 0);
+        colGrad.addColorStop(0, '#332e2b');
+        colGrad.addColorStop(0.4, '#241f1d');
+        colGrad.addColorStop(1, '#171413');
+        ctx.fillStyle = colGrad;
         ctx.fillRect(col - 5, beamTop + beamDepth, 10, colH);
         // Column flanges
-        ctx.fillStyle = '#1a1818';
+        ctx.fillStyle = '#2a2522';
         ctx.fillRect(col - 7, beamTop + beamDepth, 3, colH);
         ctx.fillRect(col + 4, beamTop + beamDepth, 3, colH);
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(col - 6, beamTop + beamDepth, 1, colH);
         // Gusset plate (triangle at connection)
-        ctx.fillStyle = '#222020';
+        ctx.fillStyle = '#332e2a';
         ctx.beginPath();
         ctx.moveTo(col - 12, beamTop + beamDepth);
         ctx.lineTo(col + 12, beamTop + beamDepth);
         ctx.lineTo(col, beamTop + beamDepth + 16);
         ctx.closePath(); ctx.fill();
         // Bolts
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = '#4e4842';
         ctx.beginPath(); ctx.arc(col - 4, beamTop + beamDepth + 6, 1.5, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(col + 4, beamTop + beamDepth + 6, 1.5, 0, Math.PI * 2); ctx.fill();
+        // Rust streaks bleeding down from the connection
+        ctx.fillStyle = 'rgba(120,62,28,0.20)';
+        ctx.fillRect(col - 3, beamTop + beamDepth + 16, 1.5, 26);
+        ctx.fillRect(col + 2, beamTop + beamDepth + 16, 1, 18);
     }
 
-    // ── Platform deck (grated steel) ──────────────────────────────────────────
-    ctx.fillStyle = '#1e1c1c';
+    // ── Platform deck — grated steel with visible tread and lit top edge ─────
+    const deckGrad = ctx.createLinearGradient(0, bridgePlatY - 4, 0, bridgePlatY + 4);
+    deckGrad.addColorStop(0, '#3b3734');
+    deckGrad.addColorStop(1, '#242120');
+    ctx.fillStyle = deckGrad;
     ctx.fillRect(-GX, bridgePlatY - 4, CANVAS_W, 8);
-    // Grate pattern — fine grid
-    ctx.strokeStyle = '#2a2828'; ctx.lineWidth = 0.5;
+    // Grate pattern — crosshatch reads as open steel mesh
+    ctx.strokeStyle = '#191716'; ctx.lineWidth = 1;
     for(let gx = -GX; gx < CANVAS_W; gx += 8) {
         ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 4); ctx.lineTo(gx, bridgePlatY + 4); ctx.stroke();
     }
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    for(let gx = -GX + 4; gx < CANVAS_W; gx += 8) {
+        ctx.beginPath(); ctx.moveTo(gx, bridgePlatY - 4); ctx.lineTo(gx, bridgePlatY + 4); ctx.stroke();
+    }
+    ctx.strokeStyle = '#191716';
     ctx.beginPath(); ctx.moveTo(-GX, bridgePlatY); ctx.lineTo(CANVAS_W, bridgePlatY); ctx.stroke();
+    // Lit walking edge — the strongest highlight on the whole bridge
+    ctx.fillStyle = 'rgba(255,240,210,0.14)';
+    ctx.fillRect(-GX, bridgePlatY - 4, CANVAS_W, 1.2);
     // Toe plate (kick plate at edge)
-    ctx.fillStyle = '#252222';
+    ctx.fillStyle = '#332f2c';
     ctx.fillRect(-GX, bridgePlatY - 6, CANVAS_W, 3);
-    ctx.fillStyle = '#1a1717';
+    ctx.fillStyle = '#1f1c1a';
     ctx.fillRect(-GX, bridgePlatY + 3, CANVAS_W, 3);
 
     // ── Edge warning strip (hazard chevrons) ──────────────────────────────────
@@ -12097,44 +12416,55 @@ function drawNuclearAssemblyBridge() {
 
     // Railing — waist-height, thin posts, wide spacing
     for(let px = -GX + 20; px < CANVAS_W; px += 90) {
-        ctx.fillStyle = '#3a3434';
+        ctx.fillStyle = '#443e3a';
         ctx.fillRect(px, railTopY, 3, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(px, railTopY, 1, bridgePlatY - railTopY - 2);
     }
 
     // Railing posts — steel angle-iron stanchions, skip posts inside gap zones
     for(let px = -GX + 14; px < CANVAS_W; px += 55) {
         if(isInGap(px)) continue;
-        // Main post (angle iron profile)
-        ctx.fillStyle = '#2c2828';
+        // Main post (angle iron profile), lit on one edge
+        ctx.fillStyle = '#3a3430';
         ctx.fillRect(px, railTopY, 5, bridgePlatY - railTopY - 2);
-        // Highlight edge
-        ctx.fillStyle = '#383030';
-        ctx.fillRect(px, railTopY, 1, bridgePlatY - railTopY - 2);
+        ctx.fillStyle = '#514a44';
+        ctx.fillRect(px, railTopY, 1.4, bridgePlatY - railTopY - 2);
         // Flanged base plate bolted to deck
-        ctx.fillStyle = '#333';
-        ctx.fillRect(px - 4, bridgePlatY - 6, 13, 5);
+        ctx.fillStyle = '#443f3a';
+        pathRoundRect(px - 4, bridgePlatY - 6, 13, 5, 1.5);
+        ctx.fill();
         // Base bolts
-        ctx.fillStyle = '#444';
+        ctx.fillStyle = '#5c554e';
         ctx.beginPath(); ctx.arc(px - 1, bridgePlatY - 4, 1, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(px + 6, bridgePlatY - 4, 1, 0, Math.PI * 2); ctx.fill();
-        // Post cap (ball finial)
-        ctx.fillStyle = '#3a3232';
+        // Post cap (ball finial) with specular dot
+        ctx.fillStyle = '#4a423e';
         ctx.beginPath(); ctx.arc(px + 2, railTopY - 2, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#444';
+        ctx.fillStyle = '#6a6058';
         ctx.beginPath(); ctx.arc(px + 1, railTopY - 3, 1.5, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Top rail bar — with breaks at gaps
-    ctx.fillStyle = '#2a2626';
+    // Top rail bar — brushed handrail with a lit top edge, breaks at gaps
     let railX = -GX;
     for(const g of railGaps) {
-        if(railX < g.left) ctx.fillRect(railX, railTopY - 2, g.left - railX, 3);
+        if(railX < g.left) {
+            ctx.fillStyle = '#453f3a';
+            ctx.fillRect(railX, railTopY - 2, g.left - railX, 3.5);
+            ctx.fillStyle = 'rgba(255,240,210,0.16)';
+            ctx.fillRect(railX, railTopY - 2, g.left - railX, 1);
+        }
         railX = g.right;
     }
-    if(railX < CANVAS_W) ctx.fillRect(railX, railTopY - 2, CANVAS_W - railX, 3);
+    if(railX < CANVAS_W) {
+        ctx.fillStyle = '#453f3a';
+        ctx.fillRect(railX, railTopY - 2, CANVAS_W - railX, 3.5);
+        ctx.fillStyle = 'rgba(255,240,210,0.16)';
+        ctx.fillRect(railX, railTopY - 2, CANVAS_W - railX, 1);
+    }
 
     // Mid rail wire — with breaks at gaps (skip wire in gap zones)
-    ctx.strokeStyle = '#2a2626'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#3c3632'; ctx.lineWidth = 1;
     let midRailX = -GX;
     for(const g of railGaps) {
         if(midRailX < g.left) {
