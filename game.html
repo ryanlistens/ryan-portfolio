@@ -291,23 +291,35 @@ function drawActionLabel(text, x, y, options) {
     const fontSize = opt.fontSize || 16;
     const padding = opt.padding || 8;
 
-    // Split off the [ ACTION ] prefix (any spacing, optional dash after).
+    // Locate the [ ACTION ] token — it may sit at the start ("[ ACTION ] OPEN")
+    // or mid-string ("▲▼ SELECT  [ ACTION ] CONFIRM"). Text before and after
+    // renders normally; the token itself becomes the key-cap glyph.
     // Also handles the "[ ACTION TO CLOSE ]" full-bracket form.
-    let label = String(text);
-    let hasKey = false;
-    const km = label.match(/^\s*\[\s*ACTION\s*\]\s*[-—–]?\s*(.*)$/i);
-    const km2 = km ? null : label.match(/^\s*\[\s*ACTION\s+TO\s+(.*?)\s*\]\s*$/i);
-    if(km)       { hasKey = true; label = km[1] || 'ACTION'; }
-    else if(km2) { hasKey = true; label = km2[1]; }
+    let src = String(text);
+    let pre = '', post = '', hasKey = false;
+    const mk = src.match(/\[\s*ACTION\s*\]\s*[-—–]?\s*/i);
+    const mk2 = mk ? null : src.match(/^\s*\[\s*ACTION\s+TO\s+(.*?)\s*\]\s*$/i);
+    if(mk) {
+        hasKey = true;
+        pre = src.slice(0, mk.index).replace(/\s+$/, '');
+        post = src.slice(mk.index + mk[0].length);
+        if(!pre && !post) post = 'ACTION';
+    } else if(mk2) {
+        hasKey = true;
+        post = mk2[1];
+    } else {
+        post = src;
+    }
 
     ctx.font = scaledFont(fontSize, 'bold', 'Arial', false);
     const th = fontSize * FONT_SCALE;
     const keyR = hasKey ? Math.max(7, th * 0.58) : 0;
     const keyW = hasKey ? keyR * 2 + 6 : 0;
     ctx.textAlign = 'left';
-    const tw = ctx.measureText(label).width;
-    const leftPad = hasKey ? 5 : padding;
-    const bw = leftPad + keyW + tw + padding;
+    const preW = pre ? ctx.measureText(pre).width + 6 : 0;
+    const postW = post ? ctx.measureText(post).width : 0;
+    const leftPad = (hasKey && !pre) ? 5 : padding;
+    const bw = leftPad + preW + keyW + postW + padding;
     const bh = hasKey ? Math.max(th + padding, keyR * 2 + 7) : th + padding;
 
     // Gentle idle float so prompts read as live UI, not painted-on text
@@ -341,9 +353,18 @@ function drawActionLabel(text, x, y, options) {
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
     ctx.beginPath(); ctx.roundRect(bx + 2, by + 1.5, bw - 4, bh * 0.42, bh * 0.28); ctx.fill();
 
+    const ty = cyMid + th * 0.36;
+    // Leading text before the key (e.g. "▲▼ SELECT")
+    if(pre) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillText(pre, bx + leftPad + 1, ty + 1);
+        ctx.fillStyle = color;
+        ctx.fillText(pre, bx + leftPad, ty);
+    }
+
     // Round golden ACTION key-cap with pulsing rim
     if(hasKey) {
-        const kx = bx + leftPad + keyR, ky = cyMid;
+        const kx = bx + leftPad + preW + keyR, ky = cyMid;
         const pulse = 0.5 + Math.sin(Date.now() / 420) * 0.5;
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.beginPath(); ctx.arc(kx, ky + 1, keyR, 0, Math.PI * 2); ctx.fill();
@@ -369,13 +390,14 @@ function drawActionLabel(text, x, y, options) {
         ctx.textAlign = 'left';
     }
 
-    // Label text with drop shadow
-    const tx = bx + leftPad + keyW;
-    const ty = cyMid + th * 0.36;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillText(label, tx + 1, ty + 1);
-    ctx.fillStyle = color;
-    ctx.fillText(label, tx, ty);
+    // Label text after the key, with drop shadow
+    if(post) {
+        const tx = bx + leftPad + preW + keyW;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillText(post, tx + 1, ty + 1);
+        ctx.fillStyle = color;
+        ctx.fillText(post, tx, ty);
+    }
     ctx.textAlign = 'center';
 }
 
@@ -4166,8 +4188,10 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         ctx.arc(stackX + 2.5 + sp2 * 15, stackTop - 2 - sp2 * 11, 2 + sp2 * 4, 0, Math.PI * 2);
         ctx.fill();
     }
-    // Foreground buildings — varied heights and tones, real window grids
-    // whose lights slowly come and go (offices emptying out)
+    // Foreground buildings — varied heights and tones, real window grids.
+    // Each window keeps its own long, offset on/off cycle and cross-fades,
+    // so lights drift independently instead of the whole skyline flipping
+    // in unison (which read as a loop cutting).
     const fgBldgs = [
         { x: 0.00, w: 0.16, h: 17, c: '#7a7068', wc: 3 },
         { x: 0.16, w: 0.12, h: 24, c: '#6e6a72', wc: 2 },
@@ -4177,7 +4201,6 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
         { x: 0.75, w: 0.11, h: 23, c: '#6e6862', wc: 2 },
         { x: 0.86, w: 0.14, h: 15, c: '#7d746c', wc: 3 }
     ];
-    const winEpoch = Math.floor(t / 7000);
     for(let bi = 0; bi < fgBldgs.length; bi++) {
         const B = fgBldgs[bi];
         const bx3 = wx + ww * B.x, bw3 = ww * B.w, btop = bldgBot - B.h;
@@ -4200,16 +4223,35 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
             ctx.fillStyle = '#a04040';
             ctx.beginPath(); ctx.arc(bx3 + bw3 * 0.5, btop - 6, 0.8, 0, Math.PI * 2); ctx.fill();
         }
-        // Window grid
+        // Window grid — per-window slow cycle with a soft cross-fade
         const rows = Math.max(2, Math.floor((B.h - 4) / 6));
         for(let r2 = 0; r2 < rows; r2++) {
             for(let c2 = 0; c2 < B.wc; c2++) {
                 const cellW = (bw3 - 4) / B.wc;
                 const wwx = bx3 + 2 + c2 * cellW + 1;
                 const wwy = btop + 3 + r2 * 6;
-                const lit3 = ((bi * 31 + r2 * 7 + c2 * 13 + winEpoch) % 9) < 4;
-                ctx.fillStyle = lit3 ? 'rgba(255,228,150,0.75)' : 'rgba(70,95,120,0.55)';
+                // Deterministic per-window traits: long period (26-60s) and
+                // its own phase, so no two windows switch together
+                const seedW = bi * 31 + r2 * 7 + c2 * 13;
+                const period = 26000 + (seedW % 7) * 5000;
+                const phase = ((t + seedW * 3300) % period) / period;
+                const duty = 0.34 + (seedW % 5) * 0.07;   // fraction of time lit
+                // Smooth 8%-of-period ramps at each edge
+                let litAmt;
+                const ramp = 0.08;
+                if(phase < duty) {
+                    litAmt = Math.min(1, phase / ramp, (duty - phase) / ramp);
+                } else {
+                    litAmt = 0;
+                }
+                litAmt = Math.max(0, Math.min(1, litAmt));
+                // Dark (empty office) base, warm lamp blended over it
+                ctx.fillStyle = 'rgba(70,95,120,0.55)';
                 ctx.fillRect(wwx, wwy, Math.max(2, cellW - 2), 3.4);
+                if(litAmt > 0.01) {
+                    ctx.fillStyle = `rgba(255,228,150,${0.75 * litAmt})`;
+                    ctx.fillRect(wwx, wwy, Math.max(2, cellW - 2), 3.4);
+                }
             }
         }
     }
@@ -4252,17 +4294,21 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(wx, streetTop + 1); ctx.lineTo(wx + ww, streetTop + 1); ctx.stroke();
-    // Street traffic — a one-way flow of varied vehicles with natural gaps
+    // Street traffic — a one-way flow of varied vehicles with natural gaps.
+    // NOTE: the cycle hash must stay in exact-integer range. A big 32-bit
+    // multiply here silently lost its low bits to float precision, so the
+    // "is there a car this cycle" test was always false and the road sat
+    // empty forever. Small-modulus LCG keeps every value exact.
     {
         const carY = (streetTop + streetBot) / 2;
         const trafPeriod = 5200;
         const trafCyc = Math.floor(t / trafPeriod);
         const trafP = (t % trafPeriod) / trafPeriod;
-        const trafSeed = ((trafCyc * 2654435761) >>> 0);
-        if(trafSeed % 4 !== 0) {              // every 4th slot the street is empty
-            const kind = [0, 1, 0, 2, 1, 0][trafSeed % 6];
+        const h1 = ((trafCyc % 4096) * 401 + 137) % 1021;   // exact in double
+        if(h1 % 5 !== 0) {                    // ~1 in 5 slots the street is empty
+            const kind = [0, 1, 0, 2, 1, 0][h1 % 6];
             const palette = ['#8899a6', '#a65f4b', '#5a7d5a', '#7d6ba0', '#b3a76b', '#4a6d8c'];
-            const colr = palette[(trafSeed >>> 3) % palette.length];
+            const colr = palette[(h1 >> 2) % palette.length];
             const cx3 = wx - 36 + (ww + 72) * trafP;
             drawWindowVehicle(cx3, carY + Math.sin(t / 95) * 0.3, kind, colr, t);
         }
@@ -10855,7 +10901,7 @@ function drawLevel6MegacomputerRoom() {
         const s = 2;
         const detectiveSkin = '#c9b5a0';
         // Screen-space pickup coordinates (interaction system relies on these)
-        const hatX = detectiveX + 14*s;       // 568 — hat knocked off past head
+        const hatX = detectiveX + 21*s;       // hat knocked clear of the head
         const hatY = detectiveY - 22;
         const pistolGX = 460;                 // just inside radiation zone right edge
         const pistolGY = detectiveY - 2;
@@ -10884,44 +10930,59 @@ function drawLevel6MegacomputerRoom() {
         ctx.fill();
         ctx.globalAlpha = 1;
 
-        // ── Back leg (behind body, extending LEFT) — rounded limb ────────────
+        // ── FAR (back) leg — starts deep inside the hip so it reads attached ──
         ctx.lineCap = 'round';
-        ctx.strokeStyle = '#23233a';
-        ctx.lineWidth = 3.6 * s;
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#1e1e33';
+        ctx.lineWidth = 4.2 * s;
         ctx.beginPath();
-        ctx.moveTo(detectiveX - 8*s, detectiveY - 3*s);
-        ctx.quadraticCurveTo(detectiveX - 20*s, detectiveY - 5.5*s, detectiveX - 27*s, detectiveY - 3*s);
-        ctx.lineTo(detectiveX - 34*s, detectiveY - 2.5*s);
+        ctx.moveTo(detectiveX - 6*s, detectiveY - 7*s);          // hip joint, under torso
+        ctx.quadraticCurveTo(detectiveX - 19*s, detectiveY - 9*s, detectiveX - 28*s, detectiveY - 7*s);
+        ctx.lineTo(detectiveX - 35*s, detectiveY - 6.5*s);       // ankle
         ctx.stroke();
-        // Back shoe — heel down, toe splayed slightly outward
-        ctx.fillStyle = '#141414';
-        pathRoundRect(detectiveX - 39.5*s, detectiveY - 4.6*s, 5.8*s, 4.4*s, 3);
+        // Far shoe — overlaps the ankle so there's no seam
+        ctx.fillStyle = '#101010';
+        pathRoundRect(detectiveX - 40.5*s, detectiveY - 9*s, 6.4*s, 5*s, 2.5);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.10)';
-        pathRoundRect(detectiveX - 39*s, detectiveY - 4.2*s, 2*s, 3.4*s, 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        pathRoundRect(detectiveX - 40*s, detectiveY - 8.5*s, 2.2*s, 3.8*s, 2);
         ctx.fill();
 
         // ── Outstretched (far) arm reaching LEFT toward the pistol ───────────
+        // Shoulder starts under the torso; sleeve, cuff and hand overlap each
+        // other along the way so the limb reads as one continuous arm.
         ctx.strokeStyle = '#1a1a4d';
-        ctx.lineWidth = 3 * s;
+        ctx.lineWidth = 3.4 * s;
         ctx.beginPath();
-        ctx.moveTo(detectiveX - 10*s, detectiveY - 12*s);
-        ctx.quadraticCurveTo(detectiveX - 22*s, detectiveY - 13.8*s, detectiveX - 31*s, detectiveY - 13*s);
+        ctx.moveTo(detectiveX - 8*s, detectiveY - 12*s);         // shoulder, inside torso
+        ctx.quadraticCurveTo(detectiveX - 22*s, detectiveY - 14.2*s, detectiveX - 34*s, detectiveY - 13.2*s);
         ctx.stroke();
-        // Shirt cuff at the wrist
+        // Shirt cuff at the wrist (overlapping the sleeve end)
         ctx.fillStyle = '#e8e8e8';
-        ctx.fillRect(detectiveX - 33*s, detectiveY - 14.6*s, 2.2*s, 3.4*s);
+        ctx.save();
+        ctx.translate(detectiveX - 34.5*s, detectiveY - 13.2*s);
+        ctx.rotate(-0.06);
+        pathRoundRect(-1.4*s, -2.2*s, 2.8*s, 4.4*s, 1);
+        ctx.fill();
+        ctx.restore();
+        // Forearm-to-hand link so no gap can open up
+        ctx.strokeStyle = detectiveSkin;
+        ctx.lineWidth = 2.6 * s;
+        ctx.beginPath();
+        ctx.moveTo(detectiveX - 34.5*s, detectiveY - 13.2*s);
+        ctx.lineTo(detectiveX - 37*s, detectiveY - 13*s);
+        ctx.stroke();
         // Hand — palm with fingers splayed toward the grip, just short of it
         ctx.fillStyle = detectiveSkin;
         ctx.beginPath();
-        ctx.ellipse(detectiveX - 36.5*s, detectiveY - 13*s, 2.6*s, 1.9*s, -0.15, 0, Math.PI * 2);
+        ctx.ellipse(detectiveX - 37.6*s, detectiveY - 13*s, 2.8*s, 2.1*s, -0.12, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = detectiveSkin;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.6;
         for(let fg = 0; fg < 3; fg++) {
             ctx.beginPath();
-            ctx.moveTo(detectiveX - 38.4*s, detectiveY - (13.8 - fg * 0.9)*s);
-            ctx.lineTo(detectiveX - 40.6*s, detectiveY - (14.3 - fg * 1.1)*s);
+            ctx.moveTo(detectiveX - 39.4*s, detectiveY - (13.6 - fg * 0.8)*s);
+            ctx.lineTo(detectiveX - 41.4*s, detectiveY - (14.0 - fg * 1.0)*s);
             ctx.stroke();
         }
 
@@ -10985,61 +11046,69 @@ function drawLevel6MegacomputerRoom() {
             ctx.beginPath(); ctx.arc(hx, hy, 1, 0, Math.PI * 2); ctx.fill();
         }
 
-        // ── Neck ─────────────────────────────────────────────────────────────
+        // ── Neck — broad, overlapping both the collar and the jaw ────────────
         ctx.fillStyle = detectiveSkin;
-        ctx.fillRect(detectiveX + 6*s, detectiveY - 8*s, 4*s, 5*s);
+        pathRoundRect(detectiveX + 5*s, detectiveY - 9.5*s, 6*s, 6*s, 1.5);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(120,95,70,0.25)';
+        ctx.fillRect(detectiveX + 5*s, detectiveY - 9.5*s, 6*s, 1.4*s);
 
-        // ── Head lying flat — rounded skull, to the RIGHT of torso ───────────
+        // ── Head lying flat — rounded skull, clear of the knocked-off hat ────
         ctx.fillStyle = detectiveSkin;
         ctx.beginPath();
-        ctx.ellipse(detectiveX + 13*s, detectiveY - 10.5*s, 5.4*s, 5.7*s, 0.08, 0, Math.PI * 2);
+        ctx.ellipse(detectiveX + 11*s, detectiveY - 10.5*s, 5.2*s, 5.5*s, 0.08, 0, Math.PI * 2);
+        ctx.fill();
+        // Jaw shading along the underside
+        ctx.fillStyle = 'rgba(150,125,100,0.28)';
+        ctx.beginPath();
+        ctx.ellipse(detectiveX + 11*s, detectiveY - 7.5*s, 4.2*s, 2*s, 0.08, 0, Math.PI);
         ctx.fill();
         // Dark hair — swept cap over the crown, with sideburns
         ctx.fillStyle = '#2a2a2a';
         ctx.beginPath();
-        ctx.ellipse(detectiveX + 13*s, detectiveY - 14*s, 5.5*s, 3.2*s, 0.08, Math.PI * 0.92, Math.PI * 2.08);
+        ctx.ellipse(detectiveX + 11*s, detectiveY - 13.4*s, 5.3*s, 3.1*s, 0.08, Math.PI * 0.92, Math.PI * 2.08);
         ctx.closePath();
         ctx.fill();
         ctx.fillStyle = '#2a2a2a';
-        pathRoundRect(detectiveX + 7.6*s, detectiveY - 13.5*s, 1.7*s, 4.6*s, 1.5);
+        pathRoundRect(detectiveX + 5.8*s, detectiveY - 13.2*s, 1.7*s, 4.4*s, 1.5);
         ctx.fill();
-        pathRoundRect(detectiveX + 16.8*s, detectiveY - 13.5*s, 1.7*s, 4.6*s, 1.5);
+        pathRoundRect(detectiveX + 14.6*s, detectiveY - 13.2*s, 1.7*s, 4.4*s, 1.5);
         ctx.fill();
         // Ears at the temples
         ctx.fillStyle = '#b59f8a';
-        ctx.beginPath(); ctx.ellipse(detectiveX + 8.2*s, detectiveY - 9.5*s, 1.1*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(detectiveX + 17.8*s, detectiveY - 9.5*s, 1.1*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(detectiveX + 6.4*s, detectiveY - 9.5*s, 1.1*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(detectiveX + 15.6*s, detectiveY - 9.5*s, 1.1*s, 1.5*s, 0, 0, Math.PI * 2); ctx.fill();
 
         // X-eyes (dead) — matching drawDeadCloningBoss convention
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         // Near eye (on our left as we look at the face)
-        ctx.moveTo(detectiveX + 10*s, detectiveY - 13*s);
-        ctx.lineTo(detectiveX + 12*s, detectiveY - 11*s);
-        ctx.moveTo(detectiveX + 12*s, detectiveY - 13*s);
+        ctx.moveTo(detectiveX + 8*s, detectiveY - 13*s);
         ctx.lineTo(detectiveX + 10*s, detectiveY - 11*s);
+        ctx.moveTo(detectiveX + 10*s, detectiveY - 13*s);
+        ctx.lineTo(detectiveX + 8*s, detectiveY - 11*s);
         // Far eye
-        ctx.moveTo(detectiveX + 14*s, detectiveY - 13*s);
-        ctx.lineTo(detectiveX + 16*s, detectiveY - 11*s);
-        ctx.moveTo(detectiveX + 16*s, detectiveY - 13*s);
+        ctx.moveTo(detectiveX + 12*s, detectiveY - 13*s);
         ctx.lineTo(detectiveX + 14*s, detectiveY - 11*s);
+        ctx.moveTo(detectiveX + 14*s, detectiveY - 13*s);
+        ctx.lineTo(detectiveX + 12*s, detectiveY - 11*s);
         ctx.stroke();
 
         // Nose — soft rounded bump
         ctx.fillStyle = '#b59f8a';
         ctx.beginPath();
-        ctx.ellipse(detectiveX + 13.5*s, detectiveY - 9.2*s, 1.5*s, 1.1*s, 0, 0, Math.PI * 2);
+        ctx.ellipse(detectiveX + 11.5*s, detectiveY - 9.2*s, 1.5*s, 1.1*s, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Slack mouth with blood trickle
         ctx.strokeStyle = '#4a2a2a';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(detectiveX + 13*s, detectiveY - 7*s, 2.5, 0.2, Math.PI - 0.2);
+        ctx.arc(detectiveX + 11*s, detectiveY - 7*s, 2.5, 0.2, Math.PI - 0.2);
         ctx.stroke();
         ctx.fillStyle = '#660000';
-        ctx.fillRect(detectiveX + 15*s, detectiveY - 7*s, 1, 2*s);
+        ctx.fillRect(detectiveX + 13*s, detectiveY - 7*s, 1, 2*s);
 
         // ── Note clutched in near hand (drawn before fingers so fingers overlap) ──
         if(!level6.pistol.dropped) {
@@ -11106,28 +11175,34 @@ function drawLevel6MegacomputerRoom() {
             ctx.fillRect(noteScreenX - 2, noteScreenY + 17, 2, 2);
         }
 
-        // ── Front leg (on top) extending LEFT — rounded, knee slightly bent ──
-        ctx.strokeStyle = '#31314a';
-        ctx.lineWidth = 3.8 * s;
+        // ── NEAR (front) leg — lighter and lower so the two legs read apart ──
+        // Hip anchors under the jacket hem; the limb runs unbroken to the shoe.
+        ctx.strokeStyle = '#353552';
+        ctx.lineWidth = 4.4 * s;
         ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(detectiveX - 7*s, detectiveY - 1*s);
-        ctx.quadraticCurveTo(detectiveX - 19*s, detectiveY - 3.5*s, detectiveX - 26*s, detectiveY - 0.5*s);
-        ctx.lineTo(detectiveX - 34*s, detectiveY);
+        ctx.moveTo(detectiveX - 6*s, detectiveY - 1.5*s);        // hip joint, under torso
+        ctx.quadraticCurveTo(detectiveX - 18*s, detectiveY - 3*s, detectiveX - 26*s, detectiveY - 0.5*s);
+        ctx.lineTo(detectiveX - 34.5*s, detectiveY + 0.5*s);     // ankle
         ctx.stroke();
         // Pant crease highlight along the shin
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(detectiveX - 26*s, detectiveY - 2*s);
-        ctx.lineTo(detectiveX - 33*s, detectiveY - 1.6*s);
+        ctx.moveTo(detectiveX - 24*s, detectiveY - 2.4*s);
+        ctx.lineTo(detectiveX - 33*s, detectiveY - 1.2*s);
         ctx.stroke();
-        // Front shoe — toe up (foot fallen outward)
-        ctx.fillStyle = '#1a1a1a';
-        pathRoundRect(detectiveX - 39.5*s, detectiveY - 2.4*s, 5.8*s, 4.4*s, 3);
+        // Cuff break over the shoe
+        ctx.fillStyle = '#2b2b44';
+        pathRoundRect(detectiveX - 36.5*s, detectiveY - 2.4*s, 2.6*s, 5*s, 1.2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        pathRoundRect(detectiveX - 39*s, detectiveY - 2*s, 2*s, 3.4*s, 2);
+        // Front shoe — toe up (foot fallen outward), overlapping the ankle
+        ctx.fillStyle = '#171717';
+        pathRoundRect(detectiveX - 40.5*s, detectiveY - 2.6*s, 6.4*s, 5*s, 2.5);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.13)';
+        pathRoundRect(detectiveX - 40*s, detectiveY - 2.2*s, 2.2*s, 3.8*s, 2);
         ctx.fill();
 
         // ── Pistol on ground — just inside radiation zone right edge ─────────
@@ -11349,7 +11424,7 @@ function drawLevel6MegacomputerRoom() {
     // ── Detective pickup/view-note prompts — drawn AFTER blast door to avoid z-clipping ──
     {
         const _dX = 540, _dY = 395, _s = 2;
-        const _hatX = _dX + 14*_s, _hatY = _dY - 22;
+        const _hatX = _dX + 21*_s, _hatY = _dY - 22;
         const _pistolGX = 460, _pistolGY = _dY - 2;
         const _noteScreenX = _dX + 11*_s, _noteScreenY = _dY - 9*_s;
         const _noteRead = level6.pistol.dropped;
@@ -19756,9 +19831,7 @@ function drawSafeUI() {
         ctx.font = 'bold 16px Arial';
         ctx.fillText('Rounds (x6)', 530, 255);
 
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 18px Arial';
-        ctx.fillText('USE ◄► TO SELECT, ACTION TO TAKE', 350, 380);
+        drawActionLabel('◄► SELECT   [ ACTION ] TAKE', 350, 388, {fontSize: 14});
         return;
     }
 
@@ -19984,10 +20057,7 @@ function drawElevatorUI() {
         }
     }
 
-    ctx.fillStyle = '#666';
-    ctx.font = '13px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('▲▼ SELECT   ACTION CONFIRM', 350, py + ph - 15);
+    drawActionLabel('▲▼ SELECT   [ ACTION ] CONFIRM', 350, py + ph - 6, {fontSize: 12});
 }
 
 function drawKeypadUI() {
@@ -20118,10 +20188,8 @@ function drawKeypadUI() {
     }
 
     // Instructions
-    ctx.fillStyle = '#888';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('◄►▲▼ SELECT   ACTION ENTER', 350, escBtnY + (level6.keypadShowHint ? 72 : 56));
+    drawActionLabel('◄►▲▼ SELECT   [ ACTION ] ENTER', 350,
+        escBtnY + (level6.keypadShowHint ? 80 : 64), {fontSize: 12});
 }
 
 function drawComputerUI() {
@@ -20176,9 +20244,7 @@ function drawComputerUI() {
     ctx.fillText('DELIVER MEANS', 490, 240);
     ctx.fillText('OF PRODUCTION', 490, 270);
 
-    ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText('USE ◄► TO SELECT, ACTION TO CONFIRM', 350, 355);
+    drawActionLabel('◄► SELECT   [ ACTION ] CONFIRM', 350, 363, {fontSize: 14});
 
     ctx.fillStyle = '#b8860b';
     ctx.font = '16px Arial';
@@ -22501,46 +22567,140 @@ function drawSelfDestructCave2() {
         ctx.fillStyle = 'rgba(0,0,0,0.4)';
         ctx.beginPath(); ctx.ellipse(dx, dy+3, 18+4*riseAmt - Math.abs(bodyBob)*0.3, 5, 0, 0, Math.PI*2); ctx.fill();
 
-        // Legs/lower body
-        if(!seated || riseAmt > 0) {
-            ctx.fillStyle = '#4a0808';
-            const lLegLift = isWalkingDevil ? Math.max(0, legStagger) : 0;
-            const rLegLift = isWalkingDevil ? Math.max(0, -legStagger) : 0;
-            ctx.fillRect(dx-7*s, dy-10*s+bodyOfsY - lLegLift, 6*s, 10*s); // left leg
-            ctx.fillRect(dx+s, dy-10*s+bodyOfsY - rLegLift, 6*s, 10*s);   // right leg
-            ctx.fillStyle = '#1a0404';
-            ctx.fillRect(dx-7*s, dy-2*s - lLegLift, 6*s, 2*s); // left boot
-            ctx.fillRect(dx+s, dy-2*s - rLegLift, 6*s, 2*s);   // right boot
-        } else {
-            // Seated legs — knees bent forward, feet on ground
-            ctx.fillStyle = '#4a0808';
-            ctx.fillRect(dx-8*s, dy-14*s, 8*s, 6*s); // left thigh (horizontal, compact)
-            ctx.fillRect(dx, dy-14*s, 8*s, 6*s);      // right thigh
-            ctx.fillRect(dx-10*s, dy-8*s, 5*s, 8*s);  // left shin (hanging down)
-            ctx.fillRect(dx+5*s, dy-8*s, 5*s, 8*s);   // right shin
-            ctx.fillStyle = '#1a0404'; // hooves
-            ctx.fillRect(dx-11*s, dy-s, 6*s, 2*s);
-            ctx.fillRect(dx+5*s, dy-s, 6*s, 2*s);
+        // ── Skeleton anchors — every part hangs off these so nothing detaches
+        const torsoY = dy - 22*s - 8 + bodyOfsY;   // shoulder line
+        const hipY   = torsoY + 12*s;              // waist = top of the legs
+        const headY  = torsoY - 12*s;
+
+        // ── CAPE — one continuous sweep from the shoulders to the floor,
+        // drawn behind the body. Previously two separate triangles left a
+        // wedge-shaped hole down the middle.
+        {
+            const capeTop = torsoY + 2;
+            const sway = isWalkingDevil ? gait * 3 : 0;
+            const hemY = dy + 1;
+            ctx.fillStyle = '#0e0404';
+            ctx.beginPath();
+            ctx.moveTo(dx - 9*s, capeTop);
+            // Left shoulder out to the trailing hem
+            ctx.quadraticCurveTo(dx - 15*s, torsoY + 14*s, dx - 19*s - sway, hemY);
+            // Scalloped hem across the ground
+            ctx.quadraticCurveTo(dx - 10*s - sway*0.5, hemY - 5, dx - 3*s, hemY - 1);
+            ctx.quadraticCurveTo(dx + 3*s, hemY - 6, dx + 10*s + sway*0.5, hemY - 1);
+            ctx.quadraticCurveTo(dx + 15*s, hemY - 3, dx + 19*s + sway, hemY);
+            // Right side back up to the shoulder
+            ctx.quadraticCurveTo(dx + 15*s, torsoY + 14*s, dx + 9*s, capeTop);
+            // Collar arc closes the shape across the shoulders
+            ctx.quadraticCurveTo(dx, capeTop - 5, dx - 9*s, capeTop);
+            ctx.closePath();
+            ctx.fill();
+            // Dark red lining showing along the inner left edge
+            ctx.fillStyle = '#4a0a0a';
+            ctx.beginPath();
+            ctx.moveTo(dx - 8*s, capeTop + 2);
+            ctx.quadraticCurveTo(dx - 12*s, torsoY + 14*s, dx - 15*s - sway, hemY - 2);
+            ctx.quadraticCurveTo(dx - 10*s, hemY - 6, dx - 6*s, hemY - 4);
+            ctx.quadraticCurveTo(dx - 7*s, torsoY + 12*s, dx - 8*s, capeTop + 2);
+            ctx.closePath();
+            ctx.fill();
+            // Standing collar behind the head
+            ctx.fillStyle = '#1a0606';
+            ctx.beginPath();
+            ctx.moveTo(dx - 9*s, capeTop + 1);
+            ctx.quadraticCurveTo(dx - 8*s, headY + 6*s, dx - 4*s, headY + 5*s);
+            ctx.lineTo(dx + 4*s, headY + 5*s);
+            ctx.quadraticCurveTo(dx + 8*s, headY + 6*s, dx + 9*s, capeTop + 1);
+            ctx.closePath();
+            ctx.fill();
         }
 
-        // Cape — sweeping black with dark red lining
-        const capeY = dy - 12*s - 20 + bodyOfsY;
-        ctx.fillStyle = '#0e0404';
-        ctx.beginPath();
-        ctx.moveTo(dx-12*s, capeY+8); ctx.lineTo(dx-18*s, dy); ctx.lineTo(dx-6*s, dy); ctx.closePath(); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(dx+12*s, capeY+8); ctx.lineTo(dx+18*s, dy); ctx.lineTo(dx+6*s, dy); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#3a0808';
-        ctx.beginPath(); ctx.moveTo(dx-12*s, capeY+10); ctx.lineTo(dx-8*s, dy-2*s); ctx.lineTo(dx-4*s, capeY+10); ctx.closePath(); ctx.fill();
+        // ── LEGS — rooted at the hip line so they always meet the torso
+        ctx.lineCap = 'round';
+        if(!seated || riseAmt > 0) {
+            const lLegLift = isWalkingDevil ? Math.max(0, legStagger) : 0;
+            const rLegLift = isWalkingDevil ? Math.max(0, -legStagger) : 0;
+            const drawLeg = (hipX, lift, swing) => {
+                const footY = dy - lift;
+                ctx.strokeStyle = '#4a0808';
+                ctx.lineWidth = 6.5*s;
+                ctx.beginPath();
+                ctx.moveTo(hipX, hipY);
+                ctx.quadraticCurveTo(hipX + swing * 0.5, (hipY + footY) / 2, hipX + swing, footY - 3);
+                ctx.stroke();
+                // Cloven hoof
+                ctx.fillStyle = '#1a0404';
+                ctx.beginPath();
+                ctx.moveTo(hipX + swing - 4*s, footY - 4);
+                ctx.lineTo(hipX + swing + 4*s, footY - 4);
+                ctx.quadraticCurveTo(hipX + swing + 5*s, footY + 1, hipX + swing + 2*s, footY + 1);
+                ctx.lineTo(hipX + swing + 0.6*s, footY - 1.5);
+                ctx.lineTo(hipX + swing - 0.6*s, footY + 1);
+                ctx.quadraticCurveTo(hipX + swing - 5*s, footY + 1, hipX + swing - 4*s, footY - 4);
+                ctx.closePath();
+                ctx.fill();
+            };
+            drawLeg(dx - 4*s, lLegLift, isWalkingDevil ? legStagger * 0.6 : 0);
+            drawLeg(dx + 4*s, rLegLift, isWalkingDevil ? -legStagger * 0.6 : 0);
+        } else {
+            // Seated — thighs forward off the throne, shins dropping to hooves
+            ctx.strokeStyle = '#4a0808';
+            ctx.lineWidth = 6*s;
+            for(const sgn of [-1, 1]) {
+                const kneeX = dx + sgn * 9*s;
+                ctx.beginPath();
+                ctx.moveTo(dx + sgn * 3*s, hipY - 2*s);
+                ctx.lineTo(kneeX, hipY);
+                ctx.lineTo(kneeX + sgn * 1.5*s, dy - 3);
+                ctx.stroke();
+                ctx.fillStyle = '#1a0404';
+                ctx.beginPath();
+                ctx.ellipse(kneeX + sgn * 1.5*s, dy - 1, 4*s, 2*s, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
 
-        // Torso
-        const torsoY = dy - 22*s - 8 + bodyOfsY;
-        ctx.fillStyle = '#7a0000';
-        ctx.fillRect(dx-8*s, torsoY, 16*s, 12*s);
-        // Lapel/collar detail
+        // ── TORSO — tapered chest into the waist, connecting shoulders to hips
+        const torsoGrad = ctx.createLinearGradient(dx - 9*s, 0, dx + 9*s, 0);
+        torsoGrad.addColorStop(0, '#5a0000');
+        torsoGrad.addColorStop(0.45, '#8a0000');
+        torsoGrad.addColorStop(1, '#4a0000');
+        ctx.fillStyle = torsoGrad;
+        ctx.beginPath();
+        ctx.moveTo(dx - 9*s, torsoY + 1*s);
+        ctx.quadraticCurveTo(dx - 8*s, torsoY - 1*s, dx - 5*s, torsoY - 1*s);   // left shoulder
+        ctx.lineTo(dx + 5*s, torsoY - 1*s);
+        ctx.quadraticCurveTo(dx + 8*s, torsoY - 1*s, dx + 9*s, torsoY + 1*s);   // right shoulder
+        ctx.quadraticCurveTo(dx + 8*s, torsoY + 8*s, dx + 6.5*s, hipY);         // taper to waist
+        ctx.lineTo(dx - 6.5*s, hipY);
+        ctx.quadraticCurveTo(dx - 8*s, torsoY + 8*s, dx - 9*s, torsoY + 1*s);
+        ctx.closePath();
+        ctx.fill();
+        // Open jacket lapels over a dark shirt
+        ctx.fillStyle = '#1a0202';
+        ctx.beginPath();
+        ctx.moveTo(dx - 3*s, torsoY);
+        ctx.lineTo(dx + 3*s, torsoY);
+        ctx.lineTo(dx + 2*s, hipY);
+        ctx.lineTo(dx - 2*s, hipY);
+        ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#aa0808';
-        ctx.fillRect(dx-6*s, torsoY, 4*s, 10*s);
-        ctx.fillRect(dx+2*s, torsoY, 4*s, 10*s);
+        ctx.beginPath();
+        ctx.moveTo(dx - 5*s, torsoY - 0.5*s);
+        ctx.lineTo(dx - 2.4*s, torsoY);
+        ctx.lineTo(dx - 3.4*s, torsoY + 7*s);
+        ctx.lineTo(dx - 6*s, torsoY + 4*s);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(dx + 5*s, torsoY - 0.5*s);
+        ctx.lineTo(dx + 2.4*s, torsoY);
+        ctx.lineTo(dx + 3.4*s, torsoY + 7*s);
+        ctx.lineTo(dx + 6*s, torsoY + 4*s);
+        ctx.closePath(); ctx.fill();
+        // Belt at the waist
+        ctx.fillStyle = '#1a0404';
+        ctx.fillRect(dx - 6.8*s, hipY - 2.5, 13.6*s, 3.5);
+        ctx.fillStyle = '#c8a010';
+        ctx.fillRect(dx - 1.6*s, hipY - 2.5, 3.2*s, 3.5);
 
         // Arms
         // During the stabbing lockout the side is fixed to whichever way the devil faced at contact
@@ -22558,19 +22718,44 @@ function drawSelfDestructCave2() {
             else if(stT < 22) plunge = -8 + ((stT - 8) / 14) * 58;     // drive forward
             else              plunge = 50;                             // held in the player
         }
+        // Stroke-based arms anchored at the shoulders so they never float free
+        ctx.strokeStyle = '#8a0e00';
+        ctx.lineWidth = 4*s;
+        ctx.lineCap = 'round';
         if(pfAimed) {
-            // Arm extended horizontally toward the player at torso height
-            ctx.fillRect(dx + pfSide*4*s, torsoY+4, pfSide*10*s, 2*s);
-            // Back arm tucked at side
-            ctx.fillRect(dx - pfSide*8*s, torsoY+2, 2*s, 10*s);
+            // Lead arm extended toward the player at torso height
+            ctx.beginPath();
+            ctx.moveTo(dx + pfSide*7*s, torsoY + 3*s);
+            ctx.quadraticCurveTo(dx + pfSide*11*s, torsoY + 4, dx + pfSide*14*s, torsoY + 5);
+            ctx.stroke();
+            // Back arm tucked at the side
+            ctx.beginPath();
+            ctx.moveTo(dx - pfSide*7*s, torsoY + 3*s);
+            ctx.quadraticCurveTo(dx - pfSide*9*s, torsoY + 7*s, dx - pfSide*8*s, torsoY + 11*s);
+            ctx.stroke();
         } else {
-            // Both arms hanging at sides
-            ctx.fillRect(dx + pfSide*8*s, torsoY+2, 2*s, 12*s);
-            ctx.fillRect(dx - pfSide*10*s, torsoY+2, 2*s, 10*s);
+            // Both arms hanging, curving in at the wrists
+            ctx.beginPath();
+            ctx.moveTo(dx + pfSide*7*s, torsoY + 3*s);
+            ctx.quadraticCurveTo(dx + pfSide*10*s, torsoY + 7*s, dx + pfSide*9*s, torsoY + 12*s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(dx - pfSide*7*s, torsoY + 3*s);
+            ctx.quadraticCurveTo(dx - pfSide*10*s, torsoY + 7*s, dx - pfSide*9*s, torsoY + 11*s);
+            ctx.stroke();
+        }
+        // Clawed hands
+        ctx.fillStyle = '#cc2200';
+        if(pfAimed) {
+            ctx.beginPath(); ctx.arc(dx + pfSide*14*s, torsoY + 5, 2.2*s, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.beginPath(); ctx.arc(dx + pfSide*9*s, torsoY + 12*s, 2.2*s, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(dx - pfSide*9*s, torsoY + 11*s, 2.2*s, 0, Math.PI*2); ctx.fill();
         }
 
-        // Head
-        const headY = torsoY - 12*s;
+        // Head — neck first so it connects to the collar
+        ctx.fillStyle = '#a81200';
+        ctx.fillRect(dx - 2*s, headY + 9*s, 4*s, 4*s);
         ctx.fillStyle = '#cc1500';
         ctx.beginPath(); ctx.arc(dx, headY+6*s, 6*s, 0, Math.PI*2); ctx.fill();
         // Horns
@@ -28812,7 +28997,7 @@ function update() {
                     // Note interact: after mirror, left arm hand is at screen x = detectiveX + 11*s
                     const noteInteractX = detectiveX + 11*s; // ≈ 562
                     // Hat is to the RIGHT of detective: screen x = detectiveX + 14*s = 568
-                    const hatX = detectiveX + 14*s; // 568
+                    const hatX = detectiveX + 21*s; // hat knocked clear of the head
                     const pistolGX = 460; // inside radiation zone from right edge
                     // View note (only before it's been read)
                     if(!level6.viewingDetectiveNote && !level6.pistol.dropped && Math.abs(player.x - noteInteractX) < 55 && Math.abs(player.y - 395) < 60 && (keys[' '] || keys['action'])) {
