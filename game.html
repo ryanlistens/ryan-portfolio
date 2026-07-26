@@ -4285,6 +4285,286 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 2);
 }
 
+// === HELL-MODE WINDOW SCENERY ==============================================
+// Apocalyptic scorched earth beyond the glass: blood-red sky under a black
+// sun, burning ruins on the horizon, a chain gang of colored PMs marching
+// slowly past, robot demons cracking whips to keep them in line, and
+// gargoyles occasionally flapping by. All animation is slow and deterministic
+// — no strobing.
+function drawHellscapeWindow(wx, wy, ww, wh) {
+    const t = Date.now();
+    const horizonY = wy + wh * 0.60;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+
+    // ── BLOOD-RED SKY ──
+    const sky = ctx.createLinearGradient(0, wy, 0, horizonY);
+    sky.addColorStop(0, '#1c0004');
+    sky.addColorStop(0.55, '#5e0606');
+    sky.addColorStop(1, '#a81c08');
+    ctx.fillStyle = sky;
+    ctx.fillRect(wx, wy, ww, horizonY - wy);
+
+    // Black sun with a dim ember corona (slow breathing, ~7s period)
+    const sunX = wx + ww * 0.79, sunY = wy + wh * 0.20;
+    const breathe = 0.5 + 0.5 * Math.sin(t / 1114);
+    const corona = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 20);
+    corona.addColorStop(0, `rgba(255,120,40,${0.40 + breathe * 0.15})`);
+    corona.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = corona;
+    ctx.beginPath(); ctx.arc(sunX, sunY, 20, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0c0006';
+    ctx.beginPath(); ctx.arc(sunX, sunY, 8, 0, Math.PI * 2); ctx.fill();
+
+    // Drifting ash-smoke bands
+    for(let b = 0; b < 3; b++) {
+        const drift = ((t / (14000 + b * 5000) + b * 0.37) % 1) * (ww + 110) - 55;
+        ctx.fillStyle = `rgba(16,3,2,${0.30 - b * 0.07})`;
+        ctx.beginPath();
+        ctx.ellipse(wx + drift, wy + 7 + b * 12, 48, 5 + b * 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // ── BURNING RUINS ON THE HORIZON ──
+    ctx.fillStyle = '#140303';
+    for(const [rx, rw2, rh2] of [[0.06,0.09,14],[0.17,0.06,22],[0.30,0.10,10],[0.52,0.07,18],[0.63,0.05,12],[0.88,0.08,16]]) {
+        const bx2 = wx + ww * rx, bw2 = ww * rw2;
+        ctx.fillRect(bx2, horizonY - rh2, bw2, rh2);
+        // Jagged broken top
+        ctx.beginPath();
+        ctx.moveTo(bx2, horizonY - rh2);
+        ctx.lineTo(bx2 + bw2 * 0.4, horizonY - rh2 - 4);
+        ctx.lineTo(bx2 + bw2, horizonY - rh2);
+        ctx.closePath(); ctx.fill();
+    }
+    // Slow-licking distant flames between ruins (gentle 1.6-2.2s sway, no strobe)
+    for(let f = 0; f < 4; f++) {
+        const fx2 = wx + ww * (0.13 + f * 0.24);
+        const sway = Math.sin(t / (520 + f * 90) + f * 2.1);
+        const fh2 = 5 + Math.sin(t / (800 + f * 130) + f) * 1.5;
+        ctx.fillStyle = 'rgba(255,110,20,0.55)';
+        ctx.beginPath();
+        ctx.moveTo(fx2 - 3, horizonY);
+        ctx.quadraticCurveTo(fx2 + sway * 2, horizonY - fh2, fx2 + 3, horizonY);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,200,60,0.45)';
+        ctx.beginPath();
+        ctx.moveTo(fx2 - 1.5, horizonY);
+        ctx.quadraticCurveTo(fx2 + sway * 1.4, horizonY - fh2 * 0.55, fx2 + 1.5, horizonY);
+        ctx.closePath(); ctx.fill();
+    }
+
+    // ── SCORCHED EARTH ──
+    const gnd = ctx.createLinearGradient(0, horizonY, 0, wy + wh);
+    gnd.addColorStop(0, '#200a06');
+    gnd.addColorStop(1, '#0a0302');
+    ctx.fillStyle = gnd;
+    ctx.fillRect(wx, horizonY, ww, wy + wh - horizonY);
+    // Glowing ember cracks (slow pulse, per-crack phase)
+    for(let c = 0; c < 5; c++) {
+        const cx2 = wx + ww * (0.08 + c * 0.19);
+        const cy2 = horizonY + 8 + (c % 3) * 8;
+        const emb = 0.25 + 0.2 * Math.sin(t / 1600 + c * 1.7);
+        ctx.strokeStyle = `rgba(255,90,20,${emb})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx2 - 9, cy2);
+        ctx.lineTo(cx2 - 3, cy2 + 2);
+        ctx.lineTo(cx2 + 2, cy2 - 1);
+        ctx.lineTo(cx2 + 8, cy2 + 1);
+        ctx.stroke();
+    }
+    // Charred stumps
+    ctx.fillStyle = '#0e0503';
+    for(const [sx2, sh2] of [[0.24, 7], [0.71, 9]]) {
+        const stx = wx + ww * sx2;
+        ctx.fillRect(stx, horizonY + 4 - sh2, 3, sh2 + 4);
+        ctx.fillRect(stx - 2, horizonY + 4 - sh2, 7, 2);
+    }
+
+    // ── CHAIN GANG OF COLOR PMs (slow march, right to left) ──
+    const laneY = wy + wh - 8;                       // feet line
+    const gangSpan = 4 * 30;                          // four PMs, 30px apart
+    const trainW = gangSpan + 84;                     // + demons front and back
+    const marchT = (t / 42000) % 1;                   // one full pass ≈ 42s
+    const trainX = wx + ww + 20 - marchT * (ww + trainW + 40);
+    const stepPh = t / 620;                           // slow trudge cadence
+
+    // Ankle chain — sagging links connecting all four PMs
+    ctx.strokeStyle = 'rgba(120,120,130,0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for(let i = 0; i < 3; i++) {
+        const ax = trainX + i * 30, bx2 = trainX + (i + 1) * 30;
+        ctx.moveTo(ax, laneY - 2);
+        ctx.quadraticCurveTo((ax + bx2) / 2, laneY + 2, bx2, laneY - 2);
+    }
+    ctx.stroke();
+
+    for(let i = 0; i < 4; i++) {
+        const px2 = trainX + i * 30;
+        const step = Math.sin(stepPh + i * 0.9);      // per-PM gait offset
+        const bob = Math.abs(step) * 0.8;
+        const col = COLORS[i];
+        // Legs — short slow shuffle
+        ctx.strokeStyle = col.shadow || col.hex;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(px2 - 1, laneY - 7); ctx.lineTo(px2 - 2 + step * 2, laneY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px2 + 1, laneY - 7); ctx.lineTo(px2 + 2 - step * 2, laneY); ctx.stroke();
+        // Slumped torso
+        ctx.fillStyle = col.hex;
+        pathRoundRect(px2 - 3.5, laneY - 15 + bob, 7, 9, 2);
+        ctx.fill();
+        // Bowed hooded head (leaning forward in defeat)
+        ctx.fillStyle = col.hex;
+        ctx.beginPath(); ctx.arc(px2 - 1.5, laneY - 17 + bob, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f5c89a';
+        ctx.beginPath(); ctx.arc(px2 - 2.2, laneY - 16.6 + bob, 1.5, 0, Math.PI * 2); ctx.fill();
+        // Wrist shackle + hands hanging in front
+        ctx.strokeStyle = 'rgba(150,150,160,0.9)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(px2 - 3, laneY - 9 + bob); ctx.lineTo(px2 + 3, laneY - 9 + bob); ctx.stroke();
+        // Ankle cuff dots
+        ctx.fillStyle = '#9a9aa4';
+        ctx.beginPath(); ctx.arc(px2, laneY - 2, 1.1, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ── ROBOT DEMON SLAVE-DRIVERS (one behind, one ahead) ──
+    const drawRobotDemon = (dx, flip, whipSeed) => {
+        const dir = flip ? -1 : 1;                    // faces the gang
+        // Whip-crack cycle ≈ 3.4s: long wind-up, brief snap, recover
+        const wp = ((t + whipSeed) % 3400) / 3400;
+        // Legs — stiff mechanical stride
+        ctx.strokeStyle = '#2c2c34';
+        ctx.lineWidth = 2.4;
+        const dstep = Math.sin(stepPh) * 1.5;
+        ctx.beginPath(); ctx.moveTo(dx - 1, laneY - 9); ctx.lineTo(dx - 2 + dstep, laneY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(dx + 1, laneY - 9); ctx.lineTo(dx + 2 - dstep, laneY); ctx.stroke();
+        // Gunmetal torso with chest vent
+        const dGrad = ctx.createLinearGradient(0, laneY - 20, 0, laneY - 8);
+        dGrad.addColorStop(0, '#3a3a44');
+        dGrad.addColorStop(1, '#1e1e26');
+        ctx.fillStyle = dGrad;
+        pathRoundRect(dx - 4.5, laneY - 20, 9, 12, 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,60,20,0.8)';
+        ctx.fillRect(dx - 2, laneY - 16, 4, 1.2);
+        // Head — angular skull with horns and glowing eye visor
+        ctx.fillStyle = '#2c2c34';
+        pathRoundRect(dx - 3.5, laneY - 26, 7, 6, 1.5);
+        ctx.fill();
+        ctx.beginPath();                              // horns
+        ctx.moveTo(dx - 3.5, laneY - 25); ctx.lineTo(dx - 6, laneY - 30); ctx.lineTo(dx - 2, laneY - 26);
+        ctx.moveTo(dx + 3.5, laneY - 25); ctx.lineTo(dx + 6, laneY - 30); ctx.lineTo(dx + 2, laneY - 26);
+        ctx.fill();
+        const eyeGlow = 0.65 + 0.3 * Math.sin(t / 900 + whipSeed);
+        ctx.fillStyle = `rgba(255,40,20,${eyeGlow})`;
+        ctx.fillRect(dx - 2.5, laneY - 24.5, 5, 1.6);
+        // Whip arm + lash
+        const shX = dx + dir * 4, shY = laneY - 18;
+        let armAng, lash;
+        if(wp < 0.70) {                               // wind-up: whip trails up behind
+            armAng = -0.6 - wp * 0.9;
+            lash = 0;
+        } else if(wp < 0.80) {                        // SNAP forward
+            const sp2 = (wp - 0.70) / 0.10;
+            armAng = -1.23 + sp2 * 1.5;
+            lash = sp2;
+        } else {                                      // recover
+            const rec = (wp - 0.80) / 0.20;
+            armAng = 0.27 - rec * 0.87;
+            lash = 1 - rec;
+        }
+        const handX = shX + dir * Math.cos(armAng) * 7;
+        const handY = shY + Math.sin(armAng) * 7;
+        ctx.strokeStyle = '#2c2c34';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(shX, shY); ctx.lineTo(handX, handY); ctx.stroke();
+        // Lash — curled overhead in wind-up, straightens on the snap
+        ctx.strokeStyle = '#4a3020';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(handX, handY);
+        if(lash > 0.4) {
+            const tipX = handX + dir * (10 + lash * 14);
+            const tipY = handY + 2 - (1 - lash) * 6;
+            ctx.quadraticCurveTo(handX + dir * 8, handY - 6 * (1 - lash), tipX, tipY);
+            ctx.stroke();
+            if(lash > 0.75) {                         // crack spark at the tip
+                ctx.fillStyle = `rgba(255,240,180,${(lash - 0.75) * 2.4})`;
+                ctx.beginPath(); ctx.arc(tipX, tipY, 1.6, 0, Math.PI * 2); ctx.fill();
+            }
+        } else {
+            ctx.quadraticCurveTo(handX - dir * 6, handY - 9, handX - dir * 12, handY - 5);
+            ctx.stroke();
+        }
+    };
+    drawRobotDemon(trainX - 26, false, 0);            // driver behind the gang
+    drawRobotDemon(trainX + gangSpan + 16, true, 1700); // driver leading in front
+
+    // ── GARGOYLES FLAPPING PAST (one crossing every ~11s) ──
+    const gCycle = (t % 11000) / 11000;
+    if(gCycle < 0.34) {
+        const gp = gCycle / 0.34;
+        const gDir = (Math.floor(t / 11000) % 2 === 0) ? 1 : -1; // alternate direction
+        const gx = gDir > 0 ? wx - 16 + gp * (ww + 32) : wx + ww + 16 - gp * (ww + 32);
+        const gy = wy + 13 + Math.sin(gp * Math.PI * 2.5) * 5;
+        const flap = Math.sin(t / 150);
+        ctx.fillStyle = '#0e0208';
+        // Body
+        ctx.beginPath(); ctx.ellipse(gx, gy, 5, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+        // Head + tiny horns
+        ctx.beginPath(); ctx.arc(gx + gDir * 5, gy - 1, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(gx + gDir * 4, gy - 3); ctx.lineTo(gx + gDir * 5, gy - 5); ctx.lineTo(gx + gDir * 6, gy - 3);
+        ctx.fill();
+        // Bat wings — flap between raised and lowered
+        ctx.beginPath();
+        ctx.moveTo(gx - gDir * 1, gy - 1);
+        ctx.quadraticCurveTo(gx - gDir * 6, gy - 6 - flap * 5, gx - gDir * 12, gy - 2 - flap * 7);
+        ctx.quadraticCurveTo(gx - gDir * 7, gy + 1 - flap * 2, gx - gDir * 1, gy + 1);
+        ctx.closePath(); ctx.fill();
+        // Trailing tail with spade tip
+        ctx.strokeStyle = '#0e0208'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(gx - gDir * 4, gy + 1);
+        ctx.quadraticCurveTo(gx - gDir * 9, gy + 4, gx - gDir * 12, gy + 3);
+        ctx.stroke();
+        // Ember eye
+        ctx.fillStyle = 'rgba(255,60,20,0.9)';
+        ctx.fillRect(gx + gDir * 5, gy - 1.6, 1.2, 1.2);
+    }
+
+    // Heat-tinted glass
+    ctx.fillStyle = 'rgba(60,8,4,0.14)';
+    ctx.fillRect(wx, wy, ww, wh);
+
+    ctx.restore();
+
+    // === Window frame — same heavy industrial steel as the parking window ===
+    ctx.strokeStyle = '#4a4a4a';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(wx, wy, ww, wh);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(wx + 3, wy + 3, ww - 6, wh - 6);
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(wx, wy + wh * 0.45, ww, 3);
+    ctx.fillRect(wx + ww * 0.33, wy, 3, wh);
+    ctx.fillRect(wx + ww * 0.66, wy, 3, wh);
+    const hellRivets = [[wx+6,wy+6],[wx+ww-6,wy+6],[wx+6,wy+wh-6],[wx+ww-6,wy+wh-6]];
+    for(let rv of hellRivets) {
+        ctx.fillStyle = '#888';
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#555';
+        ctx.beginPath(); ctx.arc(rv[0], rv[1], 1, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(wx - 3, wy + wh, ww + 6, 5);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(wx - 2, wy + wh + 1, ww + 4, 2);
+}
+
 // Draw one pipe (vertical → elbow → horizontal) with:
 //   • bendy-straw ridges
 //   • bolted ring seal at the elbow joint
@@ -22477,9 +22757,10 @@ const ATMOS_MOODS = {
     // Underbelly — grimy near-dark, single failing bulb
     underbelly: { tint: 'rgba(38,52,38,0.12)',    glow: '190,205,180', glowA: 0.05, floor: 0.18, vig: 0.34,
                   flicker: { c: '205,215,190', base: 0.02, amp: 0.02, speed: 55 } },
-    // Hell mode — ember red inferno breathing over everything
+    // Hell mode — ember red glow breathing slowly (no strobe: fast full-screen
+    // flicker here read as overwhelming blinking lights)
     hell:       { tint: 'rgba(255,44,0,0.08)',    glow: '255,84,20',   glowA: 0.06, floor: 0.17, vig: 0.34,
-                  flicker: { c: '255,66,12', base: 0.04, amp: 0.04, speed: 80 } }
+                  pulse: { c: '255,66,12', base: 0.03, amp: 0.03, period: 5600 } }
 };
 // Gradient cache — keys include canvas dims so gradients rebuild on resize.
 // Every gradient spans the FULL canvas (letterbox included): rooms paint
@@ -24957,12 +25238,20 @@ function drawScene() {
     // pipeY=210, horizontal pipe runs at pipeY+25=235 — gasket centered on pipe
     drawPipeRoomRightWall(235);
 
-    // Single wide parking lot bay window — behind pipe managers
+    // Single wide bay window — behind pipe managers.
+    // Hell mode swaps the parking lot for the scorched-earth hellscape.
     if(level >= 1) {
-        drawParkingLotWindow(260, 275, 380, 95);
-        // Heavy tint overlay — window recedes behind NPCs and pipes as primary focal points
-        ctx.fillStyle = 'rgba(80,75,65,0.60)';
-        ctx.fillRect(260, 275, 380, 95);
+        if(hellMode) {
+            drawHellscapeWindow(260, 275, 380, 95);
+            // Lighter smoke tint so the hellscape stays readable
+            ctx.fillStyle = 'rgba(30,8,5,0.22)';
+            ctx.fillRect(260, 275, 380, 95);
+        } else {
+            drawParkingLotWindow(260, 275, 380, 95);
+            // Heavy tint overlay — window recedes behind NPCs and pipes as primary focal points
+            ctx.fillStyle = 'rgba(80,75,65,0.60)';
+            ctx.fillRect(260, 275, 380, 95);
+        }
     }
 
     for(let npc of npcs) {
