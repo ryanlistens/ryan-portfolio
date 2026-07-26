@@ -313,9 +313,12 @@ function drawActionLabel(text, x, y, options) {
     // Gentle idle float so prompts read as live UI, not painted-on text
     const bob = Math.sin(Date.now() / 480) * 1.2;
 
-    // Clamp to game-world bounds (drawing is in game coords after translate)
-    const bx = Math.max(2 - GX, Math.min(x - bw / 2, CANVAS_W - GX - bw - 2));
-    const by = Math.max(2 - GY, Math.min(y - bh + bob, CANVAS_H - GY - bh - 2));
+    // Clamp to game-world bounds (drawing is in game coords after translate).
+    // Full-screen document UIs draw in raw canvas space and pass noClamp.
+    const bx = opt.noClamp ? x - bw / 2
+        : Math.max(2 - GX, Math.min(x - bw / 2, CANVAS_W - GX - bw - 2));
+    const by = opt.noClamp ? y - bh + bob
+        : Math.max(2 - GY, Math.min(y - bh + bob, CANVAS_H - GY - bh - 2));
     const cyMid = by + bh / 2;
 
     // Soft drop shadow under the chip
@@ -19313,128 +19316,272 @@ function drawEmailUI(officeName) {
     drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', 350, 489, {fontSize: 14});
 }
 
+// Word-wrap helper for the document transcripts (measures with the given font)
+function wrapDocText(text, font, maxW) {
+    ctx.font = font;
+    const words = text.split(' ');
+    const lines = [];
+    let cur = '';
+    for(const w of words) {
+        const test = cur ? cur + ' ' + w : w;
+        if(ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+        else cur = test;
+    }
+    if(cur) lines.push(cur);
+    return lines;
+}
+
 function drawLetterUI() {
-    // Work in logical canvas space so image fills the full screen
+    // Work in logical canvas space so the document fills the full screen
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = '#181410';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    if(letterImg.complete && letterImg.naturalWidth > 0) {
+    const instrH = 50;
+    const viewH = CANVAS_H - instrH;
+    // On narrow displays the letter photo shrinks below legibility, so we
+    // render a faithful styled transcription instead. cssW is the canvas's
+    // on-screen width; below ~560 CSS px the photo text is unreadable.
+    const cssW2 = parseFloat(canvas.style.width) || CANVAS_W;
+    const haveImg = letterImg.complete && letterImg.naturalWidth > 0;
+    const useTranscript = !haveImg || cssW2 < 560;
+    let chipY = viewH + 40;   // default: on the footer bar (photo mode)
+
+    if(!useTranscript) {
         const scale = CANVAS_W / letterImg.naturalWidth;
-        const imgW = CANVAS_W;
         const imgH = letterImg.naturalHeight * scale;
-        const instrH = 50;
-        const viewH = CANVAS_H - instrH;
+        level5.letterScrollOffset = Math.max(0, Math.min(level5.letterScrollOffset, Math.max(0, imgH - viewH)));
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0, 0, CANVAS_W, viewH); ctx.clip();
+        ctx.drawImage(letterImg, 0, -level5.letterScrollOffset, CANVAS_W, imgH);
+        ctx.restore();
+    } else {
+        // ── Styled transcription — CEO memo on PIPETECH letterhead ──
+        // k converts a desired on-screen CSS size to logical canvas units so
+        // text renders at true readable size regardless of device.
+        const k = Math.max(1, CANVAS_W / cssW2);
+        const F = (px) => Math.round(px * k);
+        const mX = F(12);
+        const pw = CANVAS_W - mX * 2;
+        const innerPad = F(18);
+        const maxTextW = pw - innerPad * 2;
+        const bodyFont = `${F(15)}px Georgia, serif`;
+        const bodyLH = F(23);
+
+        const bodyLines = ['Red:', '']
+            .concat(wrapDocText('Please see me in the furnace room at your soonest convenience.', bodyFont, maxTextW))
+            .concat(['', 'Thanks,']);
+
+        const headerH = F(34) + F(13) * 2 + F(16);      // logo + address + divider
+        const bodyH = bodyLines.length * bodyLH;
+        const sigH = F(30) + F(18);
+        const paperH = F(26) + headerH + F(12) + bodyH + sigH + F(40);
+        const paperTopMargin = F(14);
+        level5.letterScrollOffset = Math.max(0, Math.min(level5.letterScrollOffset,
+            Math.max(0, paperH + paperTopMargin * 2 - viewH)));
+        const off = level5.letterScrollOffset;
 
         ctx.save();
         ctx.beginPath(); ctx.rect(0, 0, CANVAS_W, viewH); ctx.clip();
-        ctx.drawImage(letterImg, 0, -level5.letterScrollOffset, imgW, imgH);
-        ctx.restore();
+        const py0 = paperTopMargin - off;
+        // Paper with drop shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(mX + F(4), py0 + F(4), pw, paperH);
+        ctx.fillStyle = '#efe8d6';
+        ctx.fillRect(mX, py0, pw, paperH);
+        ctx.fillStyle = 'rgba(180,160,120,0.18)';
+        ctx.fillRect(mX, py0, pw, F(3));
 
-        ctx.fillStyle = 'rgba(0,0,0,0.88)';
-        ctx.fillRect(0, viewH, CANVAS_W, instrH);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
-        drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, viewH + 40, {fontSize: 14});
+        let yy = py0 + F(26);
+        // PIPETECH letterhead logo — red-boxed wordmark
+        ctx.font = `bold ${F(21)}px Arial Black, Arial`;
+        ctx.textAlign = 'center';
+        const logoW = ctx.measureText('PIPETECH').width + F(20);
+        ctx.strokeStyle = '#a02020';
+        ctx.lineWidth = F(2.5);
+        ctx.strokeRect(CANVAS_W / 2 - logoW / 2, yy - F(19), logoW, F(28));
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillText('PIPETECH', CANVAS_W / 2, yy + F(3));
+        yy += F(24);
+        ctx.fillStyle = '#5a5248';
+        ctx.font = `${F(10)}px Georgia, serif`;
+        ctx.fillText('1234 Industrial Parkway, Suite 100', CANVAS_W / 2, yy);
+        yy += F(13);
+        ctx.fillText('Anytown, USA', CANVAS_W / 2, yy);
+        yy += F(12);
+        ctx.strokeStyle = 'rgba(90,82,72,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(mX + innerPad, yy);
+        ctx.lineTo(mX + pw - innerPad, yy);
+        ctx.stroke();
+        yy += F(12) + bodyLH;
+
+        // Body
+        ctx.fillStyle = '#2a2620';
+        ctx.font = bodyFont;
+        ctx.textAlign = 'left';
+        for(const ln of bodyLines) {
+            if(ln) ctx.fillText(ln, mX + innerPad, yy);
+            yy += bodyLH;
+        }
+        // Signature — script hand over printed title
+        ctx.fillStyle = '#1c1a16';
+        ctx.font = `italic ${F(20)}px "Snell Roundhand", "Brush Script MT", cursive`;
+        ctx.fillText('Aldon Pipersworth', mX + innerPad, yy + F(4));
+        yy += F(26);
+        ctx.font = `${F(13)}px Georgia, serif`;
+        ctx.fillStyle = '#2a2620';
+        ctx.fillText('Founder / CEO of PipeTech', mX + innerPad, yy);
+
+        // Coffee ring stain — bottom right of the sheet
+        const crX = mX + pw - F(52), crY = py0 + paperH - F(48);
+        ctx.strokeStyle = 'rgba(150,105,45,0.4)';
+        ctx.lineWidth = F(5);
+        ctx.beginPath(); ctx.arc(crX, crY, F(24), 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(150,105,45,0.22)';
+        ctx.lineWidth = F(2.5);
+        ctx.beginPath(); ctx.arc(crX + F(3), crY + F(2), F(19), 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+        // If the whole sheet fits on screen, tuck the chip just below it;
+        // otherwise leave it on the footer bar so it never covers text
+        const belowSheet = py0 + paperH + F(38);
+        if(belowSheet <= viewH - F(8)) chipY = belowSheet;
     }
+
+    // Instruction bar
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.fillRect(0, viewH, CANVAS_W, instrH);
+    drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, chipY, {fontSize: 14, noClamp: true});
     ctx.restore();
 }
 
 function drawDetectiveNoteUI() {
-    // Work in logical canvas space so image fills the full screen
+    // Work in logical canvas space so the document fills the full screen
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = '#0c0c0e';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
+    const instrH = 50;
+    const viewH = CANVAS_H - instrH;
+    // On narrow displays the handwriting photo shrinks below legibility —
+    // render a faithful transcription on legal-pad paper instead.
+    const cssW2 = parseFloat(canvas.style.width) || CANVAS_W;
+    const haveImg = detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0;
+    const useTranscript = !haveImg || cssW2 < 560;
+    let chipY = viewH + 40;   // default: on the footer bar (photo mode)
+
+    if(!useTranscript) {
         const scale = CANVAS_W / detectiveNoteImg.naturalWidth;
-        const imgW = CANVAS_W;
         const imgH = detectiveNoteImg.naturalHeight * scale;
-        const instrH = 50;
-        const viewH = CANVAS_H - instrH;
-
+        level6.noteScrollOffset = Math.max(0, Math.min(level6.noteScrollOffset, Math.max(0, imgH - viewH)));
         ctx.save();
         ctx.beginPath(); ctx.rect(0, 0, CANVAS_W, viewH); ctx.clip();
-        ctx.drawImage(detectiveNoteImg, 0, -level6.noteScrollOffset, imgW, imgH);
+        ctx.drawImage(detectiveNoteImg, 0, -level6.noteScrollOffset, CANVAS_W, imgH);
         ctx.restore();
-
-        ctx.fillStyle = 'rgba(0,0,0,0.88)';
-        ctx.fillRect(0, viewH, CANVAS_W, instrH);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
-        drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, viewH + 40, {fontSize: 14});
     } else {
-        // Fallback: render detective's case notes as styled canvas text
-        const instrH = 50;
-        const viewH = CANVAS_H - instrH;
-        const noteLines = [
-            { text: 'CASE FILE — KHAN INVESTIGATIONS', style: 'bold 14px monospace', color: '#c8a830' },
-            { text: '——————————————————————————', style: '11px monospace', color: '#7a6020' },
-            { text: 'SUBJECT: PipeTech Global Corp.', style: 'bold 12px monospace', color: '#d4b040' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'Day 14. They know I\'m here.', style: 'italic 13px monospace', color: '#c8c8a0' },
-            { text: 'Found the lower level assembly bay.', style: '12px monospace', color: '#c8c8a0' },
-            { text: 'This isn\'t a pipe company.', style: '12px monospace', color: '#c8c8a0' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'Warheads. Private label.', style: 'bold 13px monospace', color: '#ff9944' },
-            { text: 'Shipped under "industrial supply" docs.', style: '12px monospace', color: '#c8c8a0' },
-            { text: 'CEO signs every manifest personally.', style: '12px monospace', color: '#c8c8a0' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'Contact inside: R. (RED office, 3rd fl)', style: '12px monospace', color: '#88ccff' },
-            { text: 'She\'s scared. Rightfully so.', style: 'italic 12px monospace', color: '#88ccff' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: 'If you\'re reading this:', style: 'bold 13px monospace', color: '#ff4444' },
-            { text: 'The black box is real.', style: 'bold 13px monospace', color: '#ff4444' },
-            { text: 'Get it out.', style: 'bold 13px monospace', color: '#ff4444' },
-            { text: '', style: '11px monospace', color: '#c8c8a0' },
-            { text: '— Khan', style: 'italic 14px monospace', color: '#c8a830' },
+        // ── Khan's note, transcribed from the photo, on a yellow legal pad ──
+        const k = Math.max(1, CANVAS_W / cssW2);
+        const F = (px) => Math.round(px * k);
+        const mX = F(10);
+        const pw = CANVAS_W - mX * 2;
+        const marginX = mX + F(30);          // red margin rule
+        const textX = marginX + F(8);
+        const maxTextW = mX + pw - F(14) - textX;
+        const hand = `italic ${F(14)}px "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive`;
+        const lineH = F(20);
+        const paraGap = F(9);
+
+        const paragraphs = [
+            'Just when you think you know someone...',
+            'I finally figured out why people seem to "reset" around here on a daily basis.',
+            'The pipe managers — the ORIGINAL pipe managers, that is — were Aldon’s natural born children.',
+            'When the first nuclear reactor melted down, they were all tragically killed before the pipe factory was rebuilt.',
+            'That’s around the time Mr. Pipersworth got his hands on some rare (re: illegal) cloning technology to replicate his kids and put them quickly to work building his pipe empire.',
+            'So Red, Green, Blue, and Yellow are rarely who they appear to be.',
+            'None of the PMs are ever more than a week or two in age, but I suspect Red is the one behind all the failed uprising attempts — because he’s perpetually the youngest.',
+            'All this effort to build a nuclear-powered AI mega-computer that seeks to simultaneously control all the world’s banks... and all the world’s missile silos.',
+            'That’s a lot of power for one man.',
+            'God help us if that man is Aldon Pipersworth.'
         ];
-
-        // Paper background
-        ctx.fillStyle = '#2a2218';
-        ctx.fillRect(80, 30 - level6.noteScrollOffset, CANVAS_W - 160, viewH - 20);
-        ctx.strokeStyle = '#6a5020';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(80, 30 - level6.noteScrollOffset, CANVAS_W - 160, viewH - 20);
-
-        // Blood stain top-right corner
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = '#7a0000';
-        ctx.beginPath(); ctx.arc(CANVAS_W - 130, 60 - level6.noteScrollOffset, 22, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(CANVAS_W - 115, 75 - level6.noteScrollOffset, 14, 0, Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1;
-
-        // Lined paper rules
-        ctx.strokeStyle = 'rgba(100,80,20,0.2)';
-        ctx.lineWidth = 1;
-        for(let ly = 80; ly < viewH; ly += 22) {
-            ctx.beginPath();
-            ctx.moveTo(100, ly - level6.noteScrollOffset);
-            ctx.lineTo(CANVAS_W - 100, ly - level6.noteScrollOffset);
-            ctx.stroke();
-        }
+        // Wrap everything first so the pad height and scroll bounds are exact
+        const wrapped = paragraphs.map(p => wrapDocText(p, hand, maxTextW));
+        let contentLines = 0;
+        wrapped.forEach(w => contentLines += w.length);
+        const padTop = F(30);
+        const padH = padTop + contentLines * lineH + (wrapped.length - 1) * paraGap + F(58);
+        const topMargin = F(12);
+        level6.noteScrollOffset = Math.max(0, Math.min(level6.noteScrollOffset,
+            Math.max(0, padH + topMargin * 2 - viewH)));
+        const off = level6.noteScrollOffset;
+        const py0 = topMargin - off;
 
         ctx.save();
         ctx.beginPath(); ctx.rect(0, 0, CANVAS_W, viewH); ctx.clip();
-        let ty = 68 - level6.noteScrollOffset;
-        for(const ln of noteLines) {
-            ctx.fillStyle = ln.color;
-            ctx.font = ln.style;
-            ctx.textAlign = 'left';
-            ctx.fillText(ln.text, 108, ty);
-            ty += ln.text === '' ? 10 : 22;
+        // Pad with shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(mX + F(4), py0 + F(4), pw, padH);
+        const padGrad = ctx.createLinearGradient(mX, 0, mX + pw, 0);
+        padGrad.addColorStop(0, '#e6da9c');
+        padGrad.addColorStop(0.5, '#efe4ac');
+        padGrad.addColorStop(1, '#dccf90');
+        ctx.fillStyle = padGrad;
+        ctx.fillRect(mX, py0, pw, padH);
+        // Blue rules + red margin line
+        ctx.strokeStyle = 'rgba(90,120,180,0.35)';
+        ctx.lineWidth = 1;
+        for(let ry = py0 + padTop + F(6); ry < py0 + padH - F(10); ry += lineH) {
+            ctx.beginPath(); ctx.moveTo(mX + F(6), ry); ctx.lineTo(mX + pw - F(6), ry); ctx.stroke();
         }
-        ctx.restore();
+        ctx.strokeStyle = 'rgba(200,80,80,0.5)';
+        ctx.beginPath(); ctx.moveTo(marginX, py0); ctx.lineTo(marginX, py0 + padH); ctx.stroke();
 
-        // Instruction bar
-        ctx.fillStyle = 'rgba(0,0,0,0.88)';
-        ctx.fillRect(0, viewH, CANVAS_W, instrH);
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center';
-        drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, viewH + 40, {fontSize: 14});
+        // Handwritten text
+        ctx.fillStyle = '#23305e';
+        ctx.font = hand;
+        ctx.textAlign = 'left';
+        let yy = py0 + padTop + F(2);
+        for(const paraLines of wrapped) {
+            for(const ln of paraLines) {
+                ctx.fillText(ln, textX, yy);
+                yy += lineH;
+            }
+            yy += paraGap;
+        }
+        // Signature — right aligned
+        ctx.font = `italic bold ${F(15)}px "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive`;
+        ctx.textAlign = 'right';
+        ctx.fillText('— D.K.', mX + pw - F(26), yy + F(6));
+        ctx.textAlign = 'left';
+
+        // Blood smudges — corner blots and a thumb streak, like the photo
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#7a0000';
+        ctx.beginPath(); ctx.ellipse(mX + pw - F(34), py0 + padH - F(40), F(20), F(13), 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(mX + pw - F(58), py0 + padH - F(20), F(11), F(7), -0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath(); ctx.ellipse(mX + pw - F(20), py0 + F(48), F(8), F(16), 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        // Crumpled corner
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.beginPath();
+        ctx.moveTo(mX + pw, py0 + padH - F(26));
+        ctx.lineTo(mX + pw, py0 + padH);
+        ctx.lineTo(mX + pw - F(26), py0 + padH);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+        // If the whole pad fits on screen, tuck the chip just below it;
+        // otherwise leave it on the footer bar so it never covers handwriting
+        const belowPad = py0 + padH + F(38);
+        if(belowPad <= viewH - F(8)) chipY = belowPad;
     }
+
+    // Instruction bar
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.fillRect(0, viewH, CANVAS_W, instrH);
+    drawActionLabel('[ ACTION ] CLOSE   ▲▼ SCROLL', CANVAS_W / 2, chipY, {fontSize: 14, noClamp: true});
     ctx.restore();
 }
 
@@ -27040,14 +27187,9 @@ function update() {
                 keys.upProcessed = true;
             }
             if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                // Calculate max scroll in canvas pixels (matches drawLetterUI canvas-space rendering)
-                if(letterImg.complete && letterImg.naturalWidth > 0) {
-                    const scale = canvas.width / letterImg.naturalWidth;
-                    const imgH = letterImg.naturalHeight * scale;
-                    const viewH = canvas.height - 50;
-                    const maxScroll = Math.max(0, imgH - viewH);
-                    level5.letterScrollOffset = Math.min(maxScroll, level5.letterScrollOffset + 60);
-                }
+                // drawLetterUI clamps to the exact content height each frame
+                // (photo or transcript), so the handler just advances
+                level5.letterScrollOffset += 60;
                 keys.downProcessed = true;
             }
             if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
@@ -27557,16 +27699,9 @@ function update() {
                     keys.upProcessed = true;
                 }
                 if((keys['ArrowDown'] || keys['down']) && !keys.downProcessed) {
-                    // Calculate max scroll based on image height (matches drawDetectiveNoteUI 2x zoom)
-                    if(detectiveNoteImg.complete && detectiveNoteImg.naturalWidth > 0) {
-                        const ZOOM = 2.0;
-                        const zoomedWidth = GAME_W * ZOOM;
-                        const viewportHeight = GAME_H - 45;
-                        const scale = zoomedWidth / detectiveNoteImg.naturalWidth;
-                        const fullHeight = detectiveNoteImg.naturalHeight * scale;
-                        const maxScroll = Math.max(0, fullHeight - viewportHeight);
-                        level6.noteScrollOffset = Math.min(maxScroll, level6.noteScrollOffset + 30);
-                    }
+                    // drawDetectiveNoteUI clamps to the exact content height
+                    // each frame (photo or transcript), so just advance
+                    level6.noteScrollOffset += 40;
                     keys.downProcessed = true;
                 }
                 if(!keys['ArrowUp'] && !keys['up']) keys.upProcessed = false;
