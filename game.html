@@ -5567,6 +5567,401 @@ function drawCharEyes(cx, cy, eyeW, eyeH, gap, opts) {
     }
 }
 
+// === CHARACTER RIG — ONE 3D DEFINITION, PROJECTED TO ANY ANGLE ==============
+// WHY THIS REPLACES THE PER-VIEW DRAWING.
+// Until now every character was drawn by a separate hand-built routine per
+// facing. Even the "canonical head" only unified the FRONT faces — the profile
+// was a different code path with its own numbers inside the same function. So
+// front and side never shared a skull. That is the actual cause of: the CEO's
+// head looking like a different man in profile, the boss's hard hat drifting
+// off his scalp (hat and head positioned by unrelated numbers), and the cigar
+// clipping through the tie (each placed per-view, never in the same space).
+// Reconciling views that have no common source cannot converge.
+//
+// A character is now defined ONCE as volumes in body space and projected to a
+// yaw angle. Every view is the same object seen from a different side, so the
+// views cannot disagree — a hat sits on the skull at every angle because it is
+// attached to the skull, not re-placed per view.
+//
+// BODY SPACE:  +x = character's left   +y = down   +z = the way they face
+// CAMERA:      orthographic, looking along -z. yaw 0 = facing the viewer,
+//              yaw +90deg = facing screen-right. depth > 0 is nearer the camera.
+function rigRot(px, py, pz, yaw) {
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    return { x: px * c + pz * sn, y: py, z: -px * sn + pz * c };
+}
+
+// Head as an ellipsoid. Features live on its surface as unit directions, so
+// they rotate WITH the skull and self-occlude when they pass behind it.
+function rigHead(cx, cy, rx, ry, rz, yaw, spec, opts) {
+    const o = opts || {};
+    const sk = spec.skin || '#f0c69a';
+    // Silhouette width foreshortens: a sphere seen edge-on is still round, a
+    // narrow skull seen from the side shows its depth instead of its width.
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    const halfW = Math.sqrt((rx * c) * (rx * c) + (rz * sn) * (rz * sn));
+    const proj = (ax, ay, az) => {
+        const r = rigRot(ax * rx, ay * ry, az * rz, yaw);
+        return { x: cx + r.x, y: cy + r.y, z: r.z, vis: r.z > -rz * 0.12 };
+    };
+    // Skull
+    ctx.fillStyle = sk;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, halfW, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Jaw: a wedge hung under the skull, narrowing to the chin, that swings
+    // forward as the head turns so the profile grows a real chin and throat.
+    const jaw = spec.jaw === undefined ? 0.4 : spec.jaw;
+    const chin = proj(0, 0.98, 0.55 + jaw * 0.30);
+    const jl = proj(-0.72, 0.42, 0.16), jr = proj(0.72, 0.42, 0.16);
+    ctx.beginPath();
+    ctx.moveTo(jl.x, jl.y);
+    ctx.quadraticCurveTo(cx + (chin.x - cx) * 0.55, cy + ry * 0.92, chin.x, chin.y);
+    ctx.quadraticCurveTo(cx + (chin.x - cx) * 0.55 + (jr.x - cx) * 0.30, cy + ry * 0.92, jr.x, jr.y);
+    ctx.lineTo(jr.x, jr.y - ry * 0.10);
+    ctx.lineTo(jl.x, jl.y - ry * 0.10);
+    ctx.closePath();
+    ctx.fill();
+    // Form: light on the lit side, shadow under the jaw
+    ctx.fillStyle = 'rgba(255,244,224,0.17)';
+    ctx.beginPath(); ctx.ellipse(cx - halfW * 0.42, cy - ry * 0.36, halfW * 0.34, ry * 0.28, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(118,76,46,0.16)';
+    ctx.beginPath(); ctx.ellipse(cx + (chin.x - cx) * 0.4, cy + ry * 0.60, halfW * 0.56, ry * 0.22, 0, 0, Math.PI*2); ctx.fill();
+
+    // Ears — sit at the sides of the skull, so they slide to the silhouette
+    // edge and one vanishes as the head turns.
+    for(const side of [-1, 1]) {
+        const e = proj(side * 0.98, 0.06, -0.10);
+        if(!e.vis) continue;
+        ctx.fillStyle = charMix(sk, '#000', 0.10);
+        ctx.beginPath();
+        ctx.ellipse(e.x, e.y, Math.max(0.8, rx * 0.15 * Math.abs(Math.sin(yaw)) + rx * 0.05),
+                    ry * 0.20, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Brow ridge and nose read as a real profile because the nose is a point
+    // that projects past the skull silhouette when the head is turned.
+    const nose = proj(0, 0.26, 1.34);
+    const browC = proj(0, -0.16, 1.0);
+    if(nose.vis) {
+        ctx.fillStyle = sk;
+        const nb1 = proj(0, 0.02, 0.94), nb2 = proj(0, 0.50, 0.86);
+        ctx.beginPath();
+        ctx.moveTo(nb1.x, nb1.y);
+        ctx.lineTo(nose.x, nose.y);
+        ctx.lineTo(nb2.x, nb2.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(120,78,50,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(nose.x - (nose.x - cx) * 0.25, nose.y + ry * 0.06,
+                    Math.max(0.8, rx * 0.16), ry * 0.07, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Eyes — one per side, culled when it rotates behind the head
+    const eyeAz = 0.42, eyeEl = -0.02;
+    for(const side of [-1, 1]) {
+        const e = proj(side * eyeAz, eyeEl, 0.92);
+        if(e.z <= rz * 0.02) continue;                       // behind the brow
+        const foreshort = Math.max(0.35, Math.min(1, e.z / (rz * 0.92)));
+        const ew = rx * 0.21 * foreshort, eh = ry * 0.17;
+        ctx.fillStyle = 'rgba(120,80,52,0.20)';
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + eh * 0.2, ew * 1.35, eh * 1.2, 0, 0, Math.PI*2); ctx.fill();
+        if(o.wide) {
+            ctx.fillStyle = '#f2efe9';
+            ctx.beginPath(); ctx.ellipse(e.x, e.y, ew * 1.15, eh * 1.15, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = spec.iris || '#241c17';
+            ctx.beginPath(); ctx.arc(e.x, e.y, ew * 0.5, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = spec.iris || '#241c17';
+            ctx.beginPath(); ctx.ellipse(e.x, e.y, ew * 0.9, eh * 0.9, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.78)';
+            ctx.beginPath(); ctx.arc(e.x - ew * 0.3, e.y - eh * 0.34, Math.max(0.4, ew * 0.24), 0, Math.PI*2); ctx.fill();
+        }
+        if(spec.brow) {
+            const b = proj(side * eyeAz, eyeEl - 0.34, 0.90);
+            ctx.strokeStyle = spec.brow;
+            ctx.lineWidth = Math.max(1, ry * (spec.browW || 0.09));
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(b.x - ew * 1.15, b.y + (o.browAngle || 0) * side * -1);
+            ctx.lineTo(b.x + ew * 1.15, b.y + (o.browAngle || 0) * side);
+            ctx.stroke(); ctx.lineCap = 'butt';
+        }
+    }
+    // Mouth — a chord across the front of the face
+    const m1 = proj(-0.30, 0.62, 0.86), m2 = proj(0.30, 0.62, 0.86);
+    if(m1.z > 0 || m2.z > 0) {
+        ctx.strokeStyle = spec.lips || charMix(sk, '#000', 0.42);
+        ctx.lineWidth = Math.max(1, ry * 0.07); ctx.lineCap = 'round';
+        ctx.beginPath();
+        if(o.frown) {
+            ctx.moveTo(m1.x, m1.y - ry * 0.04);
+            ctx.quadraticCurveTo((m1.x + m2.x) / 2, m1.y + ry * 0.14, m2.x, m2.y - ry * 0.04);
+        } else if(o.smile) {
+            ctx.moveTo(m1.x, m1.y);
+            ctx.quadraticCurveTo((m1.x + m2.x) / 2, m1.y + ry * 0.18, m2.x, m2.y);
+        } else {
+            ctx.moveTo(m1.x, m1.y); ctx.lineTo(m2.x, m2.y);
+        }
+        ctx.stroke(); ctx.lineCap = 'butt';
+    }
+    if(spec.age) {
+        ctx.strokeStyle = 'rgba(120,80,50,' + (0.20 * spec.age) + ')'; ctx.lineWidth = 1;
+        const f1 = proj(-0.5, -0.52, 0.8), f2 = proj(0.5, -0.52, 0.8);
+        if(f1.z > 0 || f2.z > 0) { ctx.beginPath(); ctx.moveTo(f1.x, f1.y); ctx.lineTo(f2.x, f2.y); ctx.stroke(); }
+    }
+    // Hair / headwear is attached to the SKULL, so it cannot drift off it at
+    // any angle — the boss's floating scalp was a per-view placement bug.
+    if(spec.hair && spec.hair !== 'none') rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec);
+    return { halfW, proj, chin };
+}
+
+function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec) {
+    const hc = spec.hairColor || '#3a2a1a';
+    const sn = Math.sin(yaw);
+    const back = rigRot(0, 0, -rz, yaw);              // where the back of the skull went
+    ctx.fillStyle = hc;
+    if(spec.hair === 'slick' || spec.hair === 'crop') {
+        // Cap over the cranium, hugging the projected silhouette
+        ctx.beginPath();
+        ctx.ellipse(cx + back.x * 0.10, cy - ry * 0.30, halfW * 1.02, ry * 0.78,
+                    0, Math.PI * 0.98, Math.PI * 2.02);
+        ctx.fill();
+        ctx.fillStyle = charMix(hc, '#fff', 0.20);
+        ctx.beginPath();
+        ctx.ellipse(cx - halfW * 0.34, cy - ry * 0.62, halfW * 0.28, ry * 0.10, -0.2, 0, Math.PI*2);
+        ctx.fill();
+    } else if(spec.hair === 'mullet') {
+        // Short crop over the crown...
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - ry * 0.32, halfW * 1.02, ry * 0.76, 0, Math.PI * 0.98, Math.PI * 2.02);
+        ctx.fill();
+        // ...length hanging off the BACK of the skull, which swings around to
+        // the trailing side as the character turns
+        const tailX = cx + back.x * 0.85;
+        ctx.beginPath();
+        ctx.moveTo(tailX - halfW * 0.52, cy - ry * 0.42);
+        ctx.quadraticCurveTo(tailX - halfW * 0.72, cy + ry * 0.70, tailX - halfW * 0.44, cy + ry * 1.42);
+        ctx.lineTo(tailX + halfW * 0.46, cy + ry * 1.42);
+        ctx.quadraticCurveTo(tailX + halfW * 0.74, cy + ry * 0.70, tailX + halfW * 0.54, cy - ry * 0.42);
+        ctx.closePath();
+        ctx.fill();
+    }
+    if(spec.hat === 'hardhat') {
+        // Dome + brim, both anchored to the skull centre and foreshortened by
+        // the same yaw, so the hat can never slide off the head.
+        const brimF = rigRot(0, 0, rz * 1.30, yaw);
+        ctx.fillStyle = '#f0f0f0';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - ry * 0.62, halfW * 1.16, ry * 0.72, 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e2e2e2';
+        ctx.beginPath();
+        ctx.ellipse(cx + brimF.x * 0.42, cy - ry * 0.58, halfW * 1.30, ry * 0.20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.ellipse(cx - halfW * 0.36, cy - ry * 0.94, halfW * 0.30, ry * 0.12, -0.2, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+// Torso as a tapered box: shoulder and hip rectangles in body space, projected
+// and joined. Its width foreshortens with yaw, so turning genuinely narrows the
+// chest instead of leaving a front-on slab behind a turned head.
+function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    const shW  = Math.sqrt((shHalf * c) ** 2 + (halfDepth * sn) ** 2);
+    const hipW = Math.sqrt((hipHalf * c) ** 2 + (halfDepth * sn) ** 2);
+    const g = ctx.createLinearGradient(cx - shW, 0, cx + shW, 0);
+    g.addColorStop(0, ramp.lit);
+    g.addColorStop(0.45, ramp.base);
+    g.addColorStop(1, ramp.dark);
+    ctx.fillStyle = g;
+    const r = Math.min(3.5, shW * 0.34);
+    ctx.beginPath();
+    ctx.moveTo(cx - shW + r, shY);
+    ctx.quadraticCurveTo(cx - shW, shY, cx - shW, shY + r);
+    ctx.lineTo(cx - hipW, hemY);
+    ctx.lineTo(cx + hipW, hemY);
+    ctx.lineTo(cx + shW, shY + r);
+    ctx.quadraticCurveTo(cx + shW, shY, cx + shW - r, shY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath();
+    ctx.ellipse(cx - shW * 0.34, shY + (hemY - shY) * 0.34, shW * 0.40, (hemY - shY) * 0.30, 0, 0, Math.PI*2);
+    ctx.fill();
+    return { shW, hipW };
+}
+
+// A limb is two 3D endpoints; depth decides whether it draws in front of or
+// behind the torso, which is what makes arms swap sides as a character turns.
+function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
+    const a = rigRot(sx, sy, sz, yaw), b = rigRot(ex, ey, ez, yaw);
+    const behind = (a.z + b.z) / 2 < 0;
+    ctx.strokeStyle = behind ? charMix(colour, '#000', 0.30) : colour;
+    ctx.lineWidth = w * (behind ? 0.92 : 1);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx + a.x, a.y);
+    ctx.quadraticCurveTo(cx + (a.x + b.x) / 2 + (b.x - a.x) * 0.18, (a.y + b.y) / 2, cx + b.x, b.y);
+    ctx.stroke();
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    if(handR) charHand(cx + b.x, b.y + handR * 0.5, handR, behind ? charMix(skin, '#000', 0.22) : skin);
+    return behind;
+}
+
+// One whole-character renderer. Everything about a character lives in its
+// SHEET entry; this projects that at any yaw, so a turnaround is generated
+// rather than hand-drawn per view.
+//   heightY  distance from anchor up to the shoulder line
+//   build    0 lean .. 1 heavy (drives shoulder/hip width and jaw)
+const RIG_SHEET = {
+    mulletPro: {
+        skin:'#f0c69a', jaw:0.32, brow:'#4a3a2c', browW:0.09,
+        hair:'mullet', hairColor:'#3a2a1a',
+        shHalf:14, hipHalf:11, depth:7.5, headRx:9.4, headRy:11.0, headRz:9.0,
+        shY:-4, hemY:16, hipY:16, soleY:36, legW:8, armW:5, armLen:20, headY:-17,
+        top:'#800020', topLit:'#96122e', topDark:'#5c0016',
+        leg:'#a4c2db', shoe:'#654321',
+    },
+    baldManager: {
+        skin:'#f2cba2', jaw:0.58, brow:'#c9b394', browW:0.06, hair:'none',
+        shHalf:14.5, hipHalf:11.5, depth:8, headRx:9.6, headRy:11.0, headRz:9.2,
+        shY:-2, hemY:18, hipY:18, soleY:36, legW:8, armW:5, armLen:21, headY:-15,
+        top:'#ffffff', topLit:'#ffffff', topDark:'#cfcfcf',
+        leg:'#1a1a1a', shoe:'#000', tie:'#800020', belt:true,
+    },
+    pipeManager: {
+        skin:'#f5c89a', jaw:0.30, brow:'#5a4632', browW:0.08, hair:'none',
+        shHalf:13, hipHalf:10.5, depth:7, headRx:8.6, headRy:10.0, headRz:8.4,
+        shY:-4, hemY:14, hipY:14, soleY:36, legW:7.5, armW:4.6, armLen:19, headY:-16,
+        top:'#e74c3c', topLit:'#ee6a5a', topDark:'#a03024',
+        leg:null, shoe:'#ffffff', hood:true,
+    },
+    cloningBoss: {
+        skin:'#f5d5a8', jaw:0.55, brow:'#4a3520', browW:0.10, hair:'crop',
+        hairColor:'#6b5030', hat:'hardhat',
+        shHalf:15, hipHalf:11.5, depth:8.5, headRx:9.8, headRy:11.4, headRz:9.4,
+        shY:-6, hemY:16, hipY:16, soleY:36, legW:8.5, armW:5.4, armLen:22, headY:-19,
+        top:'#cc2222', topLit:'#e03535', topDark:'#8f1717',
+        leg:'#2a2a2a', shoe:'#111', tie:'#111',
+    },
+    ceo: {
+        skin:'#d9a97e', jaw:0.82, brow:'#5c5c5c', browW:0.09, age:1,
+        hair:'slick', hairColor:'#6b6b6b',
+        shHalf:16, hipHalf:12, depth:9, headRx:10.2, headRy:11.6, headRz:9.8,
+        shY:-6, hemY:18, hipY:18, soleY:36, legW:9, armW:5.6, armLen:22, headY:-19,
+        top:'#2b2b30', topLit:'#3a3a41', topDark:'#191a1e',
+        leg:'#151518', shoe:'#0a0a0a', tie:'#8a1020',
+    },
+};
+
+// yaw in radians. pose: { stride, armSwing, wide, frown, smile, browAngle, look }
+function drawRigCharacter(x, yBase, yaw, sheet, pose) {
+    const P = pose || {};
+    const c = sheet;
+    const stride = P.stride || 0;
+    const swing = P.armSwing === undefined ? stride : P.armSwing;
+    const shY = yBase + c.shY, hemY = yBase + c.hemY;
+    const hipY = yBase + c.hipY, soleY = yBase + c.soleY;
+    const ramp = { base: c.top || '#cccccc', lit: c.topLit || '#dddddd', dark: c.topDark || '#999999' };
+
+    // Contact shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath(); ctx.ellipse(x, soleY + 2, c.shHalf * 0.80, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+
+    // --- Legs. Each foot lifts off a fixed contact line, never through it.
+    // Depth ordering makes the trailing leg draw behind the body.
+    const legs = [-1, 1].map(side => {
+        const hip = rigRot(side * c.hipHalf * 0.52, 0, 0, yaw);
+        const fz = side * stride * 1.6;
+        const foot = rigRot(side * c.hipHalf * 0.52, 0, fz, yaw);
+        return { side, hip, foot, lift: Math.max(0, side * stride) * 0.8, z: foot.z };
+    }).sort((a, b) => a.z - b.z);
+    for(const L of legs) {
+        const behind = L.z < 0;
+        const col = c.leg ? (behind ? charMix(c.leg, '#000', 0.28) : c.leg)
+                          : (behind ? ramp.dark : ramp.base);
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.moveTo(x + L.hip.x - c.legW / 2, hipY);
+        ctx.lineTo(x + L.hip.x + c.legW / 2, hipY);
+        ctx.lineTo(x + L.foot.x + c.legW / 2, soleY - L.lift);
+        ctx.lineTo(x + L.foot.x - c.legW / 2, soleY - L.lift);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = behind ? charMix(c.shoe, '#000', 0.28) : c.shoe;
+        pathRoundRect(x + L.foot.x - c.legW * 0.60, soleY - L.lift,
+                      c.legW * 1.26, c.legW * 0.50, c.legW * 0.22);
+        ctx.fill();
+    }
+
+    // --- Far arm, then torso, then near arm: correct occlusion at any angle
+    const arms = [-1, 1].map(side => {
+        const sh = rigRot(side * c.shHalf * 0.86, 0, 0, yaw);
+        return { side, z: sh.z };
+    }).sort((a, b) => a.z - b.z);
+    // Shoulders sit just OUTSIDE the chest so the arm reads as a limb beside
+    // the body rather than a stripe buried inside the torso silhouette.
+    const shoulderX = c.shHalf + c.armW * 0.34;
+    const drawArm = (side) => rigLimb(x,
+        side * shoulderX, shY + c.armW * 0.5, 0,
+        side * (shoulderX + 0.6), shY + c.armLen, -side * swing * 1.4,
+        yaw, c.armW, ramp.base, c.skin, c.armW * 0.42);
+    drawArm(arms[0].side);
+    rigTorso(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, ramp);
+    // Tie / belt on the chest front, so they turn with the body and cannot be
+    // overlapped by an arm that belongs on the other side of the chest.
+    const cw = Math.cos(yaw), sw = Math.sin(yaw);
+    if(c.tie) {
+        const t1 = rigRot(0, 0, c.depth, yaw);
+        if(t1.z > -c.depth * 0.2) {
+            ctx.fillStyle = c.tie;
+            const tw = 2.6 * Math.max(0.25, Math.abs(cw));
+            ctx.beginPath();
+            ctx.moveTo(x + t1.x - tw, shY + 1);
+            ctx.lineTo(x + t1.x + tw, shY + 1);
+            ctx.lineTo(x + t1.x + tw * 0.6, hemY - 1);
+            ctx.lineTo(x + t1.x, hemY + 2);
+            ctx.lineTo(x + t1.x - tw * 0.6, hemY - 1);
+            ctx.closePath(); ctx.fill();
+        }
+    }
+    if(c.belt) {
+        ctx.fillStyle = '#1a1a1a';
+        const bw = Math.sqrt((c.hipHalf * cw) ** 2 + (c.depth * sw) ** 2);
+        ctx.fillRect(x - bw, hemY - 1, bw * 2, 4);
+    }
+    if(c.hood) {
+        // Hood wraps the skull; the face opening shrinks as the head turns away
+        const hr = Math.sqrt((c.headRx * cw) ** 2 + (c.headRz * sw) ** 2);
+        ctx.fillStyle = ramp.base;
+        ctx.beginPath();
+        const hy = yBase + (c.headY === undefined ? -18 : c.headY);
+        ctx.ellipse(x, hy, hr * 1.22, c.headRy * 1.22, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ramp.dark;
+        ctx.beginPath();
+        ctx.ellipse(x, hy, hr * 1.22, c.headRy * 1.22, 0, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.fill();
+    }
+    drawArm(arms[1].side);
+
+    // Neck — a short column between the jaw and the collar, so the head is
+    // joined to the body instead of hovering above it
+    const headCy = yBase + (c.headY === undefined ? -18 : c.headY);
+    const neckW = Math.sqrt((3.2 * Math.cos(yaw)) ** 2 + (3.0 * Math.sin(yaw)) ** 2);
+    ctx.fillStyle = charMix(c.skin, '#000', 0.16);
+    ctx.fillRect(x - neckW, headCy + c.headRy * 0.55, neckW * 2, (shY + 2) - (headCy + c.headRy * 0.55));
+
+    // --- Head last, attached to the same body space
+    rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
+            { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
+}
+
 // === CANONICAL HEAD =========================================================
 // WHY THIS EXISTS. Every character used to build its own head out of ad-hoc
 // numbers, inside separate per-facing branches that each redrew everything.
