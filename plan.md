@@ -153,11 +153,62 @@ and box size; the buffer resolution is capped at 2x dpr. Measured cost is
 pacing stays at a 16.7ms median / 17.6ms p95 in level 1 pipe, level 5 pipe and
 the level 6 cloning room — no dropped frames.
 
+### Priority 7: One ground plane, one face ✓ COMPLETE (2026-07 remaster)
+
+**Ground plane.** Every sprite was authored around its own idea of where the
+feet sit relative to its anchor. Measured from rendered pixels across every
+sprite and facing, the offsets ranged from **+29** (cloning boss) to **+51**
+(CEO) — so `y` was not a depth coordinate, and two characters handed the same
+`y` stood at visibly different depths. The clearest symptom was the nuclear
+bridge: the player's shoes hung past the front edge of the deck into the void
+while the clone follower beside him, on the identical `y`, stood correctly on
+the walkway.
+
+`FOOT_FIX` now brings every sprite onto one contract — the feet land exactly
+`SPRITE_FOOT` (36px) below the anchor. Re-measured spread: **35–37**.
+
+**Feet planted in motion.** A static offset isn't enough — the walk cycles
+were adding their stride offset in *both* directions, so on alternate steps a
+boot sank ~5px through the floor. The cloning boss and clone follower now lift
+each foot off a *fixed* contact line and never push through it. Measured
+across a full walk cycle, foot drift is **0px** for every animated character
+(worst case was 4px).
+
+**Faces.** The cast was split between two drawing languages: bosses and the
+CEO had modelled eyes (sclera, iris, brow) while pipe managers, Mullet Pro,
+the bald manager and the clone follower had flat black squares — which read as
+tiles hovering in front of the face, with the cheek shading below them looking
+like a shadow they cast. One shared `drawCharEyes()` now serves all of them:
+socket recessed into the skin, white, tracking iris, catchlight keyed to the
+same light as `shadeSprite`, and a brow. Pipe managers get a slow blink and
+drifting gaze; their worried/pacing states pinch the brows.
+
+**Cloning boss anatomy.** Forward view: torso was a plain rectangle with each
+arm a bare plank butted against its outer edge in the same flat red — no
+shoulder, no separation, so the silhouette collapsed into one slab with no
+readable front or side. The chest now slopes from the neck and tucks at the
+waist, arms hang from deltoid caps over the shoulder joint, and a seam divides
+limb from chest. Side view: the front arm terminated mid-torso, leaving its
+hand as a floating disc on the shirt; both arms now run down the body's edges
+with hands clearing the hem at hip level.
+
+**Not a bug, worth recording:** the clone follower measured 97px tall against a
+pipe manager's 63px, which looked like a gross scale error. It isn't — the
+extra 34px was its floating "CLONE"/"ARMED" text label being counted as part of
+the sprite. Measuring the contiguous mass up from the feet gives 63px, matching
+the pipe manager it was cloned from exactly.
+
 ### Verification
 
 Headless Chromium smoke test: level 1 pipe room, level 5 pipe/furnace/office
 rooms, level 6 cloning room/underbelly/CEO office, plus safe/keypad/elevator
 UIs — zero page errors; script passes `node --check`.
+
+Character geometry is measured, never assumed — `scratchpad/feet.cjs` re-derives
+every foot offset and body height from rendered alpha, `walkfeet.cjs` samples
+each character across a full walk cycle to catch feet leaving the ground plane,
+and `sheet.cjs` renders a contact sheet with a ground line drawn under every
+sprite.
 
 Two automated checks guard the shading model — both with negative controls, so
 a passing result means the check can actually fail:
