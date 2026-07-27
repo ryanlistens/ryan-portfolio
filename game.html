@@ -477,11 +477,29 @@ const levelMusic = {
     level5: new Audio('music/level5.mp3'), // KEEP — most potent level track
     newceo: new Audio('music/newceo.mp3'), // KEEP — win screen
     hellmode: new Audio('music/hellmode.mp3'), // hell mode loop after devil throne
+    // Office radios — YELLOW's boombox plays this over the level track
+    yellow: new Audio('music/yellow.mp3'),
     // Remaining tracks silenced for now (original sound design pass in progress)
     level1: null, level2: null, level3: null, level4: null,
     level6: null, blewit: null,
-    blue: null, yellow: null, green: null, red: null
+    blue: null, green: null, red: null
 };
+
+// Office radio state — the level-5 track is diegetic: it plays from RED's
+// office stereo, and YELLOW's boombox can take over the floor.
+// 'level'  = level5.mp3 (RED's stereo, the default)
+// 'yellow' = yellow.mp3 (YELLOW's boombox, overrides for the rest of the level)
+// 'off'    = silence
+let officeRadio = { source: 'level' };
+function setOfficeRadio(source) {
+    officeRadio.source = source;
+    if(source === 'yellow')     playMusic('yellow');
+    else if(source === 'level') playMusic('level5');
+    else                        playMusic(null);
+}
+// Restore whatever the radios are currently set to (used when leaving an
+// office / changing rooms mid-level, so a radio choice sticks for the level)
+function resumeLevelRadio() { setOfficeRadio(officeRadio.source); }
 
 // Set all music to loop and preload (skip null entries)
 Object.values(levelMusic).forEach(audio => {
@@ -1341,6 +1359,8 @@ function updateLives() {
 }
 
 function initLevel(lv) {
+    // Office radios reset to the default level track each level
+    officeRadio.source = 'level';
     level = lv;
     npcs = [];
     cracks = [];
@@ -1519,6 +1539,18 @@ function initLevel(lv) {
         // Underbelly backroom state
         level6.mutantPM = { x: 380, y: 350, aggroTimer: 0, shakeIntensity: 0, cageOpen: false, cageLockShot: false, barsDropTime: 0, escaped: false, escapeTime: 0, eating: false, eatTarget: null, eatTime: 0 };
         level6.cageKey = { found: false, used: false, useTime: 0 };
+        // === MUTANT ESCAPE MODE ===
+        // Freeing the caged PM while wearing the detective's hat doesn't just
+        // release him — you BECOME him. 30-second rampage: eat anyone in your
+        // way and smash out of the building through RED's office window.
+        level6.mutantMode = {
+            active: false, startTime: 0, timeLeft: 30,
+            eaten: 0, eating: false, eatTimer: 0, eatTargetX: 0,
+            doorSmashed: false, windowSmashed: false,
+            jumping: false, jumpTimer: 0,
+            freeCard: false, freeCardTimer: 0,
+            caught: false, roar: 0
+        };
         level6.barrelDrip = { lastDrip: 0, drips: [] };
         level6.underbellyFlicker = 0;
         level6.skeletonHorde2 = { triggered: false, skeletons: [], drops: [] };
@@ -4465,8 +4497,8 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     const numBugs = (level === 1) ? 3 : 4;
     for(let pi = 0; pi < numBugs; pi++) {
         const bcx = wx + 8 + (pi + 0.5) * spotW;
-        const half = spotW * 0.31;
-        const bh2 = lotH * 0.66;
+        const half = spotW * 0.42;
+        const bh2 = lotH * 0.44;
         // Ground shadow
         ctx.fillStyle = 'rgba(0,0,0,0.28)';
         ctx.beginPath(); ctx.ellipse(bcx, carBaseY + 1, half + 2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
@@ -4524,8 +4556,8 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     // === SILVER CONVERTIBLE, rear view (spot 5) — top down, seats visible ===
     {
         const cvx = wx + 8 + 5.5 * spotW;
-        const half = spotW * 0.34;
-        const bh2 = lotH * 0.52;
+        const half = spotW * 0.44;
+        const bh2 = lotH * 0.34;
         ctx.fillStyle = 'rgba(0,0,0,0.28)';
         ctx.beginPath(); ctx.ellipse(cvx, carBaseY + 1, half + 2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#161616';
@@ -4578,8 +4610,8 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     // === BLACK CADILLACS, rear view (spots 7 and 8) — fins + vertical lights ===
     for(let ci = 0; ci < 2; ci++) {
         const cdx = wx + 8 + (7.5 + ci) * spotW;
-        const half = spotW * 0.36;
-        const bh2 = lotH * 0.74;
+        const half = spotW * 0.46;
+        const bh2 = lotH * 0.46;
         ctx.fillStyle = 'rgba(0,0,0,0.30)';
         ctx.beginPath(); ctx.ellipse(cdx, carBaseY + 1, half + 2, 2.4, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#0c0c0c';
@@ -4645,8 +4677,8 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     // === WHITE COMPACT CARGO VAN, rear view (spot 10) — double doors ===
     {
         const vnx = wx + 8 + 10.3 * spotW;
-        const half = spotW * 0.36;
-        const bh2 = lotH * 0.94;
+        const half = spotW * 0.42;
+        const bh2 = lotH * 0.66;
         ctx.fillStyle = 'rgba(0,0,0,0.30)';
         ctx.beginPath(); ctx.ellipse(vnx, carBaseY + 1, half + 2, 2.4, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#161616';
@@ -8898,6 +8930,382 @@ function drawRecliningBoss(fx, fy) {
     }
 }
 
+// === PLAYABLE MUTANT ========================================================
+// The player sprite while MUTANT ESCAPE mode is running: a hulking, hunched
+// PM in a torn red jumpsuit. Knuckle-walking gait, heaving breath, and a
+// wide-open maw while mid-bite.
+function drawMutantPlayer(x, y, facing, walking, eating) {
+    const t = Date.now();
+    const dir = (facing === 'left') ? -1 : 1;
+    const gait = walking ? Math.sin(t / 110) : 0;
+    const breathe = Math.sin(t / 620) * 1.6;
+    const bob = walking ? Math.abs(gait) * -2.5 : breathe * 0.5;
+    const hipY = y + 4 + bob;
+
+    // Contact shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(x, y + 30, 26, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // ── Legs — squat and powerful, alternating stride
+    for(const [sgn, ph] of [[-1, 0], [1, Math.PI]]) {
+        const sw = Math.sin(t / 110 + ph) * (walking ? 6 : 0);
+        ctx.strokeStyle = '#a81c1c';
+        ctx.lineWidth = 11;
+        ctx.beginPath();
+        ctx.moveTo(x + sgn * 8, hipY + 6);
+        ctx.quadraticCurveTo(x + sgn * 11 + sw * 0.4, y + 18, x + sgn * 9 + sw, y + 27);
+        ctx.stroke();
+        // Bare mutant foot
+        ctx.fillStyle = '#b89a72';
+        ctx.beginPath();
+        ctx.ellipse(x + sgn * 9 + sw + dir * 2, y + 29, 7.5, 3.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // ── Torso — barrel chest hunched forward, torn jumpsuit
+    const torsoGrad = ctx.createLinearGradient(x - 20, 0, x + 20, 0);
+    torsoGrad.addColorStop(0, '#8f1616');
+    torsoGrad.addColorStop(0.45, '#cc2222');
+    torsoGrad.addColorStop(1, '#7d1212');
+    ctx.fillStyle = torsoGrad;
+    ctx.beginPath();
+    ctx.moveTo(x - 17, hipY + 8);
+    ctx.quadraticCurveTo(x - 24, y - 12 + bob, x - 16 + dir * 3, y - 22 + bob);  // shoulders
+    ctx.lineTo(x + 16 + dir * 3, y - 22 + bob);
+    ctx.quadraticCurveTo(x + 24, y - 12 + bob, x + 17, hipY + 8);
+    ctx.closePath();
+    ctx.fill();
+    // Torn hem + seam shading
+    ctx.fillStyle = '#7d1212';
+    ctx.beginPath();
+    ctx.moveTo(x - 17, hipY + 8);
+    for(let z = 0; z < 5; z++) ctx.lineTo(x - 17 + z * 8.5 + 4, hipY + (z % 2 ? 12 : 6));
+    ctx.lineTo(x + 17, hipY + 8);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - 6, y - 18 + bob); ctx.lineTo(x - 5, hipY + 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 7, y - 18 + bob); ctx.lineTo(x + 6, hipY + 6); ctx.stroke();
+    // PipeTech patch, half torn off
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(x + dir * 8, y - 14 + bob, 9, 7);
+    ctx.fillStyle = '#333';
+    ctx.font = scaledFont(5, 'bold', 'Arial', true);
+    ctx.textAlign = 'center';
+    ctx.fillText('PT', x + dir * 12.5, y - 8.5 + bob);
+
+    // ── Arms — long, knuckle-dragging, swinging opposite the legs
+    for(const [sgn, ph] of [[-1, Math.PI], [1, 0]]) {
+        const sw = Math.sin(t / 110 + ph) * (walking ? 7 : 0);
+        ctx.strokeStyle = '#b89a72';
+        ctx.lineWidth = 9;
+        ctx.beginPath();
+        ctx.moveTo(x + sgn * 15, y - 18 + bob);
+        ctx.quadraticCurveTo(x + sgn * 25, y - 2 + bob, x + sgn * 22 + sw, y + 18);
+        ctx.stroke();
+        // Knuckles on the floor
+        ctx.fillStyle = '#a88a62';
+        ctx.beginPath(); ctx.arc(x + sgn * 22 + sw, y + 20, 5.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ── Head — oversized, jutting brow, jaw wide when eating
+    const hy = y - 34 + bob;
+    ctx.fillStyle = '#c4a882';
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 3, hy, 14, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Heavy brow ridge
+    ctx.fillStyle = '#a88a62';
+    ctx.beginPath();
+    ctx.ellipse(x + dir * 3, hy - 6, 14.5, 5, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    // Bloodshot eyes
+    for(const es of [-1, 1]) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.ellipse(x + dir * 3 + es * 6, hy - 1, 4, 3.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c00';
+        ctx.beginPath(); ctx.arc(x + dir * 3 + es * 6 + dir, hy - 1, 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x + dir * 3 + es * 6 + dir, hy - 1, 1.1, 0, Math.PI * 2); ctx.fill();
+    }
+    // Mouth — gaping maw with teeth while eating, snarl otherwise
+    if(eating) {
+        const gape = 5 + Math.abs(Math.sin(t / 90)) * 5;
+        ctx.fillStyle = '#3a0808';
+        ctx.beginPath();
+        ctx.ellipse(x + dir * 4, hy + 7, 8, gape, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        for(let tt = -2; tt <= 2; tt++) {
+            ctx.beginPath();
+            ctx.moveTo(x + dir * 4 + tt * 3, hy + 7 - gape + 1);
+            ctx.lineTo(x + dir * 4 + tt * 3 + 2, hy + 7 - gape + 1);
+            ctx.lineTo(x + dir * 4 + tt * 3 + 1, hy + 7 - gape + 4.5);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x + dir * 4 + tt * 3, hy + 7 + gape - 1);
+            ctx.lineTo(x + dir * 4 + tt * 3 + 2, hy + 7 + gape - 1);
+            ctx.lineTo(x + dir * 4 + tt * 3 + 1, hy + 7 + gape - 4.5);
+            ctx.closePath(); ctx.fill();
+        }
+    } else {
+        ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + dir * 3 - 6, hy + 7);
+        ctx.quadraticCurveTo(x + dir * 3, hy + 4, x + dir * 3 + 6, hy + 7);
+        ctx.stroke();
+        // Lower fangs
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(x + dir * 3 - 4, hy + 6.5); ctx.lineTo(x + dir * 3 - 2, hy + 6.5);
+        ctx.lineTo(x + dir * 3 - 3, hy + 3.5); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + dir * 3 + 2, hy + 6.5); ctx.lineTo(x + dir * 3 + 4, hy + 6.5);
+        ctx.lineTo(x + dir * 3 + 3, hy + 3.5); ctx.closePath(); ctx.fill();
+    }
+    // Matted hair tufts
+    ctx.strokeStyle = '#6b4a28'; ctx.lineWidth = 2;
+    for(let h = -2; h <= 2; h++) {
+        ctx.beginPath();
+        ctx.moveTo(x + dir * 3 + h * 5, hy - 10);
+        ctx.lineTo(x + dir * 3 + h * 5 + (h % 2 ? 2 : -2), hy - 16);
+        ctx.stroke();
+    }
+}
+
+// Level-6 player draw — swaps in the mutant sprite during MUTANT ESCAPE.
+// Tracks horizontal movement itself so the gait animates without threading a
+// "walking" flag through a dozen call sites.
+let _mutLastX = null, _mutWalkTimer = 0;
+function drawL6Player(x, y, facing, holding, hasGun) {
+    const mm = (level === 6) ? level6.mutantMode : null;
+    if(mm && mm.active) {
+        if(_mutLastX !== null && Math.abs(x - _mutLastX) > 0.4) _mutWalkTimer = 8;
+        else if(_mutWalkTimer > 0) _mutWalkTimer--;
+        _mutLastX = x;
+        drawMutantPlayer(x, y, facing, _mutWalkTimer > 0, mm.eating);
+        return;
+    }
+    drawBaldManager(x, y, facing, holding, hasGun);
+}
+
+// MUTANT ESCAPE HUD — countdown, meals eaten, and the current objective
+function drawMutantHUD() {
+    const mm = level6.mutantMode;
+    if(!mm.active || mm.freeCard) return;
+    const secs = Math.max(0, mm.timeLeft);
+    const urgent = secs <= 10;
+    // Red rage vignette that tightens as time runs out
+    const rage = 0.10 + (1 - secs / 30) * 0.22;
+    const vg = ctx.createRadialGradient(350, 240, 150, 350, 240, 430);
+    vg.addColorStop(0, 'rgba(120,0,0,0)');
+    vg.addColorStop(1, `rgba(120,0,0,${rage})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    // Countdown chip
+    const cx = 350, cy = 34;
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    pathRoundRect(cx - 84, cy - 20, 168, 34, 8); ctx.fill();
+    ctx.strokeStyle = urgent ? '#ff3020' : '#cc2222';
+    ctx.lineWidth = 2;
+    pathRoundRect(cx - 84, cy - 20, 168, 34, 8); ctx.stroke();
+    const blink = urgent ? (0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 160))) : 1;
+    ctx.globalAlpha = blink;
+    ctx.fillStyle = urgent ? '#ff5533' : '#ffb020';
+    ctx.font = scaledFont(17, 'bold', 'monospace', true);
+    ctx.textAlign = 'center';
+    ctx.fillText('ESCAPE  ' + secs.toFixed(1) + 's', cx, cy + 4);
+    ctx.globalAlpha = 1;
+    // Meals eaten
+    if(mm.eaten > 0) {
+        ctx.fillStyle = '#88dd66';
+        ctx.font = scaledFont(10, 'bold', 'Arial', true);
+        ctx.fillText('DEVOURED × ' + mm.eaten, cx, cy + 20);
+    }
+    // Objective line
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    pathRoundRect(cx - 130, cy + 26, 260, 18, 6); ctx.fill();
+    ctx.fillStyle = '#e8c8a0';
+    ctx.font = scaledFont(9, 'bold', 'Arial', true);
+    const obj = !mm.doorSmashed ? 'SMASH INTO RED’S OFFICE'
+              : !mm.windowSmashed ? 'SMASH THE WINDOW'
+              : 'JUMP AND RUN';
+    ctx.fillText(obj, cx, cy + 39);
+}
+
+// Find an edible NPC near the mutant in the current room. Returns a handle
+// with a kill() that removes it, or null. Kept deliberately narrow: the PMs
+// on their ladders, the hallway supervisor, and the red clone.
+function findMutantMeal() {
+    const R = level6.room;
+    const near = (x) => Math.abs(player.x - x) < 62;
+    if(R === 'employeePipeRoom' || R === 'pipeRoom') {
+        const list = (R === 'pipeRoom') ? npcs : level5.npcPipes;
+        if(list) for(const n of list) {
+            if(n && !n.eatenByMutant && near(n.x)) {
+                return { x: n.x, kill: () => { n.eatenByMutant = true; n.needsDoc = false; n.state = 'gone'; } };
+            }
+        }
+    }
+    if(R === 'employeeHallway') {
+        const b = level6.hallwayCloningBoss;
+        if(b && b.alive && near(b.x)) return { x: b.x, kill: () => { b.alive = false; b.deathTime = Date.now(); } };
+    }
+    if(R === 'cloningRoom') {
+        const cb = level6.cloningBoss;
+        if(cb && cb.alive && near(cb.x)) return { x: cb.x, kill: () => { cb.alive = false; cb.deathTime = Date.now(); } };
+    }
+    const cf = level6.cloneFollower;
+    if(cf && cf.active && cf.room === R && near(cf.x)) {
+        return { x: cf.x, kill: () => { cf.active = false; } };
+    }
+    return null;
+}
+
+// "YOU ARE FREE!" — the mutant ending card, plus the recapture card
+function drawMutantFreeCard() {
+    const mm = level6.mutantMode;
+    if(!mm.freeCard && !mm.caught) return;
+    const el = mm.freeCardTimer;
+    const fade = Math.min(1, el / 40);
+    if(mm.caught) {
+        ctx.fillStyle = `rgba(20,0,0,${0.92 * fade})`;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(255,60,40,${fade})`;
+        ctx.font = scaledFont(34, 'bold', '"Press Start 2P", monospace', true);
+        ctx.fillText('CONTAINED', 350, 230);
+        ctx.fillStyle = `rgba(200,140,120,${fade})`;
+        ctx.font = scaledFont(11, 'bold', 'Arial', true);
+        ctx.fillText('Security caught the specimen before it reached the surface.', 350, 275);
+        if(el > 70) drawActionLabel('[ ACTION ] CONTINUE', 350, 340, {fontSize: 13});
+        return;
+    }
+    // Freedom — daylight wash, then the title
+    ctx.fillStyle = `rgba(255,255,255,${0.85 * fade})`;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    const skyG = ctx.createLinearGradient(0, -GY, 0, CANVAS_H);
+    skyG.addColorStop(0, `rgba(120,190,240,${fade})`);
+    skyG.addColorStop(0.62, `rgba(200,230,250,${fade})`);
+    skyG.addColorStop(0.63, `rgba(96,150,72,${fade})`);
+    skyG.addColorStop(1, `rgba(58,104,48,${fade})`);
+    ctx.fillStyle = skyG;
+    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    // Sun
+    ctx.fillStyle = `rgba(255,240,170,${0.9 * fade})`;
+    ctx.beginPath(); ctx.arc(560, 90, 34, 0, Math.PI * 2); ctx.fill();
+    // The mutant running free into the distance, shrinking as he goes
+    const runP = Math.min(1, el / 150);
+    const rx = 120 + runP * 380;
+    const rs = 1 - runP * 0.45;
+    ctx.save();
+    ctx.translate(rx, 360);
+    ctx.scale(rs, rs);
+    drawMutantPlayer(0, 0, 'right', true, false);
+    ctx.restore();
+    // Dust puffs behind him
+    for(let d = 0; d < 4; d++) {
+        const dp = ((el / 26 + d * 0.25) % 1);
+        ctx.fillStyle = `rgba(180,165,130,${(1 - dp) * 0.45 * fade})`;
+        ctx.beginPath();
+        ctx.arc(rx - 26 - dp * 42, 386 - dp * 5, 4 + dp * 8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Title
+    ctx.textAlign = 'center';
+    const titleA = Math.min(1, Math.max(0, (el - 30) / 40));
+    ctx.fillStyle = `rgba(20,40,20,${titleA * 0.35})`;
+    ctx.font = scaledFont(40, 'bold', '"Press Start 2P", monospace', true);
+    ctx.fillText('YOU ARE FREE!', 353, 173);
+    ctx.fillStyle = `rgba(255,248,220,${titleA})`;
+    ctx.fillText('YOU ARE FREE!', 350, 170);
+    ctx.fillStyle = `rgba(40,70,40,${titleA})`;
+    ctx.font = scaledFont(12, 'bold', 'Arial', true);
+    if(mm.eaten > 0) ctx.fillText('You devoured ' + mm.eaten + ' on the way out.', 350, 212);
+    else ctx.fillText('You walked out without touching a soul.', 350, 212);
+    if(el > 110) drawActionLabel('[ ACTION ] CONTINUE', 350, 300, {fontSize: 13});
+}
+
+// === OFFICE RADIOS ==========================================================
+// The level-5 soundtrack is diegetic: it plays out of RED's stereo. YELLOW
+// has a boombox that can take the floor over. Shared placement constants so
+// the sprite, the prompt and the interaction can never drift apart.
+const RADIO_RED_X = 120, RADIO_YELLOW_X = 120, RADIO_Y = 372;
+function drawOfficeRadio(rx, ry, accent, playing) {
+    const t = Date.now();
+    // Shelf/stand shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(rx, ry + 15, 30, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // Body — brushed dark plastic with a warm top edge
+    const bodyGrad = ctx.createLinearGradient(0, ry - 22, 0, ry + 14);
+    bodyGrad.addColorStop(0, '#4a4a50');
+    bodyGrad.addColorStop(0.5, '#33333a');
+    bodyGrad.addColorStop(1, '#212126');
+    ctx.fillStyle = bodyGrad;
+    pathRoundRect(rx - 28, ry - 22, 56, 36, 5);
+    ctx.fill();
+    ctx.strokeStyle = '#15151a'; ctx.lineWidth = 1.5;
+    pathRoundRect(rx - 28, ry - 22, 56, 36, 5);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    pathRoundRect(rx - 26, ry - 21, 52, 5, 3);
+    ctx.fill();
+    // Carry handle
+    ctx.strokeStyle = '#54545c'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(rx - 13, ry - 22);
+    ctx.quadraticCurveTo(rx, ry - 33, rx + 13, ry - 22);
+    ctx.stroke();
+    // Twin speakers — cones pulse gently while playing
+    for(const sx of [rx - 16, rx + 16]) {
+        ctx.fillStyle = '#17171b';
+        ctx.beginPath(); ctx.arc(sx, ry - 3, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#4e4e56'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, ry - 3, 9, 0, Math.PI * 2); ctx.stroke();
+        const pulse = playing ? 1 + Math.sin(t / 130 + (sx > rx ? 1.1 : 0)) * 0.13 : 1;
+        ctx.fillStyle = playing ? accent : '#2a2a30';
+        ctx.beginPath(); ctx.arc(sx, ry - 3, 4.6 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath(); ctx.arc(sx, ry - 3, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    // Cassette window + tuner dial between the speakers
+    ctx.fillStyle = '#101014';
+    pathRoundRect(rx - 7, ry - 15, 14, 9, 1.5);
+    ctx.fill();
+    ctx.fillStyle = playing ? accent : '#33333a';
+    ctx.beginPath(); ctx.arc(rx - 3.2, ry - 10.5, 1.7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rx + 3.2, ry - 10.5, 1.7, 0, Math.PI * 2); ctx.fill();
+    // Power LED
+    ctx.fillStyle = playing ? '#4dff7a' : '#3a1010';
+    ctx.beginPath(); ctx.arc(rx - 22, ry + 8, 2, 0, Math.PI * 2); ctx.fill();
+    if(playing) {
+        ctx.fillStyle = 'rgba(77,255,122,0.25)';
+        ctx.beginPath(); ctx.arc(rx - 22, ry + 8, 4.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // Little VU meter bars that dance while playing
+    for(let b = 0; b < 5; b++) {
+        const lvl = playing ? (0.35 + 0.65 * Math.abs(Math.sin(t / (180 + b * 40) + b))) : 0.12;
+        ctx.fillStyle = playing ? (b > 3 ? '#ff6a3a' : accent) : '#2c2c33';
+        ctx.fillRect(rx - 6 + b * 3, ry + 10 - 6 * lvl, 2, 6 * lvl);
+    }
+    // Music notes floating out while playing
+    if(playing) {
+        for(let n = 0; n < 3; n++) {
+            const np = ((t / 1700 + n * 0.33) % 1);
+            const nx = rx + 20 + np * 22 + Math.sin(np * 7 + n) * 4;
+            const ny = ry - 24 - np * 30;
+            ctx.globalAlpha = Math.max(0, 0.75 * (1 - np));
+            ctx.fillStyle = accent;
+            ctx.font = 'bold 13px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(n % 2 ? '♪' : '♫', nx, ny);
+            ctx.globalAlpha = 1;
+        }
+    }
+}
+
 function drawOfficeRoom(officeName) {
     const office = level5.hallway.offices.find(o => o.name === officeName);
     const color = office.color;
@@ -9397,6 +9805,13 @@ function drawOfficeRoom(officeName) {
     if(officeName === 'YELLOW') {
         // Yellow cat — drawn after player is placed (at bottom of function)
         // (cat is drawn separately in drawScene after drawOfficeRoom)
+        // YELLOW's boombox on the side cabinet — takes the floor's music over
+        drawOfficeRadio(RADIO_YELLOW_X, RADIO_Y, '#d4a017', officeRadio.source === 'yellow');
+    }
+
+    if(officeName === 'RED') {
+        // RED's hi-fi stereo — the level soundtrack is coming from in here
+        drawOfficeRadio(RADIO_RED_X, RADIO_Y, '#b0342c', officeRadio.source === 'level');
     }
 
     if(officeName === 'RED') {
@@ -24507,6 +24922,17 @@ function drawScene() {
             }
         }
 
+        // Radio prompt — drawn after the player so it floats above him
+        if(level5.currentOffice === 'YELLOW' || level5.currentOffice === 'RED') {
+            const _radX = level5.currentOffice === 'YELLOW' ? RADIO_YELLOW_X : RADIO_RED_X;
+            if(Math.abs(player.x - _radX) < 46 && player.y > RADIO_Y - 40) {
+                const _lbl = level5.currentOffice === 'YELLOW'
+                    ? (officeRadio.source === 'yellow' ? '[ ACTION ] STOP BOOMBOX' : '[ ACTION ] PLAY BOOMBOX')
+                    : (officeRadio.source === 'off' ? '[ ACTION ] STEREO ON' : '[ ACTION ] STEREO OFF');
+                drawActionLabel(_lbl, _radX, RADIO_Y - 44, {fontSize: 13});
+            }
+        }
+
         // Cinematic atmosphere grade (skipped while reading docs full-screen)
         applyRoomAtmosphere();
     }
@@ -24631,7 +25057,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player in pipe room
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'megacomputer') {
             drawLevel6MegacomputerRoom();
@@ -24641,7 +25067,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player in megacomputer room
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'nuclearBridge') {
             drawNuclearAssemblyBridge();
@@ -24651,7 +25077,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player on bridge
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'marbleRoom') {
             drawLevel6MarbleRoom();
@@ -24659,7 +25085,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'marbleRoom') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
             if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0) { drawAmmoCounter(player.x, player.y, level6.threeShotRifleAmmo); }
             // Marble room action labels — after player for correct z-order
@@ -24681,7 +25107,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player in entryway
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
             // Action labels drawn AFTER player so they float above the character
             { const _eelvX = 550, _eelvW = 130;
@@ -24693,7 +25119,7 @@ function drawScene() {
         } else if(level6.room === 'employeeLobby') {
             drawLevel6EmployeeLobby();
 
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'cloningRoom') {
             drawLevel6CloningRoom();
@@ -24702,7 +25128,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'cloningRoom') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'l6Furnace') {
             drawL6FurnaceRoom();
@@ -24711,8 +25137,87 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'l6Furnace') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+        } else if(level6.room === 'redOffice') {
+            // MUTANT ESCAPE finale — RED's office, seen from the inside with
+            // the smashed door behind you and the window as the way out.
+            drawOfficeRoom('RED');
+            const mm = level6.mutantMode;
+            // Office glass runs (180,40)-(520,240); the smash is aligned to it
+            const glX = 180, glY = 40, glW = 340, glH = 200;
+            const winX = glX + glW / 2;   // 350 — centre of the opening
+            if(mm.windowSmashed) {
+                // Blown-out opening: the outdoor scene stays visible, but the
+                // pane is gone — bright rim light, jagged teeth around the
+                // frame, and a gust of daylight spilling onto the carpet.
+                ctx.save();
+                ctx.beginPath(); ctx.rect(glX, glY, glW, glH); ctx.clip();
+                // Daylight blow-out around the edges of the hole
+                const blow = ctx.createRadialGradient(winX, glY + glH * 0.6, 30, winX, glY + glH * 0.6, glW * 0.75);
+                blow.addColorStop(0, 'rgba(255,255,255,0)');
+                blow.addColorStop(1, 'rgba(255,255,255,0.55)');
+                ctx.fillStyle = blow;
+                ctx.fillRect(glX, glY, glW, glH);
+                // Jagged glass teeth clinging to the frame
+                ctx.fillStyle = 'rgba(214,238,250,0.92)';
+                for(let g2 = 0; g2 < 9; g2++) {
+                    const gx2 = glX + 4 + g2 * ((glW - 8) / 8);
+                    ctx.beginPath();
+                    ctx.moveTo(gx2 - 6, glY); ctx.lineTo(gx2 + 8, glY);
+                    ctx.lineTo(gx2 + 1, glY + 16 + (g2 % 3) * 11);
+                    ctx.closePath(); ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(gx2 - 6, glY + glH); ctx.lineTo(gx2 + 8, glY + glH);
+                    ctx.lineTo(gx2 + 1, glY + glH - 14 - (g2 % 2) * 13);
+                    ctx.closePath(); ctx.fill();
+                }
+                for(let g3 = 0; g3 < 5; g3++) {
+                    const gy3 = glY + 6 + g3 * ((glH - 12) / 4);
+                    ctx.beginPath();
+                    ctx.moveTo(glX, gy3 - 6); ctx.lineTo(glX, gy3 + 8);
+                    ctx.lineTo(glX + 15 + (g3 % 2) * 10, gy3 + 1);
+                    ctx.closePath(); ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(glX + glW, gy3 - 6); ctx.lineTo(glX + glW, gy3 + 8);
+                    ctx.lineTo(glX + glW - 15 - (g3 % 2) * 10, gy3 + 1);
+                    ctx.closePath(); ctx.fill();
+                }
+                ctx.restore();
+                // Broken frame rim
+                ctx.strokeStyle = '#5a3418'; ctx.lineWidth = 5;
+                ctx.strokeRect(glX - 2, glY - 2, glW + 4, glH + 4);
+                // Glass scattered across the carpet below
+                ctx.fillStyle = 'rgba(206,234,248,0.85)';
+                for(let sh2 = 0; sh2 < 14; sh2++) {
+                    const sx2 = glX + 20 + (sh2 * 97) % (glW - 40);
+                    const sy2 = 300 + (sh2 * 53) % 90;
+                    ctx.beginPath();
+                    ctx.moveTo(sx2, sy2); ctx.lineTo(sx2 + 7, sy2 - 4); ctx.lineTo(sx2 + 3, sy2 + 4);
+                    ctx.closePath(); ctx.fill();
+                }
+            }
+            // The mutant player (mid-leap when jumping)
+            if(mm.jumping) {
+                const jp = Math.min(1, mm.jumpTimer / 45);
+                const jx = 350 + jp * 210;
+                const jy = 400 - Math.sin(jp * Math.PI) * 150;
+                ctx.save();
+                ctx.translate(jx, jy);
+                ctx.rotate(jp * 0.5);
+                drawMutantPlayer(0, 0, 'right', true, false);
+                ctx.restore();
+            } else {
+                drawL6Player(player.x, player.y, player.facing, player.holding, false);
+            }
+            // Prompts
+            if(!mm.jumping) {
+                if(!mm.windowSmashed && Math.abs(player.x - winX) < 110 && player.y < 430) {
+                    drawActionLabel('[ ACTION ] SMASH WINDOW', winX, 360, {fontSize: 14});
+                } else if(mm.windowSmashed && Math.abs(player.x - winX) < 110) {
+                    drawActionLabel('[ ACTION ] JUMP AND RUN', winX, 360, {fontSize: 14});
+                }
+            }
         } else if(level6.room === 'employeeHallway') {
             drawLevel5Hallway();
 
@@ -24775,7 +25280,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeeHallway') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'employeePipeRoom') {
             // Inner try/catch: if room draw throws, reset state and keep rendering player
@@ -24798,7 +25303,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeePipeRoom') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'underbellyHallway') {
             drawLevel6UnderbellyHallway();
@@ -24857,7 +25362,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'underbellyHallway') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'underbelly') {
             drawLevel6Underbelly();
@@ -24866,7 +25371,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'underbelly') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawBaldManager(player.x, player.y, player.facing, player.holding, l6HasGun);
+            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
             if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
         } else if(level6.room === 'ceoOffice') {
             // Screen shake from missile explosion
@@ -26241,6 +26746,31 @@ function drawScene() {
             ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
         }
 
+        // MUTANT ESCAPE overlays — prompts, HUD countdown, freedom card
+        if(level6.mutantMode && level6.mutantMode.active) {
+            const _mm = level6.mutantMode;
+            if(!_mm.freeCard && !_mm.caught && !_mm.jumping) {
+                // Smash into RED's office
+                if(level6.room === 'employeeHallway' && Math.abs(player.x - 150) < 55) {
+                    drawActionLabel('[ ACTION ] SMASH RED’S DOOR', 150, 300, {fontSize: 13});
+                }
+                // Devour a nearby NPC
+                if(level6.room !== 'redOffice') {
+                    const _meal = findMutantMeal();
+                    if(_meal && !_mm.eating) {
+                        drawActionLabel('[ ACTION ] DEVOUR', _meal.x, player.y - 70,
+                                        {fontSize: 13, color: '#ff8866'});
+                    }
+                }
+                // Way out of the underbelly hallway
+                if(level6.room === 'underbellyHallway' && player.x > 560) {
+                    drawActionLabel('SMASH UPSTAIRS →', 640, 300, {fontSize: 12});
+                }
+            }
+            drawMutantHUD();
+            drawMutantFreeCard();
+        }
+
         // Draw mute indicator for level 6
         drawMuteIndicator();
         drawHolsterButton();
@@ -27531,10 +28061,29 @@ function update() {
                 level5.currentOffice = null;
                 keys[' '] = false;
                 keys['action'] = false;
-                // Return to hallway soundtrack (RED's office keeps current music)
-                if(exitingOffice !== 'RED') playMusic('level5');
+                // Return to whatever the office radios are set to. RED's
+                // office keeps whatever is playing (its stereo IS the source).
+                if(exitingOffice !== 'RED') resumeLevelRadio();
             }
     
+            // === OFFICE RADIOS — RED's stereo is the level soundtrack;
+            // YELLOW's boombox overrides it for the rest of the level ===
+            if(level5.currentOffice === 'YELLOW' || level5.currentOffice === 'RED') {
+                const radX = level5.currentOffice === 'YELLOW' ? RADIO_YELLOW_X : RADIO_RED_X;
+                if(Math.abs(player.x - radX) < 46 && player.y > RADIO_Y - 40 && (keys[' '] || keys['action'])) {
+                    SFX.play('keypadTone');
+                    if(level5.currentOffice === 'YELLOW') {
+                        // Toggle YELLOW's boombox on / back to whatever RED's stereo was
+                        setOfficeRadio(officeRadio.source === 'yellow' ? 'level' : 'yellow');
+                    } else {
+                        // RED's stereo — kill the level track, or bring it back
+                        setOfficeRadio(officeRadio.source === 'off' ? 'level' : 'off');
+                    }
+                    keys[' '] = false;
+                    keys['action'] = false;
+                }
+            }
+
             // Interact with monitor - expanded range for easier access (center/right position)
             const deskX = 350;
             const deskY = 250;
@@ -27823,6 +28372,62 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // === MUTANT ESCAPE — countdown, feeding, and the escape beats ===
+            {
+                const mm = level6.mutantMode;
+                if(mm && mm.active) {
+                    if(mm.freeCard || mm.caught) {
+                        mm.freeCardTimer++;
+                        // ACTION continues out of the ending card
+                        const cardReady = mm.caught ? mm.freeCardTimer > 70 : mm.freeCardTimer > 110;
+                        if(cardReady && (keys[' '] || keys['action'])) {
+                            keys[' '] = false; keys['action'] = false;
+                            if(mm.freeCard) { state = 'win'; }
+                            else { state = 'gameover'; }
+                        }
+                        return;   // freeze the world under the card
+                    }
+                    // Countdown
+                    mm.timeLeft = Math.max(0, 30 - (Date.now() - mm.startTime) / 1000);
+                    if(mm.roar > 0) mm.roar -= 0.02;
+                    if(mm.timeLeft <= 0 && !mm.jumping) {
+                        mm.caught = true;
+                        mm.freeCardTimer = 0;
+                        SFX.play('hurt');
+                        return;
+                    }
+                    // Chewing animation timer
+                    if(mm.eating) {
+                        mm.eatTimer--;
+                        if(mm.eatTimer <= 0) { mm.eating = false; }
+                        return;   // locked in place mid-meal
+                    }
+                    // The jump-out beat plays itself
+                    if(mm.jumping) {
+                        mm.jumpTimer++;
+                        if(mm.jumpTimer > 45) {
+                            mm.freeCard = true;
+                            mm.freeCardTimer = 0;
+                            playMusic('newceo');
+                        }
+                        return;
+                    }
+                    // Feeding — ACTION next to any NPC devours it (+2s of rampage)
+                    const meal = findMutantMeal();
+                    if(meal && (keys[' '] || keys['action'])) {
+                        keys[' '] = false; keys['action'] = false;
+                        meal.kill();
+                        mm.eaten++;
+                        mm.eating = true;
+                        mm.eatTimer = 34;
+                        mm.eatTargetX = meal.x;
+                        mm.startTime += 2000;    // a meal buys you two seconds
+                        SFX.play('mutantGrowl');
+                        SFX.play('enemyDie');
+                    }
+                }
+            }
+
             // Clear bullets and muzzle flashes when changing rooms
             if(level6._prevRoom && level6._prevRoom !== level6.room) {
                 bullets = [];
@@ -29427,9 +30032,40 @@ function update() {
             }
 
             // === Employee Hallway (original Level 5 hallway revisited from Level 6) ===
+            // === MUTANT ESCAPE FINALE — RED's office: smash glass, jump out ===
+            else if(level6.room === 'redOffice') {
+                const mm = level6.mutantMode;
+                player.y = Math.max(360, Math.min(430, player.y));
+                const winX = 350;
+                if(!mm.jumping && (keys[' '] || keys['action']) && Math.abs(player.x - winX) < 110) {
+                    keys[' '] = false; keys['action'] = false;
+                    if(!mm.windowSmashed) {
+                        mm.windowSmashed = true;
+                        SFX.play('explode');
+                        SFX.play('mutantGrowl');
+                    } else {
+                        mm.jumping = true;
+                        mm.jumpTimer = 0;
+                        SFX.play('mutantGrowl');
+                    }
+                }
+            }
             else if(level6.room === 'employeeHallway') {
                 player.y = 380;
                 if(level6.cloneFollower.active) updateCloneFollower();
+
+                // === MUTANT: smash through RED's office door ===
+                if(level6.mutantMode && level6.mutantMode.active) {
+                    const redDoorX = 150;
+                    if(Math.abs(player.x - redDoorX) < 55 && (keys[' '] || keys['action'])) {
+                        keys[' '] = false; keys['action'] = false;
+                        SFX.play('explode');
+                        level6.mutantMode.doorSmashed = true;
+                        level6.room = 'redOffice';
+                        player.x = 350;
+                        player.y = 400;
+                    }
+                }
 
                 // Pick up hallway boss drops — check BEFORE gun firing so ACTION collects ammo instead of shooting
                 let hallwayActionConsumed = false;
@@ -29616,8 +30252,17 @@ function update() {
                     level6.lastExitEdge = 'left';
                 }
 
+                // Right — as the mutant, tear straight up onto the employee
+                // floor instead of taking the long way through smartware
+                if(player.x > 660 && level6.mutantMode && level6.mutantMode.active) {
+                    SFX.play('explode');
+                    level6.room = 'employeeHallway';
+                    player.x = 80;
+                    player.y = 380;
+                    level6.lastExitEdge = 'right';
+                }
                 // Right — back to smartware level
-                if(player.x > 660) {
+                else if(player.x > 660) {
                     level6.room = 'pipeRoom';
                     player.x = 80;
                     player.y = 380;
@@ -29747,6 +30392,21 @@ function update() {
                             level6.mutantPM.cageLockShot = true;
                             level6.mutantPM.cageOpen = true;
                             level6.mutantPM.barsDropTime = Date.now();
+                            // === MUTANT ESCAPE — freeing him as the DETECTIVE
+                            // makes you the mutant instead of a bystander ===
+                            if(level6.hasDetectiveHat && !level6.mutantMode.active) {
+                                level6.mutantMode.active = true;
+                                level6.mutantMode.startTime = Date.now();
+                                level6.mutantMode.timeLeft = 30;
+                                level6.mutantMode.roar = 1;
+                                SFX.play('mutantGrowl');
+                                // You take his place: he's gone from the cage,
+                                // and the player becomes the beast.
+                                level6.mutantPM.escaped = true;
+                                level6.mutantPM.escapeTime = 0;
+                                player.x = level6.mutantPM.x;
+                                player.y = 380;
+                            }
                         }, 1000);
                     }
                 }
