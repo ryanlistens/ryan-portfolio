@@ -198,11 +198,55 @@ extra 34px was its floating "CLONE"/"ARMED" text label being counted as part of
 the sprite. Measuring the contiguous mass up from the feet gives 63px, matching
 the pipe manager it was cloned from exactly.
 
+### Priority 8: Give the cast the same craft as the props ✓ COMPLETE (2026-07)
+
+The props had been modelled — the truck articulates, the pipes have polish, the
+mainframes have depth — while the cast were still rectangles with limbs stuck
+on the sides. Rather than hand-shaping each character (which produces as many
+different answers as there are characters), there is now a shared anatomy
+vocabulary, so consistency is structural:
+
+- **`charTorso`** — shoulders slope out from the neck, waist tucks in, lit from
+  the same top-left key as `shadeSprite`, with a chest highlight
+- **`charLimb`** — a tapered stroke (two widths, round caps): reads as a limb
+  rather than a bar of constant thickness
+- **`charDeltoid`** — a cap over the shoulder joint so arms attach *on top of*
+  the shoulder instead of being butted against the torso's outer edge
+- **`charHead`** / **`charHand`** — rounded skull with jaw shading; hands as
+  masses at the wrist
+- **`charRamp` / `charMix`** — one base colour derives the shadow and lit sides,
+  so no character invents its own light direction
+
+**Rebuilt on it:** pipe managers (torso, arms, worried pose), Mullet Pro
+(jacket with lapels and open V, arms, jeans), the bald manager (dress shirt,
+collar wings, tapered tie, belt, trousers), the cloning boss (forward and side),
+the playable mutant, and the caged mutant.
+
+**A tuning note worth keeping:** the first pass gave every character a full-size
+deltoid in a contrasting tone. At 8× they read as *pauldrons* — armour, not
+anatomy. The cap has to be small and tucked inside the shoulder line, tinted
+only slightly off the torso. Anatomy reads by silhouette and subtle value, not
+by a visible joint.
+
+**Two regressions this pass caught and fixed:**
+- Changing the pipe manager's near arm to hang left the "worried" pose's raised
+  hand floating beside the face with nothing reaching it. That arm now folds up
+  — elbow out, forearm rising — with the hand at the end of it.
+- Mullet Pro's and the bald manager's walk cycles had the same both-directions
+  leg offset already fixed on the bosses, so their feet also passed through the
+  floor on alternate steps. Both now lift off a fixed contact line.
+
 ### Verification
 
 Headless Chromium smoke test: level 1 pipe room, level 5 pipe/furnace/office
 rooms, level 6 cloning room/underbelly/CEO office, plus safe/keypad/elevator
 UIs — zero page errors; script passes `node --check`.
+
+Character geometry is measured, never assumed — `scratchpad/feet.cjs` re-derives
+every foot offset and body height from rendered alpha, `walkfeet.cjs` samples
+each character across a full walk cycle to catch feet leaving the ground plane,
+and `sheet.cjs` renders a contact sheet with a ground line drawn under every
+sprite.
 
 Character geometry is measured, never assumed — `scratchpad/feet.cjs` re-derives
 every foot offset and body height from rendered alpha, `walkfeet.cjs` samples
