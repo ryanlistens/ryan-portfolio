@@ -6029,6 +6029,102 @@ function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
     return { shW, hipW };
 }
 
+// Garment detail, projected in body space so it turns with the chest. The rig
+// torso is a tapered box with a gradient and nothing else, which is why four
+// of five characters read as single-colour slabs: the cloning boss only looked
+// right because his hard hat, his tie and his red-over-black contrast were
+// doing the work the garment should be doing for everyone.
+function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const front = rigRot(0, 0, depth, yaw);
+    const facing = front.z;                       // > 0 means the chest is toward us
+    const shW = Math.sqrt((shHalf * cs) ** 2 + (depth * sn) ** 2);
+    const px = (ax) => cx + rigRot(ax * shHalf, 0, depth * 0.92, yaw).x;
+    const g = c.garment || 'plain';
+    const H = hemY - shY;
+
+    if(facing > 0) {
+        // ---- FRONT-FACING DETAIL -----------------------------------------
+        if(g === 'suit' || g === 'jacket') {
+            // Shirt / tee showing in the jacket opening
+            ctx.fillStyle = c.under || '#1a1a1a';
+            ctx.beginPath();
+            ctx.moveTo(px(-0.30), shY);
+            ctx.lineTo(px(0.30), shY);
+            ctx.lineTo(px(0.14), shY + H * 0.44);
+            ctx.lineTo(px(-0.14), shY + H * 0.44);
+            ctx.closePath(); ctx.fill();
+            // Lapels folding back off the opening
+            ctx.fillStyle = charMix(ramp.base, '#fff', 0.10);
+            ctx.beginPath();
+            ctx.moveTo(px(-0.44), shY); ctx.lineTo(px(-0.06), shY);
+            ctx.lineTo(px(-0.30), shY + H * 0.46); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = charMix(ramp.base, '#000', 0.14);
+            ctx.beginPath();
+            ctx.moveTo(px(0.44), shY); ctx.lineTo(px(0.06), shY);
+            ctx.lineTo(px(0.30), shY + H * 0.46); ctx.closePath(); ctx.fill();
+            // Buttons down the closure
+            ctx.fillStyle = charMix(ramp.dark, '#000', 0.30);
+            for(let i = 0; i < 2; i++) {
+                ctx.beginPath();
+                ctx.arc(px(0.06), shY + H * (0.56 + i * 0.18), Math.max(0.7, shW * 0.05), 0, Math.PI*2);
+                ctx.fill();
+            }
+        } else if(g === 'shirt') {
+            // Collar wings either side of the neck
+            ctx.fillStyle = charMix(ramp.base, '#000', 0.10);
+            ctx.beginPath();
+            ctx.moveTo(px(-0.34), shY); ctx.lineTo(px(-0.05), shY);
+            ctx.lineTo(px(-0.20), shY + H * 0.22); ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(px(0.34), shY); ctx.lineTo(px(0.05), shY);
+            ctx.lineTo(px(0.20), shY + H * 0.22); ctx.closePath(); ctx.fill();
+            // Button placket
+            ctx.strokeStyle = charMix(ramp.base, '#000', 0.16);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(px(0.02), shY + H * 0.20); ctx.lineTo(px(0.02), hemY);
+            ctx.stroke();
+        } else if(g === 'jumpsuit') {
+            // Collar band, centre zip, chest pocket, hip seam
+            ctx.fillStyle = ramp.dark;
+            ctx.fillRect(cx - shW * 0.62, shY, shW * 1.24, Math.max(1.5, H * 0.10));
+            ctx.strokeStyle = charMix(ramp.dark, '#000', 0.25);
+            ctx.lineWidth = Math.max(1, shW * 0.07);
+            ctx.beginPath();
+            ctx.moveTo(px(0.0), shY + H * 0.12); ctx.lineTo(px(0.0), hemY);
+            ctx.stroke();
+            ctx.fillStyle = charMix(ramp.base, '#000', 0.12);
+            ctx.fillRect(px(0.22), shY + H * 0.24, shW * 0.34, H * 0.20);
+            ctx.strokeStyle = charMix(ramp.dark, '#000', 0.18);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(cx - shW * 0.84, hemY - H * 0.06);
+            ctx.lineTo(cx + shW * 0.84, hemY - H * 0.06);
+            ctx.stroke();
+        }
+    } else {
+        // ---- BACK DETAIL: a yoke seam and a centre vent, so the back is not
+        // a blank slab either
+        ctx.strokeStyle = charMix(ramp.dark, '#000', 0.22);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - shW * 0.80, shY + H * 0.22);
+        ctx.lineTo(cx + shW * 0.80, shY + H * 0.22);
+        ctx.moveTo(cx, shY + H * 0.22); ctx.lineTo(cx, hemY);
+        ctx.stroke();
+    }
+    // Shoulder seams read at every angle
+    ctx.strokeStyle = charMix(ramp.dark, '#000', 0.18);
+    ctx.lineWidth = 1;
+    for(const side of [-1, 1]) {
+        const sx = cx + rigRot(side * shHalf * 0.82, 0, 0, yaw).x;
+        ctx.beginPath();
+        ctx.moveTo(sx, shY + 1); ctx.lineTo(sx, shY + H * 0.30);
+        ctx.stroke();
+    }
+}
+
 // A limb is two 3D endpoints; depth decides whether it draws in front of or
 // behind the torso, which is what makes arms swap sides as a character turns.
 function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
@@ -6057,6 +6153,7 @@ const RIG_SHEET = {
         skin:'#eec49a', jaw:0.26, brow:'#4a3a2c', browW:0.09, browRidge:0.50,
         chisel:0.25, eyeSp:0.46, eyeSz:1.02, noseLen:1.00, eyeEl:0.00,
         hair:'mullet', hairColor:'#4a3018',
+        garment:'jacket', under:'#1a1a1a',
         shHalf:14, hipHalf:11, depth:7.5, headRx:8.8, headRy:11.8, headRz:8.6,
         shY:-4, hemY:16, hipY:16, soleY:36, legW:8, armW:5, armLen:20, headY:-17,
         top:'#800020', topLit:'#96122e', topDark:'#5c0016',
@@ -6066,7 +6163,8 @@ const RIG_SHEET = {
         // broad round skull, small close-set eyes, short nose, heavy soft jaw
         skin:'#f4cfa8', jaw:0.62, brow:'#c9b394', browW:0.06, hair:'none', browRidge:0.85,
         chisel:0.20, eyeSp:0.34, eyeSz:0.86, noseLen:0.86, eyeEl:0.02,
-        shHalf:14.5, hipHalf:11.5, depth:8, headRx:10.4, headRy:10.2, headRz:9.8,
+        shHalf:14.5, hipHalf:11.5, depth:8, headRx:10.4,
+        garment:'shirt',  headRy:10.2, headRz:9.8,
         shY:-2, hemY:18, hipY:18, soleY:36, legW:8, armW:5, armLen:21, headY:-15,
         top:'#ffffff', topLit:'#ffffff', topDark:'#cfcfcf',
         leg:'#1a1a1a', shoe:'#000', tie:'#800020', belt:true,
@@ -6075,6 +6173,7 @@ const RIG_SHEET = {
         // small youthful skull, large eyes, small nose, light brow
         skin:'#f7cd9f', jaw:0.24, brow:'#6a5238', browW:0.07, hair:'none', browRidge:0.35,
         chisel:0.15, eyeSp:0.40, eyeSz:1.16, noseLen:0.82, eyeEl:0.01,
+        garment:'jumpsuit', 
         shHalf:13, hipHalf:10.5, depth:7, headRx:8.4, headRy:9.6, headRz:8.2,
         shY:-4, hemY:14, hipY:14, soleY:36, legW:7.5, armW:4.6, armLen:19, headY:-16,
         top:'#e74c3c', topLit:'#ee6a5a', topDark:'#a03024',
@@ -6087,6 +6186,7 @@ const RIG_SHEET = {
         browRidge:1.0, moustache:'#5a3c1c',
         chisel:0.95, eyeSp:0.38, eyeSz:0.84, noseLen:1.16, eyeEl:-0.04,
         hairColor:'#5a4126', hat:'hardhat',
+        garment:'jumpsuit', 
         shHalf:15.5, hipHalf:11.5, depth:8.5, headRx:10.0, headRy:10.6, headRz:9.6,
         shY:-6, hemY:16, hipY:16, soleY:36, legW:8.5, armW:5.4, armLen:22, headY:-19,
         top:'#cc2222', topLit:'#e03535', topDark:'#8f1717',
@@ -6097,6 +6197,7 @@ const RIG_SHEET = {
         skin:'#cfa076', jaw:0.92, brow:'#6a6a6a', browW:0.10, age:1, browRidge:0.90,
         chisel:0.35, eyeSp:0.36, eyeSz:0.80, noseLen:1.22, eyeEl:0.04,
         hair:'slick', hairColor:'#70706e',
+        garment:'suit', under:'#e8e4dc',
         shHalf:16, hipHalf:12, depth:9, headRx:9.8, headRy:12.2, headRz:9.4,
         shY:-6, hemY:18, hipY:18, soleY:36, legW:9, armW:5.6, armLen:22, headY:-19,
         top:'#2b2b30', topLit:'#3a3a41', topDark:'#191a1e',
@@ -6158,6 +6259,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         yaw, c.armW, ramp.base, c.skin, c.armW * 0.42);
     drawArm(arms[0].side);
     rigTorso(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, ramp);
+    rigGarment(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, c, ramp);
     // Tie / belt on the chest front, so they turn with the body and cannot be
     // overlapped by an arm that belongs on the other side of the chest.
     const cw = Math.cos(yaw), sw = Math.sin(yaw);
