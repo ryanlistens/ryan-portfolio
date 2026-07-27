@@ -5614,21 +5614,52 @@ function rigHead(cx, cy, rx, ry, rz, yaw, spec, opts) {
     // Jaw: a wedge hung under the skull, narrowing to the chin, that swings
     // forward as the head turns so the profile grows a real chin and throat.
     const jaw = spec.jaw === undefined ? 0.4 : spec.jaw;
-    const chin = proj(0, 0.98, 0.55 + jaw * 0.30);
-    const jl = proj(-0.72, 0.42, 0.16), jr = proj(0.72, 0.42, 0.16);
+    // chisel 0 = soft rounded jaw, 1 = square angular jaw with a hard gonial
+    // corner and a flat chin. The foreman lost his chiselled skull when the
+    // rig replaced his hand-drawn profile with a generic rounded wedge.
+    const ch = spec.chisel === undefined ? 0.3 : spec.chisel;
+    const chin = proj(0, 0.98 + jaw * 0.06, 0.55 + jaw * 0.30);
+    const jl = proj(-0.74, 0.36, 0.14), jr = proj(0.74, 0.36, 0.14);
+    const gl = proj(-0.66 - ch * 0.08, 0.70, 0.30), gr = proj(0.66 + ch * 0.08, 0.70, 0.30);
+    const cl = proj(-0.30 - ch * 0.10, 0.96, 0.52), cr = proj(0.30 + ch * 0.10, 0.96, 0.52);
     ctx.beginPath();
     ctx.moveTo(jl.x, jl.y);
-    ctx.quadraticCurveTo(cx + (chin.x - cx) * 0.55, cy + ry * 0.92, chin.x, chin.y);
-    ctx.quadraticCurveTo(cx + (chin.x - cx) * 0.55 + (jr.x - cx) * 0.30, cy + ry * 0.92, jr.x, jr.y);
+    if(ch > 0.5) {
+        ctx.lineTo(gl.x, gl.y);                       // hard gonial angle
+        ctx.lineTo(cl.x, cl.y);
+        ctx.lineTo(cr.x, cr.y);                       // flat chin
+        ctx.lineTo(gr.x, gr.y);
+        ctx.lineTo(jr.x, jr.y);
+    } else {
+        ctx.quadraticCurveTo(gl.x, gl.y, chin.x, chin.y);
+        ctx.quadraticCurveTo(gr.x, gr.y, jr.x, jr.y);
+    }
     ctx.lineTo(jr.x, jr.y - ry * 0.10);
     ctx.lineTo(jl.x, jl.y - ry * 0.10);
     ctx.closePath();
     ctx.fill();
-    // Form: light on the lit side, shadow under the jaw
-    ctx.fillStyle = 'rgba(255,244,224,0.17)';
-    ctx.beginPath(); ctx.ellipse(cx - halfW * 0.42, cy - ry * 0.36, halfW * 0.34, ry * 0.28, 0, 0, Math.PI*2); ctx.fill();
+    if(ch > 0.5) {                                    // plane change along the jaw
+        ctx.strokeStyle = 'rgba(104,66,40,0.30)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(gl.x, gl.y); ctx.lineTo(cl.x, cl.y);
+        ctx.moveTo(gr.x, gr.y); ctx.lineTo(cr.x, cr.y);
+        ctx.stroke();
+    }
+    // Form shading is PROJECTED, so it turns with the head. It used to be
+    // painted at fixed screen offsets, which is why the highlight and jaw
+    // shadow sat in the same place no matter which way the character faced.
+    const tmp1 = proj(-0.52, -0.34, 0.62);
+    if(tmp1.z > -rz * 0.3) {
+        ctx.fillStyle = 'rgba(255,244,224,0.17)';
+        ctx.beginPath();
+        ctx.ellipse(tmp1.x, tmp1.y, halfW * 0.30, ry * 0.26, 0, 0, Math.PI*2);
+        ctx.fill();
+    }
+    const jshd = proj(0.18, 0.62, 0.52);
     ctx.fillStyle = 'rgba(118,76,46,0.16)';
-    ctx.beginPath(); ctx.ellipse(cx + (chin.x - cx) * 0.4, cy + ry * 0.60, halfW * 0.56, ry * 0.22, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(jshd.x, jshd.y, halfW * 0.50, ry * 0.20, 0, 0, Math.PI*2);
+    ctx.fill();
 
     // --- STRUCTURE ---------------------------------------------------------
     // A smooth ellipsoid with two dark dots is a jelly bean with coal eyes.
@@ -5679,7 +5710,7 @@ function rigHead(cx, cy, rx, ry, rz, yaw, spec, opts) {
     }
     // Brow ridge and nose read as a real profile because the nose is a point
     // that projects past the skull silhouette when the head is turned.
-    const nose = proj(0, 0.26, 1.34);
+    const nose = proj(0, 0.26, 1.34 * (spec.noseLen === undefined ? 1 : spec.noseLen));
     const browC = proj(0, -0.16, 1.0);
     if(nose.vis) {
         // Nose with a lit bridge, a shaded underside and a nostril, so it has
@@ -5711,12 +5742,14 @@ function rigHead(cx, cy, rx, ry, rz, yaw, spec, opts) {
         ctx.fill();
     }
     // Eyes — one per side, culled when it rotates behind the head
-    const eyeAz = 0.42, eyeEl = -0.02;
+    const eyeAz = spec.eyeSp === undefined ? 0.42 : spec.eyeSp;
+    const eyeEl = spec.eyeEl === undefined ? -0.02 : spec.eyeEl;
     for(const side of [-1, 1]) {
         const e = proj(side * eyeAz, eyeEl, 0.92);
         if(e.z <= rz * 0.02) continue;                       // behind the brow
         const foreshort = Math.max(0.35, Math.min(1, e.z / (rz * 0.92)));
-        const ew = rx * 0.21 * foreshort, eh = ry * 0.17;
+        const esz = spec.eyeSz === undefined ? 1 : spec.eyeSz;
+        const ew = rx * 0.21 * esz * foreshort, eh = ry * 0.17 * esz;
         ctx.fillStyle = 'rgba(120,80,52,0.20)';
         ctx.beginPath(); ctx.ellipse(e.x, e.y + eh * 0.2, ew * 1.35, eh * 1.2, 0, 0, Math.PI*2); ctx.fill();
         if(o.wide) {
@@ -5839,20 +5872,38 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
     } else if(spec.hair === 'mullet' && pass === 'front') {
         // BUSINESS: a real hairline with a fringe hanging over the brow — the
         // previous version was a smooth cap, i.e. a bowl pulled over the skull.
+        // A smooth sealed dome plus a band across the brow reads as a do-rag.
+        // Real hair has an IRREGULAR outline that breaks past the skull, sits
+        // proud of it, and shows strand direction.
+        const fx = cx + fwd.x * 0.16;
         ctx.fillStyle = hc;
         ctx.beginPath();
-        ctx.ellipse(cx, cy - ry * 0.30, halfW * 1.04, ry * 0.82, 0, Math.PI * 0.94, Math.PI * 2.06);
-        ctx.fill();
-        // Fringe: a ragged edge across the forehead, swung by the head turn
-        const fx = cx + fwd.x * 0.16;
-        ctx.beginPath();
-        ctx.moveTo(cx - halfW * 1.04, cy - ry * 0.34);
-        ctx.quadraticCurveTo(fx - halfW * 0.40, cy - ry * 0.06, fx - halfW * 0.06, cy - ry * 0.26);
-        ctx.quadraticCurveTo(fx + halfW * 0.30, cy - ry * 0.02, fx + halfW * 0.62, cy - ry * 0.24);
-        ctx.quadraticCurveTo(cx + halfW * 0.92, cy - ry * 0.06, cx + halfW * 1.04, cy - ry * 0.34);
-        ctx.lineTo(cx + halfW * 1.04, cy - ry * 0.62);
-        ctx.lineTo(cx - halfW * 1.04, cy - ry * 0.62);
+        ctx.moveTo(cx - halfW * 1.10, cy - ry * 0.18);
+        ctx.quadraticCurveTo(cx - halfW * 1.22, cy - ry * 0.86, cx - halfW * 0.44, cy - ry * 1.12);
+        ctx.quadraticCurveTo(cx - halfW * 0.10, cy - ry * 1.26, cx + halfW * 0.34, cy - ry * 1.10);
+        ctx.quadraticCurveTo(cx + halfW * 1.02, cy - ry * 0.92, cx + halfW * 1.12, cy - ry * 0.22);
+        // ragged lower edge — tufts over the brow rather than a clean band
+        ctx.lineTo(cx + halfW * 0.96, cy - ry * 0.40);
+        ctx.lineTo(cx + halfW * 0.78, cy - ry * 0.12);
+        ctx.lineTo(fx + halfW * 0.50, cy - ry * 0.38);
+        ctx.lineTo(fx + halfW * 0.22, cy - ry * 0.06);
+        ctx.lineTo(fx - halfW * 0.06, cy - ry * 0.34);
+        ctx.lineTo(fx - halfW * 0.34, cy - ry * 0.02);
+        ctx.lineTo(cx - halfW * 0.70, cy - ry * 0.34);
+        ctx.lineTo(cx - halfW * 0.92, cy - ry * 0.08);
         ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = dark; ctx.lineWidth = 1;    // strand direction over the crown
+        for(let i = -2; i <= 2; i++) {
+            ctx.beginPath();
+            ctx.moveTo(cx + halfW * i * 0.30, cy - ry * 1.06);
+            ctx.quadraticCurveTo(cx + halfW * i * 0.36 - halfW * 0.10, cy - ry * 0.64,
+                                 cx + halfW * i * 0.34 - halfW * 0.06, cy - ry * 0.26);
+            ctx.stroke();
+        }
+        ctx.fillStyle = lite;                          // sheen off the crown
+        ctx.beginPath();
+        ctx.ellipse(cx - halfW * 0.34, cy - ry * 0.92, halfW * 0.30, ry * 0.11, -0.22, 0, Math.PI*2);
         ctx.fill();
     }
     if(spec.hair === 'mullet' && pass === 'back') {
@@ -5914,7 +5965,7 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
 // with visible thickness, a dark lining inside it, and fabric gathered at the
 // neck. The opening narrows as the head turns away, and by the back view the
 // face is gone and you are looking at the outside of the hood.
-function rigHood(cx, cy, rx, ry, rz, yaw, ramp) {
+function rigHood(cx, cy, rx, ry, rz, yaw, ramp, pass) {
     const cs = Math.cos(yaw), sn = Math.sin(yaw);
     const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2);
     const fwd = rigRot(0, 0, rz, yaw);
@@ -5928,19 +5979,41 @@ function rigHood(cx, cy, rx, ry, rz, yaw, ramp) {
     ctx.ellipse(cx - fwd.x * 0.10, cy - ry * 0.06, halfW * 1.30, ry * 1.26,
                 0, Math.PI * 0.15, Math.PI * 0.85);
     ctx.fill();
-    // Rim thickness, then the lining inside it
-    const openW = halfW * 1.02 * Math.max(0.12, cs);   // opening shuts as it turns
-    if(cs > 0.06) {
-        ctx.fillStyle = ramp.lit;
-        ctx.beginPath();
-        ctx.ellipse(cx + fwd.x * 0.16, cy, openW * 1.14, ry * 1.10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = charMix(ramp.dark, '#000', 0.35);
-        ctx.beginPath();
-        ctx.ellipse(cx + fwd.x * 0.16, cy, openW, ry * 1.00, 0, 0, Math.PI * 2);
-        ctx.fill();
+    return { halfW };
+}
+
+// The near side of the hood is drawn AFTER the head, otherwise the skull
+// covers the opening and the cowl looks identical at every angle — which is
+// exactly what it was doing.
+function rigHoodFront(cx, cy, rx, ry, rz, yaw, ramp) {
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2);
+    const fwd = rigRot(0, 0, rz, yaw);
+    const openW = halfW * 1.04 * Math.max(0.04, cs);   // opening shuts as it turns
+    const ox = cx + fwd.x * 0.20;
+    ctx.save();
+    // Ring of fabric: fill the whole cowl, then punch the opening out of it
+    ctx.beginPath();
+    ctx.ellipse(cx - fwd.x * 0.10, cy - ry * 0.06, halfW * 1.30, ry * 1.26, 0, 0, Math.PI * 2);
+    if(cs > 0.04) {
+        ctx.ellipse(ox, cy + ry * 0.04, openW, ry * 0.98, 0, 0, Math.PI * 2, true);
     }
-    return { openW, halfW };
+    ctx.fillStyle = ramp.base;
+    ctx.fill('evenodd');
+    // Lining thickness around the opening, darker on the trailing side
+    if(cs > 0.04) {
+        ctx.strokeStyle = charMix(ramp.dark, '#000', 0.30);
+        ctx.lineWidth = Math.max(1.2, halfW * 0.16);
+        ctx.beginPath();
+        ctx.ellipse(ox, cy + ry * 0.04, openW, ry * 0.98, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    // Crown highlight follows the turn
+    ctx.fillStyle = charMix(ramp.lit, '#fff', 0.10);
+    ctx.beginPath();
+    ctx.ellipse(cx - fwd.x * 0.10 - halfW * 0.30, cy - ry * 0.92, halfW * 0.34, ry * 0.16, -0.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
 }
 
 // Torso as a tapered box: shoulder and hip rectangles in body space, projected
@@ -5996,40 +6069,51 @@ function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
 //   build    0 lean .. 1 heavy (drives shoulder/hip width and jaw)
 const RIG_SHEET = {
     mulletPro: {
-        skin:'#f0c69a', jaw:0.32, brow:'#4a3a2c', browW:0.09, browRidge:0.55,
-        hair:'mullet', hairColor:'#3a2a1a',
-        shHalf:14, hipHalf:11, depth:7.5, headRx:9.4, headRy:11.0, headRz:9.0,
+        // long narrow skull, wide-set eyes, straight nose, soft jaw
+        skin:'#eec49a', jaw:0.26, brow:'#4a3a2c', browW:0.09, browRidge:0.50,
+        chisel:0.25, eyeSp:0.46, eyeSz:1.02, noseLen:1.00, eyeEl:0.00,
+        hair:'mullet', hairColor:'#4a3018',
+        shHalf:14, hipHalf:11, depth:7.5, headRx:8.8, headRy:11.8, headRz:8.6,
         shY:-4, hemY:16, hipY:16, soleY:36, legW:8, armW:5, armLen:20, headY:-17,
         top:'#800020', topLit:'#96122e', topDark:'#5c0016',
         leg:'#a4c2db', shoe:'#654321',
     },
     baldManager: {
-        skin:'#f2cba2', jaw:0.58, brow:'#c9b394', browW:0.06, hair:'none', browRidge:0.80,
-        shHalf:14.5, hipHalf:11.5, depth:8, headRx:9.6, headRy:11.0, headRz:9.2,
+        // broad round skull, small close-set eyes, short nose, heavy soft jaw
+        skin:'#f4cfa8', jaw:0.62, brow:'#c9b394', browW:0.06, hair:'none', browRidge:0.85,
+        chisel:0.20, eyeSp:0.34, eyeSz:0.86, noseLen:0.86, eyeEl:0.02,
+        shHalf:14.5, hipHalf:11.5, depth:8, headRx:10.4, headRy:10.2, headRz:9.8,
         shY:-2, hemY:18, hipY:18, soleY:36, legW:8, armW:5, armLen:21, headY:-15,
         top:'#ffffff', topLit:'#ffffff', topDark:'#cfcfcf',
         leg:'#1a1a1a', shoe:'#000', tie:'#800020', belt:true,
     },
     pipeManager: {
-        skin:'#f5c89a', jaw:0.30, brow:'#5a4632', browW:0.08, hair:'none', browRidge:0.50,
-        shHalf:13, hipHalf:10.5, depth:7, headRx:8.6, headRy:10.0, headRz:8.4,
+        // small youthful skull, large eyes, small nose, light brow
+        skin:'#f7cd9f', jaw:0.24, brow:'#6a5238', browW:0.07, hair:'none', browRidge:0.35,
+        chisel:0.15, eyeSp:0.40, eyeSz:1.16, noseLen:0.82, eyeEl:0.01,
+        shHalf:13, hipHalf:10.5, depth:7, headRx:8.4, headRy:9.6, headRz:8.2,
         shY:-4, hemY:14, hipY:14, soleY:36, legW:7.5, armW:4.6, armLen:19, headY:-16,
         top:'#e74c3c', topLit:'#ee6a5a', topDark:'#a03024',
         leg:null, shoe:'#ffffff', hood:true,
     },
     cloningBoss: {
-        skin:'#f5d5a8', jaw:0.62, brow:'#4a3520', browW:0.12, hair:'crop',
-        browRidge:1.0, moustache:'#6b4a24',
-        hairColor:'#6b5030', hat:'hardhat',
-        shHalf:15, hipHalf:11.5, depth:8.5, headRx:9.8, headRy:11.4, headRz:9.4,
+        // THE FOREMAN: square chiselled skull, hard gonial angle, flat chin,
+        // deep-set narrow eyes under a heavy brow, big nose, moustache
+        skin:'#eccc9e', jaw:0.78, brow:'#3f2c18', browW:0.14, hair:'crop',
+        browRidge:1.0, moustache:'#5a3c1c',
+        chisel:0.95, eyeSp:0.38, eyeSz:0.84, noseLen:1.16, eyeEl:-0.04,
+        hairColor:'#5a4126', hat:'hardhat',
+        shHalf:15.5, hipHalf:11.5, depth:8.5, headRx:10.0, headRy:10.6, headRz:9.6,
         shY:-6, hemY:16, hipY:16, soleY:36, legW:8.5, armW:5.4, armLen:22, headY:-19,
         top:'#cc2222', topLit:'#e03535', topDark:'#8f1717',
         leg:'#2a2a2a', shoe:'#111', tie:'#111',
     },
     ceo: {
-        skin:'#d9a97e', jaw:0.82, brow:'#5c5c5c', browW:0.09, age:1, browRidge:0.95,
-        hair:'slick', hairColor:'#6b6b6b',
-        shHalf:16, hipHalf:12, depth:9, headRx:10.2, headRy:11.6, headRz:9.8,
+        // jowly, long-faced, hooded eyes set low, long nose, weathered
+        skin:'#cfa076', jaw:0.92, brow:'#6a6a6a', browW:0.10, age:1, browRidge:0.90,
+        chisel:0.35, eyeSp:0.36, eyeSz:0.80, noseLen:1.22, eyeEl:0.04,
+        hair:'slick', hairColor:'#70706e',
+        shHalf:16, hipHalf:12, depth:9, headRx:9.8, headRy:12.2, headRz:9.4,
         shY:-6, hemY:18, hipY:18, soleY:36, legW:9, armW:5.6, armLen:22, headY:-19,
         top:'#2b2b30', topLit:'#3a3a41', topDark:'#191a1e',
         leg:'#151518', shoe:'#0a0a0a', tie:'#8a1020',
@@ -6114,7 +6198,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     }
     if(c.hood) {
         const hy = yBase + (c.headY === undefined ? -18 : c.headY);
-        rigHood(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+        rigHood(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp, 'back');
     }
     drawArm(arms[1].side);
 
@@ -6125,9 +6209,11 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     ctx.fillStyle = charMix(c.skin, '#000', 0.16);
     ctx.fillRect(x - neckW, headCy + c.headRy * 0.55, neckW * 2, (shY + 2) - (headCy + c.headRy * 0.55));
 
-    // --- Head last, attached to the same body space
+    // --- Head, attached to the same body space
     rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
             { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
+    // ...then the near side of the hood, which crops the face as it turns away
+    if(c.hood) rigHoodFront(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp);
 }
 
 // === CANONICAL HEAD =========================================================
