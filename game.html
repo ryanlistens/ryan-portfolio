@@ -5961,59 +5961,43 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
     }
 }
 
-// A hood is a COWL, not a ring painted round the face: an outer shell, a rim
-// with visible thickness, a dark lining inside it, and fabric gathered at the
-// neck. The opening narrows as the head turns away, and by the back view the
-// face is gone and you are looking at the outside of the hood.
-function rigHood(cx, cy, rx, ry, rz, yaw, ramp, pass) {
-    const cs = Math.cos(yaw), sn = Math.sin(yaw);
-    const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2);
-    const fwd = rigRot(0, 0, rz, yaw);
-    // Outer shell, slightly larger than the skull
-    ctx.fillStyle = ramp.base;
-    ctx.beginPath();
-    ctx.ellipse(cx - fwd.x * 0.10, cy - ry * 0.06, halfW * 1.30, ry * 1.26, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = ramp.dark;                        // shaded back of the shell
-    ctx.beginPath();
-    ctx.ellipse(cx - fwd.x * 0.10, cy - ry * 0.06, halfW * 1.30, ry * 1.26,
-                0, Math.PI * 0.15, Math.PI * 0.85);
-    ctx.fill();
-    return { halfW };
+// A hood is a HALF-SHELL on the BACK of the head — not a ring wrapped around
+// the face with a hole punched in it, which is what this used to be. Facing
+// the viewer you see it peeking around the skull; turned away it covers the
+// head entirely. So it is one dome, depth-sorted against the skull exactly
+// like a limb: behind the head while they face you, in front once they turn.
+function rigHoodBehind(yaw, rz) {
+    return rigRot(0, 0, -rz, yaw).z < 0;
 }
-
-// The near side of the hood is drawn AFTER the head, otherwise the skull
-// covers the opening and the cowl looks identical at every angle — which is
-// exactly what it was doing.
-function rigHoodFront(cx, cy, rx, ry, rz, yaw, ramp) {
+function rigHoodShell(cx, cy, rx, ry, rz, yaw, ramp) {
     const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const back = rigRot(0, 0, -rz * 0.34, yaw);        // shell sits off the nape
     const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2);
-    const fwd = rigRot(0, 0, rz, yaw);
-    const openW = halfW * 1.04 * Math.max(0.04, cs);   // opening shuts as it turns
-    const ox = cx + fwd.x * 0.20;
-    ctx.save();
-    // Ring of fabric: fill the whole cowl, then punch the opening out of it
-    ctx.beginPath();
-    ctx.ellipse(cx - fwd.x * 0.10, cy - ry * 0.06, halfW * 1.30, ry * 1.26, 0, 0, Math.PI * 2);
-    if(cs > 0.04) {
-        ctx.ellipse(ox, cy + ry * 0.04, openW, ry * 0.98, 0, 0, Math.PI * 2, true);
-    }
+    const R = halfW * 1.20;
+    const bx = cx + back.x, by = cy - ry * 0.06;
+    // Dome: round over the crown, dropping to a squarer opening at the neck
     ctx.fillStyle = ramp.base;
-    ctx.fill('evenodd');
-    // Lining thickness around the opening, darker on the trailing side
-    if(cs > 0.04) {
-        ctx.strokeStyle = charMix(ramp.dark, '#000', 0.30);
-        ctx.lineWidth = Math.max(1.2, halfW * 0.16);
-        ctx.beginPath();
-        ctx.ellipse(ox, cy + ry * 0.04, openW, ry * 0.98, 0, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-    // Crown highlight follows the turn
-    ctx.fillStyle = charMix(ramp.lit, '#fff', 0.10);
     ctx.beginPath();
-    ctx.ellipse(cx - fwd.x * 0.10 - halfW * 0.30, cy - ry * 0.92, halfW * 0.34, ry * 0.16, -0.2, 0, Math.PI*2);
+    ctx.moveTo(bx - R, by + ry * 0.86);
+    ctx.quadraticCurveTo(bx - R * 1.06, by - ry * 0.72, bx, by - ry * 1.22);
+    ctx.quadraticCurveTo(bx + R * 1.06, by - ry * 0.72, bx + R, by + ry * 0.86);
+    ctx.quadraticCurveTo(bx, by + ry * 1.10, bx - R, by + ry * 0.86);
+    ctx.closePath();
     ctx.fill();
-    ctx.restore();
+    // Shading: the shell turns away from the key light on the trailing side
+    ctx.fillStyle = ramp.dark;
+    ctx.beginPath();
+    ctx.ellipse(bx + R * 0.42, by - ry * 0.10, R * 0.58, ry * 0.94, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = charMix(ramp.lit, '#fff', 0.06);
+    ctx.beginPath();
+    ctx.ellipse(bx - R * 0.40, by - ry * 0.60, R * 0.34, ry * 0.20, -0.22, 0, Math.PI * 2);
+    ctx.fill();
+    // Gathered fabric where the hood meets the shoulders
+    ctx.fillStyle = ramp.dark;
+    ctx.beginPath();
+    ctx.ellipse(bx, by + ry * 0.92, R * 0.86, ry * 0.26, 0, 0, Math.PI * 2);
+    ctx.fill();
 }
 
 // Torso as a tapered box: shoulder and hip rectangles in body space, projected
@@ -6196,9 +6180,9 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         const bw = Math.sqrt((c.hipHalf * cw) ** 2 + (c.depth * sw) ** 2);
         ctx.fillRect(x - bw, hemY - 1, bw * 2, 4);
     }
-    if(c.hood) {
+    if(c.hood && rigHoodBehind(yaw, c.headRz)) {
         const hy = yBase + (c.headY === undefined ? -18 : c.headY);
-        rigHood(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp, 'back');
+        rigHoodShell(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp);
     }
     drawArm(arms[1].side);
 
@@ -6212,8 +6196,10 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // --- Head, attached to the same body space
     rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
             { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
-    // ...then the near side of the hood, which crops the face as it turns away
-    if(c.hood) rigHoodFront(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+    // ...and if they have turned away, the shell is now in FRONT of the skull
+    if(c.hood && !rigHoodBehind(yaw, c.headRz)) {
+        rigHoodShell(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+    }
 }
 
 // === CANONICAL HEAD =========================================================
