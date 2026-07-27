@@ -1547,7 +1547,7 @@ function initLevel(lv) {
             active: false, startTime: 0, timeLeft: 30,
             eaten: 0, eating: false, eatTimer: 0, eatTargetX: 0,
             doorSmashed: false, windowSmashed: false,
-            jumping: false, jumpTimer: 0,
+            jumping: false, jumpTimer: 0, jumpFromX: 350, jumpFromY: 400,
             freeCard: false, freeCardTimer: 0,
             caught: false, roar: 0
         };
@@ -9255,10 +9255,24 @@ function drawL6Player(x, y, facing, holding, hasGun) {
     drawBaldManager(x, y, facing, holding, hasGun);
 }
 
+// The escape geometry lives in one place so the leap, the prompts and the
+// window it goes through can never drift apart. RED's office glass runs
+// (180,40)-(520,240); the floor the mutant stands on is y=400.
+const MUTANT_WIN = { x: 180, y: 40, w: 340, h: 200 };
+const MUTANT_WIN_CX = MUTANT_WIN.x + MUTANT_WIN.w / 2;          // 350
+const MUTANT_WIN_CY = MUTANT_WIN.y + MUTANT_WIN.h * 0.52;       // 144
+const MUTANT_JUMP_FRAMES = 58;
+// Ground line for the freedom card, and how far the mutant's feet sit below
+// its anchor — so he lands on the grass instead of floating over it.
+const MUTANT_FREE_HORIZON = 372;
+const MUTANT_FOOT_OFS = 35;
+
 // MUTANT ESCAPE HUD — countdown, meals eaten, and the current objective
 function drawMutantHUD() {
     const mm = level6.mutantMode;
-    if(!mm.active || mm.freeCard) return;
+    // The leap is a cutscene beat — the countdown and the objective have both
+    // been answered by then, so they shouldn't sit over him mid-air
+    if(!mm.active || mm.freeCard || mm.jumping) return;
     const secs = Math.max(0, mm.timeLeft);
     const urgent = secs <= 10;
     // Red rage vignette that tightens as time runs out
@@ -9347,34 +9361,75 @@ function drawMutantFreeCard() {
         if(el > 70) drawActionLabel('[ ACTION ] CONTINUE', 350, 340, {fontSize: 13});
         return;
     }
-    // Freedom — daylight wash, then the title
+    // Freedom — daylight wash, then the title. The sky/ground split is a
+    // game-space line, not a fraction of the canvas: the canvas is letterboxed
+    // and much taller than the play area on a phone, so a proportional horizon
+    // drifted far below the mutant and left him running on the sky.
+    const cTop = -GY, cBot = -GY + CANVAS_H;
     ctx.fillStyle = `rgba(255,255,255,${0.85 * fade})`;
-    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    const skyG = ctx.createLinearGradient(0, -GY, 0, CANVAS_H);
+    ctx.fillRect(-GX, cTop, CANVAS_W, CANVAS_H);
+    const skyG = ctx.createLinearGradient(0, cTop, 0, MUTANT_FREE_HORIZON);
     skyG.addColorStop(0, `rgba(120,190,240,${fade})`);
-    skyG.addColorStop(0.62, `rgba(200,230,250,${fade})`);
-    skyG.addColorStop(0.63, `rgba(96,150,72,${fade})`);
-    skyG.addColorStop(1, `rgba(58,104,48,${fade})`);
+    skyG.addColorStop(1, `rgba(200,230,250,${fade})`);
     ctx.fillStyle = skyG;
-    ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+    ctx.fillRect(-GX, cTop, CANVAS_W, MUTANT_FREE_HORIZON - cTop);
+    const gndG = ctx.createLinearGradient(0, MUTANT_FREE_HORIZON, 0, cBot);
+    gndG.addColorStop(0, `rgba(96,150,72,${fade})`);
+    gndG.addColorStop(1, `rgba(58,104,48,${fade})`);
+    ctx.fillStyle = gndG;
+    ctx.fillRect(-GX, MUTANT_FREE_HORIZON, CANVAS_W, cBot - MUTANT_FREE_HORIZON);
     // Sun
     ctx.fillStyle = `rgba(255,240,170,${0.9 * fade})`;
     ctx.beginPath(); ctx.arc(560, 90, 34, 0, Math.PI * 2); ctx.fill();
-    // The mutant running free into the distance, shrinking as he goes
+    // The PipeTech tower he just came out of, receding behind him — the
+    // smashed window is still there, so the card reads as the far side of the
+    // leap rather than an unrelated field
+    const bH = 150, bW = 74, bX = 44, bY = MUTANT_FREE_HORIZON - bH;
+    ctx.fillStyle = `rgba(120,126,136,${fade})`;
+    ctx.fillRect(bX, bY, bW, bH);
+    ctx.fillStyle = `rgba(96,102,112,${fade})`;
+    ctx.fillRect(bX + bW - 16, bY, 16, bH);           // shaded return face
+    ctx.fillStyle = `rgba(150,156,164,${fade})`;
+    ctx.fillRect(bX, bY, bW, 6);                       // parapet
+    for(let wy = 0; wy < 6; wy++) {
+        for(let wx = 0; wx < 3; wx++) {
+            const isHole = (wy === 2 && wx === 1);
+            ctx.fillStyle = isHole ? `rgba(24,22,26,${fade})`
+                                   : `rgba(178,206,226,${0.75 * fade})`;
+            ctx.fillRect(bX + 9 + wx * 18, bY + 16 + wy * 21, 12, 13);
+        }
+    }
+    // Distant treeline along the horizon, echoing the view out the window
+    for(let tr = 0; tr < 26; tr++) {
+        const tx = -GX + 14 + tr * ((CANVAS_W - 28) / 25);
+        const th = 15 + ((tr * 37) % 13);
+        ctx.fillStyle = `rgba(58,102,56,${0.85 * fade})`;
+        ctx.beginPath();
+        ctx.ellipse(tx, MUTANT_FREE_HORIZON - th * 0.5, th * 0.62, th * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.fillStyle = `rgba(74,120,64,${fade})`;
+    ctx.fillRect(-GX, MUTANT_FREE_HORIZON, CANVAS_W, 5);   // grass meets the trees
+    // The mutant running free into the distance, shrinking as he goes — his
+    // feet are planted on the horizon at whatever scale he's currently at
     const runP = Math.min(1, el / 150);
     const rx = 120 + runP * 380;
     const rs = 1 - runP * 0.45;
+    // He runs on the open grass in front of the treeline, not level with it,
+    // so the field reads as having depth
+    const runY = MUTANT_FREE_HORIZON + 30;
     ctx.save();
-    ctx.translate(rx, 360);
+    ctx.translate(rx, runY - MUTANT_FOOT_OFS * rs);
     ctx.scale(rs, rs);
     drawMutantPlayer(0, 0, 'right', true, false);
     ctx.restore();
-    // Dust puffs behind him
+    // Dust puffs kicked up off the grass behind him
     for(let d = 0; d < 4; d++) {
         const dp = ((el / 26 + d * 0.25) % 1);
         ctx.fillStyle = `rgba(180,165,130,${(1 - dp) * 0.45 * fade})`;
         ctx.beginPath();
-        ctx.arc(rx - 26 - dp * 42, 386 - dp * 5, 4 + dp * 8, 0, Math.PI * 2);
+        ctx.arc(rx - (26 + dp * 42) * rs, runY - (dp * 5) * rs,
+                (4 + dp * 8) * rs, 0, Math.PI * 2);
         ctx.fill();
     }
     // Title
@@ -9389,7 +9444,8 @@ function drawMutantFreeCard() {
     ctx.font = scaledFont(12, 'bold', 'Arial', true);
     if(mm.eaten > 0) ctx.fillText('You devoured ' + mm.eaten + ' on the way out.', 350, 212);
     else ctx.fillText('You walked out without touching a soul.', 350, 212);
-    if(el > 110) drawActionLabel('[ ACTION ] CONTINUE', 350, 300, {fontSize: 13});
+    // Prompt sits down on the grass, clear of the runner on the horizon
+    if(el > 110) drawActionLabel('[ ACTION ] CONTINUE', 350, 432, {fontSize: 13});
 }
 
 // === OFFICE RADIOS ==========================================================
@@ -25564,9 +25620,10 @@ function drawScene() {
             // the smashed door behind you and the window as the way out.
             drawOfficeRoom('RED');
             const mm = level6.mutantMode;
-            // Office glass runs (180,40)-(520,240); the smash is aligned to it
-            const glX = 180, glY = 40, glW = 340, glH = 200;
-            const winX = glX + glW / 2;   // 350 — centre of the opening
+            // Office glass geometry — shared with the leap and the prompts
+            const glX = MUTANT_WIN.x, glY = MUTANT_WIN.y;
+            const glW = MUTANT_WIN.w, glH = MUTANT_WIN.h;
+            const winX = MUTANT_WIN_CX;   // centre of the opening
             if(mm.windowSmashed) {
                 // Blown-out opening: the outdoor scene stays visible, but the
                 // pane is gone — bright rim light, jagged teeth around the
@@ -25617,14 +25674,24 @@ function drawScene() {
                     ctx.closePath(); ctx.fill();
                 }
             }
-            // The mutant player (mid-leap when jumping)
+            // The mutant player (mid-leap when jumping). He goes THROUGH the
+            // opening, not over the office: the arc starts where he stood and
+            // ends inside the blown-out glass, and once he's past the plane of
+            // the window he shrinks and dims so he reads as heading away from
+            // us rather than sliding across the wall.
             if(mm.jumping) {
-                const jp = Math.min(1, mm.jumpTimer / 45);
-                const jx = 350 + jp * 210;
-                const jy = 400 - Math.sin(jp * Math.PI) * 150;
+                const jp = Math.min(1, mm.jumpTimer / MUTANT_JUMP_FRAMES);
+                const e = 1 - Math.pow(1 - jp, 2);            // ease out of the launch
+                const jx = mm.jumpFromX + (MUTANT_WIN_CX - mm.jumpFromX) * e;
+                const jy = mm.jumpFromY + (MUTANT_WIN_CY - mm.jumpFromY) * e
+                           - Math.sin(jp * Math.PI) * 38;     // pop clearing the sill
+                const through = Math.max(0, (jp - 0.5) / 0.5);
+                const js = 1 - through * 0.55;
                 ctx.save();
                 ctx.translate(jx, jy);
-                ctx.rotate(jp * 0.5);
+                ctx.scale(js, js);
+                ctx.rotate(-0.16 + jp * 0.28);                // lean into the leap
+                ctx.globalAlpha = 1 - through * 0.3;
                 drawMutantPlayer(0, 0, 'right', true, false);
                 ctx.restore();
             } else {
@@ -28825,7 +28892,7 @@ function update() {
                     // The jump-out beat plays itself
                     if(mm.jumping) {
                         mm.jumpTimer++;
-                        if(mm.jumpTimer > 45) {
+                        if(mm.jumpTimer > MUTANT_JUMP_FRAMES) {
                             mm.freeCard = true;
                             mm.freeCardTimer = 0;
                             playMusic('newceo');
@@ -30456,7 +30523,7 @@ function update() {
             else if(level6.room === 'redOffice') {
                 const mm = level6.mutantMode;
                 player.y = Math.max(360, Math.min(430, player.y));
-                const winX = 350;
+                const winX = MUTANT_WIN_CX;
                 if(!mm.jumping && (keys[' '] || keys['action']) && Math.abs(player.x - winX) < 110) {
                     keys[' '] = false; keys['action'] = false;
                     if(!mm.windowSmashed) {
@@ -30466,6 +30533,10 @@ function update() {
                     } else {
                         mm.jumping = true;
                         mm.jumpTimer = 0;
+                        // Launch from wherever he actually is, so the arc is
+                        // continuous with the pose he was standing in
+                        mm.jumpFromX = player.x;
+                        mm.jumpFromY = player.y;
                         SFX.play('mutantGrowl');
                     }
                 }
