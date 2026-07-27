@@ -14683,131 +14683,163 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
     ctx.globalAlpha=1;
     ctx.restore(); // end exterior zone clip
 
-    // ── TRUCK SPRITES — view-correct for this pseudo-perspective scene:
-    // side profile while on the road, nose-on while driving down into the
-    // bay (growing with perspective), tail-on while departing (shrinking).
-    // Replaces the old top-down sprite that was rotated in place.
-    const drawMWTruckSide = (x, y, dir) => {
+    // ── TRUCK — one yaw-parametric sprite so the rig actually TURNS instead
+    // of snapping between fixed views. yaw 0 = full side profile, yaw 1 =
+    // square-on to the camera. Between the two the side face foreshortens
+    // while the end face widens, with the receding end lifted for depth —
+    // a 2.5D box turn that reads as a real cab swinging around.
+    // rear=true shows trailer doors instead of the cab front.
+    const drawMWTruck = (x, y, yaw, sc, rear) => {
+        const a = Math.max(0, Math.min(1, yaw)) * Math.PI / 2;
+        const cosA = Math.cos(a), sinA = Math.sin(a);
         ctx.save();
         ctx.translate(x, y);
-        ctx.scale(dir, 1);
-        ctx.fillStyle = 'rgba(0,0,0,0.30)';
-        ctx.beginPath(); ctx.ellipse(0, 10.5, 30, 2, 0, 0, Math.PI * 2); ctx.fill();
-        // Trailer box with rib lines
-        const trlGrad = ctx.createLinearGradient(0, -12, 0, 8);
-        trlGrad.addColorStop(0, '#d84a10');
-        trlGrad.addColorStop(0.5, '#c02e00');
-        trlGrad.addColorStop(1, '#8a2200');
-        ctx.fillStyle = trlGrad;
-        pathRoundRect(-30, -12, 38, 18, 1.5); ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.7;
-        for(let rr = 1; rr < 5; rr++) {
-            ctx.beginPath(); ctx.moveTo(-30 + rr * 7.6, -11); ctx.lineTo(-30 + rr * 7.6, 5); ctx.stroke();
+        ctx.scale(sc, sc);
+
+        const L = 56;            // full side length
+        const W = 22;            // vehicle width
+        const H = 20;            // body height
+        const sideL = L * cosA;  // foreshortened side
+        const faceW = W * sinA;  // end face coming into view
+        const lift  = 7 * sinA;  // receding end rises → depth cue
+        const fx0 = -faceW / 2, fx1 = faceW / 2;   // end face x-range (nearest)
+        const bx0 = fx0 - sideL;                   // far end of the side face
+        const top = -H, bot = 0;
+
+        // Ground shadow spans the whole footprint
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.beginPath();
+        ctx.ellipse((bx0 + fx1) / 2, bot + 4, (sideL + faceW) / 2 + 4, 2.6 + sinA * 1.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ── SIDE FACE — trailer then cab, skewed so the far end sits higher
+        if(sideL > 1.5) {
+            const sideGrad = ctx.createLinearGradient(0, top, 0, bot);
+            sideGrad.addColorStop(0, '#c94a18');
+            sideGrad.addColorStop(0.55, '#a83208');
+            sideGrad.addColorStop(1, '#742000');
+            ctx.fillStyle = sideGrad;
+            ctx.beginPath();
+            ctx.moveTo(bx0, top - lift);
+            ctx.lineTo(fx0, top);
+            ctx.lineTo(fx0, bot);
+            ctx.lineTo(bx0, bot - lift);
+            ctx.closePath();
+            ctx.fill();
+            // Rib lines running back along the trailer
+            ctx.strokeStyle = 'rgba(0,0,0,0.20)'; ctx.lineWidth = 0.7;
+            for(let r = 1; r < 6; r++) {
+                const tRib = r / 6;
+                const rx = fx0 + (bx0 - fx0) * tRib;
+                const rl = lift * tRib;
+                ctx.beginPath();
+                ctx.moveTo(rx, top - rl + 1);
+                ctx.lineTo(rx, bot - rl - 1);
+                ctx.stroke();
+            }
+            // Cab break — the tractor unit sits at the near end of the side
+            const cabSplit = fx0 + (bx0 - fx0) * 0.30;
+            ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(cabSplit, top - lift * 0.30 + 1);
+            ctx.lineTo(cabSplit, bot - lift * 0.30 - 1);
+            ctx.stroke();
+            // Door glass on the cab side
+            if(!rear && sideL > 14) {
+                ctx.fillStyle = 'rgba(130,190,225,0.75)';
+                const gx0 = fx0 + (bx0 - fx0) * 0.06, gx1 = fx0 + (bx0 - fx0) * 0.24;
+                ctx.beginPath();
+                ctx.moveTo(gx0, top - lift * 0.06 + 3);
+                ctx.lineTo(gx1, top - lift * 0.24 + 3);
+                ctx.lineTo(gx1, top - lift * 0.24 + 9);
+                ctx.lineTo(gx0, top - lift * 0.06 + 9);
+                ctx.closePath(); ctx.fill();
+            }
+            // Exhaust stack behind the cab
+            if(!rear && sideL > 20) {
+                const stx = fx0 + (bx0 - fx0) * 0.30;
+                ctx.fillStyle = '#4a4a4a';
+                ctx.fillRect(stx - 1, top - lift * 0.30 - 5, 1.8, 6);
+            }
         }
-        // Cab — hood profile, windshield, door glass
-        ctx.fillStyle = '#7a2000';
-        ctx.beginPath();
-        ctx.moveTo(9, 6);
-        ctx.lineTo(9, -10);
-        ctx.lineTo(16, -10);
-        ctx.quadraticCurveTo(18.5, -10, 19.5, -6);
-        ctx.lineTo(24, -5.5);
-        ctx.quadraticCurveTo(26, -5, 26, -2);
-        ctx.lineTo(26, 6);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle = 'rgba(120,180,220,0.85)';
-        ctx.beginPath();
-        ctx.moveTo(16.5, -9);
-        ctx.quadraticCurveTo(18, -9, 18.8, -6);
-        ctx.lineTo(16.5, -5.5);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle = 'rgba(120,180,220,0.7)';
-        ctx.fillRect(11, -9, 4.5, 4);
-        // Exhaust stack + fuel tank
-        ctx.fillStyle = '#444';
-        ctx.fillRect(8, -13, 1.6, 5);
-        ctx.fillStyle = '#999';
-        pathRoundRect(11, 3, 8, 4, 2); ctx.fill();
-        // Headlight
-        ctx.fillStyle = '#ffe040';
-        ctx.fillRect(25, -3, 1.4, 2.6);
-        // Wheels
-        for(const wxx of [-24, -16, 14, 22]) {
+
+        // ── ROOF — connects the side and end faces so it reads as a solid box
+        if(sideL > 1.5 && faceW > 1.5) {
+            ctx.fillStyle = '#8a2a06';
+            ctx.beginPath();
+            ctx.moveTo(bx0, top - lift);
+            ctx.lineTo(fx0, top);
+            ctx.lineTo(fx1, top);
+            ctx.lineTo(bx0 + faceW, top - lift);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // ── END FACE — cab front (or trailer doors when reversing out)
+        if(faceW > 1.5) {
+            const faceGrad = ctx.createLinearGradient(fx0, 0, fx1, 0);
+            faceGrad.addColorStop(0, rear ? '#a82800' : '#8a2600');
+            faceGrad.addColorStop(0.5, rear ? '#c83a08' : '#a83008');
+            faceGrad.addColorStop(1, rear ? '#8a2200' : '#6f1c00');
+            ctx.fillStyle = faceGrad;
+            pathRoundRect(fx0, top, faceW, H, 1.5 * sinA);
+            ctx.fill();
+            const inset = faceW * 0.13;
+            if(rear) {
+                // Twin doors with a centre seam and tail lights
+                ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.9;
+                ctx.beginPath(); ctx.moveTo(0, top + 1.5); ctx.lineTo(0, bot - 1.5); ctx.stroke();
+                if(faceW > 9) {
+                    ctx.fillStyle = '#ff3020';
+                    ctx.fillRect(fx0 + inset, bot - 5, faceW * 0.16, 2.2);
+                    ctx.fillRect(fx1 - inset - faceW * 0.16, bot - 5, faceW * 0.16, 2.2);
+                }
+            } else {
+                // Windscreen, grille and headlights fade in as the face opens up
+                if(faceW > 8) {
+                    ctx.fillStyle = 'rgba(135,195,230,0.9)';
+                    pathRoundRect(fx0 + inset, top + 2, faceW - inset * 2, H * 0.30, 1);
+                    ctx.fill();
+                    ctx.fillStyle = '#3a3a3a';
+                    pathRoundRect(fx0 + inset, top + H * 0.52, faceW - inset * 2, H * 0.22, 1);
+                    ctx.fill();
+                    ctx.fillStyle = '#ffe040';
+                    ctx.fillRect(fx0 + inset * 0.5, top + H * 0.80, faceW * 0.15, 2.4);
+                    ctx.fillRect(fx1 - inset * 0.5 - faceW * 0.15, top + H * 0.80, faceW * 0.15, 2.4);
+                }
+                // Mirrors flick out once the cab is turned toward us
+                if(faceW > 12) {
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 0.9;
+                    ctx.beginPath(); ctx.moveTo(fx0, top + 3); ctx.lineTo(fx0 - 2.5, top + 2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(fx1, top + 3); ctx.lineTo(fx1 + 2.5, top + 2); ctx.stroke();
+                }
+            }
+            // Bumper across the bottom of the face
+            ctx.fillStyle = rear ? '#555' : '#4a4a4a';
+            pathRoundRect(fx0 - 0.5, bot - 2.4, faceW + 1, 2.6, 1);
+            ctx.fill();
+        }
+
+        // ── WHEELS — along the side while it's visible, plus the pair under
+        // the end face once the truck is turned toward us
+        const wheelR = 3.4;
+        if(sideL > 6) {
+            for(const f of [0.08, 0.24, 0.70, 0.90]) {
+                const wxp = fx0 + (bx0 - fx0) * f;
+                const wyp = bot - lift * f;
+                ctx.fillStyle = '#151515';
+                ctx.beginPath(); ctx.ellipse(wxp, wyp, wheelR * cosA + 1.2, wheelR, 0, 0, Math.PI * 2); ctx.fill();
+                if(cosA > 0.45) {
+                    ctx.fillStyle = '#777';
+                    ctx.beginPath(); ctx.ellipse(wxp, wyp, 1.3 * cosA, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+        }
+        if(faceW > 7) {
             ctx.fillStyle = '#151515';
-            ctx.beginPath(); ctx.arc(wxx, 7.5, 3.4, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#777';
-            ctx.beginPath(); ctx.arc(wxx, 7.5, 1.3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillRect(fx0 - 1, bot - 1.5, faceW * 0.18, 4);
+            ctx.fillRect(fx1 + 1 - faceW * 0.18, bot - 1.5, faceW * 0.18, 4);
         }
-        ctx.restore();
-    };
-    const drawMWTruckFront = (x, y, s) => {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.scale(s, s);
-        ctx.fillStyle = 'rgba(0,0,0,0.30)';
-        ctx.beginPath(); ctx.ellipse(0, 13, 13, 2, 0, 0, Math.PI * 2); ctx.fill();
-        // Trailer visible behind/above the cab
-        ctx.fillStyle = '#a82800';
-        pathRoundRect(-11, -22, 22, 14, 1.5); ctx.fill();
-        // Cab front
-        const cabGrad = ctx.createLinearGradient(0, -12, 0, 10);
-        cabGrad.addColorStop(0, '#8a2600');
-        cabGrad.addColorStop(1, '#6a1c00');
-        ctx.fillStyle = cabGrad;
-        pathRoundRect(-10, -12, 20, 22, 2.5); ctx.fill();
-        // Split windshield
-        ctx.fillStyle = 'rgba(130,190,230,0.9)';
-        pathRoundRect(-8, -10, 7.4, 5, 1); ctx.fill();
-        pathRoundRect(0.6, -10, 7.4, 5, 1); ctx.fill();
-        // Grille + headlights + bumper
-        ctx.fillStyle = '#3a3a3a';
-        pathRoundRect(-6.5, -2, 13, 6, 1); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 0.5;
-        for(let g2 = 0; g2 < 3; g2++) {
-            ctx.beginPath(); ctx.moveTo(-5.5, -0.5 + g2 * 1.8); ctx.lineTo(5.5, -0.5 + g2 * 1.8); ctx.stroke();
-        }
-        ctx.fillStyle = '#ffe040';
-        ctx.fillRect(-9, 1, 2.4, 2); ctx.fillRect(6.6, 1, 2.4, 2);
-        ctx.fillStyle = '#555';
-        pathRoundRect(-10.5, 6.5, 21, 3, 1); ctx.fill();
-        // Side mirrors
-        ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.moveTo(-10, -9); ctx.lineTo(-12.5, -8); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(10, -9); ctx.lineTo(12.5, -8); ctx.stroke();
-        ctx.fillStyle = '#222';
-        ctx.fillRect(-13.4, -9.5, 1.6, 3); ctx.fillRect(11.8, -9.5, 1.6, 3);
-        // Front tires
-        ctx.fillStyle = '#151515';
-        ctx.fillRect(-11.5, 8, 3.4, 4); ctx.fillRect(8.1, 8, 3.4, 4);
-        ctx.restore();
-    };
-    const drawMWTruckRear = (x, y, s) => {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.scale(s, s);
-        ctx.fillStyle = 'rgba(0,0,0,0.30)';
-        ctx.beginPath(); ctx.ellipse(0, 13, 13, 2, 0, 0, Math.PI * 2); ctx.fill();
-        // Trailer doors
-        const doorGrad = ctx.createLinearGradient(-11, 0, 11, 0);
-        doorGrad.addColorStop(0, '#a82800');
-        doorGrad.addColorStop(0.5, '#c83a08');
-        doorGrad.addColorStop(1, '#8a2200');
-        ctx.fillStyle = doorGrad;
-        pathRoundRect(-11, -22, 22, 32, 1.5); ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.8;
-        ctx.beginPath(); ctx.moveTo(0, -21); ctx.lineTo(0, 9); ctx.stroke();
-        ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.6;
-        ctx.beginPath(); ctx.moveTo(-4.5, -21); ctx.lineTo(-4.5, 9); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(4.5, -21); ctx.lineTo(4.5, 9); ctx.stroke();
-        // Tail lights, bumper, tires, mudflaps
-        ctx.fillStyle = '#ff3020';
-        ctx.fillRect(-10, 6.5, 2.6, 2); ctx.fillRect(7.4, 6.5, 2.6, 2);
-        ctx.fillStyle = '#555';
-        pathRoundRect(-10.5, 9, 21, 2.6, 1); ctx.fill();
-        ctx.fillStyle = '#151515';
-        ctx.fillRect(-10.5, 11, 3.6, 3.4); ctx.fillRect(6.9, 11, 3.6, 3.4);
-        ctx.fillStyle = '#222';
-        ctx.fillRect(-11.5, 10.5, 2, 4); ctx.fillRect(9.5, 10.5, 2, 4);
         ctx.restore();
     };
 
@@ -14836,15 +14868,26 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         const exitX =bayRight-42;
         for(let ti=0;ti<2;ti++){
             const phase=((t/11000+ti*0.5)%1);
-            if(phase<0.20){
-                // Rolling in from the left, easing to a stop at the driveway
-                const p=phase/0.20;
+            if(phase<0.16){
+                // Rolling in from the left, braking to a stop at the driveway
+                const p=phase/0.16;
                 const ease=1-(1-p)*(1-p);
-                drawMWTruckSide((wx-64)+ease*(entryX-(wx-64)), truckY, 1);
-            } else if(phase>=0.94){
+                drawMWTruck((wx-64)+ease*(entryX-(wx-64)), truckY, 0, 1, false);
+            } else if(phase<0.26){
+                // TURNING IN — cab swings from side profile toward the camera
+                // while creeping forward, so the pivot reads as a real turn
+                const p=(phase-0.16)/0.10;
+                const sm=p*p*(3-2*p);
+                drawMWTruck(entryX+sm*10, truckY+sm*4, sm, 1+sm*0.12, false);
+            } else if(phase>=0.86 && phase<0.96){
+                // TURNING OUT — swings back from square-on to side profile
+                const p=(phase-0.86)/0.10;
+                const sm=p*p*(3-2*p);
+                drawMWTruck(exitX+sm*8, truckY+(1-sm)*4, 1-sm, 1.12-sm*0.12, true);
+            } else if(phase>=0.96){
                 // Pulling away to the right, accelerating from a standstill
-                const p=(phase-0.94)/0.06;
-                drawMWTruckSide(exitX+p*p*(wx+ww+64-exitX), truckY, 1);
+                const p=(phase-0.96)/0.04;
+                drawMWTruck(exitX+p*p*(wx+ww+64-exitX), truckY, 0, 1, false);
             }
         }
     }
@@ -14874,25 +14917,25 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
         const exitX =bayRight-42;
         for(let ti=0;ti<2;ti++){
             const phase=((t/11000+ti*0.5)%1);
-            if(phase>=0.20&&phase<0.57){
-                // Turned off the road — nose toward the viewer, driving down
-                // into the bay and growing with perspective
+            if(phase>=0.26&&phase<0.56){
+                // Squared up and driving down into the bay, growing with
+                // perspective. Starts where the turn left off.
                 ctx.save();
                 ctx.beginPath(); ctx.rect(bayLeft, mainRoadTop-4, bayRight-bayLeft, wy+wh-mainRoadTop+4); ctx.clip();
-                const p=(phase-0.20)/0.37;
+                const p=(phase-0.26)/0.30;
                 const ease=p*p*(3-2*p);
-                const cy=truckY+ease*(wy+wh+30-truckY);
-                drawMWTruckFront(entryX, cy, 0.7+ease*0.75);
+                const cy=(truckY+4)+ease*(wy+wh+30-truckY-4);
+                drawMWTruck(entryX+10, cy, 1, 1.12+ease*0.62, false);
                 ctx.restore();
-            } else if(phase>=0.57&&phase<0.94){
-                // Departing — trailer doors toward the viewer, shrinking as it
-                // climbs back up to the road
+            } else if(phase>=0.56&&phase<0.86){
+                // Backing out — trailer doors toward the viewer, shrinking as
+                // it climbs back up toward the road
                 ctx.save();
                 ctx.beginPath(); ctx.rect(bayLeft, mainRoadTop-4, bayRight-bayLeft, wy+wh-mainRoadTop+4); ctx.clip();
-                const p=(phase-0.57)/0.37;
+                const p=(phase-0.56)/0.30;
                 const ease=p*p*(3-2*p);
-                const cy=(wy+wh+30)*(1-ease)+truckY*ease;
-                drawMWTruckRear(exitX, cy, 1.45-ease*0.75);
+                const cy=(wy+wh+30)*(1-ease)+(truckY+4)*ease;
+                drawMWTruck(exitX+8, cy, 1, 1.74-ease*0.62, true);
                 ctx.restore();
             }
         }
@@ -14929,6 +14972,107 @@ function drawLevel6EmployeeLobby() {
         // Stripe highlight (top edge — softer pastel feel)
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
         ctx.fillRect(-GX, lobbyLineY + i * 12, CANVAS_W, 2);
+    }
+
+    // ── LOBBY DRESSING — the left wall was blank; a notice board, bench and
+    // clock give the space something to sit against and balance the elevator
+    // on the far right. ──
+    {
+        const fY = 400;
+        // Cork notice board with pinned memos
+        const nbX = 20, nbY = 175, nbW = 118, nbH = 92;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(nbX + 3, nbY + 3, nbW, nbH);
+        ctx.fillStyle = '#6b4a24';
+        ctx.fillRect(nbX, nbY, nbW, nbH);
+        ctx.fillStyle = '#b3813f';
+        ctx.fillRect(nbX + 5, nbY + 5, nbW - 10, nbH - 10);
+        const memos = [
+            [10, 8, 30, 22, '#f2efe0'], [46, 6, 26, 20, '#e8f0dc'],
+            [78, 10, 28, 24, '#f6e6c8'], [12, 38, 34, 24, '#eef2f6'],
+            [52, 36, 24, 18, '#f2efe0'], [80, 40, 26, 22, '#e6e2f2'],
+            [22, 66, 30, 18, '#f6e6c8'], [60, 64, 32, 20, '#eef2f6']
+        ];
+        for(const [mx, my, mw, mh, mc] of memos) {
+            ctx.save();
+            ctx.translate(nbX + 5 + mx + mw / 2, nbY + 5 + my + mh / 2);
+            ctx.rotate(((mx * 7 + my) % 9 - 4) * 0.012);
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.fillRect(-mw / 2 + 1, -mh / 2 + 1, mw, mh);
+            ctx.fillStyle = mc;
+            ctx.fillRect(-mw / 2, -mh / 2, mw, mh);
+            ctx.strokeStyle = 'rgba(90,80,60,0.35)'; ctx.lineWidth = 0.6;
+            for(let ln = 0; ln < 3; ln++) {
+                ctx.beginPath();
+                ctx.moveTo(-mw / 2 + 3, -mh / 2 + 5 + ln * 5);
+                ctx.lineTo(mw / 2 - 3, -mh / 2 + 5 + ln * 5);
+                ctx.stroke();
+            }
+            ctx.fillStyle = ['#cc3333','#3366cc','#e8b020','#2f9e4f'][(mx + my) % 4];
+            ctx.beginPath(); ctx.arc(0, -mh / 2 + 3, 2.2, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+        ctx.fillStyle = '#3a2a14';
+        ctx.fillRect(nbX + 5, nbY - 12, nbW - 10, 12);
+        ctx.fillStyle = '#d8d2c0';
+        ctx.font = scaledFont(8, 'bold', 'Arial', true);
+        ctx.textAlign = 'center';
+        ctx.fillText('NOTICES', nbX + nbW / 2, nbY - 3);
+
+        // Wall clock above the bench
+        const clX = 196, clY = 196;
+        ctx.fillStyle = '#2a2a2a';
+        ctx.beginPath(); ctx.arc(clX, clY, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e8e6dc';
+        ctx.beginPath(); ctx.arc(clX, clY, 18, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 1;
+        for(let hh = 0; hh < 12; hh++) {
+            const a2 = hh * Math.PI / 6;
+            ctx.beginPath();
+            ctx.moveTo(clX + Math.sin(a2) * 15, clY - Math.cos(a2) * 15);
+            ctx.lineTo(clX + Math.sin(a2) * 17, clY - Math.cos(a2) * 17);
+            ctx.stroke();
+        }
+        // Hands frozen just before five — the shift that never ends
+        ctx.strokeStyle = '#222'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(clX, clY); ctx.lineTo(clX + 7, clY - 6); ctx.stroke();
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(clX, clY); ctx.lineTo(clX + 2, clY - 13); ctx.stroke();
+        ctx.strokeStyle = '#cc3333'; ctx.lineWidth = 1;
+        const sec = (Date.now() / 1000) % 60, sa = sec * Math.PI / 30;
+        ctx.beginPath(); ctx.moveTo(clX, clY);
+        ctx.lineTo(clX + Math.sin(sa) * 14, clY - Math.cos(sa) * 14); ctx.stroke();
+        ctx.fillStyle = '#222';
+        ctx.beginPath(); ctx.arc(clX, clY, 2, 0, Math.PI * 2); ctx.fill();
+
+        // Moulded waiting bench under the board
+        const bX = 34, bW = 150, bY = 356;
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(bX + bW / 2, fY + 4, bW / 2 + 5, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#4a4a52';
+        ctx.fillRect(bX + 8, bY + 16, 5, 28);
+        ctx.fillRect(bX + bW - 13, bY + 16, 5, 28);
+        ctx.fillRect(bX + 4, fY - 2, 14, 4);
+        ctx.fillRect(bX + bW - 18, fY - 2, 14, 4);
+        const seatG = ctx.createLinearGradient(0, bY, 0, bY + 18);
+        seatG.addColorStop(0, '#4d5f74');
+        seatG.addColorStop(1, '#33445a');
+        ctx.fillStyle = seatG;
+        pathRoundRect(bX, bY, bW, 18, 5); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        pathRoundRect(bX + 3, bY + 2, bW - 6, 5, 3); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1;
+        for(let sg = 1; sg < 3; sg++) {
+            ctx.beginPath();
+            ctx.moveTo(bX + (bW / 3) * sg, bY + 2);
+            ctx.lineTo(bX + (bW / 3) * sg, bY + 16);
+            ctx.stroke();
+        }
+        // Discarded coffee cup on the bench
+        ctx.fillStyle = '#f0ece0';
+        pathRoundRect(bX + bW - 34, bY - 11, 10, 12, 1.5); ctx.fill();
+        ctx.fillStyle = '#c8402a';
+        ctx.fillRect(bX + bW - 34, bY - 11, 10, 3);
     }
 
     // Bold brutalist PipeTech logo on wall — below stripes
@@ -18003,6 +18147,127 @@ function drawLevel6Entryway() {
         ctx.strokeRect(i * 35, 400, 35, 100);
     }
     
+    // ── EXECUTIVE ANTEROOM DRESSING — the left half of this floor was a bare
+    // red wall; it now reads as a waiting area balancing the elevator on the
+    // right, with a runner carpet leading the eye to the CEO doors. ──
+    {
+        const fY = 400;
+        // Runner carpet — a shallow band hugging the floor line, so it reads
+        // as a rug seen edge-on rather than a slab standing up
+        const rug = ctx.createLinearGradient(0, fY + 2, 0, fY + 22);
+        rug.addColorStop(0, '#7a1818');
+        rug.addColorStop(1, '#4a0d0d');
+        ctx.fillStyle = rug;
+        ctx.fillRect(30, fY + 2, 430, 20);
+        ctx.fillStyle = '#b8912e';
+        ctx.fillRect(30, fY + 2, 430, 2);
+        ctx.fillRect(30, fY + 19, 430, 2);
+        ctx.fillStyle = 'rgba(184,145,46,0.35)';
+        ctx.fillRect(38, fY + 7, 414, 1);
+
+        // Wainscot rail running the length of the wall
+        ctx.fillStyle = '#5a1010';
+        ctx.fillRect(-GX, 330, CANVAS_W, 6);
+        ctx.fillStyle = 'rgba(200,160,80,0.28)';
+        ctx.fillRect(-GX, 330, CANVAS_W, 1.5);
+
+        // Framed portrait pair on the empty left wall
+        for(const [fx2, fh2] of [[70, 78], [162, 78]]) {
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.fillRect(fx2 + 3, 175 + 3, 62, fh2);
+            ctx.fillStyle = '#c8a44a';
+            ctx.fillRect(fx2, 175, 62, fh2);
+            ctx.fillStyle = '#8a6f24';
+            ctx.fillRect(fx2 + 3, 178, 56, fh2 - 6);
+            ctx.fillStyle = '#241a10';
+            ctx.fillRect(fx2 + 6, 181, 50, fh2 - 12);
+            // Abstract corporate "art" — pipe cross-sections
+            ctx.strokeStyle = '#6a5a3a'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(fx2 + 31, 181 + (fh2 - 12) / 2, 13, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = '#4a3f28';
+            ctx.beginPath(); ctx.arc(fx2 + 31, 181 + (fh2 - 12) / 2, 7, 0, Math.PI * 2); ctx.stroke();
+            // Picture light
+            ctx.fillStyle = '#c8a44a';
+            ctx.fillRect(fx2 + 24, 168, 14, 4);
+            ctx.fillStyle = 'rgba(255,224,150,0.10)';
+            ctx.beginPath();
+            ctx.moveTo(fx2 + 24, 172); ctx.lineTo(fx2 + 38, 172);
+            ctx.lineTo(fx2 + 52, 175 + fh2); ctx.lineTo(fx2 + 10, 175 + fh2);
+            ctx.closePath(); ctx.fill();
+        }
+
+        // Waiting bench — buttoned oxblood leather on a brass frame
+        const bx2 = 66, bw2 = 132, byT = 352;
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        ctx.beginPath(); ctx.ellipse(bx2 + bw2 / 2, fY + 6, bw2 / 2 + 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#8a6f24';
+        ctx.fillRect(bx2 + 6, byT + 20, 6, 30);
+        ctx.fillRect(bx2 + bw2 - 12, byT + 20, 6, 30);
+        const benchGrad = ctx.createLinearGradient(0, byT, 0, byT + 22);
+        benchGrad.addColorStop(0, '#7a2222');
+        benchGrad.addColorStop(1, '#4e1212');
+        ctx.fillStyle = benchGrad;
+        pathRoundRect(bx2, byT, bw2, 22, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        pathRoundRect(bx2 + 4, byT + 2, bw2 - 8, 6, 4); ctx.fill();
+        ctx.fillStyle = '#3a0d0d';
+        for(let bt = 0; bt < 4; bt++) {
+            ctx.beginPath(); ctx.arc(bx2 + 22 + bt * 30, byT + 12, 2, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // Tall potted palm anchoring the corner
+        const px2 = 224;
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(px2, fY + 6, 20, 5, 0, 0, Math.PI * 2); ctx.fill();
+        const potG = ctx.createLinearGradient(px2 - 16, 0, px2 + 16, 0);
+        potG.addColorStop(0, '#2e2a26'); potG.addColorStop(0.4, '#4a443c'); potG.addColorStop(1, '#26221e');
+        ctx.fillStyle = potG;
+        ctx.beginPath();
+        ctx.moveTo(px2 - 15, fY + 4); ctx.lineTo(px2 - 12, 358);
+        ctx.lineTo(px2 + 12, 358); ctx.lineTo(px2 + 15, fY + 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#5a544a';
+        ctx.fillRect(px2 - 13, 354, 26, 5);
+        // Fronds
+        for(let fr = 0; fr < 7; fr++) {
+            const ang = -Math.PI / 2 + (fr - 3) * 0.36 + Math.sin(Date.now() / 2600 + fr) * 0.03;
+            const len = 52 - Math.abs(fr - 3) * 6;
+            ctx.strokeStyle = fr % 2 ? '#1f5c26' : '#2a7a32';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(px2, 356);
+            ctx.quadraticCurveTo(px2 + Math.cos(ang) * len * 0.5, 356 + Math.sin(ang) * len * 0.7,
+                                 px2 + Math.cos(ang) * len, 356 + Math.sin(ang) * len);
+            ctx.stroke();
+        }
+
+        // Brass side table with a desk lamp, closing the gap to the doors
+        const stX = 244;
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.ellipse(stX, fY + 5, 20, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5a3a18';
+        pathRoundRect(stX - 19, 366, 38, 6, 2); ctx.fill();
+        ctx.fillStyle = '#8a6f24';
+        ctx.fillRect(stX - 2, 372, 4, 28);
+        ctx.beginPath(); ctx.ellipse(stX, 400, 12, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+        // Lamp — brass stem with a green shade and a warm pool of light
+        ctx.fillStyle = '#8a6f24';
+        ctx.fillRect(stX - 1.5, 344, 3, 22);
+        ctx.fillStyle = '#1f5c26';
+        ctx.beginPath();
+        ctx.moveTo(stX - 15, 344); ctx.lineTo(stX + 15, 344);
+        ctx.lineTo(stX + 10, 332); ctx.lineTo(stX - 10, 332);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(stX - 9, 333, 18, 3);
+        ctx.fillStyle = 'rgba(255,214,140,0.16)';
+        ctx.beginPath();
+        ctx.moveTo(stX - 14, 345); ctx.lineTo(stX + 14, 345);
+        ctx.lineTo(stX + 26, 372); ctx.lineTo(stX - 26, 372);
+        ctx.closePath(); ctx.fill();
+    }
+
     // Giant double doors
     ctx.fillStyle = '#4a2a0a';
     ctx.fillRect(250, 150, 200, 250);
