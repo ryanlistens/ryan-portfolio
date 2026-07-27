@@ -116,11 +116,66 @@ gradient/flat fills per frame; all static gradients cached in
   glowing digits; ESC/?/CLR share the treatment
 - **HUD (DOM)**: gradient bar, glow-tinted heart/money counters
 
+### Priority 6: One light model across every sprite ✓ COMPLETE (2026-07 remaster)
+
+Individually hand-shading ~90 draw functions would have produced ~90 slightly
+different ideas about where the light is. Instead there is now a single house
+shading model — `shadeSprite()` — and every character and prop sprite goes
+through it, so the whole cast and set are lit from the same direction.
+
+**How it works.** The sprite draws into a pooled offscreen buffer (`ctx` is
+redirected for the duration), then three passes are composited with
+`source-atop` so they touch only the sprite's own pixels and never the room
+behind it:
+1. **Key light** — warm, top-left, falling off to a cool shadow at lower-right
+2. **Rim light** — cool blue down the lit edge
+3. **Grounding** — darkening where the sprite meets the floor
+   (`opts.ground: 0` for wall-mounted signage and held items, which have no
+   floor contact; reduced for bodies lying down)
+
+**Covered (24 sprites):** `drawMulletPro`, `drawBaldManager`, `drawCEO`,
+`drawNPC`, `drawBoss`, `drawCloningBoss`, `drawCloneFollower`,
+`drawMutantPlayer`, `drawMulletProAsPM`, `drawPipeManagerBack`,
+`drawSkeletonPlayer`, `drawBackViewPlayerOnLadder`, `drawRecliningBoss`,
+`drawDeadCEO`, `drawDeadCloningBoss`, `drawStepLadder`, `drawToolCabinet`,
+`drawMarkerBoard`, `draw3DPrinter`, `drawGhostGun`, `drawWrenchGun`,
+`drawRevolver`, `drawPipeWrench`, `drawHeldDoc`.
+
+**Deliberately excluded:** `drawHellMeltPlayer` (self-illuminated — a fire
+glow must not be re-lit), `drawWrenchProjectile` (fast-moving, too small to
+read form), HUD/UI widgets, and room backgrounds, which the
+`applyRoomAtmosphere()` pass already handles.
+
+**Performance.** Buffers are pooled by power-of-two size tier so each is
+allocated once rather than resized per sprite; gradients are cached per tier
+and box size; the buffer resolution is capped at 2x dpr. Measured cost is
++1–4ms per frame in the heaviest rooms, and real `requestAnimationFrame`
+pacing stays at a 16.7ms median / 17.6ms p95 in level 1 pipe, level 5 pipe and
+the level 6 cloning room — no dropped frames.
+
 ### Verification
 
 Headless Chromium smoke test: level 1 pipe room, level 5 pipe/furnace/office
 rooms, level 6 cloning room/underbelly/CEO office, plus safe/keypad/elevator
 UIs — zero page errors; script passes `node --check`.
+
+Two automated checks guard the shading model — both with negative controls, so
+a passing result means the check can actually fail:
+- **Clip detection.** A probe re-renders every `shadeSprite` call into a
+  measured buffer and flags any sprite whose artwork reaches the buffer edge.
+  Run across 11 rooms and ~1,000 sprite draws with facings, held items, gun
+  states and the NPC stress escalation cycled: no clipping. Shrinking every
+  box by 26px makes all 13 reachable sprites report, confirming sensitivity.
+- **Round-trip equivalence.** With the light model neutralised, routing a
+  sprite through the offscreen buffer must match drawing it straight to the
+  canvas — this catches clipping, resampling artefacts, and state leaking
+  between sprites that share a pooled buffer. Worst case is 24 differing
+  pixels out of 576,000, and an animation-only control (same render path
+  snapped twice) accounts for all of the large ones.
+
+Sprite bounding boxes were measured by rendering each function and taking its
+alpha extents, not read off the source — the same render-first discipline used
+for the dead detective.
 
 ### Future ideas
 

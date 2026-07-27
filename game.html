@@ -164,7 +164,7 @@
 
 // SECTION 2: Canvas Setup and Constants
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+let ctx = canvas.getContext('2d');   // let: sprite shading redirects this
 
 // Polyfill for CanvasRenderingContext2D.roundRect (Safari <16, older browsers)
 if (!ctx.roundRect) {
@@ -1825,6 +1825,9 @@ function drawAmmoCounter(x, y, ammo) {
 }
 
 function drawHeldDoc(x, y, colorName) {
+    shadeSprite(x + 0, y + -48, 19, 21, () => _drawHeldDoc(x, y, colorName), { ground: 0 });
+}
+function _drawHeldDoc(x, y, colorName) {
     let col = COLORS.find(c => c.name === colorName);
     if(hellMode) col = {hex: '#0a0a0a'};
 
@@ -1878,7 +1881,11 @@ function drawHeldDoc(x, y, colorName) {
     ctx.fillText(col.name, x, y - 50);
 }
 
-function drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
+function drawMulletPro(x, y, ...rest) {
+    shadeSprite(x + 0, y + -14, 42, 58, () => _drawMulletPro(x, y, ...rest));
+}
+
+function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
     const s = 2;
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
     const mpStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
@@ -2041,6 +2048,10 @@ function drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = 
 // pipes depending on npc.state. Back-facing when at the pipe so the mullet
 // hair silhouette reads clearly.
 function drawMulletProAsPM(npc) {
+    // Box is sized for the tallest pose (the jump) rather than the idle stance
+    shadeSprite(npc.x, npc.y - 4, 30, 52, () => _drawMulletProAsPM(npc));
+}
+function _drawMulletProAsPM(npc) {
     let x = npc.x;
     let y = npc.y;
 
@@ -2225,7 +2236,11 @@ function drawMulletProAsPM(npc) {
     }
 }
 
-function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
+function drawBaldManager(x, y, ...rest) {
+    shadeSprite(x + 0, y + -14, 42, 58, () => _drawBaldManager(x, y, ...rest));
+}
+
+function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
     const isWalking = Date.now() - player.lastMove < 150;
 
@@ -2473,6 +2488,10 @@ function drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 // Unified cloning boss renderer with side-view support
 // facing: 'left' | 'right' | 'forward'; paused stops the walk cycle; hasGun draws a revolver in the lead hand.
 function drawCloningBoss(bx, by, facing, paused, hasGun) {
+    shadeSprite(bx + 0, by + -16, 44, 64, () => _drawCloningBoss(bx, by, facing, paused, hasGun));
+}
+
+function _drawCloningBoss(bx, by, facing, paused, hasGun) {
     const walkCycle = paused ? 0 : Math.sin(Date.now() / 150) * 5;
     const bob = paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
     const sideView = (facing === 'left' || facing === 'right');
@@ -2754,6 +2773,9 @@ function drawCloningBoss(bx, by, facing, paused, hasGun) {
 
 // Draw pipe manager from back - colored jumpsuit with white sneakers
 function drawPipeManagerBack(x, y, color, animOffset) {
+    shadeSprite(x + 0, y + 11, 22, 38, () => _drawPipeManagerBack(x, y, color, animOffset));
+}
+function _drawPipeManagerBack(x, y, color, animOffset) {
     const s = 2;
 
     // Shadow — at foot level (y+44 = sole bottom)
@@ -2826,7 +2848,11 @@ function drawPipeManagerBack(x, y, color, animOffset) {
 
 
 // SECTION 7: Boss and NPC Drawing Functions
-function drawBoss(x, y, facing) {
+function drawBoss(x, y, ...rest) {
+    shadeSprite(x + 0, y + -16, 46, 62, () => _drawBoss(x, y, ...rest));
+}
+
+function _drawBoss(x, y, facing) {
     const s = 2;
 
     // Shadow — at foot level (y+50 ≈ shoe bottom)
@@ -3041,6 +3067,10 @@ function updateNPCPipeAnimation(npc) {
 }
 
 function drawNPC(npc) {
+    shadeSprite(npc.x + 0, npc.y + -14, 40, 56, () => _drawNPC(npc));
+}
+
+function _drawNPC(npc) {
     let x = npc.x;
     let y = npc.y;
     const s = 2;
@@ -5349,6 +5379,15 @@ function drawHandWheelValve(pipeX, pipeY, npc, horizontal) {
 
 // Draw color-coordinated step-ladder for pipe managers
 function drawStepLadder(x, npcY, color) {
+    // The ladder hangs from the NPC's feet but stands on the fixed floor, so
+    // its height varies with npcY — derive the shade box from the same numbers
+    // the body below uses rather than assuming a constant size.
+    const top = npcY + 32 - 130, bot = 406;
+    if(bot - top < 24) { _drawStepLadder(x, npcY, color); return; }
+    shadeSprite(x, (top + bot) / 2, 24, (bot - top) / 2,
+                () => _drawStepLadder(x, npcY, color));
+}
+function _drawStepLadder(x, npcY, color) {
     const s = 2;
     const feetY = npcY + 16 * s; // NPC feet bottom
     const floorY = 400;
@@ -5447,6 +5486,114 @@ function pathRoundRect(rx, ry, rw, rh, rr) {
     ctx.lineTo(rx, ry + r);
     ctx.quadraticCurveTo(rx, ry, rx + r, ry);
     ctx.closePath();
+}
+
+// === HOUSE SHADING MODEL =====================================================
+// One light model for every character sprite so the whole cast is lit the
+// same way. The sprite is drawn into an offscreen buffer, then a key light
+// (top-left), a falloff toward the lower-right and a left rim light are
+// composited with 'source-atop' — so they only touch the sprite's own
+// pixels, never the room behind it. Sprites keep their own artwork; this
+// only unifies how light falls on them.
+// Buffers are pooled by power-of-two tier. Sprites range from a held pistol to
+// a whiteboard, and resizing one canvas to fit each would reallocate its
+// backing store several times per frame; picking the smallest tier that fits
+// means each buffer is allocated once and reused for the life of the page.
+const _sprPool = new Map();
+let _sprBusy = false;
+// The light model is a soft gradient, so it survives being rendered at 2x even
+// on a 3x phone. Capping here keeps the per-sprite fill area bounded.
+function _sprDpr() { return Math.min(dpr, 2); }
+function _sprBuffer(w, h) {
+    const tier = Math.max(64, 1 << Math.ceil(Math.log2(Math.max(w, h))));
+    const sd = _sprDpr();
+    let buf = _sprPool.get(tier);
+    if(!buf) {
+        const cv = document.createElement('canvas');
+        const px = Math.ceil(tier * sd);
+        cv.width = px; cv.height = px;
+        buf = { cv, cx: cv.getContext('2d'), tier, px, grads: new Map() };
+        _sprPool.set(tier, buf);
+    } else if(buf.px !== Math.ceil(buf.tier * sd)) {
+        // dpr changed (window moved between displays) — resize once
+        buf.px = Math.ceil(buf.tier * sd);
+        buf.cv.width = buf.px; buf.cv.height = buf.px;
+        buf.grads.clear();   // gradients are bound to the context's old state
+    }
+    return buf;
+}
+// Gradients are pure functions of the box size, but a CanvasGradient is bound
+// to the context that made it — so they're cached on the buffer, not globally.
+function _sprGrads(buf, w, h, gA) {
+    const k = w + '|' + h + '|' + gA;
+    let g = buf.grads.get(k);
+    if(g) return g;
+    const bcx = buf.cx;
+    const key = bcx.createLinearGradient(0, 0, w * 0.62, h);
+    key.addColorStop(0,    'rgba(255,250,238,0.17)');   // key light, top-left
+    key.addColorStop(0.42, 'rgba(255,255,255,0.02)');
+    key.addColorStop(1,    'rgba(4,6,26,0.24)');        // shadow side, lower-right
+    const rim = bcx.createLinearGradient(0, 0, w * 0.16, 0);
+    rim.addColorStop(0, 'rgba(190,215,255,0.13)');      // cool rim down the lit edge
+    rim.addColorStop(1, 'rgba(190,215,255,0)');
+    let gnd = null;
+    if(gA > 0) {
+        gnd = bcx.createLinearGradient(0, h * 0.62, 0, h);
+        gnd.addColorStop(0, 'rgba(0,0,0,0)');
+        gnd.addColorStop(1, 'rgba(0,0,0,' + gA + ')');
+    }
+    g = { key, rim, gnd };
+    buf.grads.set(k, g);
+    return g;
+}
+// opts.ground — how hard to darken the bottom edge (0 disables it). Characters
+// and floor-standing props want it; wall-mounted and held items do not.
+function shadeSprite(cx, cy, halfW, halfH, drawFn, opts) {
+    // Re-entrancy guard: a sprite that draws another sprite just draws flat
+    if(_sprBusy) { drawFn(); return; }
+    const pad = 10;
+    const w = Math.ceil(halfW * 2 + pad * 2);
+    const h = Math.ceil(halfH * 2 + pad * 2);
+    const buf = _sprBuffer(w, h);
+    if(w > buf.tier || h > buf.tier) { drawFn(); return; }   // safety net
+    const sd = _sprDpr();
+    const bcx = buf.cx;
+    bcx.setTransform(sd, 0, 0, sd, 0, 0);
+    // The buffer context is shared by every sprite in this size tier, so start
+    // each one from the same state the main context would have offered rather
+    // than from whatever the previous sprite left behind.
+    bcx.globalAlpha = 1;
+    bcx.globalCompositeOperation = 'source-over';
+    bcx.lineWidth = ctx.lineWidth;
+    bcx.lineCap = ctx.lineCap;
+    bcx.lineJoin = ctx.lineJoin;
+    bcx.font = ctx.font;
+    bcx.textAlign = ctx.textAlign;
+    bcx.textBaseline = ctx.textBaseline;
+    bcx.clearRect(0, 0, w, h);
+    // Map world space so the sprite lands centred in the buffer
+    const ox = halfW + pad - cx, oy = halfH + pad - cy;
+    bcx.translate(ox, oy);
+    const saved = ctx;
+    ctx = bcx;
+    _sprBusy = true;
+    try { drawFn(); }
+    finally { ctx = saved; _sprBusy = false; }
+    // Composite the light model onto the sprite's pixels only
+    const gA = (opts && opts.ground !== undefined) ? opts.ground : 0.20;
+    const g = _sprGrads(buf, w, h, gA);
+    bcx.setTransform(sd, 0, 0, sd, 0, 0);
+    bcx.globalAlpha = 1;                    // in case the sprite left it dimmed
+    bcx.globalCompositeOperation = 'source-atop';
+    bcx.fillStyle = g.key;
+    bcx.fillRect(0, 0, w, h);
+    bcx.fillStyle = g.rim;
+    bcx.fillRect(0, 0, w, h);
+    if(g.gnd) { bcx.fillStyle = g.gnd; bcx.fillRect(0, 0, w, h); }
+    bcx.globalCompositeOperation = 'source-over';
+    // Blit only the region we actually used out of the pooled buffer
+    ctx.drawImage(buf.cv, 0, 0, Math.ceil(w * sd), Math.ceil(h * sd),
+                  cx - halfW - pad, cy - halfH - pad, w, h);
 }
 
 function drawTableDesk(x, topY, width) {
@@ -5583,6 +5730,9 @@ function drawComputer(x, y) {
 }
 
 function draw3DPrinter(x, y) {
+    shadeSprite(x + 0, y + -8, 27, 29, () => _draw3DPrinter(x, y));
+}
+function _draw3DPrinter(x, y) {
     ctx.fillStyle = '#3a3a3a';
     ctx.fillRect(x - 25, y - 35, 50, 50);
     
@@ -5649,6 +5799,9 @@ function draw3DPrinter(x, y) {
 }
 
 function drawGhostGun(x, y, facing) {
+    shadeSprite(x + 0, y + -15, 48, 45, () => _drawGhostGun(x, y, facing), { ground: 0 });
+}
+function _drawGhostGun(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
@@ -5814,6 +5967,9 @@ function drawGhostGun(x, y, facing) {
 
 // Draw the pipe wrench held by player (melee weapon, level 4)
 function drawPipeWrench(x, y, facing) {
+    shadeSprite(x + 0, y + -11, 21, 26, () => _drawPipeWrench(x, y, facing), { ground: 0 });
+}
+function _drawPipeWrench(x, y, facing) {
     const sleeveColor = '#800020';
     const skinColor = '#f5c89a';
     const wrenchColor = '#7a7a7a';
@@ -5893,6 +6049,9 @@ function drawWrenchShatter(pieces) {
 
 // Draw auto-wrench held by player (level 6)
 function drawWrenchGun(x, y, facing) {
+    shadeSprite(x + -4, y + 0, 46, 46, () => _drawWrenchGun(x, y, facing), { ground: 0 });
+}
+function _drawWrenchGun(x, y, facing) {
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 || level6.wrenchBolts.length > 0;
     if(!isActive) return;
     // 'forward' (idle) falls back to last horizontal facing so the arm stays
@@ -5977,6 +6136,9 @@ function drawWrenchGun(x, y, facing) {
 }
 
 function drawRevolver(x, y, facing) {
+    shadeSprite(x + 0, y + -6, 47, 41, () => _drawRevolver(x, y, facing), { ground: 0 });
+}
+function _drawRevolver(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
     if(!isActive) return;
@@ -7306,6 +7468,9 @@ function drawWaterCooler(x, y) {
 
 // Tool cabinet (metal, industrial, 3 drawers with handles)
 function drawToolCabinet(x, y) {
+    shadeSprite(x + 0, y + -32, 26, 36, () => _drawToolCabinet(x, y));
+}
+function _drawToolCabinet(x, y) {
     // Cabinet body — gunmetal steel
     ctx.fillStyle = '#5a5a5a';
     ctx.fillRect(x - 24, y - 64, 48, 64);
@@ -7353,6 +7518,9 @@ function drawToolCabinet(x, y) {
 
 // Marker board with multicolored sticky notes
 function drawMarkerBoard(x, y, boardLv) {
+    shadeSprite(x + 0, y + 0, 72, 52, () => _drawMarkerBoard(x, y, boardLv), { ground: 0 });
+}
+function _drawMarkerBoard(x, y, boardLv) {
     const t = Date.now();
     // Wooden frame — wider for readability
     ctx.fillStyle = '#6b4226';
@@ -8788,6 +8956,9 @@ function drawBlueFuton(x, y) {
 // Draw boss reclining on futon after a nap
 // Futon center passed as fx,fy (560,360). Seat cushion: y=fy-20..fy-2, x=fx-48..fx+48.
 function drawRecliningBoss(fx, fy) {
+    shadeSprite(fx + 0, fy + -26, 53, 29, () => _drawRecliningBoss(fx, fy), { ground: 0.10 });
+}
+function _drawRecliningBoss(fx, fy) {
     // The napping player — the bald manager lying on his back on the futon,
     // head on a pillow at the left, ankles crossed at the right, chest
     // slowly rising and falling with each breath.
@@ -8934,7 +9105,11 @@ function drawRecliningBoss(fx, fy) {
 // The player sprite while MUTANT ESCAPE mode is running: a hulking, hunched
 // PM in a torn red jumpsuit. Knuckle-walking gait, heaving breath, and a
 // wide-open maw while mid-bite.
-function drawMutantPlayer(x, y, facing, walking, eating) {
+function drawMutantPlayer(x, y, ...rest) {
+    shadeSprite(x + 0, y + -12, 46, 58, () => _drawMutantPlayer(x, y, ...rest));
+}
+
+function _drawMutantPlayer(x, y, facing, walking, eating) {
     // This is the SAME creature that was in the cage — after the detective
     // frees him you are playing his story, so every feature is matched to
     // the caged sprite: squared skull with a bulging brow, thick brows,
@@ -16271,7 +16446,11 @@ function drawLevel6CloningRoom() {
 }
 
 // === RED PM CLONE FOLLOWER — draws the clone at (x,y) in canonical PM style ===
-function drawCloneFollower(x, y, facing) {
+function drawCloneFollower(x, y, ...rest) {
+    shadeSprite(x + 0, y + -14, 40, 56, () => _drawCloneFollower(x, y, ...rest));
+}
+
+function _drawCloneFollower(x, y, facing) {
     const s = 2;
     const clt = Date.now();
     const isWalking = Math.abs(level6.cloneFollower.x - level6.cloneFollower.targetX) > 3;
@@ -20917,7 +21096,11 @@ function drawComputerUI() {
 
 
 // SECTION 12: Main Drawing and Scene Management
-function drawCEO(x, y, facing) {
+function drawCEO(x, y, ...rest) {
+    shadeSprite(x + 0, y + -16, 50, 66, () => _drawCEO(x, y, ...rest));
+}
+
+function _drawCEO(x, y, facing) {
     const s = 2;
 
     // Shadow
@@ -21473,6 +21656,9 @@ function drawCEO(x, y, facing) {
 }
 
 function drawDeadCEO(x, y) {
+    shadeSprite(x + 18, y + -8, 61, 30, () => _drawDeadCEO(x, y), { ground: 0.12 });
+}
+function _drawDeadCEO(x, y) {
     const s = 2;
 
     // Shadow
@@ -21621,6 +21807,9 @@ function drawPortraitUI() {
 
 
 function drawDeadCloningBoss(x, y) {
+    shadeSprite(x + 0, y + -1, 50, 16, () => _drawDeadCloningBoss(x, y), { ground: 0.12 });
+}
+function _drawDeadCloningBoss(x, y) {
     // Proper horizontal dead pose — body lying flat, head left, feet right
     // Shadow pool
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -22827,6 +23016,9 @@ function drawSelfDestructCave1() {
 
 // Back-view player drawn climbing a ladder — no front-facing tie/face elements
 function drawBackViewPlayerOnLadder(bx, py) {
+    shadeSprite(bx + 0, py + 9, 16, 43, () => _drawBackViewPlayerOnLadder(bx, py));
+}
+function _drawBackViewPlayerOnLadder(bx, py) {
     // Elegant back-view climber. py is the player anchor point (waist level).
     // Proportions match drawBaldManager so the player doesn't appear to
     // change size when stepping onto the ladder.
@@ -23797,6 +23989,9 @@ function drawSelfDestructCave2() {
 //   • Default (standing still)  → FRONT-FACING, like every other playable character.
 //   • Walking (left/right held)  → PROFILE view with horde-style animated limbs.
 function drawSkeletonPlayer(x, y, facing) {
+    shadeSprite(x + 0, y + 13, 21, 44, () => _drawSkeletonPlayer(x, y, facing));
+}
+function _drawSkeletonPlayer(x, y, facing) {
     const BONE = '#e8e2c8';
     const BONE_DARK = '#9a9480';
     const isWalking = Date.now() - player.lastMove < 150;
