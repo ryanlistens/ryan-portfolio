@@ -1901,7 +1901,7 @@ function _drawHeldDoc(x, y, colorName) {
 
 function drawMulletPro(x, y, ...rest) {
     const gy = y + FOOT_FIX.mulletPro;
-    shadeSprite(x + 0, gy + -18, 46, 74, () => _drawMulletPro(x, gy, ...rest));
+    shadeSprite(x + 0, gy + -16, 32, 70, () => _drawMulletPro(x, gy, ...rest));
 }
 
 function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
@@ -1927,7 +1927,7 @@ function drawMulletProAsPM(npc) {
     // keeps working.
     const oy = npc.y;
     npc.y = oy + FOOT_FIX.mulletProAsPM;
-    try { shadeSprite(npc.x, npc.y - 14, 48, 88, () => _drawMulletProAsPM(npc)); }
+    try { shadeSprite(npc.x, npc.y - 12, 36, 80, () => _drawMulletProAsPM(npc)); }
     finally { npc.y = oy; }
 }
 function _drawMulletProAsPM(npc) {
@@ -2117,7 +2117,7 @@ function _drawMulletProAsPM(npc) {
 
 function drawBaldManager(x, y, ...rest) {
     const gy = y + FOOT_FIX.baldManager;
-    shadeSprite(x + 0, gy + -18, 46, 74, () => _drawBaldManager(x, gy, ...rest));
+    shadeSprite(x + 0, gy + -16, 32, 70, () => _drawBaldManager(x, gy, ...rest));
 }
 
 function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
@@ -2135,7 +2135,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 // facing: 'left' | 'right' | 'forward'; paused stops the walk cycle; hasGun draws a revolver in the lead hand.
 function drawCloningBoss(bx, by, facing, paused, hasGun) {
     const gy = by + FOOT_FIX.cloningBoss;
-    shadeSprite(bx + 0, gy + -20, 48, 80, () => _drawCloningBoss(bx, gy, facing, paused, hasGun));
+    shadeSprite(bx + 0, gy + -18, 34, 76, () => _drawCloningBoss(bx, gy, facing, paused, hasGun));
 }
 
 function _drawCloningBoss(bx, by, facing, paused, hasGun) {
@@ -2238,7 +2238,7 @@ function _drawPipeManagerBack(x, y, color, animOffset) {
 
 // SECTION 7: Boss and NPC Drawing Functions
 function drawBoss(x, y, ...rest) {
-    shadeSprite(x + 0, y + -18, 46, 76, () => _drawBoss(x, y, ...rest));
+    shadeSprite(x + 0, y + -16, 32, 72, () => _drawBoss(x, y, ...rest));
 }
 
 function _drawBoss(x, y, facing) {
@@ -2292,7 +2292,7 @@ function drawNPC(npc) {
     // escalation stopped firing in levels 1-4 and the L6 employee pipe room.
     const oy = npc.y;
     npc.y = oy + FOOT_FIX.npc;
-    try { shadeSprite(npc.x + 0, npc.y + -18, 46, 76, () => _drawNPC(npc)); }
+    try { shadeSprite(npc.x + 0, npc.y + -16, 34, 72, () => _drawNPC(npc)); }
     finally { npc.y = oy; }
 }
 
@@ -5542,8 +5542,22 @@ const RIG_SCALE = 112 / 76;
 // 110px while the step stayed at 5px/frame, so he covered far less ground
 // relative to his own body and the pipe room felt stifled — same distance, many
 // more paces. This keeps the felt speed the same as the original game.
-const PLAYER_STEP = 8;                     // was 5, at a 67px player
+//
+// It also has to be TIME-based, not per-frame. Measured cost per room: the L5
+// hallway draws in 3.2ms and holds 60fps, the L5 pipe room takes 19.2ms and
+// drops to ~52 — so an identical "+= 8 per frame" walked visibly slower in the
+// pipe room than in the hallway, which is exactly the "doesn't feel like the
+// same game" mismatch. stepScale converts a per-frame constant into a
+// per-second one using the real frame delta, clamped so a stall or a
+// background tab cannot teleport the player across the room.
+const PLAYER_STEP = 8;                     // px per frame at 60fps
 const PLAYER_STEP_SLOW = 3;                // slow crawls (chute, ladders)
+let _frameDelta = 1000 / 60;               // ms since the previous frame
+function stepScale() {
+    return Math.max(0.25, Math.min(3, _frameDelta / (1000 / 60)));
+}
+const STEP = () => PLAYER_STEP * stepScale();
+const STEP_SLOW = () => PLAYER_STEP_SLOW * stepScale();
 
 function rigBuild(H0, build, o) {
     const H = H0 * RIG_SCALE;
@@ -6459,25 +6473,39 @@ const FOOT_FIX = {
 // a whiteboard, and resizing one canvas to fit each would reallocate its
 // backing store several times per frame; picking the smallest tier that fits
 // means each buffer is allocated once and reused for the life of the page.
+// Character shading boxes are sized from MEASURED ink, not guessed. When the
+// pipe-manager jump was clipping I widened every box as well as heightening it,
+// but the clipping was purely vertical: the ink is ~16px half-width against a
+// 46px half-box, so 72% of every character buffer was empty and still being
+// cleared, shaded and blitted every frame.
 const _sprPool = new Map();
 let _sprBusy = false;
 // The light model is a soft gradient, so it survives being rendered at 2x even
 // on a 3x phone. Capping here keeps the per-sprite fill area bounded.
 function _sprDpr() { return Math.min(dpr, 2); }
+// Tiers are SEPARATE per axis. They used to be square on max(w, h), so a
+// character sprite — tall and narrow, about 116x196 once the cast was scaled up
+// — landed in a 256x256 buffer and cleared eleven times the pixels it actually
+// covered. With several pipe managers on screen that alone put the L5 pipe room
+// at 19ms a frame while an empty hallway drew in 3. Quantising each axis to 32
+// keeps the pool small without paying for the empty half of the buffer.
+function _sprTier(v) { return Math.max(64, Math.ceil(v / 32) * 32); }
 function _sprBuffer(w, h) {
-    const tier = Math.max(64, 1 << Math.ceil(Math.log2(Math.max(w, h))));
+    const tw = _sprTier(w), th = _sprTier(h);
+    const key = tw + 'x' + th;
     const sd = _sprDpr();
-    let buf = _sprPool.get(tier);
+    let buf = _sprPool.get(key);
     if(!buf) {
         const cv = document.createElement('canvas');
-        const px = Math.ceil(tier * sd);
-        cv.width = px; cv.height = px;
-        buf = { cv, cx: cv.getContext('2d'), tier, px, grads: new Map() };
-        _sprPool.set(tier, buf);
+        const pw = Math.ceil(tw * sd), ph = Math.ceil(th * sd);
+        cv.width = pw; cv.height = ph;
+        buf = { cv, cx: cv.getContext('2d'), tier: tw, tierH: th, px: pw, pxH: ph, grads: new Map() };
+        _sprPool.set(key, buf);
     } else if(buf.px !== Math.ceil(buf.tier * sd)) {
         // dpr changed (window moved between displays) — resize once
         buf.px = Math.ceil(buf.tier * sd);
-        buf.cv.width = buf.px; buf.cv.height = buf.px;
+        buf.pxH = Math.ceil(buf.tierH * sd);
+        buf.cv.width = buf.px; buf.cv.height = buf.pxH;
         buf.grads.clear();   // gradients are bound to the context's old state
     }
     return buf;
@@ -6489,13 +6517,15 @@ function _sprGrads(buf, w, h, gA) {
     let g = buf.grads.get(k);
     if(g) return g;
     const bcx = buf.cx;
+    // Key light and cool rim in ONE ramp: the rim was a separate full-buffer
+    // pass covering only the leftmost 16%, which is the same region the key
+    // gradient's first stops already cover.
     const key = bcx.createLinearGradient(0, 0, w * 0.62, h);
-    key.addColorStop(0,    'rgba(255,250,238,0.17)');   // key light, top-left
+    key.addColorStop(0,    'rgba(214,232,255,0.26)');   // cool rim on the lit edge
+    key.addColorStop(0.10, 'rgba(255,250,238,0.17)');   // key light, top-left
     key.addColorStop(0.42, 'rgba(255,255,255,0.02)');
     key.addColorStop(1,    'rgba(4,6,26,0.24)');        // shadow side, lower-right
-    const rim = bcx.createLinearGradient(0, 0, w * 0.16, 0);
-    rim.addColorStop(0, 'rgba(190,215,255,0.13)');      // cool rim down the lit edge
-    rim.addColorStop(1, 'rgba(190,215,255,0)');
+    const rim = null;
     let gnd = null;
     if(gA > 0) {
         gnd = bcx.createLinearGradient(0, h * 0.62, 0, h);
@@ -6515,7 +6545,7 @@ function shadeSprite(cx, cy, halfW, halfH, drawFn, opts) {
     const w = Math.ceil(halfW * 2 + pad * 2);
     const h = Math.ceil(halfH * 2 + pad * 2);
     const buf = _sprBuffer(w, h);
-    if(w > buf.tier || h > buf.tier) { drawFn(); return; }   // safety net
+    if(w > buf.tier || h > buf.tierH) { drawFn(); return; }   // safety net
     const sd = _sprDpr();
     const bcx = buf.cx;
     bcx.setTransform(sd, 0, 0, sd, 0, 0);
@@ -6545,9 +6575,11 @@ function shadeSprite(cx, cy, halfW, halfH, drawFn, opts) {
     bcx.setTransform(sd, 0, 0, sd, 0, 0);
     bcx.globalAlpha = 1;                    // in case the sprite left it dimmed
     bcx.globalCompositeOperation = 'source-atop';
+    // Three full-buffer composite passes were half the cost of a busy room. The
+    // rim light is folded into the key gradient (both run left-to-right, so one
+    // ramp carries both), leaving two passes — and the ground shadow only when a
+    // sprite actually asks for one.
     bcx.fillStyle = g.key;
-    bcx.fillRect(0, 0, w, h);
-    bcx.fillStyle = g.rim;
     bcx.fillRect(0, 0, w, h);
     if(g.gnd) { bcx.fillStyle = g.gnd; bcx.fillRect(0, 0, w, h); }
     bcx.globalCompositeOperation = 'source-over';
@@ -17461,7 +17493,7 @@ function drawLevel6CloningRoom() {
 // === RED PM CLONE FOLLOWER — draws the clone at (x,y) in canonical PM style ===
 function drawCloneFollower(x, y, ...rest) {
     const gy = y + FOOT_FIX.cloneFollower;
-    shadeSprite(x + 0, gy + -20, 48, 80, () => _drawCloneFollower(x, gy, ...rest));
+    shadeSprite(x + 0, gy + -18, 34, 76, () => _drawCloneFollower(x, gy, ...rest));
 }
 
 function _drawCloneFollower(x, y, facing) {
@@ -22050,7 +22082,7 @@ function drawComputerUI() {
 // SECTION 12: Main Drawing and Scene Management
 function drawCEO(x, y, ...rest) {
     const gy = y + FOOT_FIX.ceo;
-    shadeSprite(x + 0, gy + -20, 52, 80, () => _drawCEO(x, gy, ...rest));
+    shadeSprite(x + 0, gy + -18, 36, 76, () => _drawCEO(x, gy, ...rest));
 }
 
 function _drawCEO(x, y, facing) {
@@ -24351,7 +24383,7 @@ function drawSelfDestructCave2() {
 function drawSkeletonPlayer(x, y, facing) {
     // On the rig's foot convention now, so it needs no FOOT_FIX — leaving the
     // old -13 in place floated the skeleton 14px above the floor.
-    shadeSprite(x + 0, y + -18, 40, 76, () => _drawSkeletonPlayer(x, y + 1, facing));
+    shadeSprite(x + 0, y + -16, 30, 72, () => _drawSkeletonPlayer(x, y + 1, facing));
 }
 function _drawSkeletonPlayer(x, y, facing) {
     // REBUILT ON THE RIG. This is the PLAYER'S OWN skeleton, so it is laid out
@@ -28032,7 +28064,7 @@ function update() {
     // ── SELF-DESTRUCT SEQUENCE UPDATE ────────────────────────────────────────
     if(state === 'selfDestructSeq') {
         const sds = selfDestructSeq;
-        const speed = 5.6;   // scaled with the cast (was 3.4 at a 67px player)
+        const speed = 5.6 * stepScale();   // scaled with the cast, and time-based
         const floorY = 380;
 
         if(sds.room === 'hatch') {
@@ -28835,7 +28867,7 @@ function update() {
 
             if(keys['ArrowLeft'] || keys['left']) {
                 level5.napReclining = false;
-                player.x = Math.max(40, player.x - PLAYER_STEP);
+                player.x = Math.max(40, player.x - STEP());
                 if(player.x !== prevX) {
                     player.facing = 'left';
                     player.lastMove = Date.now();
@@ -28843,7 +28875,7 @@ function update() {
             }
             if(keys['ArrowRight'] || keys['right']) {
                 level5.napReclining = false;
-                player.x = Math.min(660, player.x + PLAYER_STEP);
+                player.x = Math.min(660, player.x + STEP());
                 if(player.x !== prevX) {
                     player.facing = 'right';
                     player.lastMove = Date.now();
@@ -28851,12 +28883,12 @@ function update() {
             }
             if(keys['ArrowUp'] || keys['up']) {
                 level5.napReclining = false;
-                player.y = Math.max(100, player.y - PLAYER_STEP);
+                player.y = Math.max(100, player.y - STEP());
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
             if(keys['ArrowDown'] || keys['down']) {
                 level5.napReclining = false;
-                player.y = Math.min(480, player.y + PLAYER_STEP);
+                player.y = Math.min(480, player.y + STEP());
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
 
@@ -28954,7 +28986,7 @@ function update() {
                 if(dist > 80) {
                     // Move toward player
                     cat.state = 'walking';
-                    const speed = PLAYER_STEP_SLOW;   // scaled with the cast (was 1.8)
+                    const speed = STEP_SLOW();   // scaled with the cast (was 1.8)
                     cat.x += (dx / dist) * speed;
                     cat.y += (dy / dist) * speed;
                     cat.facing = dx < 0 ? 'left' : 'right';
@@ -29063,14 +29095,14 @@ function update() {
                     player.y = 380;
                     const prevX = player.x;
                     if(keys['ArrowLeft'] || keys['left']) {
-                        player.x = Math.max(20, player.x - PLAYER_STEP);
+                        player.x = Math.max(20, player.x - STEP());
                         if(player.x !== prevX) {
                             player.facing = 'left';
                             player.lastMove = Date.now();
                         }
                     }
                     if(keys['ArrowRight'] || keys['right']) {
-                        player.x = Math.min(680, player.x + PLAYER_STEP);
+                        player.x = Math.min(680, player.x + STEP());
                         if(player.x !== prevX) {
                             player.facing = 'right';
                             player.lastMove = Date.now();
@@ -30099,14 +30131,14 @@ function update() {
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(10, player.x - PLAYER_STEP);
+                    player.x = Math.max(10, player.x - STEP());
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(690, player.x + PLAYER_STEP);
+                    player.x = Math.min(690, player.x + STEP());
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
@@ -31742,28 +31774,28 @@ if (keys[' '] || keys['action']) {
                     const prevY = player.y;
 
                     if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(60, player.x - PLAYER_STEP);
+                    player.x = Math.max(60, player.x - STEP());
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(640, player.x + PLAYER_STEP);
+                    player.x = Math.min(640, player.x + STEP());
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowUp'] || keys['up']) {
-                    player.y = Math.max(80, player.y - PLAYER_STEP);
+                    player.y = Math.max(80, player.y - STEP());
                     if(player.y !== prevY) {
                         player.facing = 'up';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowDown'] || keys['down']) {
-                    player.y = Math.min(450, player.y + PLAYER_STEP);
+                    player.y = Math.min(450, player.y + STEP());
                     if(player.y !== prevY) {
                         player.facing = 'down';
                         player.lastMove = Date.now();
@@ -32800,14 +32832,14 @@ if (keys[' '] || keys['action']) {
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
         if(keys['ArrowLeft'] || keys['left']) {
-            player.x = Math.max(20, player.x - PLAYER_STEP);
+            player.x = Math.max(20, player.x - STEP());
             if(player.x !== prevX) {
                 player.facing = 'left';
                 player.lastMove = Date.now();
             }
         }
         if(keys['ArrowRight'] || keys['right']) {
-            player.x = Math.min(680, player.x + PLAYER_STEP);
+            player.x = Math.min(680, player.x + STEP());
             if(player.x !== prevX) {
                 player.facing = 'right';
                 player.lastMove = Date.now();
@@ -33310,6 +33342,7 @@ function gameLoop() {
     }
     player._stPrev = player.shootTimer > 0;
     const now = Date.now();
+    _frameDelta = Math.max(1, now - lastTime);   // drives time-based movement
     counter += now - lastTime;
     lastTime = now;
     
