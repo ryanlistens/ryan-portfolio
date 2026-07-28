@@ -5969,19 +5969,27 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
 function rigHoodBehind(yaw, rz) {
     return rigRot(0, 0, -rz, yaw).z < 0;
 }
-function rigHoodShell(cx, cy, rx, ry, rz, yaw, ramp) {
+// shoulderY / shoulderHalf let the hood reach DOWN to the yoke. This is a
+// hazmat-lite coverall: the hood is continuous fabric off the shoulders, not
+// a separate dome parked behind the head, which is how it was reading.
+function rigHoodShell(cx, cy, rx, ry, rz, yaw, ramp, shoulderY, shoulderHalf) {
     const cs = Math.cos(yaw), sn = Math.sin(yaw);
     const back = rigRot(0, 0, -rz * 0.34, yaw);        // shell sits off the nape
     const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2);
     const R = halfW * 1.20;
     const bx = cx + back.x, by = cy - ry * 0.06;
-    // Dome: round over the crown, dropping to a squarer opening at the neck
+    const shY = (shoulderY === undefined) ? by + ry * 0.86 : shoulderY;
+    const shH = (shoulderHalf === undefined) ? R : Math.max(R * 0.92, shoulderHalf * 0.72);
+    // One continuous drape: shoulder -> up over the crown -> back to shoulder,
+    // so hood and suit are the same piece of fabric.
     ctx.fillStyle = ramp.base;
     ctx.beginPath();
-    ctx.moveTo(bx - R, by + ry * 0.86);
-    ctx.quadraticCurveTo(bx - R * 1.06, by - ry * 0.72, bx, by - ry * 1.22);
-    ctx.quadraticCurveTo(bx + R * 1.06, by - ry * 0.72, bx + R, by + ry * 0.86);
-    ctx.quadraticCurveTo(bx, by + ry * 1.10, bx - R, by + ry * 0.86);
+    ctx.moveTo(bx - shH, shY);
+    ctx.quadraticCurveTo(bx - R * 1.10, by - ry * 0.30, bx - R * 0.94, by - ry * 0.86);
+    ctx.quadraticCurveTo(bx - R * 0.40, by - ry * 1.30, bx, by - ry * 1.26);
+    ctx.quadraticCurveTo(bx + R * 0.40, by - ry * 1.30, bx + R * 0.94, by - ry * 0.86);
+    ctx.quadraticCurveTo(bx + R * 1.10, by - ry * 0.30, bx + shH, shY);
+    ctx.quadraticCurveTo(bx, shY + ry * 0.22, bx - shH, shY);
     ctx.closePath();
     ctx.fill();
     // Shading: the shell turns away from the key light on the trailing side
@@ -5993,11 +6001,20 @@ function rigHoodShell(cx, cy, rx, ry, rz, yaw, ramp) {
     ctx.beginPath();
     ctx.ellipse(bx - R * 0.40, by - ry * 0.60, R * 0.34, ry * 0.20, -0.22, 0, Math.PI * 2);
     ctx.fill();
-    // Gathered fabric where the hood meets the shoulders
-    ctx.fillStyle = ramp.dark;
+    // Yoke seam where the hood is stitched into the shoulders of the suit,
+    // plus a drawcord channel round the opening
+    ctx.strokeStyle = charMix(ramp.dark, '#000', 0.28);
+    ctx.lineWidth = Math.max(1, R * 0.13);
     ctx.beginPath();
-    ctx.ellipse(bx, by + ry * 0.92, R * 0.86, ry * 0.26, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(bx - shH * 0.94, shY - ry * 0.06);
+    ctx.quadraticCurveTo(bx, shY + ry * 0.14, bx + shH * 0.94, shY - ry * 0.06);
+    ctx.stroke();
+    ctx.strokeStyle = charMix(ramp.dark, '#000', 0.16);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx - R * 0.92, by - ry * 0.66);
+    ctx.quadraticCurveTo(bx, by - ry * 1.06, bx + R * 0.92, by - ry * 0.66);
+    ctx.stroke();
 }
 
 // Torso as a tapered box: shoulder and hip rectangles in body space, projected
@@ -6284,7 +6301,8 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     }
     if(c.hood && rigHoodBehind(yaw, c.headRz)) {
         const hy = yBase + (c.headY === undefined ? -18 : c.headY);
-        rigHoodShell(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+        const shW0 = Math.sqrt((c.shHalf * cw) ** 2 + (c.depth * sw) ** 2);
+        rigHoodShell(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp, shY + 2, shW0);
     }
     drawArm(arms[1].side);
 
@@ -6300,7 +6318,8 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
             { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
     // ...and if they have turned away, the shell is now in FRONT of the skull
     if(c.hood && !rigHoodBehind(yaw, c.headRz)) {
-        rigHoodShell(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+        const shW1 = Math.sqrt((c.shHalf * Math.cos(yaw)) ** 2 + (c.depth * Math.sin(yaw)) ** 2);
+        rigHoodShell(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp, shY + 2, shW1);
     }
 }
 
