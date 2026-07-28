@@ -1693,6 +1693,18 @@ function initLevel(lv) {
     }
 }
 
+// Movement is applied PER FRAME, and the rooms do not render at the same rate:
+// an empty hallway draws in 0.6ms and holds 60fps, the level-5 pipe room takes
+// ~14ms and drops below it on anything but a fast machine. Identical input
+// therefore walked visibly slower in the pipe room than in the hallway or in
+// levels 1-4 — the molasses. stepScale() converts a per-frame constant into a
+// per-second one using the real frame delta, clamped so a stall or a
+// backgrounded tab cannot teleport the player across the room.
+let _frameDelta = 1000 / 60;
+function stepScale() {
+    return Math.max(0.25, Math.min(3, _frameDelta / (1000 / 60)));
+}
+
 function startGame() {
     state = 'levelCard';
     level = 1;
@@ -3303,6 +3315,11 @@ function updateNPCPipeAnimation(npc) {
 }
 
 function drawNPC(npc) {
+    // Devoured NPCs never draw, whatever the call site. Guarding only the room
+    // loops was not enough: drawNPC is reached from several places, so an eaten
+    // pipe manager kept appearing even though he was no longer edible — which is
+    // exactly the reported symptom, nobody vanishing while the counter climbed.
+    if(npcDevoured(npc)) return;
     // Shift y on the REAL object, not a clone. _drawNPC finds this NPC's pipe
     // crack with `cracks.find(c => c.npc === npc)` — an identity check — so a
     // prototype clone silently failed it and the whole pace -> jump -> scream
@@ -6043,20 +6060,27 @@ let _sprBusy = false;
 // The light model is a soft gradient, so it survives being rendered at 2x even
 // on a 3x phone. Capping here keeps the per-sprite fill area bounded.
 function _sprDpr() { return Math.min(dpr, 2); }
+// Tiers are SEPARATE per axis. A square tier on max(w, h) put every tall, narrow
+// character sprite in a buffer twice the area it needs, and the buffer is
+// cleared, shaded and blitted every frame — with four pipe managers on screen
+// that is most of why the pipe room costs 16ms while an empty hallway costs 3.
+function _sprTier(v) { return Math.max(64, Math.ceil(v / 32) * 32); }
 function _sprBuffer(w, h) {
-    const tier = Math.max(64, 1 << Math.ceil(Math.log2(Math.max(w, h))));
+    const tw = _sprTier(w), th = _sprTier(h);
+    const key = tw + 'x' + th;
     const sd = _sprDpr();
-    let buf = _sprPool.get(tier);
+    let buf = _sprPool.get(key);
     if(!buf) {
         const cv = document.createElement('canvas');
-        const px = Math.ceil(tier * sd);
-        cv.width = px; cv.height = px;
-        buf = { cv, cx: cv.getContext('2d'), tier, px, grads: new Map() };
-        _sprPool.set(tier, buf);
+        const pw = Math.ceil(tw * sd), ph = Math.ceil(th * sd);
+        cv.width = pw; cv.height = ph;
+        buf = { cv, cx: cv.getContext('2d'), tier: tw, tierH: th, px: pw, pxH: ph, grads: new Map() };
+        _sprPool.set(key, buf);
     } else if(buf.px !== Math.ceil(buf.tier * sd)) {
         // dpr changed (window moved between displays) — resize once
         buf.px = Math.ceil(buf.tier * sd);
-        buf.cv.width = buf.px; buf.cv.height = buf.px;
+        buf.pxH = Math.ceil(buf.tierH * sd);
+        buf.cv.width = buf.px; buf.cv.height = buf.pxH;
         buf.grads.clear();   // gradients are bound to the context's old state
     }
     return buf;
@@ -6094,7 +6118,7 @@ function shadeSprite(cx, cy, halfW, halfH, drawFn, opts) {
     const w = Math.ceil(halfW * 2 + pad * 2);
     const h = Math.ceil(halfH * 2 + pad * 2);
     const buf = _sprBuffer(w, h);
-    if(w > buf.tier || h > buf.tier) { drawFn(); return; }   // safety net
+    if(w > buf.tier || h > buf.tierH) { drawFn(); return; }   // safety net
     const sd = _sprDpr();
     const bcx = buf.cx;
     bcx.setTransform(sd, 0, 0, sd, 0, 0);
@@ -8458,6 +8482,7 @@ function drawLevel5PipeRoom() {
     ctx.fillRect(260, 275, 380, 95);
 
     for(let npc of level5.npcPipes) {
+        if(npcDevoured(npc)) continue;
         const pipeY = 210;
         const gasketY = 74; // Lowered from 54 to give ceiling breathing room
 
@@ -8704,6 +8729,7 @@ function drawLevel6EmployeePipeRoom() {
 
     // NPC pipe stations — RED PM's pipe stays (don't remove red pipe); only skip drawing the NPC person
     for(let npc of level5.npcPipes) {
+        if(npcDevoured(npc)) continue;
         const pipeY = 210;
         const gasketY = 74;
 
@@ -9894,6 +9920,33 @@ function drawMutantHUD() {
 function hasPalmCredential() {
     return level6.hasPMHand || !!(level6.mutantMode && level6.mutantMode.active);
 }
+
+// An NPC the mutant has devoured is GONE: it must stop drawing, stop running its
+// crack timer, and stop being a target. Only findMutantMeal checked the flag, so
+// eaten managers stayed on screen and kept their pipes cracking, and the next
+// ACTION press simply ate the one standing beside them — which is why the
+// devoured counter climbed while nobody ever disappeared.
+// The CEO has three audiences: the employee he is buttering up, the detective he
+// is threatening, and the seven-foot specimen that just came through his door.
+// The lines used to be inlined at three call sites as a two-way ternary, so a
+// mutant walking in got the detective's speech.
+function ceoDialogueFor(type) {
+    if(type === 'mutant') return [
+        "I was wrong, Red. Name your price.",
+        "I'll give you anything!",
+    ];
+    if(type === 'boss') return [
+        "I've been watching all your good work, my boy.",
+        "You deserve a raise.",
+        "Take this\u2026",
+    ];
+    return [
+        "You just couldn't leave well enough alone, detective.",
+        "Perhaps you'd like to examine a few more shell casings\u2026",
+    ];
+}
+
+function npcDevoured(n) { return !!(n && (n.eatenByMutant || n.state === 'gone')); }
 
 function findMutantMeal() {
     // EVERYTHING is food. This used to cover only the pipe-room managers, the
@@ -13393,17 +13446,32 @@ function drawNuclearAssemblyBridge() {
                 }
             }
 
-            // Replacement reverses in from off-screen right, only once the dock
-            // is clear. Reversing is correct here — the crate loads through the
-            // rear doors on its left, and there is no road to its left to drive
-            // in from, with the crate bay sitting at x=520.
+            // Replacement drives in from the LEFT, cab leading, once the dock
+            // is clear. It used to REVERSE in from the right, which is what a
+            // real loading dock does but reads as a three-point turn here: the
+            // truck is a box with a small cab, so at this size the end that led
+            // on the way in becoming the trailing end on the way out looks like
+            // the back morphing into a cab. One-way flow instead — every truck
+            // on screen now moves right, cab first, same as the street traffic.
+            //
+            // Driving in from the left is clear: the crate is not drawn during a
+            // swap (it has just been loaded), so there is nothing at the crate
+            // bay for the truck to pass through, and it arrives with its rear
+            // doors already facing the bay, ready for the next crate.
             if (arriveP > 0) {
-                const arriveStart = dockL + 300;
-                const arriveX = arriveStart - easeIO(arriveP) * (arriveStart - dockL);
+                const arriveStart = dockL - 300;
+                const arriveX = arriveStart + easeIO(arriveP) * (dockL - arriveStart);
                 drawTruck(arriveX, 1, false, null);
-                if (arriveP < 0.97 && Math.floor(_ft / 350) % 2 === 0) {
-                    ctx.fillStyle = '#ff8800'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-                    ctx.fillText('BEEP', arriveX + trW / 2, trY - trH - 8);
+                if (arriveP < 0.9) {
+                    ctx.globalAlpha = (1 - arriveP) * 0.25; ctx.fillStyle = '#555';
+                    for (let ei = 0; ei < 3; ei++) {
+                        const exX = arriveX - 4 - ei * 12 - Math.sin(_ft * 0.005 + ei) * 3;
+                        const exY = trY - 8 - ei * 4;
+                        ctx.beginPath();
+                        ctx.arc(exX, exY, 3 + ei * 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
                 }
             }
         } else {
@@ -25924,13 +25992,13 @@ function drawScene() {
             ctx.fillStyle = '#8fd16a';
             ctx.font = 'bold 52px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('ESCAPED', 350, 170);
+            ctx.fillText('ESCAPED', 350, 165);
             ctx.fillStyle = '#cfe6bd';
-            ctx.font = '22px Arial';
-            ctx.fillText('The specimen reached the treeline.', 350, 215);
+            ctx.font = '20px Arial';
+            ctx.fillText('The specimen reached the treeline.', 350, 208);
             ctx.fillStyle = '#e8b04a';
-            ctx.font = 'bold 24px Arial';
-            ctx.fillText('Devoured: ' + (level6.mutantMode ? level6.mutantMode.eaten : 0), 350, 262);
+            ctx.font = 'bold 26px Arial';
+            ctx.fillText('Devoured: ' + (level6.mutantMode ? level6.mutantMode.eaten : 0), 350, 250);
         } else if(state === 'win') {
             ctx.fillStyle = '#27ae60';
             ctx.font = 'bold 56px Arial';
@@ -25969,7 +26037,12 @@ function drawScene() {
             ctx.fillText('YOU WIN!', 350, 220);
         }
         
-        if(state !== 'victory' && state !== 'theend' && state !== 'gameover' && state !== 'fired') {
+        // The escape card carries its own metric — how many people he ate — and
+        // draws its own lines around y=215-260. The shared FINAL SCORE line is
+        // pinned at y=240, so it landed straight through the middle of them.
+        // A corporate score is meaningless for that ending anyway.
+        if(state !== 'victory' && state !== 'theend' && state !== 'gameover' &&
+           state !== 'fired' && state !== 'mutantFree') {
             ctx.fillStyle = '#f5f2ec';
             ctx.font = '32px Arial';
             ctx.textAlign = 'center';
@@ -26573,7 +26646,10 @@ function drawScene() {
             const shouldDrawPlayer = (!level6.safeUI && !level6.computerUI) || level6.npcExitSequence;
             if(shouldDrawPlayer && !level6.endingTriggered) {
                 const hasGun = (level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun || level6.hasWrenchGun;
-                drawBaldManager(player.x, player.y, player.facing, player.holding, hasGun);
+                // Through drawL6Player, not drawBaldManager: this was the one
+                // room that drew the player sprite directly, so walking in as
+                // the mutant turned you back into the detective on the spot.
+                drawL6Player(player.x, player.y, player.facing, player.holding, hasGun);
 
                 if(hasGun) {
                     if(level6.hasRevolver && level6.revolverAmmo > 0) {
@@ -26588,9 +26664,7 @@ function drawScene() {
 
             // CEO entry dialogue overlay
             if(level6.ceoDialogue) {
-                const dlgLines = level6.ceoDialogueType === 'boss'
-                    ? ["I've been watching all your good work, my boy.", "You deserve a raise.", "Take this\u2026"]
-                    : ["You just couldn't leave well enough alone, detective.", "Perhaps you'd like to examine a few more shell casings\u2026"];
+                const dlgLines = ceoDialogueFor(level6.ceoDialogueType);
                 const currentLine = dlgLines[level6.ceoDialogueLine] || '';
                 const charsShown = Math.min(Math.floor(level6.ceoDialogueChars), currentLine.length);
                 const displayText = currentLine.substring(0, charsShown);
@@ -26609,7 +26683,8 @@ function drawScene() {
                 // Speaker name
                 ctx.font = 'bold 18px Arial';
                 ctx.textAlign = 'left';
-                ctx.fillStyle = level6.ceoDialogueType === 'boss' ? '#ffd700' : '#cc3333';
+                ctx.fillStyle = level6.ceoDialogueType === 'boss' ? '#ffd700'
+                    : level6.ceoDialogueType === 'mutant' ? '#ffaa33' : '#cc3333';
                 ctx.fillText('ALDON PIPERSWORTH', dlgX + 20, dlgY + 26);
 
                 // Dialogue text — wrap across two lines if needed
@@ -28051,6 +28126,7 @@ function drawScene() {
     }
 
     for(let npc of npcs) {
+        if(npcDevoured(npc)) continue;
         const pipeY = 210;
         const gasketY = 74; // Lowered from 54 to give ceiling breathing room
 
@@ -28449,7 +28525,7 @@ function update() {
     // ── SELF-DESTRUCT SEQUENCE UPDATE ────────────────────────────────────────
     if(state === 'selfDestructSeq') {
         const sds = selfDestructSeq;
-        const speed = 3.4;
+        const speed = 3.4 * stepScale();
         const floorY = 380;
 
         if(sds.room === 'hatch') {
@@ -29004,6 +29080,7 @@ function update() {
 
         // NPC crack spawning
         for(let npc of level5.npcPipes) {
+            if(npcDevoured(npc)) continue;
             if(!npc.needsDoc && npc.state === 'happy' && Math.random() < 0.0003) {
                 npc.needsDoc = true;
                 npc.crackStartTime = Date.now();
@@ -29252,7 +29329,7 @@ function update() {
 
             if(keys['ArrowLeft'] || keys['left']) {
                 level5.napReclining = false;
-                player.x = Math.max(40, player.x - 5);
+                player.x = Math.max(40, player.x - 5 * stepScale());
                 if(player.x !== prevX) {
                     player.facing = 'left';
                     player.lastMove = Date.now();
@@ -29260,7 +29337,7 @@ function update() {
             }
             if(keys['ArrowRight'] || keys['right']) {
                 level5.napReclining = false;
-                player.x = Math.min(660, player.x + 5);
+                player.x = Math.min(660, player.x + 5 * stepScale());
                 if(player.x !== prevX) {
                     player.facing = 'right';
                     player.lastMove = Date.now();
@@ -29268,12 +29345,12 @@ function update() {
             }
             if(keys['ArrowUp'] || keys['up']) {
                 level5.napReclining = false;
-                player.y = Math.max(100, player.y - 5);
+                player.y = Math.max(100, player.y - 5 * stepScale());
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
             if(keys['ArrowDown'] || keys['down']) {
                 level5.napReclining = false;
-                player.y = Math.min(480, player.y + 5);
+                player.y = Math.min(480, player.y + 5 * stepScale());
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
 
@@ -29480,14 +29557,14 @@ function update() {
                     player.y = 380;
                     const prevX = player.x;
                     if(keys['ArrowLeft'] || keys['left']) {
-                        player.x = Math.max(20, player.x - 5);
+                        player.x = Math.max(20, player.x - 5 * stepScale());
                         if(player.x !== prevX) {
                             player.facing = 'left';
                             player.lastMove = Date.now();
                         }
                     }
                     if(keys['ArrowRight'] || keys['right']) {
-                        player.x = Math.min(680, player.x + 5);
+                        player.x = Math.min(680, player.x + 5 * stepScale());
                         if(player.x !== prevX) {
                             player.facing = 'right';
                             player.lastMove = Date.now();
@@ -29619,6 +29696,7 @@ function update() {
             // NPC pipe crack spawning for Employee Pipe Room (L5 NPCs, reused in L6)
             if(level6.room === 'employeePipeRoom') {
                 for(let npc of level5.npcPipes) {
+                    if(npcDevoured(npc)) continue;
                     // Skip RED — Red PM is absent (cloned)
                     if(npc.color.name === 'RED') continue;
                     if(!npc.needsDoc && npc.state === 'happy' && Math.random() < 0.0003) {
@@ -29696,9 +29774,7 @@ function update() {
             if(level6.room === 'ceoOffice') {
             // Advance typing animation during dialogue
             if(level6.ceoDialogue) {
-                const dlgLines = level6.ceoDialogueType === 'boss'
-                    ? ["I've been watching all your good work, my boy.", "You deserve a raise.", "Take this\u2026"]
-                    : ["You just couldn't leave well enough alone, detective.", "Perhaps you'd like to examine a few more shell casings\u2026"];
+                const dlgLines = ceoDialogueFor(level6.ceoDialogueType);
                 const currentLine = dlgLines[level6.ceoDialogueLine] || '';
                 if(level6.ceoDialogueChars < currentLine.length) {
                     const _cPrev = Math.floor(level6.ceoDialogueChars / 4);
@@ -30519,14 +30595,14 @@ function update() {
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(10, player.x - 5);
+                    player.x = Math.max(10, player.x - 5 * stepScale());
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(690, player.x + 5);
+                    player.x = Math.min(690, player.x + 5 * stepScale());
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
@@ -31682,12 +31758,15 @@ function update() {
                         level6.ceoEnteredMurderMode = true;
                         ceo.shootTimer = 0;
                         ceo.health = 6;
-                        // Trigger detective dialogue
+                        // Trigger detective dialogue — unless what came through
+                        // the door is the specimen, in which case he is not
+                        // threatening anybody, he is bargaining.
                         if(!level6.ceoDialogueShown) {
                             level6.ceoDialogue = true;
                             level6.ceoDialogueLine = 0;
                             level6.ceoDialogueChars = 0;
-                            level6.ceoDialogueType = 'detective';
+                            level6.ceoDialogueType =
+                                (level6.mutantMode && level6.mutantMode.active) ? 'mutant' : 'detective';
                             level6.ceoDialogueShown = true;
                             ceo.facing = 'forward';
                         }
@@ -31706,7 +31785,8 @@ function update() {
                             level6.ceoDialogue = true;
                             level6.ceoDialogueLine = 0;
                             level6.ceoDialogueChars = 0;
-                            level6.ceoDialogueType = 'boss';
+                            level6.ceoDialogueType =
+                                (level6.mutantMode && level6.mutantMode.active) ? 'mutant' : 'boss';
                             level6.ceoDialogueShown = true;
                             ceo.facing = 'forward';
                             ceo.walkTarget = null; // hold position during dialogue
@@ -31719,9 +31799,7 @@ function update() {
                 if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
                 // CEO entry dialogue — block all other input until dismissed
                 if(level6.ceoDialogue) {
-                    const dlgLines = level6.ceoDialogueType === 'boss'
-                        ? ["I've been watching all your good work, my boy.", "You deserve a raise.", "Take this\u2026"]
-                        : ["You just couldn't leave well enough alone, detective.", "Perhaps you'd like to examine a few more shell casings\u2026"];
+                    const dlgLines = ceoDialogueFor(level6.ceoDialogueType);
                     if(keys[' '] || keys['action']) {
                         keys[' '] = false;
                         keys['action'] = false;
@@ -32172,28 +32250,28 @@ if (keys[' '] || keys['action']) {
                     const prevY = player.y;
 
                     if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(60, player.x - 5);
+                    player.x = Math.max(60, player.x - 5 * stepScale());
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(640, player.x + 5);
+                    player.x = Math.min(640, player.x + 5 * stepScale());
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowUp'] || keys['up']) {
-                    player.y = Math.max(80, player.y - 5);
+                    player.y = Math.max(80, player.y - 5 * stepScale());
                     if(player.y !== prevY) {
                         player.facing = 'up';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowDown'] || keys['down']) {
-                    player.y = Math.min(450, player.y + 5);
+                    player.y = Math.min(450, player.y + 5 * stepScale());
                     if(player.y !== prevY) {
                         player.facing = 'down';
                         player.lastMove = Date.now();
@@ -33230,14 +33308,14 @@ if (keys[' '] || keys['action']) {
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
         if(keys['ArrowLeft'] || keys['left']) {
-            player.x = Math.max(20, player.x - 5);
+            player.x = Math.max(20, player.x - 5 * stepScale());
             if(player.x !== prevX) {
                 player.facing = 'left';
                 player.lastMove = Date.now();
             }
         }
         if(keys['ArrowRight'] || keys['right']) {
-            player.x = Math.min(680, player.x + 5);
+            player.x = Math.min(680, player.x + 5 * stepScale());
             if(player.x !== prevX) {
                 player.facing = 'right';
                 player.lastMove = Date.now();
@@ -33598,6 +33676,7 @@ if (keys[' '] || keys['action']) {
             }
             
             for(let npc of npcs) {
+                if(npcDevoured(npc)) continue;
                 // In hell mode, any doc satisfies any PM (no color matching)
                 if(Math.abs(player.x - npc.x) < 45 && npc.needsDoc && (hellMode || npc.color.name === player.holding)) {
                     npc.needsDoc = false;
@@ -33740,6 +33819,7 @@ function gameLoop() {
     }
     player._stPrev = player.shootTimer > 0;
     const now = Date.now();
+    _frameDelta = Math.max(1, now - lastTime);   // drives frame-rate-independent movement
     counter += now - lastTime;
     lastTime = now;
     
