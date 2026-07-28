@@ -1708,6 +1708,16 @@ function startGame() {
     skipPressCount = 0;
     skipGreenPressCount = 0;
     skipRedPressCount = 0;
+    // Levels 5 and 6 keep their state in long-lived objects that initLevel only
+    // touches when you actually ENTER that level, so a replay inherited the
+    // previous run's flags. level6.cloningDoorUnlocked in particular rewires the
+    // level-5 furnace room: with it set, the left door fires on proximity
+    // instead of on ACTION and the right door drops you straight into level 6 —
+    // which is why replaying could land you in a furnace room whose doors threw
+    // you into the level-6 ending. Running both initialisers first clears every
+    // field they own; initLevel has no side effects beyond state.
+    initLevel(6);
+    initLevel(5);
     initLevel(1);
     updateLives();
 
@@ -9820,6 +9830,11 @@ const MUTANT_JUMP_FRAMES = 58;
 // its anchor — so he lands on the grass instead of floating over it.
 const MUTANT_FREE_HORIZON = 372;
 const MUTANT_FOOT_OFS = 35;
+// The rampage has to last long enough to take the REAL route out: up the
+// elevator from the pipe room to the employee floor, across to RED's office.
+// At 30s the only way through was a shortcut that welded the office hallway
+// onto the underbelly cage, which made the building's geography nonsense.
+const MUTANT_SECONDS = 75;
 
 // MUTANT ESCAPE HUD — countdown, meals eaten, and the current objective
 function drawMutantHUD() {
@@ -9871,24 +9886,58 @@ function drawMutantHUD() {
 // with a kill() that removes it, or null. Kept deliberately narrow: the PMs
 // on their ladders, the hallway supervisor, and the red clone.
 function findMutantMeal() {
+    // EVERYTHING is food. This used to cover only the pipe-room managers, the
+    // two cloning bosses and the clone follower, so most of the building was
+    // mysteriously inedible — the bridge guard, the CEO, Mullet Pro and the
+    // level-5 managers all walked around untouchable while you starved.
     const R = level6.room;
-    const near = (x) => Math.abs(player.x - x) < 62;
-    if(R === 'employeePipeRoom' || R === 'pipeRoom') {
-        const list = (R === 'pipeRoom') ? npcs : level5.npcPipes;
-        if(list) for(const n of list) {
-            if(n && !n.eatenByMutant && near(n.x)) {
-                return { x: n.x, kill: () => { n.eatenByMutant = true; n.needsDoc = false; n.state = 'gone'; } };
-            }
+    const near = (x, r) => Math.abs(player.x - x) < (r || 62);
+
+    // Pipe managers, whichever list this room uses
+    for(const list of [npcs, level5.npcPipes]) {
+        if(!list) continue;
+        for(const n of list) {
+            if(!n || n.eatenByMutant || n.state === 'gone') continue;
+            if(!near(n.x)) continue;
+            // level-5 managers only count in the rooms they are actually in
+            if(list === level5.npcPipes && R !== 'employeePipeRoom' && R !== 'pipeRoom') continue;
+            if(list === npcs && R !== 'pipeRoom' && R !== 'employeePipeRoom') continue;
+            return { x: n.x, kill: () => {
+                n.eatenByMutant = true; n.needsDoc = false; n.state = 'gone';
+            } };
         }
     }
-    if(R === 'employeeHallway') {
-        const b = level6.hallwayCloningBoss;
-        if(b && b.alive && near(b.x)) return { x: b.x, kill: () => { b.alive = false; b.deathTime = Date.now(); } };
+    // Cloning bosses, wherever they stand
+    const bosses = [
+        [level6.hallwayCloningBoss, 'employeeHallway'],
+        [level6.cloningBoss,        'cloningRoom'],
+        [level6.bridgeCloningBoss,  'nuclearBridge'],
+    ];
+    for(const [b, room] of bosses) {
+        if(b && b.alive && R === room && near(b.x)) {
+            return { x: b.x, kill: () => { b.alive = false; b.deathTime = Date.now(); } };
+        }
     }
-    if(R === 'cloningRoom') {
-        const cb = level6.cloningBoss;
-        if(cb && cb.alive && near(cb.x)) return { x: cb.x, kill: () => { cb.alive = false; cb.deathTime = Date.now(); } };
+    // The CEO himself
+    if(R === 'ceoOffice' && typeof ceo !== 'undefined' && ceo && ceo.state !== 'dead' && near(ceo.x)) {
+        return { x: ceo.x, kill: () => {
+            ceo.state = 'dead'; ceo.deathTime = Date.now();
+            level6.ceoPursuing = false;
+        } };
     }
+    // Mullet Pro, on whichever floor he is wandering
+    const mp = level5.mulletPro;
+    if(mp && !mp.eatenByMutant && (R === 'employeeHallway' || R === 'employeePipeRoom' ||
+       R === 'employeeLobby' || R === 'l6Furnace') && near(mp.x)) {
+        return { x: mp.x, kill: () => {
+            mp.eatenByMutant = true; mp.state = 'gone'; mp.hasDoc = false;
+        } };
+    }
+    // The floor boss, if he is out
+    if(typeof boss !== 'undefined' && boss && boss.active && near(boss.x)) {
+        return { x: boss.x, kill: () => { boss.active = false; } };
+    }
+    // A clone that followed you down
     const cf = level6.cloneFollower;
     if(cf && cf.active && cf.room === R && near(cf.x)) {
         return { x: cf.x, kill: () => { cf.active = false; } };
@@ -25840,7 +25889,7 @@ function drawScene() {
         ctx.restore(); return;
     }
 
-    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover' || state === 'mutantFree') {
         ctx.fillStyle = '#000000';
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
 
@@ -25861,6 +25910,17 @@ function drawScene() {
             ctx.font = 'bold 56px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("GAME OVER", 350, 180);
+        } else if(state === 'mutantFree') {
+            ctx.fillStyle = '#8fd16a';
+            ctx.font = 'bold 52px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ESCAPED', 350, 170);
+            ctx.fillStyle = '#cfe6bd';
+            ctx.font = '22px Arial';
+            ctx.fillText('The specimen reached the treeline.', 350, 215);
+            ctx.fillStyle = '#e8b04a';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('Devoured: ' + (level6.mutantMode ? level6.mutantMode.eaten : 0), 350, 262);
         } else if(state === 'win') {
             ctx.fillStyle = '#27ae60';
             ctx.font = 'bold 56px Arial';
@@ -28815,7 +28875,7 @@ function update() {
     }
 
 
-    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover' || state === 'mutantFree') {
         // Victory screen only has one option, limit menuChoice to 0
         const maxChoice = state === 'victory' ? 0 : 1;
 
@@ -29445,13 +29505,16 @@ function update() {
                         const cardReady = mm.caught ? mm.freeCardTimer > 70 : mm.freeCardTimer > 110;
                         if(cardReady && (keys[' '] || keys['action'])) {
                             keys[' '] = false; keys['action'] = false;
-                            if(mm.freeCard) { state = 'win'; }
+                            // 'win' is the corporate promotion screen —
+                            // YOU'RE HIRED. Escaping as the specimen is the
+                            // opposite outcome and needs its own ending.
+                            if(mm.freeCard) { state = 'mutantFree'; }
                             else { state = 'gameover'; }
                         }
                         return;   // freeze the world under the card
                     }
                     // Countdown
-                    mm.timeLeft = Math.max(0, 30 - (Date.now() - mm.startTime) / 1000);
+                    mm.timeLeft = Math.max(0, MUTANT_SECONDS - (Date.now() - mm.startTime) / 1000);
                     if(mm.roar > 0) mm.roar -= 0.02;
                     if(mm.timeLeft <= 0 && !mm.jumping) {
                         mm.caught = true;
@@ -31319,17 +31382,13 @@ function update() {
                     level6.lastExitEdge = 'left';
                 }
 
-                // Right — as the mutant, tear straight up onto the employee
-                // floor instead of taking the long way through smartware
-                if(player.x > 660 && level6.mutantMode && level6.mutantMode.active) {
-                    SFX.play('explode');
-                    level6.room = 'employeeHallway';
-                    player.x = 80;
-                    player.y = 380;
-                    level6.lastExitEdge = 'right';
-                }
-                // Right — back to smartware level
-                else if(player.x > 660) {
+                // Right — back to smartware level. The mutant takes this route
+                // too: he rides the elevator up like everyone else and works
+                // his way across the employee floor to RED's office. He used to
+                // get a private door that dropped him straight into the office
+                // hallway from the cage, which read as the two rooms being
+                // adjacent when they are floors apart.
+                if(player.x > 660) {
                     level6.room = 'pipeRoom';
                     player.x = 80;
                     player.y = 380;
@@ -31464,8 +31523,22 @@ function update() {
                             if(level6.hasDetectiveHat && !level6.mutantMode.active) {
                                 level6.mutantMode.active = true;
                                 level6.mutantMode.startTime = Date.now();
-                                level6.mutantMode.timeLeft = 30;
+                                level6.mutantMode.timeLeft = MUTANT_SECONDS;
                                 level6.mutantMode.roar = 1;
+                                // DISARM. You are the beast now — teeth are the
+                                // only weapon. Carrying the detective's pistol
+                                // and the ghost gun into a rampage made every
+                                // encounter solvable without ever eating.
+                                level6.hasRevolver = false;
+                                level6.revolverAmmo = 0;
+                                level6.hasGhostGun = false;
+                                level6.hasWrenchGun = false;
+                                level6.pistolHolstered = false;
+                                level6.pistol.pickedUp = true;   // no re-pickup
+                                ghostGun.hasGun = false; ghostGun.ammo = 0;
+                                pipeWrench.hasWrench = false;
+                                player.holding = null;
+                                bullets = []; muzzleFlashes = [];
                                 SFX.play('mutantGrowl');
                                 // You take his place: he's gone from the cage,
                                 // and the player becomes the beast.
@@ -33643,7 +33716,7 @@ function gameLoop() {
        state !== 'win' && state !== 'menu' && state !== 'promotion' &&
        state !== 'theend' && state !== 'victory' && state !== 'rtPresents' &&
        state !== 'conceptArt' && state !== 'fired' && state !== 'gameover' &&
-       state !== 'selfDestructSeq') return;
+       state !== 'selfDestructSeq' && state !== 'mutantFree') return;
 
     // Retry pending music every ~2 seconds if audio is unlocked but music didn't start
     if(audioUnlocked && pendingMusicKey && frame % 120 === 0) {
@@ -33838,7 +33911,7 @@ function handleMuteClick(e) {
     }
 
     // End/result screen menu option taps — large hit areas for thumb use
-    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover') {
+    if(state === 'over' || state === 'win' || state === 'theend' || state === 'victory' || state === 'fired' || state === 'gameover' || state === 'mutantFree') {
         const yOffset = (state === 'theend' || state === 'victory' || state === 'gameover' || state === 'fired') ? 350 : 320;
         const maxChoice = state === 'victory' ? 0 : 1;
         if(Math.abs(x - 350) < 220) {
