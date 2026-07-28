@@ -5801,6 +5801,22 @@ function rigHead(cx, cy, rx, ry, rz, yaw, spec, opts) {
             ctx.moveTo(m1.x, m1.y); ctx.lineTo(m2.x, m2.y);
         }
         ctx.stroke(); ctx.lineCap = 'butt';
+        // An OPEN mouth. Alarm and panic have to be readable at 1x game scale,
+        // and a curved line is not enough on a face this small — the shape of
+        // the hole is what carries it.
+        if(o.open) {
+            const mc = proj(0, 0.66, 0.86);
+            ctx.fillStyle = '#3a1a16';
+            ctx.beginPath();
+            ctx.ellipse(mc.x, mc.y, halfW * 0.20 * (o.open === 2 ? 1.15 : 0.80),
+                        ry * 0.16 * (o.open === 2 ? 1.5 : 0.9), 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.22)';     // teeth along the top
+            ctx.beginPath();
+            ctx.ellipse(mc.x, mc.y - ry * 0.09 * (o.open === 2 ? 1.5 : 0.9),
+                        halfW * 0.17 * (o.open === 2 ? 1.15 : 0.80), ry * 0.035, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
         // Lower lip catches light; the shadow under it defines the chin
         const lp = proj(0, 0.74, 0.84);
         if(lp.z > 0) {
@@ -5819,6 +5835,15 @@ function rigHead(cx, cy, rx, ry, rz, yaw, spec, opts) {
                 ctx.quadraticCurveTo(mc.x, mc.y + ry * 0.05, m1.x - halfW * 0.08, m1.y - ry * 0.09);
                 ctx.closePath(); ctx.fill();
             }
+        }
+    }
+    if(o.sweat) {                                     // bead at the temple
+        const sw = proj(-0.72, -0.30, 0.55);
+        if(sw.z > 0) {
+            ctx.fillStyle = 'rgba(150,205,235,0.85)';
+            ctx.beginPath();
+            ctx.ellipse(sw.x, sw.y + ry * 0.10 * o.sweat, halfW * 0.10, ry * 0.13, 0, 0, Math.PI*2);
+            ctx.fill();
         }
     }
     if(spec.age) {
@@ -5875,35 +5900,52 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
         // A smooth sealed dome plus a band across the brow reads as a do-rag.
         // Real hair has an IRREGULAR outline that breaks past the skull, sits
         // proud of it, and shows strand direction.
-        const fx = cx + fwd.x * 0.16;
+        // BUSINESS UP FRONT means SHORT up front. This was a helmet: wider than
+        // the skull, coming down almost to the brow all the way round, which
+        // reads as a bob or a do-rag no matter what the back is doing. The top
+        // now sits close to the skull, the forehead shows, and the length is
+        // carried entirely by the tail in the 'back' pass.
+        const fx = cx + fwd.x * 0.20;                  // the face side
+        const part = fwd.x >= 0 ? 1 : -1;              // sweep away from the face
         ctx.fillStyle = hc;
         ctx.beginPath();
-        ctx.moveTo(cx - halfW * 1.10, cy - ry * 0.18);
-        ctx.quadraticCurveTo(cx - halfW * 1.22, cy - ry * 0.86, cx - halfW * 0.44, cy - ry * 1.12);
-        ctx.quadraticCurveTo(cx - halfW * 0.10, cy - ry * 1.26, cx + halfW * 0.34, cy - ry * 1.10);
-        ctx.quadraticCurveTo(cx + halfW * 1.02, cy - ry * 0.92, cx + halfW * 1.12, cy - ry * 0.22);
-        // ragged lower edge — tufts over the brow rather than a clean band
-        ctx.lineTo(cx + halfW * 0.96, cy - ry * 0.40);
-        ctx.lineTo(cx + halfW * 0.78, cy - ry * 0.12);
-        ctx.lineTo(fx + halfW * 0.50, cy - ry * 0.38);
-        ctx.lineTo(fx + halfW * 0.22, cy - ry * 0.06);
-        ctx.lineTo(fx - halfW * 0.06, cy - ry * 0.34);
-        ctx.lineTo(fx - halfW * 0.34, cy - ry * 0.02);
-        ctx.lineTo(cx - halfW * 0.70, cy - ry * 0.34);
-        ctx.lineTo(cx - halfW * 0.92, cy - ry * 0.08);
+        ctx.moveTo(cx - halfW * 1.04, cy - ry * 0.34);
+        ctx.quadraticCurveTo(cx - halfW * 1.10, cy - ry * 0.92, cx - halfW * 0.40, cy - ry * 1.14);
+        ctx.quadraticCurveTo(cx - halfW * 0.04, cy - ry * 1.24, cx + halfW * 0.38, cy - ry * 1.12);
+        ctx.quadraticCurveTo(cx + halfW * 1.00, cy - ry * 0.94, cx + halfW * 1.04, cy - ry * 0.34);
+        // Hairline: swept across to one side, dipping to a point at the part
+        // and rising over the far temple. An even band across the brow is what
+        // made it a bandana.
+        ctx.quadraticCurveTo(cx + halfW * 0.86 * part, cy - ry * 0.54,
+                             fx + halfW * 0.30 * part, cy - ry * 0.56);
+        ctx.quadraticCurveTo(fx - halfW * 0.10 * part, cy - ry * 0.58,
+                             fx - halfW * 0.44 * part, cy - ry * 0.80);
+        ctx.quadraticCurveTo(cx - halfW * 0.86 * part, cy - ry * 0.92,
+                             cx - halfW * 1.04, cy - ry * 0.34);
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = dark; ctx.lineWidth = 1;    // strand direction over the crown
+        // Sideburns: a short taper in front of each ear. Nothing said "mullet"
+        // about the old shape because it had no edges anywhere.
+        ctx.fillStyle = dark;
+        for(const s of [-1, 1]) {
+            const bx = cx + halfW * s * 0.94;
+            ctx.beginPath();
+            ctx.moveTo(bx, cy - ry * 0.48);
+            ctx.lineTo(bx + halfW * s * 0.10, cy + ry * 0.16);
+            ctx.lineTo(bx - halfW * s * 0.14, cy - ry * 0.10);
+            ctx.closePath(); ctx.fill();
+        }
+        ctx.strokeStyle = dark; ctx.lineWidth = 1;    // strands sweeping to the part
         for(let i = -2; i <= 2; i++) {
             ctx.beginPath();
-            ctx.moveTo(cx + halfW * i * 0.30, cy - ry * 1.06);
-            ctx.quadraticCurveTo(cx + halfW * i * 0.36 - halfW * 0.10, cy - ry * 0.64,
-                                 cx + halfW * i * 0.34 - halfW * 0.06, cy - ry * 0.26);
+            ctx.moveTo(cx + halfW * i * 0.28, cy - ry * 1.10);
+            ctx.quadraticCurveTo(cx + halfW * (i * 0.34 + 0.20 * part), cy - ry * 0.86,
+                                 cx + halfW * (i * 0.30 + 0.34 * part), cy - ry * 0.62);
             ctx.stroke();
         }
         ctx.fillStyle = lite;                          // sheen off the crown
         ctx.beginPath();
-        ctx.ellipse(cx - halfW * 0.34, cy - ry * 0.92, halfW * 0.30, ry * 0.11, -0.22, 0, Math.PI*2);
+        ctx.ellipse(cx - halfW * 0.30, cy - ry * 0.98, halfW * 0.28, ry * 0.10, -0.22, 0, Math.PI*2);
         ctx.fill();
     }
     if(spec.hair === 'mullet' && pass === 'back') {
@@ -5911,7 +5953,12 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
         // overlapping locks with separation, not one slab, swinging to the
         // trailing side as the character turns.
         const tailX = cx + back.x * 0.80;
-        const spread = halfW * (0.52 + 0.30 * Math.abs(cs));
+        // Widest in PROFILE, narrowest head-on. This was the other way round —
+        // 0.52 + 0.30*|cos| — so the tail fanned out to its full width exactly
+        // when it should be hidden behind the skull, and the mullet read as a
+        // bob from the front. Seen face-on you get a tuft at the nape; seen
+        // from the side you get the whole party.
+        const spread = halfW * (0.30 + 0.62 * Math.abs(sn));
         for(let i = -1; i <= 1; i++) {
             const lx = tailX + i * spread * 0.52;
             ctx.fillStyle = (i === 0) ? hc : (i < 0 ? lite : dark);
@@ -5969,7 +6016,7 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
 // A sealed hazmat hood: the suit fabric continues over the whole skull and a
 // dark rectangular visor sits on the face. Turned away, the visor is gone and
 // you see the back of the hood.
-function rigHazmatHood(cx, cy, rx, ry, rz, yaw, ramp) {
+function rigHazmatHood(cx, cy, rx, ry, rz, yaw, ramp, faceFn) {
     const cs = Math.cos(yaw), sn = Math.sin(yaw);
     const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2) * 1.16;
     const fwd = rigRot(0, 0, rz, yaw);
@@ -5987,10 +6034,22 @@ function rigHazmatHood(cx, cy, rx, ry, rz, yaw, ramp) {
     // Visor — only on the side you can see the face from
     if(cs > 0.12) {
         const vw = halfW * 0.72 * cs, vx = cx + fwd.x * 0.22;
-        ctx.fillStyle = '#20242a';
+        // The FACE goes in the visor aperture, clipped to it, then smoked glass
+        // over the top. Tinting the visor alone did nothing: the hood dome is
+        // opaque and had already covered the head, so a translucent pane just
+        // showed darker fabric and the pipe managers lost every expression they
+        // had. The window has to actually be a hole.
+        if(faceFn) {
+            ctx.save();
+            pathRoundRect(vx - vw, cy - hy * 0.30, vw * 2, hy * 0.62, Math.max(1, vw * 0.22));
+            ctx.clip();
+            faceFn();
+            ctx.restore();
+        }
+        ctx.fillStyle = 'rgba(32,36,42,0.52)';             // smoked glass
         pathRoundRect(vx - vw, cy - hy * 0.30, vw * 2, hy * 0.62, Math.max(1, vw * 0.22));
         ctx.fill();
-        ctx.fillStyle = 'rgba(150,190,220,0.30)';          // glass sheen
+        ctx.fillStyle = 'rgba(150,190,220,0.22)';          // glass sheen
         ctx.beginPath();
         ctx.moveTo(vx - vw * 0.86, cy + hy * 0.24);
         ctx.lineTo(vx - vw * 0.10, cy - hy * 0.24);
@@ -6116,7 +6175,7 @@ function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
 // of five characters read as single-colour slabs: the cloning boss only looked
 // right because his hard hat, his tie and his red-over-black contrast were
 // doing the work the garment should be doing for everyone.
-function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
+function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp, drop) {
     const cs = Math.cos(yaw), sn = Math.sin(yaw);
     const front = rigRot(0, 0, depth, yaw);
     const facing = front.z;                       // > 0 means the chest is toward us
@@ -6124,6 +6183,15 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
     const px = (ax) => cx + rigRot(ax * shHalf, 0, depth * 0.92, yaw).x;
     const g = c.garment || 'plain';
     const H = hemY - shY;
+    // The torso top SLOPES from the trapezius down to the acromion. Collars and
+    // lapels used to anchor at a flat shY, so once the shoulder gained its
+    // slope they hung in the air off the outside of the shoulder. This is the
+    // garment's top edge at a given fraction of the shoulder half-width.
+    const D = drop || 0;
+    const topAt = (ax) => {
+        const t = Math.max(0, Math.min(1, (Math.abs(ax) - 0.30) / 0.70));
+        return shY - D * 0.80 + t * D * 1.80;
+    };
 
     if(facing > 0) {
         // ---- FRONT-FACING DETAIL -----------------------------------------
@@ -6131,19 +6199,19 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
             // Shirt / tee showing in the jacket opening
             ctx.fillStyle = c.under || '#1a1a1a';
             ctx.beginPath();
-            ctx.moveTo(px(-0.30), shY);
-            ctx.lineTo(px(0.30), shY);
+            ctx.moveTo(px(-0.30), topAt(-0.30));
+            ctx.lineTo(px(0.30), topAt(0.30));
             ctx.lineTo(px(0.14), shY + H * 0.44);
             ctx.lineTo(px(-0.14), shY + H * 0.44);
             ctx.closePath(); ctx.fill();
             // Lapels folding back off the opening
             ctx.fillStyle = charMix(ramp.base, '#fff', 0.10);
             ctx.beginPath();
-            ctx.moveTo(px(-0.44), shY); ctx.lineTo(px(-0.06), shY);
+            ctx.moveTo(px(-0.44), topAt(-0.44)); ctx.lineTo(px(-0.06), topAt(-0.06));
             ctx.lineTo(px(-0.30), shY + H * 0.46); ctx.closePath(); ctx.fill();
             ctx.fillStyle = charMix(ramp.base, '#000', 0.14);
             ctx.beginPath();
-            ctx.moveTo(px(0.44), shY); ctx.lineTo(px(0.06), shY);
+            ctx.moveTo(px(0.44), topAt(0.44)); ctx.lineTo(px(0.06), topAt(0.06));
             ctx.lineTo(px(0.30), shY + H * 0.46); ctx.closePath(); ctx.fill();
             // Buttons down the closure
             ctx.fillStyle = charMix(ramp.dark, '#000', 0.30);
@@ -6156,10 +6224,10 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
             // Collar wings either side of the neck
             ctx.fillStyle = charMix(ramp.base, '#000', 0.10);
             ctx.beginPath();
-            ctx.moveTo(px(-0.34), shY); ctx.lineTo(px(-0.05), shY);
+            ctx.moveTo(px(-0.34), topAt(-0.34)); ctx.lineTo(px(-0.05), topAt(-0.05));
             ctx.lineTo(px(-0.20), shY + H * 0.22); ctx.closePath(); ctx.fill();
             ctx.beginPath();
-            ctx.moveTo(px(0.34), shY); ctx.lineTo(px(0.05), shY);
+            ctx.moveTo(px(0.34), topAt(0.34)); ctx.lineTo(px(0.05), topAt(0.05));
             ctx.lineTo(px(0.20), shY + H * 0.22); ctx.closePath(); ctx.fill();
             // Button placket
             ctx.strokeStyle = charMix(ramp.base, '#000', 0.16);
@@ -6170,7 +6238,7 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
         } else if(g === 'jumpsuit') {
             // Collar band, centre zip, chest pocket, hip seam
             ctx.fillStyle = ramp.dark;
-            ctx.fillRect(cx - shW * 0.62, shY, shW * 1.24, Math.max(1.5, H * 0.10));
+            ctx.fillRect(cx - shW * 0.62, topAt(0.62), shW * 1.24, Math.max(1.5, H * 0.10));
             ctx.strokeStyle = charMix(ramp.dark, '#000', 0.25);
             ctx.lineWidth = Math.max(1, shW * 0.07);
             ctx.beginPath();
@@ -6196,13 +6264,34 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
         ctx.moveTo(cx, shY + H * 0.22); ctx.lineTo(cx, hemY);
         ctx.stroke();
     }
+    // A hem, at every angle. Without one the garment ran straight into the belt
+    // and the whole torso read as a single tunic block — the flattest thing
+    // about the figures. A jacket or a coverall ends in a band; a shirt tucks
+    // in, so it gets only a soft shadow where it enters the waistband.
+    const hipW = Math.sqrt((hipHalf * cs) ** 2 + (depth * sn) ** 2);
+    if(g === 'jacket' || g === 'suit' || g === 'jumpsuit') {
+        const bandH = Math.max(1.6, H * 0.11);
+        const bg = ctx.createLinearGradient(0, hemY - bandH, 0, hemY);
+        bg.addColorStop(0, charMix(ramp.dark, '#000', 0.10));
+        bg.addColorStop(1, charMix(ramp.dark, '#000', 0.34));
+        ctx.fillStyle = bg;
+        ctx.fillRect(cx - hipW, hemY - bandH, hipW * 2, bandH);
+        ctx.strokeStyle = charMix(ramp.dark, '#000', 0.40);
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(cx - hipW, hemY - bandH); ctx.lineTo(cx + hipW, hemY - bandH);
+        ctx.stroke();
+    } else {
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.fillRect(cx - hipW, hemY - Math.max(1.2, H * 0.07), hipW * 2, Math.max(1.2, H * 0.07));
+    }
     // Shoulder seams read at every angle
     ctx.strokeStyle = charMix(ramp.dark, '#000', 0.18);
     ctx.lineWidth = 1;
     for(const side of [-1, 1]) {
         const sx = cx + rigRot(side * shHalf * 0.82, 0, 0, yaw).x;
         ctx.beginPath();
-        ctx.moveTo(sx, shY + 1); ctx.lineTo(sx, shY + H * 0.30);
+        ctx.moveTo(sx, topAt(0.82) + 0.5); ctx.lineTo(sx, shY + H * 0.30);
         ctx.stroke();
     }
 }
@@ -6229,11 +6318,16 @@ function rigSeg(cx, a, b, w0, w1, colour, flat) {
     if(flat) {
         ctx.fillStyle = colour;
     } else {
-        const w = Math.max(w0, w1) * 0.62;
-        const g = ctx.createLinearGradient(ax + nx * w, ay + ny * w, ax - nx * w, ay - ny * w);
-        g.addColorStop(0,    charMix(colour, '#ffffff', 0.17));
-        g.addColorStop(0.44, colour);
-        g.addColorStop(1,    charMix(colour, '#000000', 0.28));
+        // ONE LIGHT, from screen left, same as the torso. The gradient used to
+        // run along the segment's own normal at full contrast, which put a
+        // bright stripe and a dark stripe down every limb and — with a contour
+        // on both edges — turned red sleeves into candy canes. Screen-space and
+        // low contrast: the limb is now a cylinder, not a barber pole.
+        const w = Math.max(w0, w1) * 0.60;
+        const g = ctx.createLinearGradient(ax - w, 0, ax + w, 0);
+        g.addColorStop(0,    charMix(colour, '#ffffff', 0.09));
+        g.addColorStop(0.46, colour);
+        g.addColorStop(1,    charMix(colour, '#000000', 0.17));
         ctx.fillStyle = g;
     }
     ctx.beginPath();
@@ -6245,24 +6339,24 @@ function rigSeg(cx, a, b, w0, w1, colour, flat) {
     ctx.fill();
     ctx.beginPath(); ctx.arc(ax, ay, w0 * 0.5, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(bx, by, w1 * 0.5, 0, Math.PI * 2); ctx.fill();
-    // A thin shadow down the two long sides. This is what lets an arm sit
-    // against the ribs and still read as a separate limb — without it the only
-    // way to separate them was a gap of background, which made the arms look
-    // detached.
-    ctx.strokeStyle = charMix(colour, '#000000', 0.34);
+    // A shadow down ONE side only: the edge nearest the body centre. That is
+    // the armpit / inseam, which is exactly where a limb has to separate from
+    // the torso or from the other leg. Contouring both sides gave every limb a
+    // matched pair of dark lines — half of the candy-cane effect.
+    const inner = Math.abs((ax + bx) * 0.5 + nx * w0 * 0.5 - cx)
+                < Math.abs((ax + bx) * 0.5 - nx * w0 * 0.5 - cx) ? 1 : -1;
+    ctx.strokeStyle = charMix(colour, '#000000', 0.30);
     ctx.lineWidth = 0.7;
     ctx.beginPath();
-    ctx.moveTo(ax + nx * w0 * 0.5, ay + ny * w0 * 0.5);
-    ctx.lineTo(bx + nx * w1 * 0.5, by + ny * w1 * 0.5);
-    ctx.moveTo(ax - nx * w0 * 0.5, ay - ny * w0 * 0.5);
-    ctx.lineTo(bx - nx * w1 * 0.5, by - ny * w1 * 0.5);
+    ctx.moveTo(ax + inner * nx * w0 * 0.5, ay + inner * ny * w0 * 0.5);
+    ctx.lineTo(bx + inner * nx * w1 * 0.5, by + inner * ny * w1 * 0.5);
     ctx.stroke();
 }
 
 // An arm: shoulder -> elbow -> wrist, in body space so the elbow rotates with
 // everything else. The elbow bows very slightly away from the ribs, which is
 // what stops the arm reading as a straight rod pinned to the shoulder.
-function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
+function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR, cuff) {
     const side = sx < 0 ? -1 : 1;
     const jx = (sx + ex) / 2 + side * w * 0.26;   // elbow, just outside the chord
     const jy = (sy + ey) / 2;
@@ -6274,6 +6368,15 @@ function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
     const col = behind ? charMix(colour, '#000', 0.30) : colour;
     rigSeg(cx, a, j, w, w * 0.76, col);           // deltoid -> elbow
     rigSeg(cx, j, b, w * 0.72, w * 0.58, col);    // elbow -> wrist
+    if(cuff) {
+        // A sleeve ends somewhere. Without a cuff the arm was an unbroken tube
+        // of jacket colour running into a hand, which is most of why the
+        // clothes read as flat shapes rather than garments.
+        const t0 = 0.74, t1 = 0.99;
+        const p = (t) => ({ x: j.x + (b.x - j.x) * t, y: j.y + (b.y - j.y) * t });
+        rigSeg(cx, p(t0), p(t1), w * 0.66, w * 0.62,
+               behind ? charMix(cuff, '#000', 0.30) : cuff);
+    }
     if(handR) charHand(cx + b.x, b.y + handR * 0.5, handR, behind ? charMix(skin, '#000', 0.22) : skin);
     return behind;
 }
@@ -6397,7 +6500,39 @@ const RIG_SHEET = {
     }),
 };
 
-// yaw in radians. pose: { stride, armSwing, wide, frown, smile, browAngle, look }
+// The cast's emotional range, as one table. The in-game sprites already play
+// these states — pipe managers escalate idle -> alarmed -> worried -> panicked
+// -> dissolving as a crack goes untended, and enemies switch from neutral to
+// scowling when they turn on you. Naming them here means the rig can carry
+// every state across when it replaces those sprites, instead of the states
+// being re-invented per character the way they were before.
+//   wide       eye opening       browAngle  + = outer ends up (worry)
+//   open       1 ajar, 2 gaping  sweat      bead offset, 0 = none
+const RIG_EXPR = {
+    neutral:   {},
+    alarmed:   { wide: 1, browAngle: 0.9, open: 1 },
+    worried:   { wide: 1, browAngle: 1.3, frown: 1, sweat: 1 },
+    panicked:  { wide: 1, browAngle: 1.6, open: 2, sweat: 2 },
+    dissolving:{ wide: 1, browAngle: 1.1, open: 2, sweat: 2, melt: 1 },
+    scowl:     { browAngle: -1.5, frown: 1 },
+    smug:      { browAngle: -0.5, smile: 1 },
+};
+// Expression params come from pose.expr (a name) with individual pose keys
+// still able to override, so a caller can nudge one thing without leaving the
+// vocabulary behind.
+function rigFace(P) {
+    const base = RIG_EXPR[P.expr] || RIG_EXPR.neutral;
+    return {
+        wide:      P.wide      === undefined ? base.wide      : P.wide,
+        frown:     P.frown     === undefined ? base.frown     : P.frown,
+        smile:     P.smile     === undefined ? base.smile     : P.smile,
+        open:      P.open      === undefined ? base.open      : P.open,
+        sweat:     P.sweat     === undefined ? base.sweat     : P.sweat,
+        browAngle: P.browAngle === undefined ? base.browAngle : P.browAngle,
+    };
+}
+
+// yaw in radians. pose: { stride, armSwing, expr, wide, frown, smile, browAngle, look }
 function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     const P = pose || {};
     const c = sheet;
@@ -6480,10 +6615,11 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // The arm hangs from the ACROMION, which the sloped shoulder puts below the
     // trap line — not from the top corner of a box.
     const acromionY = shY + (hemY - shY) * 0.10;
+    const cuffCol = c.cuff || charMix(ramp.dark, '#000', 0.18);
     const drawArm = (side) => rigLimb(x,
         side * shoulderX, acromionY, 0,
         side * (shoulderX + 0.6), shY + c.armLen, -side * swing * 1.4,
-        yaw, c.armW, ramp.base, c.glove || c.skin, c.armW * 0.42);
+        yaw, c.armW, ramp.base, c.glove || c.skin, c.armW * 0.42, cuffCol);
     drawArm(arms[0].side);
     // Neck goes down BEFORE the torso. Drawn after it, the skin column painted
     // straight over the collar, so every character appeared to be wearing their
@@ -6515,7 +6651,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // adding arms on top is what made every chest read as a slab.
     const chestHalf = c.shHalf - c.armW * 0.62;
     rigTorso(x, shY, hemY, chestHalf, c.hipHalf, c.depth, yaw, ramp);
-    rigGarment(x, shY, hemY, chestHalf, c.hipHalf, c.depth, yaw, c, ramp);
+    rigGarment(x, shY, hemY, chestHalf, c.hipHalf, c.depth, yaw, c, ramp, (hemY - shY) * 0.10);
     // Tie / belt on the chest front, so they turn with the body and cannot be
     // overlapped by an arm that belongs on the other side of the chest.
     const cw = Math.cos(yaw), sw = Math.sin(yaw);
@@ -6571,10 +6707,13 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // over it, so the face is not drawn at all — the concept art shows a dark
     // face screen, not an open hood with features showing through.
     if(!(c.hood && c.visor)) {
-        rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
-                { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
+        rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c, rigFace(P));
     } else {
-        rigHazmatHood(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+        // The hood paints the face INTO its visor aperture, clipped to the
+        // glass, so the expression reads through — see rigHazmatHood.
+        rigHazmatHood(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp,
+            () => rigHead(x, headCy, c.headRx * 0.94, c.headRy * 0.94, c.headRz * 0.94,
+                          yaw, c, rigFace(P)));
     }
     // ...and if they have turned away, the shell is now in FRONT of the skull
     if(c.hood && !rigHoodBehind(yaw, c.headRz)) {
