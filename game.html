@@ -4946,35 +4946,42 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
         // A smooth sealed dome plus a band across the brow reads as a do-rag.
         // Real hair has an IRREGULAR outline that breaks past the skull, sits
         // proud of it, and shows strand direction.
-        // BUSINESS UP FRONT. Short, but SHORT IS NOT BALD — the previous
-        // version swept the hairline so far back that head-on he read as a man
-        // with a comb-over and no mullet at all. The cap now covers the crown
-        // properly and the hairline sits just above the brow, with the part
-        // sweeping across rather than carving the cap away.
+        // BUSINESS UP FRONT — but the hairline only exists on the FACE SIDE.
+        // The cap used to be cut symmetrically, so once he turned away the same
+        // cut ran across the BACK of his skull and left a bald patch above the
+        // tail. The lower edge now sits down at the ears all the way round and
+        // rises to the brow only where the face actually is, blended by how
+        // much of the face we can see.
         const fx = cx + fwd.x * 0.20;                  // the face side
         const part = fwd.x >= 0 ? 1 : -1;              // sweep away from the face
+        const faceW = (cs + 1) / 2;                    // 1 face-on, 0 from behind
+        const faceX = fwd.x;                           // where the face is on screen
+        // Sides come down to just above the ear, not to mid-cheek. At +0.26 ry
+        // the drop from the hairline to the side edge was so large that the
+        // boundary between them slashed diagonally across his face.
+        const edgeY = cy + ry * 0.04;                  // hair reaches the ear top
+        const dipY  = edgeY - (edgeY - (cy - ry * 0.50)) * faceW;
         ctx.fillStyle = hc;
         ctx.beginPath();
-        ctx.moveTo(cx - halfW * 1.08, cy + ry * 0.12);            // left temple
+        ctx.moveTo(cx - halfW * 1.06, edgeY);
         ctx.quadraticCurveTo(cx - halfW * 1.18, cy - ry * 0.94, cx - halfW * 0.38, cy - ry * 1.18);
         ctx.quadraticCurveTo(cx + halfW * 0.04, cy - ry * 1.30, cx + halfW * 0.46, cy - ry * 1.14);
-        ctx.quadraticCurveTo(cx + halfW * 1.12, cy - ry * 0.92, cx + halfW * 1.08, cy + ry * 0.12);
-        // hairline across the brow, dipping to a point at the part
-        ctx.lineTo(cx + halfW * 0.94, cy - ry * 0.34);
-        ctx.quadraticCurveTo(fx + halfW * 0.44 * part, cy - ry * 0.40,
-                             fx + halfW * 0.02 * part, cy - ry * 0.50);
-        ctx.quadraticCurveTo(fx - halfW * 0.50 * part, cy - ry * 0.58,
-                             cx - halfW * 0.94, cy - ry * 0.34);
+        ctx.quadraticCurveTo(cx + halfW * 1.14, cy - ry * 0.92, cx + halfW * 1.06, edgeY);
+        // lower edge back across, dipping to the brow over the face
+        ctx.quadraticCurveTo(cx + faceX + halfW * 0.62, dipY - ry * 0.04, cx + faceX * 0.92, dipY);
+        ctx.quadraticCurveTo(cx + faceX - halfW * 0.62, dipY - ry * 0.04, cx - halfW * 1.06, edgeY);
         ctx.closePath();
         ctx.fill();
         // Sideburns down in front of each ear
-        ctx.fillStyle = dark;
+        // Narrow, and only a shade off the hair. As dark wedges a sixth of the
+        // head wide they read as slabs cutting into his cheek.
+        ctx.fillStyle = charMix(hc, '#000000', 0.16);
         for(const sb of [-1, 1]) {
-            const bx = cx + halfW * sb * 0.98;
+            const bx = cx + halfW * sb * 1.00;
             ctx.beginPath();
-            ctx.moveTo(bx, cy - ry * 0.30);
-            ctx.lineTo(bx + halfW * sb * 0.08, cy + ry * 0.34);
-            ctx.lineTo(bx - halfW * sb * 0.16, cy + ry * 0.02);
+            ctx.moveTo(bx, cy - ry * 0.18);
+            ctx.lineTo(bx + halfW * sb * 0.04, cy + ry * 0.30);
+            ctx.lineTo(bx - halfW * sb * 0.09, cy + ry * 0.06);
             ctx.closePath(); ctx.fill();
         }
         ctx.strokeStyle = dark; ctx.lineWidth = 1;    // strands sweeping to the part
@@ -5009,7 +5016,7 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
         // The fan is a body-space offset that gets projected, so the mass
         // spreads across the nape head-on and collapses behind the skull in
         // profile instead of splaying sideways into empty air.
-        const nape  = cy - ry * 0.16;                  // tucked under the cap
+        const nape  = cy - ry * 0.18;                  // overlaps the cap edge
         const tipY  = cy + ry * 1.30;                  // hangs to the collar
         const outer = rigRot(rx * 0.98, 0, 0, yaw).x;  // half-width of the mass
         const hw    = Math.max(halfW * 0.42, Math.abs(outer));
@@ -5531,6 +5538,13 @@ const CANON = { chin:0.154, shoulder:0.200, waist:0.380, crotch:0.500,
 // The figure is the subject; the room and its fixtures follow it.
 const RIG_SCALE = 112 / 76;
 
+// Walk speed has to scale WITH the character. The player went from 67px tall to
+// 110px while the step stayed at 5px/frame, so he covered far less ground
+// relative to his own body and the pipe room felt stifled — same distance, many
+// more paces. This keeps the felt speed the same as the original game.
+const PLAYER_STEP = 8;                     // was 5, at a 67px player
+const PLAYER_STEP_SLOW = 3;                // slow crawls (chute, ladders)
+
 function rigBuild(H0, build, o) {
     const H = H0 * RIG_SCALE;
     const soleY = 36, crown = soleY - H;
@@ -5675,7 +5689,8 @@ function rigYaw(facing) {
 }
 // Walk cycle shared by the whole cast, so everyone's feet move at one rate.
 function rigStride(isWalking, phase) {
-    return isWalking ? Math.sin((phase === undefined ? frame : phase) * 0.25) * 3 : 0;
+    // Amplitude scales with the cast: 3px on a 110px figure is a shuffle.
+    return isWalking ? Math.sin((phase === undefined ? frame : phase) * 0.25) * 5 : 0;
 }
 
 // Pipe managers come in the pipe colours, so their sheet is per-NPC. Cached by
@@ -6639,7 +6654,16 @@ function drawPropScaled(key, x, baseY, fn) {
 }
 
 function drawComputer(x, y) {
-    drawPropScaled('computer', x, y + 35, () => _drawComputer(x, y));
+    // y is the SURFACE IT STANDS ON. The base was drawn from y DOWNWARD, so on
+    // a desk whose top is at y the whole workstation hung down the front of the
+    // desk instead of sitting on it. Shifted up by its own base height, and the
+    // scale now pivots on that same contact line.
+    drawPropScaled('computer', x, y, () => {
+        ctx.save();
+        ctx.translate(0, -35);
+        _drawComputer(x, y);
+        ctx.restore();
+    });
 }
 function _drawComputer(x, y) {
     // Printer/tower base — rounded chassis with subtle top highlight
@@ -28008,7 +28032,7 @@ function update() {
     // ── SELF-DESTRUCT SEQUENCE UPDATE ────────────────────────────────────────
     if(state === 'selfDestructSeq') {
         const sds = selfDestructSeq;
-        const speed = 3.4;
+        const speed = 5.6;   // scaled with the cast (was 3.4 at a 67px player)
         const floorY = 380;
 
         if(sds.room === 'hatch') {
@@ -28811,7 +28835,7 @@ function update() {
 
             if(keys['ArrowLeft'] || keys['left']) {
                 level5.napReclining = false;
-                player.x = Math.max(40, player.x - 5);
+                player.x = Math.max(40, player.x - PLAYER_STEP);
                 if(player.x !== prevX) {
                     player.facing = 'left';
                     player.lastMove = Date.now();
@@ -28819,7 +28843,7 @@ function update() {
             }
             if(keys['ArrowRight'] || keys['right']) {
                 level5.napReclining = false;
-                player.x = Math.min(660, player.x + 5);
+                player.x = Math.min(660, player.x + PLAYER_STEP);
                 if(player.x !== prevX) {
                     player.facing = 'right';
                     player.lastMove = Date.now();
@@ -28827,12 +28851,12 @@ function update() {
             }
             if(keys['ArrowUp'] || keys['up']) {
                 level5.napReclining = false;
-                player.y = Math.max(100, player.y - 5);
+                player.y = Math.max(100, player.y - PLAYER_STEP);
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
             if(keys['ArrowDown'] || keys['down']) {
                 level5.napReclining = false;
-                player.y = Math.min(480, player.y + 5);
+                player.y = Math.min(480, player.y + PLAYER_STEP);
                 if(player.y !== prevY) player.lastMove = Date.now();
             }
 
@@ -28930,7 +28954,7 @@ function update() {
                 if(dist > 80) {
                     // Move toward player
                     cat.state = 'walking';
-                    const speed = 1.8;
+                    const speed = PLAYER_STEP_SLOW;   // scaled with the cast (was 1.8)
                     cat.x += (dx / dist) * speed;
                     cat.y += (dy / dist) * speed;
                     cat.facing = dx < 0 ? 'left' : 'right';
@@ -29039,14 +29063,14 @@ function update() {
                     player.y = 380;
                     const prevX = player.x;
                     if(keys['ArrowLeft'] || keys['left']) {
-                        player.x = Math.max(20, player.x - 5);
+                        player.x = Math.max(20, player.x - PLAYER_STEP);
                         if(player.x !== prevX) {
                             player.facing = 'left';
                             player.lastMove = Date.now();
                         }
                     }
                     if(keys['ArrowRight'] || keys['right']) {
-                        player.x = Math.min(680, player.x + 5);
+                        player.x = Math.min(680, player.x + PLAYER_STEP);
                         if(player.x !== prevX) {
                             player.facing = 'right';
                             player.lastMove = Date.now();
@@ -30075,14 +30099,14 @@ function update() {
             if(level6.room === 'pipeRoom' || level6.room === 'megacomputer' || level6.room === 'nuclearBridge' || level6.room === 'entryway' || level6.room === 'employeeLobby' || level6.room === 'cloningRoom' || level6.room === 'l6Furnace' || level6.room === 'employeeHallway' || level6.room === 'employeePipeRoom' || level6.room === 'underbelly' || level6.room === 'underbellyHallway') {
                 const prevX = player.x;
                 if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(10, player.x - 5);
+                    player.x = Math.max(10, player.x - PLAYER_STEP);
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(690, player.x + 5);
+                    player.x = Math.min(690, player.x + PLAYER_STEP);
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
@@ -31718,28 +31742,28 @@ if (keys[' '] || keys['action']) {
                     const prevY = player.y;
 
                     if(keys['ArrowLeft'] || keys['left']) {
-                    player.x = Math.max(60, player.x - 5);
+                    player.x = Math.max(60, player.x - PLAYER_STEP);
                     if(player.x !== prevX) {
                         player.facing = 'left';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowRight'] || keys['right']) {
-                    player.x = Math.min(640, player.x + 5);
+                    player.x = Math.min(640, player.x + PLAYER_STEP);
                     if(player.x !== prevX) {
                         player.facing = 'right';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowUp'] || keys['up']) {
-                    player.y = Math.max(80, player.y - 5);
+                    player.y = Math.max(80, player.y - PLAYER_STEP);
                     if(player.y !== prevY) {
                         player.facing = 'up';
                         player.lastMove = Date.now();
                     }
                 }
                 if(keys['ArrowDown'] || keys['down']) {
-                    player.y = Math.min(450, player.y + 5);
+                    player.y = Math.min(450, player.y + PLAYER_STEP);
                     if(player.y !== prevY) {
                         player.facing = 'down';
                         player.lastMove = Date.now();
@@ -32776,14 +32800,14 @@ if (keys[' '] || keys['action']) {
     if(!ui.show && !ui.gunUI) {
         const prevX = player.x;
         if(keys['ArrowLeft'] || keys['left']) {
-            player.x = Math.max(20, player.x - 5);
+            player.x = Math.max(20, player.x - PLAYER_STEP);
             if(player.x !== prevX) {
                 player.facing = 'left';
                 player.lastMove = Date.now();
             }
         }
         if(keys['ArrowRight'] || keys['right']) {
-            player.x = Math.min(680, player.x + 5);
+            player.x = Math.min(680, player.x + PLAYER_STEP);
             if(player.x !== prevX) {
                 player.facing = 'right';
                 player.lastMove = Date.now();
