@@ -6077,6 +6077,10 @@ function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
     const c = Math.cos(yaw), sn = Math.sin(yaw);
     const shW  = Math.sqrt((shHalf * c) ** 2 + (halfDepth * sn) ** 2);
     const hipW = Math.sqrt((hipHalf * c) ** 2 + (halfDepth * sn) ** 2);
+    // Waist pinches in ABOVE the hips — a straight taper from shoulder to hem
+    // gives a wedge, not a torso.
+    const waistW = Math.min(shW, hipW) * 0.88;
+    const waistY = shY + (hemY - shY) * 0.62;
     const g = ctx.createLinearGradient(cx - shW, 0, cx + shW, 0);
     g.addColorStop(0, ramp.lit);
     g.addColorStop(0.45, ramp.base);
@@ -6086,9 +6090,11 @@ function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
     ctx.beginPath();
     ctx.moveTo(cx - shW + r, shY);
     ctx.quadraticCurveTo(cx - shW, shY, cx - shW, shY + r);
+    ctx.quadraticCurveTo(cx - shW * 0.98, waistY - (hemY - shY) * 0.14, cx - waistW, waistY);
     ctx.lineTo(cx - hipW, hemY);
     ctx.lineTo(cx + hipW, hemY);
-    ctx.lineTo(cx + shW, shY + r);
+    ctx.lineTo(cx + waistW, waistY);
+    ctx.quadraticCurveTo(cx + shW * 0.98, waistY - (hemY - shY) * 0.14, cx + shW, shY + r);
     ctx.quadraticCurveTo(cx + shW, shY, cx + shW - r, shY);
     ctx.closePath();
     ctx.fill();
@@ -6339,9 +6345,11 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // --- Legs. Each foot lifts off a fixed contact line, never through it.
     // Depth ordering makes the trailing leg draw behind the body.
     const legs = [-1, 1].map(side => {
-        const hip = rigRot(side * c.hipHalf * 0.52, 0, 0, yaw);
+        // Stance opens so there is a gap between the legs; a single merged
+        // column below the waist is most of what made the figure a slab.
+        const hip = rigRot(side * c.hipHalf * 0.62, 0, 0, yaw);
         const fz = side * stride * 1.6;
-        const foot = rigRot(side * c.hipHalf * 0.52, 0, fz, yaw);
+        const foot = rigRot(side * c.hipHalf * 0.72, 0, fz, yaw);
         return { side, hip, foot, lift: Math.max(0, side * stride) * 0.8, z: foot.z };
     }).sort((a, b) => a.z - b.z);
     for(const L of legs) {
@@ -6369,7 +6377,10 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     }).sort((a, b) => a.z - b.z);
     // Shoulders sit just OUTSIDE the chest so the arm reads as a limb beside
     // the body rather than a stripe buried inside the torso silhouette.
-    const shoulderX = c.shHalf + c.armW * 0.34;
+    // Arms must hang CLEAR of the ribs. At shHalf + 0.34*armW they sat against
+    // the torso in the same colour, so the silhouette had no negative space and
+    // the whole figure read as one rectangular column — a Pez dispenser.
+    const shoulderX = c.shHalf + c.armW * 0.92;
     const drawArm = (side) => rigLimb(x,
         side * shoulderX, shY + c.armW * 0.5, 0,
         side * (shoulderX + 0.6), shY + c.armLen, -side * swing * 1.4,
@@ -6449,6 +6460,13 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         rigHoodShell(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp, shY + 2, shW0);
     }
     drawArm(arms[1].side);
+    // Deltoid caps proud of the torso top, so the shoulders read as mass
+    // rather than the flat lid of a box.
+    for(const side of [-1, 1]) {
+        const sx = x + rigRot(side * (c.shHalf + c.armW * 0.30), 0, 0, yaw).x;
+        charDeltoid(sx, shY + c.armW * 0.36, c.armW * 0.62,
+                    side < 0 ? charMix(ramp.base, '#fff', 0.06) : ramp.base);
+    }
 
     // --- Head, attached to the same body space. A visored hazmat hood seals
     // over it, so the face is not drawn at all — the concept art shows a dark
