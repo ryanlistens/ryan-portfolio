@@ -1904,13 +1904,13 @@ function drawMulletPro(x, y, ...rest) {
     shadeSprite(x + 0, gy + -16, 32, 70, () => _drawMulletPro(x, gy, ...rest));
 }
 
-function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
+function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null, ent = null) {
     // WIRED TO THE RIG. This used to be a front-facing block plus a separate
     // mirrored profile block, each building the body out of its own numbers —
     // so a fix in one view never reached the other. Now there is one figure,
     // projected at whatever yaw the facing asks for.
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
-    const stride = playerStride(isWalking);
+    const stride = entStride(ent || player, x, y, isWalking);
     drawRigCharacter(x, y + 1, rigYaw(facing), RIG_SHEET.mulletPro, {
         stride,
         armSwing: (holding || hasGun) ? 0 : stride,
@@ -2111,7 +2111,7 @@ function _drawMulletProAsPM(npc) {
     } else {
         // Idle / pacing / jumping — forward-facing mullet pro sprite.
         // Pacing forces a walking arm/leg swing; jumping just bobs y in-place.
-        drawMulletPro(x, y, 'forward', false, false, isPacing);
+        drawMulletPro(x, y, 'forward', false, false, isPacing, npc);
     }
 }
 
@@ -5717,20 +5717,33 @@ function rigStride(isWalking, phase) {
 // skated. Accumulating phase from distance makes the feet plant at any speed,
 // and is what stops a fast walk reading as a sprint.
 const STRIDE_LEN = 100;                    // px of ground per full leg cycle
-let _walkPhase = 0, _wpX = null, _wpY = null;
-function updateWalkPhase() {
-    if(_wpX === null) { _wpX = player.x; _wpY = player.y; return; }
-    const d = Math.hypot(player.x - _wpX, player.y - _wpY);
-    _wpX = player.x; _wpY = player.y;
-    if(d > 0.01) _walkPhase += (d / STRIDE_LEN) * Math.PI * 2;
+// PER ENTITY. A single global phase meant every character drawn by
+// drawMulletPro — the player, the level-5 Mullet Pro, the sack carriers —
+// animated off the PLAYER'S movement, so the level-5 Mullet Pro only moved his
+// legs when you did, and in lockstep with you. The phase lives on the object
+// now and is accumulated from that object's own travel.
+function entWalkPhase(ent, x, y) {
+    if(!ent) return 0;
+    if(ent._wpX === undefined) { ent._wpX = x; ent._wpY = y; ent._wp = 0; return 0; }
+    const d = Math.hypot(x - ent._wpX, y - ent._wpY);
+    ent._wpX = x; ent._wpY = y;
+    // d < 60 rejects room changes and teleports, which would otherwise spin the
+    // legs through several cycles in one frame.
+    if(d > 0.01 && d < 60) ent._wp += (d / STRIDE_LEN) * Math.PI * 2;
+    return ent._wp;
 }
-// Amplitude is derived from the step length, not picked by eye. The foot
-// travels 2 * stride * 1.6 in body space per step (see the legs block in
-// drawRigCharacter); for the feet to PLANT rather than slide that has to equal
-// the ground covered in a step, STRIDE_LEN / 2. At 100px that gives ~15.
-const STRIDE_AMP = (STRIDE_LEN / 2) / 3.2;
-function playerStride(isWalking) {
-    return isWalking ? Math.sin(_walkPhase) * STRIDE_AMP : 0;
+// A TRUE plant needs the foot to travel the whole step, which at 270 px/s works
+// out to a stride of 15.6 — and that is a lunge: the feet end up 50px apart on
+// a figure whose legs are 30px long. It is physically honest and it looks
+// deranged, because 270 px/s on a 110px person is jogging speed, not walking.
+// So the amplitude is capped at a walking step and a little foot slide is
+// accepted, which is what game walk cycles have always done. The distance-driven
+// phase still does the important job: the cadence tracks the speed, so it never
+// skates the way a fixed sin(frame) does.
+const STRIDE_AMP = 8;
+function entStride(ent, x, y, isWalking) {
+    const ph = entWalkPhase(ent, x, y);        // always advance, even when idle
+    return isWalking ? Math.sin(ph) * STRIDE_AMP : 0;
 }
 
 // Pipe managers come in the pipe colours, so their sheet is per-NPC. Cached by
@@ -9120,7 +9133,7 @@ function drawLevel5PipeRoom() {
         if(!level5.mulletPro.deathStartTime) level5.mulletPro.deathStartTime = Date.now();
         drawMulletProDeathAnimatic(level5.mulletPro);
     } else if(!level5.mulletPro.deathDone) {
-        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
+        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward', level5.mulletPro);
 
         if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
             drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
@@ -9348,7 +9361,7 @@ function drawLevel6EmployeePipeRoom() {
     for(let ab of acidBursts) { drawAcidBurst(ab); }
 
     // Mullet Pro — walking between doc printer and pipe managers
-    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
+    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward', level5.mulletPro);
     if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
         drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
     }
@@ -26172,7 +26185,7 @@ function drawScene() {
             // Draw Mullet Pro FIRST (behind PMs) so he doesn't walk on their heads
             for(let npc of level6.exitingNPCs) {
                 if(!npc.isMulletPro) continue;
-                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward');
+                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward', npc);
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
                     drawCashSack(npc.x, npc.y - 46 + bob);
@@ -27237,7 +27250,7 @@ function drawScene() {
                     // Draw using proper game character functions
                     if(npc.isMulletPro) {
                         // holding=true uses the existing raised-arm carrying pose
-                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived, false, !npc.arrived);
+                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived, false, !npc.arrived, npc);
                     } else {
                         const tempNPC = {
                             x: npc.x, y: ny,
@@ -27825,7 +27838,7 @@ function drawScene() {
         const meltT = Math.min(1, meltElapsed / 3000);
         drawHellMeltPlayer(player.x, player.y, meltT);
     } else {
-        drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun);
+        drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun, null, player);
     }
 
     if(player.holding) {
@@ -33396,7 +33409,6 @@ function gameLoop() {
     
     try {
         update();
-        updateWalkPhase();
         drawScene();
     } catch(e) {
         console.error('gameLoop error:', e && (e.stack || e.message || e));
