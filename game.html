@@ -1824,8 +1824,26 @@ function drawAmmoCounter(x, y, ammo) {
     ctx.fillRect(x - panelWidth/2 + 32, y - 50, 4, 3);
 }
 
+// Held items were drawn for the OLD sprite, whose hands sat at y+13. The rig
+// puts the 'hold' wrists at shY + armLen*0.46, about 26px higher, so anything
+// anchored to the old offsets floated at head height. This maps a held item's
+// old centre onto the rig's actual wrist and scales it there.
+function drawHeldAtHand(x, y, oldCenterY, k, fn) {
+    const c = RIG_SHEET.mulletPro;
+    const wristY = y + c.shY + c.armLen * RIG_ARM.hold.ey;
+    ctx.save();
+    ctx.translate(x, wristY);
+    ctx.scale(k, k);
+    ctx.translate(-x, -oldCenterY);
+    fn();
+    ctx.restore();
+}
+
 function drawHeldDoc(x, y, colorName) {
-    shadeSprite(x + 0, y + -48, 19, 21, () => _drawHeldDoc(x, y, colorName), { ground: 0 });
+    // The folder was 28x24 — 0.54 m across, about twice a real file — and
+    // anchored at y-58, level with the rebuilt figure's head.
+    drawHeldAtHand(x, y, y - 46, 0.60, () =>
+        shadeSprite(x + 0, y + -48, 19, 21, () => _drawHeldDoc(x, y, colorName), { ground: 0 }));
 }
 function _drawHeldDoc(x, y, colorName) {
     let col = COLORS.find(c => c.name === colorName);
@@ -6717,7 +6735,8 @@ function _draw3DPrinter(x, y) {
 }
 
 function drawGhostGun(x, y, facing) {
-    shadeSprite(x + 0, y + -15, 48, 45, () => _drawGhostGun(x, y, facing), { ground: 0 });
+    drawHeldWeapon(x, y, facing, 0.58, () =>
+        shadeSprite(x + 0, y + -15, 48, 45, () => _drawGhostGun(x, y, facing), { ground: 0 }));
 }
 function _drawGhostGun(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
@@ -6885,7 +6904,22 @@ function _drawGhostGun(x, y, facing) {
 
 // Draw the pipe wrench held by player (melee weapon, level 4)
 function drawPipeWrench(x, y, facing) {
+    // The wrench sits much closer to the body than the guns do (its ink centre
+    // is at +8.5 against their +24), so the shared wrist clip would slice it in
+    // half. It gets mapped from its OWN centre onto the hand instead, and is
+    // not clipped.
+    const c = RIG_SHEET.mulletPro;
+    const sgn = (facing === 'left') ? -1 : 1;
+    const horiz = (facing === 'left' || facing === 'right');
+    const tx = x + (horiz ? sgn * RIG_ARM.gun.ez * c.depth : 0);
+    const ty = y + c.shY + c.armLen * RIG_ARM.gun.ey;
+    const ox = x + sgn * 8.5, oy = y - 10.5;
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.scale(0.62, 0.62);
+    ctx.translate(-ox, -oy);
     shadeSprite(x + 0, y + -11, 21, 26, () => _drawPipeWrench(x, y, facing), { ground: 0 });
+    ctx.restore();
 }
 function _drawPipeWrench(x, y, facing) {
     const sleeveColor = '#800020';
@@ -6967,7 +7001,8 @@ function drawWrenchShatter(pieces) {
 
 // Draw auto-wrench held by player (level 6)
 function drawWrenchGun(x, y, facing) {
-    shadeSprite(x + -4, y + 0, 46, 46, () => _drawWrenchGun(x, y, facing), { ground: 0 });
+    drawHeldWeapon(x, y, facing, 0.58, () =>
+        shadeSprite(x + -4, y + 0, 46, 46, () => _drawWrenchGun(x, y, facing), { ground: 0 }));
 }
 function _drawWrenchGun(x, y, facing) {
     const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 || level6.wrenchBolts.length > 0;
@@ -7053,8 +7088,40 @@ function _drawWrenchGun(x, y, facing) {
     ctx.fillRect(x + 7, y + 26, 2, 8);   // shine
 }
 
+// Weapons were drawn for the old sprite and come out huge against the rebuilt
+// cast: measured across, the revolver is 0.70 m and the pipe wrench 0.84 m,
+// where a revolver is ~0.25 m and a pipe wrench ~0.45 m. Their CENTRES already
+// land on the rig's gun-pose wrist, so they only need shrinking in place —
+// scaled about the hand so the muzzle stays where the hand is.
+function drawHeldWeapon(x, y, facing, k, fn) {
+    const c = RIG_SHEET.mulletPro;
+    const sgn = (facing === 'left') ? -1 : 1;
+    const horiz = (facing === 'left' || facing === 'right');
+    const px = x + (horiz ? sgn * RIG_ARM.gun.ez * c.depth : 0);
+    const py = y + c.shY + c.armLen * RIG_ARM.gun.ey;
+    ctx.save();
+    // Each weapon sprite also draws its OWN upper arm, forearm and hand, from
+    // the old sprite's shoulder. The rig draws the arm now, so that vestigial
+    // sleeve just floats under the real one as a stubby second limb. Rather
+    // than surgically strip it out of sixteen per-facing branches, clip the
+    // weapon to the region beyond the wrist: the gun and the gripping hand
+    // survive, the orphaned sleeve does not.
+    if(horiz) {
+        ctx.beginPath();
+        if(sgn > 0) ctx.rect(px - 5, py - 60, 200, 120);
+        else        ctx.rect(px - 195, py - 60, 200, 120);
+        ctx.clip();
+    }
+    ctx.translate(px, py);
+    ctx.scale(k, k);
+    ctx.translate(-px, -py);
+    fn();
+    ctx.restore();
+}
+
 function drawRevolver(x, y, facing) {
-    shadeSprite(x + 0, y + -6, 47, 41, () => _drawRevolver(x, y, facing), { ground: 0 });
+    drawHeldWeapon(x, y, facing, 0.58, () =>
+        shadeSprite(x + 0, y + -6, 47, 41, () => _drawRevolver(x, y, facing), { ground: 0 }));
 }
 function _drawRevolver(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
