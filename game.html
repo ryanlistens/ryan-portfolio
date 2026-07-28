@@ -1908,6 +1908,99 @@ function drawMulletPro(x, y, ...rest) {
     shadeSprite(x + 0, gy + -14, 42, 58, () => _drawMulletPro(x, gy, ...rest));
 }
 
+// Mullet Pro's head in PROFILE. The two side branches drew it as
+// fillRect(x-5s, y-12s, 10s, 10s) — a literal square — while the front branch
+// builds a rounded skull with a jaw from ellipses, so he was round face-on and
+// square side-on. One helper, mirrored by d, so the two sides cannot drift from
+// each other or from the front view again.
+//   d = -1 facing left, +1 facing right
+function mulletProfileHead(x, y, s, d) {
+    // Everything lives in here — skull, hair, eye, nose, mouth — because the
+    // first attempt moved the skull but left the eye and mouth at the offsets
+    // they had when the head was a square centred on x, so the face ended up
+    // pointing the wrong way. d = -1 facing left, +1 facing right.
+    const hcy = y - 7.2 * s, rx = 4.4 * s, ry = 5.5 * s;
+    const SKIN = '#f5c89a', HAIR = '#33251a';
+    const fx = (k) => x + d * rx * k;            // k > 0 is toward the face
+
+    // Party at the back, drawn first so the skull overlaps its front edge
+    ctx.fillStyle = charMix(HAIR, '#000000', 0.18);
+    ctx.beginPath();
+    ctx.moveTo(fx(-0.30), hcy - ry * 0.60);
+    ctx.quadraticCurveTo(fx(-1.45), hcy + ry * 0.05, fx(-1.15), hcy + ry * 1.20);
+    ctx.quadraticCurveTo(fx(-0.80), hcy + ry * 1.48, fx(-0.50), hcy + ry * 1.05);
+    ctx.quadraticCurveTo(fx(-0.22), hcy + ry * 0.30, fx(-0.10), hcy - ry * 0.55);
+    ctx.closePath();
+    ctx.fill();
+
+    // Skull and jaw — the same rounded mass as the front view, narrower
+    // because we are seeing its depth rather than its width
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.ellipse(x, hcy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(fx(-0.70), hcy + ry * 0.20);
+    ctx.quadraticCurveTo(fx(0.95), hcy + ry * 0.52, fx(0.66), hcy + ry * 0.96);
+    ctx.quadraticCurveTo(fx(0.00), hcy + ry * 1.12, fx(-0.70), hcy + ry * 0.70);
+    ctx.closePath();
+    ctx.fill();
+    // Nose, on the face side
+    ctx.beginPath();
+    ctx.moveTo(fx(0.90), hcy - ry * 0.06);
+    ctx.lineTo(fx(1.26), hcy + ry * 0.24);
+    ctx.lineTo(fx(0.88), hcy + ry * 0.32);
+    ctx.closePath();
+    ctx.fill();
+
+    // Business up front — a cap over the crown that stops above the brow, so
+    // the face stays clear
+    ctx.fillStyle = HAIR;
+    ctx.beginPath();
+    ctx.moveTo(fx(0.86), hcy - ry * 0.42);
+    ctx.quadraticCurveTo(fx(0.62), hcy - ry * 1.16, fx(-0.30), hcy - ry * 1.16);
+    ctx.quadraticCurveTo(fx(-1.06), hcy - ry * 1.00, fx(-1.02), hcy + ry * 0.10);
+    ctx.quadraticCurveTo(fx(-0.62), hcy - ry * 0.46, fx(0.10), hcy - ry * 0.58);
+    ctx.quadraticCurveTo(fx(0.60), hcy - ry * 0.64, fx(0.86), hcy - ry * 0.42);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ear, set back at the jaw hinge. At -0.26 it sat out on the cheek and read
+    // as a smudge on his face rather than an ear.
+    ctx.fillStyle = charMix(SKIN, '#000000', 0.22);
+    ctx.beginPath();
+    ctx.ellipse(fx(-0.52), hcy + ry * 0.06, rx * 0.17, ry * 0.20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = charMix(SKIN, '#000000', 0.38);
+    ctx.beginPath();
+    ctx.ellipse(fx(-0.52), hcy + ry * 0.06, rx * 0.07, ry * 0.09, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Brow, eye and mouth — one eye, placed relative to the face side
+    ctx.strokeStyle = '#4a3a2c';
+    ctx.lineWidth = Math.max(1, 0.9 * s);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fx(0.30), hcy - ry * 0.44);
+    ctx.lineTo(fx(0.82), hcy - ry * 0.34);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.fillStyle = '#f8f4ec';
+    ctx.beginPath();
+    ctx.ellipse(fx(0.56), hcy - ry * 0.12, rx * 0.20, ry * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#241a12';
+    ctx.beginPath();
+    ctx.ellipse(fx(0.64), hcy - ry * 0.12, rx * 0.11, ry * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = charMix(SKIN, '#000000', 0.45);
+    ctx.lineWidth = Math.max(1, 0.7 * s);
+    ctx.beginPath();
+    ctx.moveTo(fx(0.34), hcy + ry * 0.56);
+    ctx.lineTo(fx(0.86), hcy + ry * 0.52);
+    ctx.stroke();
+}
+
 function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
     const s = 2;
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
@@ -1921,16 +2014,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     ctx.fill();
 
     if(facing === 'left') {
-        ctx.fillStyle = '#3a2a1a';
-        ctx.fillRect(x - 5*s, y - 16*s, 12*s, 4*s);
-        ctx.fillRect(x - 6*s, y - 12*s, 13*s, 10*s); // clipped to torso right edge (x+7*s)
-
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-
-        ctx.fillStyle = '#000';
-        drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-        ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
+        mulletProfileHead(x, y, s, -1);
 
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
@@ -1971,16 +2055,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
         ctx.fillRect(x + s, y + 16*s - mpLegBob, 4*s, 2*s);
 
     } else if(facing === 'right') {
-        ctx.fillStyle = '#3a2a1a';
-        ctx.fillRect(x - 7*s, y - 16*s, 12*s, 4*s);
-        ctx.fillRect(x - 7*s, y - 12*s, 13*s, 10*s); // clipped to torso left edge (x-7*s)
-
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-
-        ctx.fillStyle = '#000';
-        drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-        ctx.fillRect(x, y - 5*s, 3*s, s);
+        mulletProfileHead(x, y, s, 1);
 
         ctx.fillStyle = '#800020';
         ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
