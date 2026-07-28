@@ -9830,11 +9830,12 @@ const MUTANT_JUMP_FRAMES = 58;
 // its anchor — so he lands on the grass instead of floating over it.
 const MUTANT_FREE_HORIZON = 372;
 const MUTANT_FOOT_OFS = 35;
-// The rampage has to last long enough to take the REAL route out: up the
-// elevator from the pipe room to the employee floor, across to RED's office.
-// At 30s the only way through was a shortcut that welded the office hallway
-// onto the underbelly cage, which made the building's geography nonsense.
-const MUTANT_SECONDS = 75;
+// 30 seconds is enough for the real route. The doors on it are already open by
+// the time you become him: the detective has to unlock the cloning door to get
+// the cage key at all, so that is never a blocker, and the palm scanner reads
+// his own hand (see hasPalmCredential). Meals are the fuel — every NPC he eats
+// buys two more seconds, which is what gets him to the CEO and back.
+const MUTANT_SECONDS = 30;
 
 // MUTANT ESCAPE HUD — countdown, meals eaten, and the current objective
 function drawMutantHUD() {
@@ -9885,6 +9886,13 @@ function drawMutantHUD() {
 // Find an edible NPC near the mutant in the current room. Returns a handle
 // with a kill() that removes it, or null. Kept deliberately narrow: the PMs
 // on their ladders, the hallway supervisor, and the red clone.
+// The palm scanner wants a red pipe manager's hand. As the mutant you ARE one —
+// asking him to go and find a severed hand to open a door he can open with his
+// own is backwards, and it was a hard blocker on the route to the CEO.
+function hasPalmCredential() {
+    return level6.hasPMHand || !!(level6.mutantMode && level6.mutantMode.active);
+}
+
 function findMutantMeal() {
     // EVERYTHING is food. This used to cover only the pipe-room managers, the
     // two cloning bosses and the clone follower, so most of the building was
@@ -15192,7 +15200,7 @@ function drawLevel6MarbleRoom() {
     // ── RED HAND PALM SCANNER — left of brickwall ─────────────────────────────
     {
         const scX = BRICK_X - 32, scY = FLOOR_Y - 150, scW = 26, scH = 36;
-        const hasHand = level6.hasPMHand;
+        const hasHand = hasPalmCredential();
         const scanPulse = 0.55 + Math.sin(t * 0.005) * 0.3;
         const accepted = brickSlide > 0;
         ctx.fillStyle = '#0e0606'; ctx.fillRect(scX - 3, scY - 3, scW + 6, scH + 6);
@@ -26205,8 +26213,8 @@ function drawScene() {
               if(player.x > _mrBrickX - 80 && !level6.marbleElevatorTransition) {
                 const _accepted = (level6.marbleBrickSlide || 0) > 0;
                 const _msg = _accepted ? '[ ACTION ] ENTER ELEVATOR'
-                    : level6.hasPMHand ? '[ ACTION ] PALM SCAN' : 'GET PM HAND FIRST';
-                const _col = _accepted ? '#00ff88' : level6.hasPMHand ? '#ffcc44' : '#ff6644';
+                    : hasPalmCredential() ? '[ ACTION ] PALM SCAN' : 'GET PM HAND FIRST';
+                const _col = _accepted ? '#00ff88' : hasPalmCredential() ? '#ffcc44' : '#ff6644';
                 drawActionLabel(_msg, _mrBrickX, _mrFloorY - 10, {color: _col, fontSize: 13});
               }
               if(player.x < 140) drawActionLabel('\u2190 BRIDGE', 70, _mrFloorY - 10, {fontSize: 13});
@@ -30872,7 +30880,7 @@ function update() {
 
                 // Palm scan — activate brickwall when player has hand and presses action near wall
                 const BRICK_X_MR = 520;
-                if(!level6.marbleBrickOpening && player.x > BRICK_X_MR - 80 && level6.hasPMHand && (keys[' ']||keys['action'])) {
+                if(!level6.marbleBrickOpening && player.x > BRICK_X_MR - 80 && hasPalmCredential() && (keys[' ']||keys['action'])) {
                     SFX.play('doorOpen'); level6.marbleBrickOpening = true;
                     keys[' '] = false; keys['action'] = false;
                 }
