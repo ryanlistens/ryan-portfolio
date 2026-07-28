@@ -10110,12 +10110,11 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     // ── Legs — thick jumpsuit legs into heavy boots (cage palette)
     for(const [sgn, ph] of [[-1, 0], [1, Math.PI]]) {
         const sw = Math.sin(t / 110 + ph) * (walking ? 6 : 0);
-        ctx.strokeStyle = '#cc2222';
-        ctx.lineWidth = 12;
-        ctx.beginPath();
-        ctx.moveTo(x + sgn * 8, hipY + 6);
-        ctx.quadraticCurveTo(x + sgn * 10 + sw * 0.4, y + 18, x + sgn * 9 + sw, y + 25);
-        ctx.stroke();
+        // Thigh -> knee -> ankle, tapered. This was one constant-width stroke,
+        // which is the same tube the whole human cast used to have.
+        const mKx = sgn * 10 + sw * 0.4, mKy = y + 17;
+        rigSeg(x, { x: sgn * 8, y: hipY + 6 }, { x: mKx, y: mKy }, 13, 9.5, '#cc2222');
+        rigSeg(x, { x: mKx, y: mKy }, { x: sgn * 9 + sw, y: y + 25 }, 9, 7, '#cc2222');
         // Heavy boot
         ctx.fillStyle = '#333';
         pathRoundRect(x + sgn * 9 + sw - 9 + dir * 2, y + 25, 18, 6, 2);
@@ -10128,23 +10127,26 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     // ── Torso — red jumpsuit, darker seams, bright collar. Silhouette is kept
     // exactly as the caged mutant's; only the light modelling is added, so the
     // two still read as the same creature.
-    const mtG = ctx.createLinearGradient(x - 23, 0, x + 23, 0);
+    const mtG = ctx.createLinearGradient(x - 19, 0, x + 19, 0);
     mtG.addColorStop(0,    charMix('#cc2222', '#fff', 0.14));
     mtG.addColorStop(0.40, '#cc2222');
     mtG.addColorStop(1,    charMix('#cc2222', '#000', 0.28));
     ctx.fillStyle = mtG;
+    // Narrowed from +-23 to +-19 at the widest. He is meant to be a bruiser,
+    // but at the old width he was three times the player across the shoulders,
+    // which reads as a different scale of creature rather than a big man.
     ctx.beginPath();
-    ctx.moveTo(x - 17, hipY + 8);
-    ctx.quadraticCurveTo(x - 23, y - 12 + bob, x - 15 + dir * 3, y - 21 + bob);
-    ctx.lineTo(x + 15 + dir * 3, y - 21 + bob);
-    ctx.quadraticCurveTo(x + 23, y - 12 + bob, x + 17, hipY + 8);
+    ctx.moveTo(x - 14, hipY + 8);
+    ctx.quadraticCurveTo(x - 19, y - 12 + bob, x - 13 + dir * 3, y - 21 + bob);
+    ctx.lineTo(x + 13 + dir * 3, y - 21 + bob);
+    ctx.quadraticCurveTo(x + 19, y - 12 + bob, x + 14, hipY + 8);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#991a1a';                      // fold seams, as in the cage
     ctx.fillRect(x - 8, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
     ctx.fillRect(x + 6, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
     ctx.fillStyle = '#e63333';                      // collar
-    ctx.fillRect(x - 13 + dir * 2, y - 23 + bob, 26, 5);
+    ctx.fillRect(x - 11 + dir * 2, y - 23 + bob, 22, 5);
     // PipeTech patch on the chest
     ctx.fillStyle = '#ddd';
     ctx.fillRect(x + dir * 8, y - 15 + bob, 9, 7);
@@ -10159,19 +10161,13 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     for(const [sgn, ph] of [[-1, Math.PI], [1, 0]]) {
         const sw = Math.sin(t / 110 + ph) * (walking ? 7 : 0);
         const sleeve = sgn < 0 ? charMix('#cc2222', '#000', 0.16) : '#cc2222';
-        ctx.strokeStyle = sleeve;
-        ctx.lineWidth = 10.5;
-        ctx.beginPath();
-        ctx.moveTo(x + sgn * 15, y - 17 + bob);
-        ctx.quadraticCurveTo(x + sgn * 24, y - 6 + bob, x + sgn * 23 + sw * 0.6, y + 4);
-        ctx.stroke();
-        ctx.lineWidth = 9;                           // lower sleeve, slightly narrower
-        ctx.beginPath();
-        ctx.moveTo(x + sgn * 23 + sw * 0.6, y + 4);
-        ctx.quadraticCurveTo(x + sgn * 23 + sw * 0.85, y + 8, x + sgn * 22 + sw, y + 12);
-        ctx.stroke();
+        // Deltoid -> elbow -> wrist. Two constant-width strokes before, so the
+        // arm had a step in it rather than a joint.
+        const mEx = sgn * 23 + sw * 0.6, mEy = y + 4;
+        rigSeg(x, { x: sgn * 13, y: y - 17 + bob }, { x: mEx, y: mEy }, 11.0, 8.2, sleeve);
+        rigSeg(x, { x: mEx, y: mEy }, { x: sgn * 22 + sw, y: y + 12 }, 8.2, 6.2, sleeve);
         // Deltoid cap over the shoulder joint
-        charDeltoid(x + sgn * 15.5, y - 17 + bob, 6,
+        charDeltoid(x + sgn * 13.5, y - 17 + bob, 5.6,
                     sgn < 0 ? charMix('#cc2222', '#000', 0.08) : charMix('#cc2222', '#fff', 0.12));
         ctx.strokeStyle = '#c4a882';                // forearm / hand
         ctx.lineWidth = 8.4;
@@ -10188,47 +10184,113 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
         ctx.fill();
     }
 
-    // ── Head — oversized and squared, with the bulging forehead
+    // ── Head. This was a rounded rectangle with a rectangular brow slab,
+    // rectangular sockets, square irises, square pupils, rectangular brows and
+    // square teeth — every single feature axis-aligned, which is exactly the
+    // Minecraft-creeper read. It is now an actual skull: broad cranium, heavy
+    // overhanging brow, cheekbones, and a prognathic jaw.
     const hy = y - 34 + bob;
-    ctx.fillStyle = '#c4a882';
-    pathRoundRect(x + dir * 3 - 14, hy - 11, 28, 24, 4);
+    const hx = x + dir * 3;
+    const skG = ctx.createLinearGradient(hx - 16, 0, hx + 16, 0);
+    skG.addColorStop(0,    charMix('#c4a882', '#ffffff', 0.14));
+    skG.addColorStop(0.45, '#c4a882');
+    skG.addColorStop(1,    charMix('#c4a882', '#000000', 0.26));
+    ctx.fillStyle = skG;
+    ctx.beginPath();
+    ctx.moveTo(hx - 15, hy - 3);
+    ctx.quadraticCurveTo(hx - 16, hy - 14, hx - 6, hy - 17);      // crown, left
+    ctx.quadraticCurveTo(hx + 7, hy - 19, hx + 15, hy - 12);      // crown, right
+    ctx.quadraticCurveTo(hx + 17, hy - 1, hx + 13, hy + 6);       // cheekbone
+    ctx.quadraticCurveTo(hx + 11, hy + 14, hx + 1, hy + 15);      // heavy jaw
+    ctx.quadraticCurveTo(hx - 10, hy + 15, hx - 13, hy + 5);
+    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#b89a72';                      // brow ridge
-    pathRoundRect(x + dir * 3 - 16, hy - 14, 32, 9, 3);
+    // Brow ridge — an overhang that curves across and casts into the sockets
+    ctx.fillStyle = charMix('#c4a882', '#000000', 0.14);
+    ctx.beginPath();
+    ctx.moveTo(hx - 15, hy - 4);
+    ctx.quadraticCurveTo(hx, hy - 13, hx + 15, hy - 5);
+    ctx.quadraticCurveTo(hx + 13, hy + 0.5, hx + 11, hy - 0.5);
+    ctx.quadraticCurveTo(hx, hy - 8, hx - 11, hy - 0.5);
+    ctx.closePath();
     ctx.fill();
-    // Sunken sockets with orange irises and darting pupils
-    const pupilOffset = Math.sin(t / 1200) * 2;
-    ctx.fillStyle = '#600';
-    ctx.fillRect(x + dir * 3 - 10, hy - 4, 8, 7);
-    ctx.fillRect(x + dir * 3 + 3, hy - 4, 8, 7);
-    ctx.fillStyle = '#ff3300';
-    ctx.fillRect(x + dir * 3 - 8, hy - 2, 5, 4);
-    ctx.fillRect(x + dir * 3 + 5, hy - 2, 5, 4);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x + dir * 3 - 7 + pupilOffset, hy - 1, 2, 2);
-    ctx.fillRect(x + dir * 3 + 6 + pupilOffset, hy - 1, 2, 2);
-    // Thick angry eyebrows
+    ctx.fillStyle = 'rgba(60,34,16,0.34)';                        // socket shadow
+    for(const sg of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(hx + sg * 6.6, hy + 0.6, 5.2, 4.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Eyes: round sockets, orange irises, round darting pupils
+    const pupilOffset = Math.sin(t / 1200) * 1.6;
+    for(const sg of [-1, 1]) {
+        ctx.fillStyle = '#5a0d0d';
+        ctx.beginPath();
+        ctx.ellipse(hx + sg * 6.6, hy + 0.8, 4.3, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ff3300';
+        ctx.beginPath();
+        ctx.ellipse(hx + sg * 6.6 + pupilOffset * 0.5, hy + 1.0, 2.5, 2.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(hx + sg * 6.6 + pupilOffset, hy + 1.1, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(hx + sg * 6.6 - 1.4, hy - 0.4, 0.7, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Brows — angled wedges driving down toward the nose, not bars
     ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(x + dir * 3 - 11, hy - 8, 9, 3);
-    ctx.fillRect(x + dir * 3 + 2, hy - 8, 9, 3);
-    // Mouth — gritted teeth, or a gaping maw mid-meal
+    for(const sg of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(hx + sg * 12, hy - 6.4);
+        ctx.lineTo(hx + sg * 1.6, hy - 3.2);
+        ctx.lineTo(hx + sg * 1.8, hy - 5.6);
+        ctx.lineTo(hx + sg * 11.6, hy - 9.2);
+        ctx.closePath();
+        ctx.fill();
+    }
+    // Muzzle shadow, so the jaw reads as pushed forward
+    ctx.fillStyle = 'rgba(90,58,30,0.20)';
+    ctx.beginPath();
+    ctx.ellipse(hx + dir * 1.5, hy + 8, 8.5, 5.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Mouth — gaping maw mid-meal, otherwise gritted teeth
     if(eating) {
         const gape = 4 + Math.abs(Math.sin(t / 90)) * 6;
         ctx.fillStyle = '#3a0808';
         ctx.beginPath();
-        ctx.ellipse(x + dir * 3, hy + 7, 8, gape, 0, 0, Math.PI * 2);
+        ctx.ellipse(hx, hy + 7, 8, gape, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#ddd';
+        ctx.fillStyle = '#ddd';                       // tapered fangs, not blocks
         for(let tt = -2; tt <= 2; tt++) {
-            ctx.fillRect(x + dir * 3 + tt * 3, hy + 7 - gape + 1, 2, 3.5);
-            ctx.fillRect(x + dir * 3 + tt * 3, hy + 7 + gape - 4.5, 2, 3.5);
+            const tx = hx + tt * 3;
+            ctx.beginPath();
+            ctx.moveTo(tx - 1.3, hy + 7 - gape + 0.5);
+            ctx.lineTo(tx + 1.3, hy + 7 - gape + 0.5);
+            ctx.lineTo(tx, hy + 7 - gape + 4);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(tx - 1.3, hy + 7 + gape - 0.5);
+            ctx.lineTo(tx + 1.3, hy + 7 + gape - 0.5);
+            ctx.lineTo(tx, hy + 7 + gape - 4);
+            ctx.closePath(); ctx.fill();
         }
     } else {
         ctx.fillStyle = '#ddd';
-        ctx.fillRect(x + dir * 3 - 6, hy + 5, 12, 4);
-        ctx.fillStyle = '#333';
-        for(let tooth = 0; tooth < 4; tooth++) {
-            ctx.fillRect(x + dir * 3 - 5 + tooth * 3, hy + 5, 1, 4);
+        ctx.beginPath();
+        ctx.moveTo(hx - 6.5, hy + 5.2);
+        ctx.quadraticCurveTo(hx, hy + 6.4, hx + 6.5, hy + 5.2);
+        ctx.lineTo(hx + 6, hy + 9);
+        ctx.quadraticCurveTo(hx, hy + 10.2, hx - 6, hy + 9);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8;
+        for(let tooth = -1; tooth <= 2; tooth++) {
+            ctx.beginPath();
+            ctx.moveTo(hx + tooth * 3 - 1, hy + 5.6);
+            ctx.lineTo(hx + tooth * 3 - 1.3, hy + 9.4);
+            ctx.stroke();
         }
     }
     // Pulsing temple vein
