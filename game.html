@@ -5000,41 +5000,43 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
         // it hid completely behind the head and the mullet vanished. A real
         // mullet hangs past the ears and flares either side of the neck from
         // any angle; it only gets wider in profile.
-        // The three locks fan across the BACK OF THE SKULL, so the fan is a
-        // body-space offset that gets projected — not a raw screen offset. Fanned
-        // in screen x it splayed sideways into empty air in profile, which is the
-        // slab that was appearing behind his head at 90 and 270 degrees. Projected,
-        // the locks spread across the nape head-on and stack into one mass in
-        // profile, which is what hair actually does.
-        // Starts at EAR LEVEL, not the crown, and only just clears the width of
-        // the skull. Hanging from cy - 0.30*ry at 1.4 head-widths it framed both
-        // cheeks and read as a shoulder-length bob. A mullet is short at the
-        // sides: from the front you should see the tail peek out behind the
-        // ears and fall below the jaw, with the face left clear.
-        const nape = cy + ry * 0.12;
-        const tipY = cy + ry * 1.34;                   // hangs to the collar
-        const lockW = halfW * 0.60;                    // half-width of one lock
-        for(let i = -1; i <= 1; i++) {
-            const fan = rigRot(i * rx * 0.44, 0, 0, yaw).x;
-            const lx = tailX + fan;
-            // Lit from screen left, same as every other surface in the game.
-            ctx.fillStyle = (i === 0) ? hc : (fan < 0 ? lite : dark);
-            ctx.beginPath();
-            ctx.moveTo(lx - lockW * 0.62, nape);
-            ctx.quadraticCurveTo(lx - lockW * 1.02, cy + ry * 0.55,
-                                 lx - lockW * 0.58, tipY + Math.abs(i) * ry * 0.10);
-            ctx.quadraticCurveTo(lx, tipY + ry * 0.26, lx + lockW * 0.54, tipY - ry * 0.04);
-            ctx.quadraticCurveTo(lx + lockW * 0.98, cy + ry * 0.52, lx + lockW * 0.60, nape);
-            ctx.closePath();
-            ctx.fill();
-        }
-        ctx.strokeStyle = dark; ctx.lineWidth = 1;    // strand separation
+        // ONE MASS, not three capsules. Drawn as three separate rounded lock
+        // shapes it read as a row of sausages hanging beside his head — the
+        // "hotdog hoagie". Hair is a single volume with strand lines ON it, so
+        // that is what this draws: one silhouette from the nape to the tips,
+        // then the partings stroked over the top of it.
+        //
+        // The fan is a body-space offset that gets projected, so the mass
+        // spreads across the nape head-on and collapses behind the skull in
+        // profile instead of splaying sideways into empty air.
+        const nape  = cy - ry * 0.16;                  // tucked under the cap
+        const tipY  = cy + ry * 1.30;                  // hangs to the collar
+        const outer = rigRot(rx * 0.98, 0, 0, yaw).x;  // half-width of the mass
+        const hw    = Math.max(halfW * 0.42, Math.abs(outer));
+        const grd = ctx.createLinearGradient(tailX - hw, 0, tailX + hw, 0);
+        grd.addColorStop(0, lite);
+        grd.addColorStop(0.45, hc);
+        grd.addColorStop(1, dark);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.moveTo(tailX - hw * 0.86, nape);
+        ctx.quadraticCurveTo(tailX - hw * 1.10, cy + ry * 0.52, tailX - hw * 0.80, tipY - ry * 0.10);
+        // ragged tips rather than one flat cut
+        ctx.quadraticCurveTo(tailX - hw * 0.62, tipY + ry * 0.20, tailX - hw * 0.34, tipY - ry * 0.06);
+        ctx.quadraticCurveTo(tailX - hw * 0.10, tipY + ry * 0.26, tailX + hw * 0.14, tipY - ry * 0.04);
+        ctx.quadraticCurveTo(tailX + hw * 0.46, tipY + ry * 0.22, tailX + hw * 0.78, tipY - ry * 0.12);
+        ctx.quadraticCurveTo(tailX + hw * 1.10, cy + ry * 0.50, tailX + hw * 0.86, nape);
+        ctx.closePath();
+        ctx.fill();
+        // Partings stroked over the mass, so it reads as strands rather than a slab
+        ctx.strokeStyle = charMix(dark, '#000', 0.10);
+        ctx.lineWidth = Math.max(0.6, hw * 0.07);
         for(let i = -1; i <= 1; i += 2) {
-            const fan = rigRot(i * rx * 0.30, 0, 0, yaw).x;
+            const fx2 = rigRot(i * rx * 0.42, 0, 0, yaw).x;
             ctx.beginPath();
-            ctx.moveTo(tailX + fan, cy - ry * 0.14);
-            ctx.quadraticCurveTo(tailX + fan * 1.4, cy + ry * 0.60,
-                                 tailX + fan * 0.8, cy + ry * 1.16);
+            ctx.moveTo(tailX + fx2 * 0.7, nape + ry * 0.10);
+            ctx.quadraticCurveTo(tailX + fx2 * 1.15, cy + ry * 0.55,
+                                 tailX + fx2 * 0.85, tipY - ry * 0.14);
             ctx.stroke();
         }
     }
@@ -5190,25 +5192,16 @@ function rigHoodShell(cx, cy, rx, ry, rz, yaw, ramp, shoulderY, shoulderHalf) {
 // Torso as a tapered box: shoulder and hip rectangles in body space, projected
 // and joined. Its width foreshortens with yaw, so turning genuinely narrows the
 // chest instead of leaving a front-on slab behind a turned head.
-function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
-    const c = Math.cos(yaw), sn = Math.sin(yaw);
-    const shW  = Math.sqrt((shHalf * c) ** 2 + (halfDepth * sn) ** 2);
-    const hipW = Math.sqrt((hipHalf * c) ** 2 + (halfDepth * sn) ** 2);
-    // Waist pinches in ABOVE the hips — a straight taper from shoulder to hem
-    // gives a wedge, not a torso.
+// The torso silhouette, as ONE path both the fill and the garment detail use.
+// Splitting it out is what lets rigGarment clip to the body: lapels, plackets
+// and the shirt opening are all positioned on the CHEST FRONT, which at three
+// quarter angles projects out near the silhouette edge — correct geometrically,
+// but with nothing stopping them they spilled past the outline and read as bits
+// of clothing hovering off the body.
+function rigTorsoPath(cx, shY, hemY, shW, hipW, drop) {
     const waistW = Math.min(shW, hipW) * 0.88;
     const waistY = shY + (hemY - shY) * 0.62;
-    const g = ctx.createLinearGradient(cx - shW, 0, cx + shW, 0);
-    g.addColorStop(0, ramp.lit);
-    g.addColorStop(0.45, ramp.base);
-    g.addColorStop(1, ramp.dark);
-    ctx.fillStyle = g;
-    // Shoulders SLOPE. The top edge used to be a horizontal line with a small
-    // corner radius — the flat lid of a box, which is most of why the figures
-    // read as containers with heads on them. The trapezius rises toward the
-    // neck and the acromion sits well below it, about 15 degrees down.
-    const drop = (hemY - shY) * 0.10;             // acromion below the trap line
-    const trapX = shW * 0.30;                     // where the neck leaves the torso
+    const trapX  = shW * 0.30;                    // where the neck leaves the torso
     ctx.beginPath();
     ctx.moveTo(cx - shW, shY + drop);
     ctx.quadraticCurveTo(cx - shW * 0.98, waistY - (hemY - shY) * 0.14, cx - waistW, waistY);
@@ -5220,6 +5213,22 @@ function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
     ctx.lineTo(cx - trapX, shY - drop * 0.80);
     ctx.quadraticCurveTo(cx - shW * 0.62, shY - drop * 0.55, cx - shW, shY + drop);
     ctx.closePath();
+}
+
+function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    const shW  = Math.sqrt((shHalf * c) ** 2 + (halfDepth * sn) ** 2);
+    const hipW = Math.sqrt((hipHalf * c) ** 2 + (halfDepth * sn) ** 2);
+    const g = ctx.createLinearGradient(cx - shW, 0, cx + shW, 0);
+    g.addColorStop(0, ramp.lit);
+    g.addColorStop(0.45, ramp.base);
+    g.addColorStop(1, ramp.dark);
+    ctx.fillStyle = g;
+    // Shoulders SLOPE: the trapezius rises toward the neck and the acromion
+    // sits about 15 degrees below it. A horizontal top edge is the flat lid of
+    // a box, which is most of why the figures read as containers with heads on.
+    const drop = (hemY - shY) * 0.10;
+    rigTorsoPath(cx, shY, hemY, shW, hipW, drop);
     ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
     ctx.beginPath();
@@ -5238,8 +5247,16 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp, drop) {
     const front = rigRot(0, 0, depth, yaw);
     const facing = front.z;                       // > 0 means the chest is toward us
     const shW = Math.sqrt((shHalf * cs) ** 2 + (depth * sn) ** 2);
+    const hipW0 = Math.sqrt((hipHalf * cs) ** 2 + (depth * sn) ** 2);
     const px = (ax) => cx + rigRot(ax * shHalf, 0, depth * 0.92, yaw).x;
     const g = c.garment || 'plain';
+    // EVERY detail below is clipped to the torso outline. All of it is placed on
+    // the chest front, which at three quarter angles projects out near the
+    // silhouette edge — geometrically right, but unclipped it spilled past the
+    // body and read as clothing hovering in the air beside him.
+    ctx.save();
+    rigTorsoPath(cx, shY, hemY, shW, hipW0, drop || 0);
+    ctx.clip();
     const H = hemY - shY;
     // The torso top SLOPES from the trapezius down to the acromion. Collars and
     // lapels used to anchor at a flat shY, so once the shoulder gained its
@@ -5255,28 +5272,41 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp, drop) {
         // ---- FRONT-FACING DETAIL -----------------------------------------
         if(g === 'suit' || g === 'jacket') {
             // Shirt / tee showing in the jacket opening
+            // The opening is a feature on the CHEST PLANE, so as he turns it
+            // swings out to the silhouette edge — correct, but as a full-height
+            // black shape it read as a hard stripe pasted down his side. Real
+            // jackets close over: the near lapel progressively covers the
+            // opening, so the visible gap narrows with cos^2, not cos, and the
+            // whole opening is gone by three-quarter-rear.
+            const fore = Math.max(0, cs);            // 1 head-on, 0 in profile
+            const oT = shY + D * 0.20;               // never rides above the trap
             ctx.fillStyle = c.under || '#1a1a1a';
             ctx.beginPath();
-            ctx.moveTo(px(-0.30), topAt(-0.30));
-            ctx.lineTo(px(0.30), topAt(0.30));
-            ctx.lineTo(px(0.14), shY + H * 0.44);
-            ctx.lineTo(px(-0.14), shY + H * 0.44);
+            ctx.moveTo(px(-0.24 * fore), oT);
+            ctx.lineTo(px(0.24 * fore), oT);
+            ctx.lineTo(px(0.10 * fore), shY + H * 0.36);
+            ctx.lineTo(px(-0.10 * fore), shY + H * 0.36);
             ctx.closePath(); ctx.fill();
             // Lapels folding back off the opening
-            ctx.fillStyle = charMix(ramp.base, '#fff', 0.10);
+            ctx.fillStyle = charMix(ramp.base, '#ffffff', 0.05);
             ctx.beginPath();
-            ctx.moveTo(px(-0.44), topAt(-0.44)); ctx.lineTo(px(-0.06), topAt(-0.06));
-            ctx.lineTo(px(-0.30), shY + H * 0.46); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = charMix(ramp.base, '#000', 0.14);
+            ctx.moveTo(px(-0.44 * fore), Math.max(oT, topAt(-0.44)));
+            ctx.lineTo(px(-0.06 * fore), oT);
+            ctx.lineTo(px(-0.30 * fore), shY + H * 0.46); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = charMix(ramp.base, '#000000', 0.10);
             ctx.beginPath();
-            ctx.moveTo(px(0.44), topAt(0.44)); ctx.lineTo(px(0.06), topAt(0.06));
-            ctx.lineTo(px(0.30), shY + H * 0.46); ctx.closePath(); ctx.fill();
-            // Buttons down the closure
-            ctx.fillStyle = charMix(ramp.dark, '#000', 0.30);
-            for(let i = 0; i < 2; i++) {
-                ctx.beginPath();
-                ctx.arc(px(0.06), shY + H * (0.56 + i * 0.18), Math.max(0.7, shW * 0.05), 0, Math.PI*2);
-                ctx.fill();
+            ctx.moveTo(px(0.44 * fore), Math.max(oT, topAt(0.44)));
+            ctx.lineTo(px(0.06 * fore), oT);
+            ctx.lineTo(px(0.30 * fore), shY + H * 0.46); ctx.closePath(); ctx.fill();
+            // Buttons down the closure, front-facing only
+            if(cs > 0.5) {
+                ctx.fillStyle = charMix(ramp.dark, '#000', 0.30);
+                for(let i = 0; i < 2; i++) {
+                    ctx.beginPath();
+                    ctx.arc(px(0.06 * fore), shY + H * (0.56 + i * 0.18),
+                            Math.max(0.7, shW * 0.05), 0, Math.PI*2);
+                    ctx.fill();
+                }
             }
         } else if(g === 'shirt') {
             // Collar wings either side of the neck
@@ -5314,14 +5344,20 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp, drop) {
     } else {
         // ---- BACK DETAIL: a yoke seam and a centre vent, so the back is not
         // a blank slab either
-        ctx.strokeStyle = charMix(ramp.dark, '#000', 0.22);
-        ctx.lineWidth = 1;
+        // Yoke seam follows the shoulder curve, and the centre vent starts
+        // BELOW the waist. Drawn as a straight bar plus a full-height line they
+        // crossed into a hard "+" stamped on his back.
+        ctx.strokeStyle = charMix(ramp.dark, '#000', 0.10);
+        ctx.lineWidth = 0.8;
         ctx.beginPath();
-        ctx.moveTo(cx - shW * 0.80, shY + H * 0.22);
-        ctx.lineTo(cx + shW * 0.80, shY + H * 0.22);
-        ctx.moveTo(cx, shY + H * 0.22); ctx.lineTo(cx, hemY);
+        ctx.moveTo(cx - shW * 0.78, shY + H * 0.24);
+        ctx.quadraticCurveTo(cx, shY + H * 0.16, cx + shW * 0.78, shY + H * 0.24);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx, shY + H * 0.62); ctx.lineTo(cx, hemY);
         ctx.stroke();
     }
+    ctx.restore();                                 // end torso clip
     // A hem, at every angle. Without one the garment ran straight into the belt
     // and the whole torso read as a single tunic block — the flattest thing
     // about the figures. A jacket or a coverall ends in a band; a shirt tucks
@@ -5346,11 +5382,16 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp, drop) {
     // Shoulder seams read at every angle
     ctx.strokeStyle = charMix(ramp.dark, '#000', 0.18);
     ctx.lineWidth = 1;
-    for(const side of [-1, 1]) {
-        const sx = cx + rigRot(side * shHalf * 0.82, 0, 0, yaw).x;
-        ctx.beginPath();
-        ctx.moveTo(sx, topAt(0.82) + 0.5); ctx.lineTo(sx, shY + H * 0.30);
-        ctx.stroke();
+    // Front-facing only. Near profile the two seams project onto the same x and
+    // stack into one dark bar down his side; from behind they crossed the yoke
+    // seam and stamped a "+" on his back.
+    if(cs > 0.55) {
+        for(const side of [-1, 1]) {
+            const sx = cx + rigRot(side * shHalf * 0.82, 0, 0, yaw).x;
+            ctx.beginPath();
+            ctx.moveTo(sx, topAt(0.82) + 0.5); ctx.lineTo(sx, shY + H * 0.30);
+            ctx.stroke();
+        }
     }
 }
 
@@ -5785,7 +5826,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     const drawArm = (side) => rigLimb(x,
         side * shoulderX, acromionY, 0,
         side * (shoulderX + AP.ex), shY + c.armLen * AP.ey, AP.ez * c.depth - side * swing * 1.4,
-        yaw, c.armW, ramp.base, c.glove || c.skin, c.armW * 0.42, cuffCol);
+        yaw, c.armW, ramp.base, c.glove || c.skin, c.armW * 0.34, cuffCol);
     drawArm(arms[0].side);
     // Neck goes down BEFORE the torso. Drawn after it, the skin column painted
     // straight over the collar, so every character appeared to be wearing their
