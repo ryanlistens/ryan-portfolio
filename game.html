@@ -1910,7 +1910,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     // so a fix in one view never reached the other. Now there is one figure,
     // projected at whatever yaw the facing asks for.
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
-    const stride = rigStride(isWalking);
+    const stride = playerStride(isWalking);
     drawRigCharacter(x, y + 1, rigYaw(facing), RIG_SHEET.mulletPro, {
         stride,
         armSwing: (holding || hasGun) ? 0 : stride,
@@ -5550,7 +5550,11 @@ const RIG_SCALE = 112 / 76;
 // same game" mismatch. stepScale converts a per-frame constant into a
 // per-second one using the real frame delta, clamped so a stall or a
 // background tab cannot teleport the player across the room.
-const PLAYER_STEP = 8;                     // px per frame at 60fps
+// 8 px/frame is 480 px/s — he sprints. The arithmetic that produced it was
+// "keep the same body-lengths per second as the 67px sprite", which is right in
+// principle but ignored that the original game shipped at 300 px/s and that was
+// already described as too fast in the hallway. 4.5 gives 270 px/s.
+const PLAYER_STEP = 4.5;                   // px per frame at 60fps -> 270 px/s
 const PLAYER_STEP_SLOW = 3;                // slow crawls (chute, ladders)
 let _frameDelta = 1000 / 60;               // ms since the previous frame
 function stepScale() {
@@ -5707,6 +5711,28 @@ function rigStride(isWalking, phase) {
     return isWalking ? Math.sin((phase === undefined ? frame : phase) * 0.25) * 5 : 0;
 }
 
+// The player's stride is driven by GROUND COVERED, not by frame count. At a
+// fixed sin(frame * 0.25) the legs cycled 2.4 times a second whatever the speed
+// — so at 480 px/s he covered 200px per stride on 30px legs and his feet
+// skated. Accumulating phase from distance makes the feet plant at any speed,
+// and is what stops a fast walk reading as a sprint.
+const STRIDE_LEN = 100;                    // px of ground per full leg cycle
+let _walkPhase = 0, _wpX = null, _wpY = null;
+function updateWalkPhase() {
+    if(_wpX === null) { _wpX = player.x; _wpY = player.y; return; }
+    const d = Math.hypot(player.x - _wpX, player.y - _wpY);
+    _wpX = player.x; _wpY = player.y;
+    if(d > 0.01) _walkPhase += (d / STRIDE_LEN) * Math.PI * 2;
+}
+// Amplitude is derived from the step length, not picked by eye. The foot
+// travels 2 * stride * 1.6 in body space per step (see the legs block in
+// drawRigCharacter); for the feet to PLANT rather than slide that has to equal
+// the ground covered in a step, STRIDE_LEN / 2. At 100px that gives ~15.
+const STRIDE_AMP = (STRIDE_LEN / 2) / 3.2;
+function playerStride(isWalking) {
+    return isWalking ? Math.sin(_walkPhase) * STRIDE_AMP : 0;
+}
+
 // Pipe managers come in the pipe colours, so their sheet is per-NPC. Cached by
 // colour: without this we would rebuild a sheet every frame for every manager
 // on screen, and rigBuild is not free.
@@ -5760,7 +5786,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // lowest at the crossover. Without it the figure glides along as if on
     // rails, which was the single most unreal thing about the old walk. The
     // sole line does NOT bob: the ground does not move.
-    const bob = -Math.abs(stride) * 0.30;
+    const bob = -Math.abs(stride) * 0.16;
     const shY = yBase + c.shY + bob, hemY = yBase + c.hemY + bob;
     const hipY = yBase + c.hipY + bob, soleY = yBase + c.soleY;
     const ramp = { base: c.top || '#cccccc', lit: c.topLit || '#dddddd', dark: c.topDark || '#999999' };
@@ -5782,7 +5808,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         // The swinging foot clears the floor properly. At 0.8 the lift was
         // within a pixel of nothing, so head-on — where the stride projects to
         // almost no sideways movement — the legs simply did not appear to move.
-        return { side, hip, foot, fz, lift: Math.max(0, side * stride) * 1.05, z: foot.z };
+        return { side, hip, foot, fz, lift: Math.max(0, side * stride) * 0.32, z: foot.z };
     }).sort((a, b) => a.z - b.z);
     for(const L of legs) {
         const behind = L.z < 0;
@@ -24397,7 +24423,7 @@ function _drawSkeletonPlayer(x, y, facing) {
     const BONE = '#efe7d2', BONE_D = '#bfb298', BONE_S = '#8e8168';
     const isWalking = Date.now() - player.lastMove < 150;
     const stride = rigStride(isWalking);
-    const bob = -Math.abs(stride) * 0.30;
+    const bob = -Math.abs(stride) * 0.16;
     const shY = y + c.shY + bob, hemY = y + c.hemY + bob;
     const hipY = y + c.hipY + bob, soleY = y + c.soleY;
     const headCy = y + c.headY + bob;
@@ -24418,7 +24444,7 @@ function _drawSkeletonPlayer(x, y, facing) {
         const x0 = side * c.hipHalf * 0.66;
         const foot = rigRot(x0, 0, fz, yaw);
         foot.x0 = x0;
-        return { side, hip, foot, fz, lift: Math.max(0, side * stride) * 1.05, z: foot.z };
+        return { side, hip, foot, fz, lift: Math.max(0, side * stride) * 0.32, z: foot.z };
     }).sort((a, b) => a.z - b.z);
     for(const L of legs) {
         const col = L.z < 0 ? BONE_D : BONE;
@@ -33370,6 +33396,7 @@ function gameLoop() {
     
     try {
         update();
+        updateWalkPhase();
         drawScene();
     } catch(e) {
         console.error('gameLoop error:', e && (e.stack || e.message || e));
