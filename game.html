@@ -6086,16 +6086,22 @@ function rigTorso(cx, shY, hemY, shHalf, hipHalf, halfDepth, yaw, ramp) {
     g.addColorStop(0.45, ramp.base);
     g.addColorStop(1, ramp.dark);
     ctx.fillStyle = g;
-    const r = Math.min(3.5, shW * 0.34);
+    // Shoulders SLOPE. The top edge used to be a horizontal line with a small
+    // corner radius — the flat lid of a box, which is most of why the figures
+    // read as containers with heads on them. The trapezius rises toward the
+    // neck and the acromion sits well below it, about 15 degrees down.
+    const drop = (hemY - shY) * 0.10;             // acromion below the trap line
+    const trapX = shW * 0.30;                     // where the neck leaves the torso
     ctx.beginPath();
-    ctx.moveTo(cx - shW + r, shY);
-    ctx.quadraticCurveTo(cx - shW, shY, cx - shW, shY + r);
+    ctx.moveTo(cx - shW, shY + drop);
     ctx.quadraticCurveTo(cx - shW * 0.98, waistY - (hemY - shY) * 0.14, cx - waistW, waistY);
     ctx.lineTo(cx - hipW, hemY);
     ctx.lineTo(cx + hipW, hemY);
     ctx.lineTo(cx + waistW, waistY);
-    ctx.quadraticCurveTo(cx + shW * 0.98, waistY - (hemY - shY) * 0.14, cx + shW, shY + r);
-    ctx.quadraticCurveTo(cx + shW, shY, cx + shW - r, shY);
+    ctx.quadraticCurveTo(cx + shW * 0.98, waistY - (hemY - shY) * 0.14, cx + shW, shY + drop);
+    ctx.quadraticCurveTo(cx + shW * 0.62, shY - drop * 0.55, cx + trapX, shY - drop * 0.80);
+    ctx.lineTo(cx - trapX, shY - drop * 0.80);
+    ctx.quadraticCurveTo(cx - shW * 0.62, shY - drop * 0.55, cx - shW, shY + drop);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
@@ -6203,17 +6209,71 @@ function rigGarment(cx, shY, hemY, shHalf, hipHalf, depth, yaw, c, ramp) {
 
 // A limb is two 3D endpoints; depth decides whether it draws in front of or
 // behind the torso, which is what makes arms swap sides as a character turns.
-function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
-    const a = rigRot(sx, sy, sz, yaw), b = rigRot(ex, ey, ez, yaw);
-    const behind = (a.z + b.z) / 2 < 0;
-    ctx.strokeStyle = behind ? charMix(colour, '#000', 0.30) : colour;
-    ctx.lineWidth = w * (behind ? 0.92 : 1);
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+// One tapered limb segment: a ribbon from a to b, w0 wide at a and w1 at b,
+// with round caps that double as the joints.
+//
+// WHY TAPERED. Limbs used to be a single constant-width stroke from shoulder
+// to wrist. Nothing on a body is a tube: the upper arm is half again the
+// wrist, the thigh nearly twice the ankle, and the widest point of each
+// segment is up near the joint above it, not in the middle. A constant-width
+// capsule with no elbow or knee is the single loudest "mannequin" cue there
+// is, and it was on every limb of every character.
+//
+// The cross-limb gradient is perpendicular to the segment axis, so it holds
+// steady along the length and reads as a cylinder catching one light.
+function rigSeg(cx, a, b, w0, w1, colour, flat) {
+    const ax = cx + a.x, ay = a.y, bx = cx + b.x, by = b.y;
+    const dx = bx - ax, dy = by - ay;
+    const L = Math.hypot(dx, dy) || 1;
+    const nx = -dy / L, ny = dx / L;              // unit normal to the limb axis
+    if(flat) {
+        ctx.fillStyle = colour;
+    } else {
+        const w = Math.max(w0, w1) * 0.62;
+        const g = ctx.createLinearGradient(ax + nx * w, ay + ny * w, ax - nx * w, ay - ny * w);
+        g.addColorStop(0,    charMix(colour, '#ffffff', 0.17));
+        g.addColorStop(0.44, colour);
+        g.addColorStop(1,    charMix(colour, '#000000', 0.28));
+        ctx.fillStyle = g;
+    }
     ctx.beginPath();
-    ctx.moveTo(cx + a.x, a.y);
-    ctx.quadraticCurveTo(cx + (a.x + b.x) / 2 + (b.x - a.x) * 0.18, (a.y + b.y) / 2, cx + b.x, b.y);
+    ctx.moveTo(ax + nx * w0 * 0.5, ay + ny * w0 * 0.5);
+    ctx.lineTo(bx + nx * w1 * 0.5, by + ny * w1 * 0.5);
+    ctx.lineTo(bx - nx * w1 * 0.5, by - ny * w1 * 0.5);
+    ctx.lineTo(ax - nx * w0 * 0.5, ay - ny * w0 * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(ax, ay, w0 * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by, w1 * 0.5, 0, Math.PI * 2); ctx.fill();
+    // A thin shadow down the two long sides. This is what lets an arm sit
+    // against the ribs and still read as a separate limb — without it the only
+    // way to separate them was a gap of background, which made the arms look
+    // detached.
+    ctx.strokeStyle = charMix(colour, '#000000', 0.34);
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(ax + nx * w0 * 0.5, ay + ny * w0 * 0.5);
+    ctx.lineTo(bx + nx * w1 * 0.5, by + ny * w1 * 0.5);
+    ctx.moveTo(ax - nx * w0 * 0.5, ay - ny * w0 * 0.5);
+    ctx.lineTo(bx - nx * w1 * 0.5, by - ny * w1 * 0.5);
     ctx.stroke();
-    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+}
+
+// An arm: shoulder -> elbow -> wrist, in body space so the elbow rotates with
+// everything else. The elbow bows very slightly away from the ribs, which is
+// what stops the arm reading as a straight rod pinned to the shoulder.
+function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
+    const side = sx < 0 ? -1 : 1;
+    const jx = (sx + ex) / 2 + side * w * 0.26;   // elbow, just outside the chord
+    const jy = (sy + ey) / 2;
+    const jz = (sz + ez) / 2 - w * 0.18;          // and a touch behind it
+    const a = rigRot(sx, sy, sz, yaw);
+    const j = rigRot(jx, jy, jz, yaw);
+    const b = rigRot(ex, ey, ez, yaw);
+    const behind = (a.z + b.z) / 2 < 0;
+    const col = behind ? charMix(colour, '#000', 0.30) : colour;
+    rigSeg(cx, a, j, w, w * 0.76, col);           // deltoid -> elbow
+    rigSeg(cx, j, b, w * 0.72, w * 0.58, col);    // elbow -> wrist
     if(handR) charHand(cx + b.x, b.y + handR * 0.5, handR, behind ? charMix(skin, '#000', 0.22) : skin);
     return behind;
 }
@@ -6244,8 +6304,12 @@ function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
 // shoulder 0.200 rather than 0.220: at 0.220 the collar sat far enough below
 // the jaw to leave a visible column of neck. The trapezius rises to meet the
 // neck well above the acromion, so the collar reads higher than the joint.
+// shW is the BIADELTOID breadth — the full span including the shoulder muscle,
+// which is the widest point of the figure. The ribcage inside it is narrower;
+// see chestHalf in drawRigCharacter. Treating shW as the ribcage and then
+// hanging deltoids outside it gave everyone shoulder pads.
 const CANON = { chin:0.154, shoulder:0.200, waist:0.380, crotch:0.500,
-                knee:0.720, shW:0.245, hipW:0.185, depth:0.105 };
+                knee:0.720, shW:0.265, hipW:0.185, depth:0.105 };
 
 // H = crown-to-sole. build 0 lean .. 1 heavy. soleY is where the feet land
 // relative to the sprite anchor (SPRITE_FOOT).
@@ -6265,8 +6329,13 @@ function rigBuild(H, build, o) {
         hipHalf: H * CANON.hipW * 0.5 * bw,
         depth:   H * CANON.depth * bw,
         armLen:  H * (CANON.crotch - CANON.shoulder),    // shoulder to wrist
-        armW:    H * 0.052 * bw,
-        legW:    H * 0.070 * bw,
+        // Limb mass, measured against the head. A thigh at its widest is a
+        // little wider than the head; an upper arm is about two thirds of it.
+        // These were 0.052 H and 0.070 H, which put the thigh NARROWER than
+        // the skull and gave the whole cast doll legs. Now that the segments
+        // taper, the ankle and wrist still come out slim.
+        armW:    H * 0.058 * bw,
+        legW:    H * 0.096 * bw,
     }, o);
 }
 
@@ -6349,24 +6418,45 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         // column below the waist is most of what made the figure a slab.
         const hip = rigRot(side * c.hipHalf * 0.62, 0, 0, yaw);
         const fz = side * stride * 1.6;
-        const foot = rigRot(side * c.hipHalf * 0.72, 0, fz, yaw);
-        return { side, hip, foot, lift: Math.max(0, side * stride) * 0.8, z: foot.z };
+        const footX0 = side * c.hipHalf * 0.72;             // body space, for the shoe
+        const foot = rigRot(footX0, 0, fz, yaw);
+        foot.x0 = footX0;
+        return { side, hip, foot, fz, lift: Math.max(0, side * stride) * 0.8, z: foot.z };
     }).sort((a, b) => a.z - b.z);
     for(const L of legs) {
         const behind = L.z < 0;
         const col = c.leg ? (behind ? charMix(c.leg, '#000', 0.28) : c.leg)
                           : (behind ? ramp.dark : ramp.base);
-        ctx.fillStyle = col;
-        ctx.beginPath();
-        ctx.moveTo(x + L.hip.x - c.legW / 2, hipY);
-        ctx.lineTo(x + L.hip.x + c.legW / 2, hipY);
-        ctx.lineTo(x + L.foot.x + c.legW / 2, soleY - L.lift);
-        ctx.lineTo(x + L.foot.x - c.legW / 2, soleY - L.lift);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = behind ? charMix(c.shoe, '#000', 0.28) : c.shoe;
-        pathRoundRect(x + L.foot.x - c.legW * 0.60, soleY - L.lift,
-                      c.legW * 1.26, c.legW * 0.50, c.legW * 0.22);
+        // Hip -> knee -> ankle. The knee sits at CANON.knee of total height and
+        // the leg narrows through it; a single hip-to-sole trapezoid gave
+        // everyone stovepipes with no calf and no ankle.
+        const ankleY = soleY - L.lift - c.legW * 0.42;
+        const kneeT  = (CANON.knee - CANON.crotch) / (1 - CANON.crotch);
+        const kneeY  = hipY + (ankleY - hipY) * kneeT;
+        const knee = { x: L.hip.x + (L.foot.x - L.hip.x) * kneeT * 0.9, y: kneeY };
+        rigSeg(x, { x: L.hip.x,  y: hipY },  knee, c.legW, c.legW * 0.68, col);
+        rigSeg(x, { x: knee.x, y: kneeY }, { x: L.foot.x, y: ankleY },
+               c.legW * 0.64, c.legW * 0.40, col);
+        // The shoe is a real footprint in body space — narrow across, long from
+        // heel to toe — projected and then extruded upward. Drawing it as a
+        // heel-to-toe capsule collapsed it to a dot head-on, because the whole
+        // length pointed straight at the camera; drawing it as a fixed rounded
+        // rect made it the same size at every angle. Projecting the four
+        // corners gives a stub from the front and a long shoe in profile.
+        const shoeCol = behind ? charMix(c.shoe, '#000', 0.28) : c.shoe;
+        const halfW = c.legW * 0.32, back = c.legW * 0.30, fwd = c.legW * 0.95;
+        let minX = Infinity, maxX = -Infinity;
+        for(const sx of [-halfW, halfW]) for(const sz of [-back, fwd]) {
+            const p = rigRot(L.foot.x0 + sx, 0, L.fz + sz, yaw);
+            if(p.x < minX) minX = p.x;
+            if(p.x > maxX) maxX = p.x;
+        }
+        const shoeH = c.legW * 0.46, shoeTop = soleY - L.lift - shoeH;
+        const sg = ctx.createLinearGradient(0, shoeTop, 0, shoeTop + shoeH);
+        sg.addColorStop(0, charMix(shoeCol, '#ffffff', 0.20));
+        sg.addColorStop(1, charMix(shoeCol, '#000000', 0.22));
+        ctx.fillStyle = sg;
+        pathRoundRect(x + minX, shoeTop, maxX - minX, shoeH, Math.min(shoeH * 0.45, (maxX - minX) * 0.35));
         ctx.fill();
     }
 
@@ -6380,9 +6470,18 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // Arms must hang CLEAR of the ribs. At shHalf + 0.34*armW they sat against
     // the torso in the same colour, so the silhouette had no negative space and
     // the whole figure read as one rectangular column — a Pez dispenser.
-    const shoulderX = c.shHalf + c.armW * 0.92;
+    // The deltoid caps OVER the shoulder joint, straddling the edge of the
+    // ribcage — it does not hang clear of it. Pushed out to 0.92*armW the arms
+    // became detached slabs with daylight between them and the chest. The
+    // separation now comes from the limb's own taper and edge shadow instead.
+    // Centred half an arm inside the biadeltoid line, the deltoid's outer edge
+    // lands exactly on shHalf: the arm IS the widest point, as it should be.
+    const shoulderX = c.shHalf - c.armW * 0.50;
+    // The arm hangs from the ACROMION, which the sloped shoulder puts below the
+    // trap line — not from the top corner of a box.
+    const acromionY = shY + (hemY - shY) * 0.10;
     const drawArm = (side) => rigLimb(x,
-        side * shoulderX, shY + c.armW * 0.5, 0,
+        side * shoulderX, acromionY, 0,
         side * (shoulderX + 0.6), shY + c.armLen, -side * swing * 1.4,
         yaw, c.armW, ramp.base, c.glove || c.skin, c.armW * 0.42);
     drawArm(arms[0].side);
@@ -6411,8 +6510,12 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     ctx.fillStyle = 'rgba(88,56,32,0.30)';                 // jaw overhang shadow
     ctx.fillRect(x - neckW, neckTop, neckW * 2, Math.max(1, c.headRy * 0.26));
 
-    rigTorso(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, ramp);
-    rigGarment(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, c, ramp);
+    // The ribcage is narrower than the shoulder span — the deltoids make up the
+    // difference. Drawing the torso out to the full biadeltoid width and then
+    // adding arms on top is what made every chest read as a slab.
+    const chestHalf = c.shHalf - c.armW * 0.62;
+    rigTorso(x, shY, hemY, chestHalf, c.hipHalf, c.depth, yaw, ramp);
+    rigGarment(x, shY, hemY, chestHalf, c.hipHalf, c.depth, yaw, c, ramp);
     // Tie / belt on the chest front, so they turn with the body and cannot be
     // overlapped by an arm that belongs on the other side of the chest.
     const cw = Math.cos(yaw), sw = Math.sin(yaw);
@@ -6442,7 +6545,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     }
     // Lapel pin and pocket square, front-facing only
     if(cw > 0.25) {
-        const fx2 = (ax) => x + rigRot(ax * c.shHalf, 0, c.depth * 0.94, yaw).x;
+        const fx2 = (ax) => x + rigRot(ax * chestHalf, 0, c.depth * 0.94, yaw).x;
         if(c.flagPin) {
             ctx.fillStyle = '#b8232f';
             ctx.fillRect(fx2(0.52) - 1.4, shY + 4, 2.8, 2);
@@ -6460,13 +6563,9 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         rigHoodShell(x, hy, c.headRx, c.headRy, c.headRz, yaw, ramp, shY + 2, shW0);
     }
     drawArm(arms[1].side);
-    // Deltoid caps proud of the torso top, so the shoulders read as mass
-    // rather than the flat lid of a box.
-    for(const side of [-1, 1]) {
-        const sx = x + rigRot(side * (c.shHalf + c.armW * 0.30), 0, 0, yaw).x;
-        charDeltoid(sx, shY + c.armW * 0.36, c.armW * 0.62,
-                    side < 0 ? charMix(ramp.base, '#fff', 0.06) : ramp.base);
-    }
+    // No separate deltoid caps: the arm's own full-width round cap at the
+    // acromion IS the deltoid now. Bolting extra circles on top of it is what
+    // put the "shoulder circles" on the pipe managers.
 
     // --- Head, attached to the same body space. A visored hazmat hood seals
     // over it, so the face is not drawn at all — the concept art shows a dark
