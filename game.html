@@ -5966,6 +5966,48 @@ function rigHair(cx, cy, rx, ry, rz, yaw, halfW, spec, pass) {
 // the viewer you see it peeking around the skull; turned away it covers the
 // head entirely. So it is one dome, depth-sorted against the skull exactly
 // like a limb: behind the head while they face you, in front once they turn.
+// A sealed hazmat hood: the suit fabric continues over the whole skull and a
+// dark rectangular visor sits on the face. Turned away, the visor is gone and
+// you see the back of the hood.
+function rigHazmatHood(cx, cy, rx, ry, rz, yaw, ramp) {
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const halfW = Math.sqrt((rx * cs) ** 2 + (rz * sn) ** 2) * 1.16;
+    const fwd = rigRot(0, 0, rz, yaw);
+    const hy = ry * 1.14;
+    const g = ctx.createLinearGradient(cx - halfW, 0, cx + halfW, 0);
+    g.addColorStop(0, ramp.lit); g.addColorStop(0.45, ramp.base); g.addColorStop(1, ramp.dark);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, cy + hy * 0.72);
+    ctx.quadraticCurveTo(cx - halfW * 1.04, cy - hy * 0.60, cx, cy - hy);
+    ctx.quadraticCurveTo(cx + halfW * 1.04, cy - hy * 0.60, cx + halfW, cy + hy * 0.72);
+    ctx.quadraticCurveTo(cx, cy + hy * 1.02, cx - halfW, cy + hy * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    // Visor — only on the side you can see the face from
+    if(cs > 0.12) {
+        const vw = halfW * 0.72 * cs, vx = cx + fwd.x * 0.22;
+        ctx.fillStyle = '#20242a';
+        pathRoundRect(vx - vw, cy - hy * 0.30, vw * 2, hy * 0.62, Math.max(1, vw * 0.22));
+        ctx.fill();
+        ctx.fillStyle = 'rgba(150,190,220,0.30)';          // glass sheen
+        ctx.beginPath();
+        ctx.moveTo(vx - vw * 0.86, cy + hy * 0.24);
+        ctx.lineTo(vx - vw * 0.10, cy - hy * 0.24);
+        ctx.lineTo(vx + vw * 0.24, cy - hy * 0.24);
+        ctx.lineTo(vx - vw * 0.52, cy + hy * 0.24);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = ramp.dark; ctx.lineWidth = 1;    // gasket
+        pathRoundRect(vx - vw, cy - hy * 0.30, vw * 2, hy * 0.62, Math.max(1, vw * 0.22));
+        ctx.stroke();
+    }
+    // Crown highlight and the seam where the hood meets the shoulders
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath();
+    ctx.ellipse(cx - halfW * 0.34, cy - hy * 0.66, halfW * 0.30, hy * 0.14, -0.2, 0, Math.PI*2);
+    ctx.fill();
+}
+
 function rigHoodBehind(yaw, rz) {
     return rigRot(0, 0, -rz, yaw).z < 0;
 }
@@ -6225,11 +6267,14 @@ function rigBuild(H, build, o) {
 const RIG_SHEET = {
     // 6.5 heads, lean build, long narrow skull
     mulletPro: rigBuild(70, 0.42, {
-        skin:'#eec49a', jaw:0.26, brow:'#4a3a2c', browW:0.09, browRidge:0.50,
-        chisel:0.25, eyeSp:0.46, eyeSz:1.02, noseLen:1.00, eyeEl:0.00, headW:0.72,
-        hair:'mullet', hairColor:'#4a3018', garment:'jacket', under:'#1a1a1a',
-        top:'#800020', topLit:'#96122e', topDark:'#5c0016',
-        leg:'#a4c2db', shoe:'#654321',
+        // FROM CONCEPT ART: action-hero build, bright RED jacket over a black
+        // tee, blue jeans with a buckled belt, dirty-blonde mullet with real
+        // volume swept back, wristband. Jacket was near-maroon; art is red.
+        skin:'#e8bd90', jaw:0.30, brow:'#6b4a26', browW:0.10, browRidge:0.72,
+        chisel:0.60, eyeSp:0.44, eyeSz:0.98, noseLen:1.04, eyeEl:0.00, headW:0.74,
+        hair:'mullet', hairColor:'#9a6b32', garment:'jacket', under:'#141414',
+        top:'#b3202a', topLit:'#d0303a', topDark:'#7c1119',
+        leg:'#7fa8cf', shoe:'#f0ece4', belt:true, buckle:'#c9a227',
     }),
     // shorter, heavier, broad round skull
     baldManager: rigBuild(68, 0.68, {
@@ -6239,31 +6284,41 @@ const RIG_SHEET = {
         top:'#ffffff', topLit:'#ffffff', topDark:'#cfcfcf',
         leg:'#1a1a1a', shoe:'#000', tie:'#800020', belt:true,
     }),
-    // youngest and slightest of the cast
-    pipeManager: rigBuild(66, 0.36, {
+    // FROM CONCEPT ART: these are full hazmat coveralls in saturated colour
+    // matched to the pipes, with the hood SEALED over the head and a dark
+    // rectangular face visor — not an open hood with a face showing. Every
+    // previous hood attempt failed because it was the wrong garment.
+    pipeManager: rigBuild(66, 0.42, {
         skin:'#f7cd9f', jaw:0.24, brow:'#6a5238', browW:0.07, hair:'none',
         browRidge:0.35, chisel:0.15, eyeSp:0.40, eyeSz:1.16, noseLen:0.82,
         eyeEl:0.01, headW:0.78, garment:'jumpsuit',
         top:'#e74c3c', topLit:'#ee6a5a', topDark:'#a03024',
-        leg:null, shoe:'#ffffff', hood:true,
+        leg:null, shoe:'#ffffff', hood:true, visor:true,
+        glove:'#1c1c1c', belt:true,
     }),
     // tallest and heaviest: the foreman
     cloningBoss: rigBuild(73, 0.78, {
         skin:'#eccc9e', jaw:0.78, brow:'#3f2c18', browW:0.14, hair:'crop',
         browRidge:1.0, moustache:'#5a3c1c', chisel:0.95, eyeSp:0.38, eyeSz:0.84,
         noseLen:1.16, eyeEl:-0.04, headW:0.82,
-        hairColor:'#5a4126', hat:'hardhat', garment:'jumpsuit',
-        top:'#cc2222', topLit:'#e03535', topDark:'#8f1717',
-        leg:'#2a2a2a', shoe:'#111', tie:'#111',
+        // FROM CONCEPT ART: worn brown canvas work jacket under a white hard
+        // hat, grey at the temples. He was in a red shirt, which is the pipe
+        // managers' colour, not his.
+        hairColor:'#8d8a84', hat:'hardhat', garment:'jacket', under:'#3a3128',
+        top:'#6b5138', topLit:'#836349', topDark:'#463322',
+        leg:'#3a3630', shoe:'#241c14',
     }),
     // tall, jowly, long-faced
     ceo: rigBuild(72, 0.62, {
         skin:'#cfa076', jaw:0.92, brow:'#6a6a6a', browW:0.10, age:1,
         browRidge:0.90, chisel:0.35, eyeSp:0.36, eyeSz:0.80, noseLen:1.22,
-        eyeEl:0.04, headW:0.74, garment:'suit', under:'#e8e4dc',
-        hair:'slick', hairColor:'#70706e',
-        top:'#2b2b30', topLit:'#3a3a41', topDark:'#191a1e',
-        leg:'#151518', shoe:'#0a0a0a', tie:'#8a1020',
+        // FROM CONCEPT ART: charcoal suit (not black), white shirt, scarlet
+        // tie, flag pin on the lapel, white pocket square, gold watch.
+        eyeEl:0.04, headW:0.74, garment:'suit', under:'#efece4',
+        hair:'slick', hairColor:'#8a8782',
+        top:'#3c3c42', topLit:'#4c4c54', topDark:'#26262b',
+        leg:'#2a2a30', shoe:'#141414', tie:'#a81c22',
+        flagPin:true, pocketSquare:'#f4f2ec',
     }),
 };
 
@@ -6318,7 +6373,7 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     const drawArm = (side) => rigLimb(x,
         side * shoulderX, shY + c.armW * 0.5, 0,
         side * (shoulderX + 0.6), shY + c.armLen, -side * swing * 1.4,
-        yaw, c.armW, ramp.base, c.skin, c.armW * 0.42);
+        yaw, c.armW, ramp.base, c.glove || c.skin, c.armW * 0.42);
     drawArm(arms[0].side);
     rigTorso(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, ramp);
     rigGarment(x, shY, hemY, c.shHalf, c.hipHalf, c.depth, yaw, c, ramp);
@@ -6343,6 +6398,25 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
         ctx.fillStyle = '#1a1a1a';
         const bw = Math.sqrt((c.hipHalf * cw) ** 2 + (c.depth * sw) ** 2);
         ctx.fillRect(x - bw, hemY - 1, bw * 2, 4);
+        if(c.buckle && cw > 0.15) {                        // buckle faces front
+            ctx.fillStyle = c.buckle;
+            const bx2 = x + rigRot(0, 0, c.depth, yaw).x;
+            ctx.fillRect(bx2 - 2.2 * cw, hemY - 0.5, 4.4 * cw, 3);
+        }
+    }
+    // Lapel pin and pocket square, front-facing only
+    if(cw > 0.25) {
+        const fx2 = (ax) => x + rigRot(ax * c.shHalf, 0, c.depth * 0.94, yaw).x;
+        if(c.flagPin) {
+            ctx.fillStyle = '#b8232f';
+            ctx.fillRect(fx2(0.52) - 1.4, shY + 4, 2.8, 2);
+            ctx.fillStyle = '#26346b';
+            ctx.fillRect(fx2(0.52) - 1.4, shY + 4, 1.3, 1);
+        }
+        if(c.pocketSquare) {
+            ctx.fillStyle = c.pocketSquare;
+            ctx.fillRect(fx2(-0.56) - 1.8, shY + 9, 3.6, 1.8);
+        }
     }
     if(c.hood && rigHoodBehind(yaw, c.headRz)) {
         const hy = yBase + (c.headY === undefined ? -18 : c.headY);
@@ -6373,9 +6447,15 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     ctx.fillStyle = 'rgba(88,56,32,0.30)';                 // jaw overhang shadow
     ctx.fillRect(x - neckW, neckTop, neckW * 2, Math.max(1, c.headRy * 0.26));
 
-    // --- Head, attached to the same body space
-    rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
-            { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
+    // --- Head, attached to the same body space. A visored hazmat hood seals
+    // over it, so the face is not drawn at all — the concept art shows a dark
+    // face screen, not an open hood with features showing through.
+    if(!(c.hood && c.visor)) {
+        rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
+                { wide: P.wide, frown: P.frown, smile: P.smile, browAngle: P.browAngle });
+    } else {
+        rigHazmatHood(x, headCy, c.headRx, c.headRy, c.headRz, yaw, ramp);
+    }
     // ...and if they have turned away, the shell is now in FRONT of the skull
     if(c.hood && !rigHoodBehind(yaw, c.headRz)) {
         const shW1 = Math.sqrt((c.shHalf * Math.cos(yaw)) ** 2 + (c.depth * Math.sin(yaw)) ** 2);
