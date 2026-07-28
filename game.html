@@ -6175,65 +6175,93 @@ function rigLimb(cx, sx, sy, sz, ex, ey, ez, yaw, w, colour, skin, handR) {
 // rather than hand-drawn per view.
 //   heightY  distance from anchor up to the shoulder line
 //   build    0 lean .. 1 heavy (drives shoulder/hip width and jaw)
+// === HUMAN PROPORTION CANON =================================================
+// The sheet used to hold hand-picked numbers per character, and they came out
+// ~4 heads tall with shoulders half as wide as the figure was high — which is
+// the Leisure Suit Larry build: big head, wide shoulders, short legs, no neck.
+//
+// A real adult is 7-7.5 heads tall. Stylised game figures that still read as
+// people sit around 6.5. Everything below is derived from ONE total height H
+// and the standard landmark fractions measured DOWN FROM THE CROWN, so every
+// character is the same species and differs only by height, build and skull:
+//
+//   chin        0.154 H     (head = H / 6.5)
+//   shoulder    0.220 H
+//   elbow/waist 0.380 H
+//   wrist/crotch 0.500 H     (hands fall at the hip, not the ribs)
+//   knee        0.720 H
+//   sole        1.000 H
+//   shoulder width  0.245 H  (~2 head widths, not 0.45 H)
+//   hip width       0.185 H
+const CANON = { chin:0.154, shoulder:0.220, waist:0.380, crotch:0.500,
+                knee:0.720, shW:0.245, hipW:0.185, depth:0.105 };
+
+// H = crown-to-sole. build 0 lean .. 1 heavy. soleY is where the feet land
+// relative to the sprite anchor (SPRITE_FOOT).
+function rigBuild(H, build, o) {
+    const soleY = 36, crown = soleY - H;
+    const hh = H * CANON.chin / 2;                       // head half-height
+    const hw = hh * (o.headW === undefined ? 0.78 : o.headW);
+    const bw = 1 + (build - 0.5) * 0.30;                 // build widens the frame
+    return Object.assign({
+        headRx: hw, headRy: hh, headRz: hw * 0.94,
+        headY:  crown + hh,                              // crown + half a head
+        shY:    crown + H * CANON.shoulder,
+        hemY:   crown + H * CANON.crotch,
+        hipY:   crown + H * CANON.crotch,
+        soleY:  soleY,
+        shHalf:  H * CANON.shW  * 0.5 * bw,
+        hipHalf: H * CANON.hipW * 0.5 * bw,
+        depth:   H * CANON.depth * bw,
+        armLen:  H * (CANON.crotch - CANON.shoulder),    // shoulder to wrist
+        armW:    H * 0.052 * bw,
+        legW:    H * 0.070 * bw,
+    }, o);
+}
+
 const RIG_SHEET = {
-    mulletPro: {
-        // long narrow skull, wide-set eyes, straight nose, soft jaw
+    // 6.5 heads, lean build, long narrow skull
+    mulletPro: rigBuild(70, 0.42, {
         skin:'#eec49a', jaw:0.26, brow:'#4a3a2c', browW:0.09, browRidge:0.50,
-        chisel:0.25, eyeSp:0.46, eyeSz:1.02, noseLen:1.00, eyeEl:0.00,
-        hair:'mullet', hairColor:'#4a3018',
-        garment:'jacket', under:'#1a1a1a',
-        shHalf:14, hipHalf:11, depth:7.5, headRx:8.8, headRy:11.8, headRz:8.6,
-        shY:-4, hemY:16, hipY:16, soleY:36, legW:8, armW:5, armLen:20, headY:-17,
+        chisel:0.25, eyeSp:0.46, eyeSz:1.02, noseLen:1.00, eyeEl:0.00, headW:0.72,
+        hair:'mullet', hairColor:'#4a3018', garment:'jacket', under:'#1a1a1a',
         top:'#800020', topLit:'#96122e', topDark:'#5c0016',
         leg:'#a4c2db', shoe:'#654321',
-    },
-    baldManager: {
-        // broad round skull, small close-set eyes, short nose, heavy soft jaw
-        skin:'#f4cfa8', jaw:0.62, brow:'#c9b394', browW:0.06, hair:'none', browRidge:0.85,
-        chisel:0.20, eyeSp:0.34, eyeSz:0.86, noseLen:0.86, eyeEl:0.02,
-        shHalf:14.5, hipHalf:11.5, depth:8, headRx:10.4,
-        garment:'shirt',  headRy:10.2, headRz:9.8,
-        shY:-2, hemY:18, hipY:18, soleY:36, legW:8, armW:5, armLen:21, headY:-15,
+    }),
+    // shorter, heavier, broad round skull
+    baldManager: rigBuild(68, 0.68, {
+        skin:'#f4cfa8', jaw:0.62, brow:'#c9b394', browW:0.06, hair:'none',
+        browRidge:0.85, chisel:0.20, eyeSp:0.34, eyeSz:0.86, noseLen:0.86,
+        eyeEl:0.02, headW:0.86, garment:'shirt',
         top:'#ffffff', topLit:'#ffffff', topDark:'#cfcfcf',
         leg:'#1a1a1a', shoe:'#000', tie:'#800020', belt:true,
-    },
-    pipeManager: {
-        // small youthful skull, large eyes, small nose, light brow
-        skin:'#f7cd9f', jaw:0.24, brow:'#6a5238', browW:0.07, hair:'none', browRidge:0.35,
-        chisel:0.15, eyeSp:0.40, eyeSz:1.16, noseLen:0.82, eyeEl:0.01,
-        garment:'jumpsuit', 
-        // The hooded head was ~26px tall against an 18px torso — bigger than
-        // the whole body, which is what made them read as crazy. The head is
-        // now about a quarter of standing height and the torso runs longer.
-        shHalf:13, hipHalf:10.5, depth:7, headRx:6.6, headRy:7.6, headRz:6.6,
-        shY:-5, hemY:16, hipY:16, soleY:36, legW:7.5, armW:4.6, armLen:20, headY:-12,
+    }),
+    // youngest and slightest of the cast
+    pipeManager: rigBuild(66, 0.36, {
+        skin:'#f7cd9f', jaw:0.24, brow:'#6a5238', browW:0.07, hair:'none',
+        browRidge:0.35, chisel:0.15, eyeSp:0.40, eyeSz:1.16, noseLen:0.82,
+        eyeEl:0.01, headW:0.78, garment:'jumpsuit',
         top:'#e74c3c', topLit:'#ee6a5a', topDark:'#a03024',
         leg:null, shoe:'#ffffff', hood:true,
-    },
-    cloningBoss: {
-        // THE FOREMAN: square chiselled skull, hard gonial angle, flat chin,
-        // deep-set narrow eyes under a heavy brow, big nose, moustache
+    }),
+    // tallest and heaviest: the foreman
+    cloningBoss: rigBuild(73, 0.78, {
         skin:'#eccc9e', jaw:0.78, brow:'#3f2c18', browW:0.14, hair:'crop',
-        browRidge:1.0, moustache:'#5a3c1c',
-        chisel:0.95, eyeSp:0.38, eyeSz:0.84, noseLen:1.16, eyeEl:-0.04,
-        hairColor:'#5a4126', hat:'hardhat',
-        garment:'jumpsuit', 
-        shHalf:15.5, hipHalf:11.5, depth:8.5, headRx:10.0, headRy:10.6, headRz:9.6,
-        shY:-6, hemY:16, hipY:16, soleY:36, legW:8.5, armW:5.4, armLen:22, headY:-19,
+        browRidge:1.0, moustache:'#5a3c1c', chisel:0.95, eyeSp:0.38, eyeSz:0.84,
+        noseLen:1.16, eyeEl:-0.04, headW:0.82,
+        hairColor:'#5a4126', hat:'hardhat', garment:'jumpsuit',
         top:'#cc2222', topLit:'#e03535', topDark:'#8f1717',
         leg:'#2a2a2a', shoe:'#111', tie:'#111',
-    },
-    ceo: {
-        // jowly, long-faced, hooded eyes set low, long nose, weathered
-        skin:'#cfa076', jaw:0.92, brow:'#6a6a6a', browW:0.10, age:1, browRidge:0.90,
-        chisel:0.35, eyeSp:0.36, eyeSz:0.80, noseLen:1.22, eyeEl:0.04,
+    }),
+    // tall, jowly, long-faced
+    ceo: rigBuild(72, 0.62, {
+        skin:'#cfa076', jaw:0.92, brow:'#6a6a6a', browW:0.10, age:1,
+        browRidge:0.90, chisel:0.35, eyeSp:0.36, eyeSz:0.80, noseLen:1.22,
+        eyeEl:0.04, headW:0.74, garment:'suit', under:'#e8e4dc',
         hair:'slick', hairColor:'#70706e',
-        garment:'suit', under:'#e8e4dc',
-        shHalf:16, hipHalf:12, depth:9, headRx:9.8, headRy:12.2, headRz:9.4,
-        shY:-6, hemY:18, hipY:18, soleY:36, legW:9, armW:5.6, armLen:22, headY:-19,
         top:'#2b2b30', topLit:'#3a3a41', topDark:'#191a1e',
         leg:'#151518', shoe:'#0a0a0a', tie:'#8a1020',
-    },
+    }),
 };
 
 // yaw in radians. pose: { stride, armSwing, wide, frown, smile, browAngle, look }
@@ -6323,9 +6351,15 @@ function drawRigCharacter(x, yBase, yaw, sheet, pose) {
     // Neck — a short column between the jaw and the collar, so the head is
     // joined to the body instead of hovering above it
     const headCy = yBase + (c.headY === undefined ? -18 : c.headY);
-    const neckW = Math.sqrt((3.2 * Math.cos(yaw)) ** 2 + (3.0 * Math.sin(yaw)) ** 2);
+    // Neck runs from just under the JAW to the collar. It used to start at
+    // 0.55 of the head radius — above the chin — which gave everyone a giraffe
+    // neck once the figures were rebuilt to realistic proportions.
+    const neckW = Math.max(2.2, c.headRx * 0.34);
+    const neckTop = headCy + c.headRy * 0.88;
     ctx.fillStyle = charMix(c.skin, '#000', 0.16);
-    ctx.fillRect(x - neckW, headCy + c.headRy * 0.55, neckW * 2, (shY + 2) - (headCy + c.headRy * 0.55));
+    ctx.fillRect(x - neckW, neckTop, neckW * 2, Math.max(1, (shY + 2) - neckTop));
+    ctx.fillStyle = 'rgba(90,58,34,0.22)';                 // shadow under the jaw
+    ctx.fillRect(x - neckW, neckTop, neckW * 2, Math.max(1, c.headRy * 0.22));
 
     // --- Head, attached to the same body space
     rigHead(x, headCy, c.headRx, c.headRy, c.headRz, yaw, c,
