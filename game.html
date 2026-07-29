@@ -1913,92 +1913,216 @@ function drawMulletPro(x, y, ...rest) {
 // builds a rounded skull with a jaw from ellipses, so he was round face-on and
 // square side-on. One helper, mirrored by d, so the two sides cannot drift from
 // each other or from the front view again.
+//
+// The first rounded attempt lost the fight it was meant to win: measured off the
+// render, the square head carried 26 x 28px and 712px^2 of head-and-hair, and
+// the round one only 21.9 x 23.3 and 370px^2 — it shed 48% of its mass and read
+// as a pinhead on a full-width torso. It was also flat: every fill was a single
+// solid colour, with none of the modelling the front view already had. So this
+// version keeps the round skull but restores the bulk (a head is very nearly as
+// deep as it is wide) and models the form with light.
 //   d = -1 facing left, +1 facing right
-function mulletProfileHead(x, y, s, d) {
+//   opt.overCollar — re-stamp ONLY the hanging mullet, clipped below the collar
+function mulletProfileHead(x, y, s, d, opt) {
     // Everything lives in here — skull, hair, eye, nose, mouth — because the
     // first attempt moved the skull but left the eye and mouth at the offsets
     // they had when the head was a square centred on x, so the face ended up
-    // pointing the wrong way. d = -1 facing left, +1 facing right.
-    const hcy = y - 7.2 * s, rx = 4.4 * s, ry = 5.5 * s;
+    // pointing the wrong way.
+    const hcy = y - 7.4 * s;              // the same centre the front view uses
+    const rx = 5.3 * s, ry = 5.6 * s;     // depth ~= width: this is the bulk
     const SKIN = '#f5c89a', HAIR = '#33251a';
-    const fx = (k) => x + d * rx * k;            // k > 0 is toward the face
+    const fx = (u) => x + d * rx * u;     // u > 0 is toward the face
+    const fy = (v) => hcy + ry * v;
 
-    // Party at the back, drawn first so the skull overlaps its front edge
-    ctx.fillStyle = charMix(HAIR, '#000000', 0.18);
+    // Light comes from screen LEFT — the convention the front view's temple
+    // highlight and rigSeg already use — so it is applied in SCREEN space, not
+    // face space. That is what stops the two profiles being flat mirror twins:
+    // facing right the light rakes across the back of the skull, facing left it
+    // catches the brow and nose.
+    const lit = (base, up, dn) => {
+        const g = ctx.createLinearGradient(x - rx * 1.6, 0, x + rx * 1.6, 0);
+        g.addColorStop(0,    charMix(base, '#ffffff', up));
+        g.addColorStop(0.50, base);
+        g.addColorStop(1,    charMix(base, '#000000', dn));
+        return g;
+    };
+
+    // The party: the back length, sweeping off the crown and hanging past the
+    // collar. Drawn first so the skull overlaps its front edge.
+    const partyPath = () => {
+        ctx.beginPath();
+        ctx.moveTo(fx(-0.18), fy(-0.94));
+        ctx.quadraticCurveTo(fx(-1.28), fy(-0.62), fx(-1.38), fy(0.55));
+        ctx.quadraticCurveTo(fx(-1.44), fy(1.45), fx(-1.14), fy(2.24));
+        ctx.quadraticCurveTo(fx(-0.80), fy(2.42), fx(-0.52), fy(2.05));
+        ctx.quadraticCurveTo(fx(-0.30), fy(1.10), fx(-0.26), fy(0.10));
+        ctx.quadraticCurveTo(fx(-0.22), fy(-0.52), fx(-0.08), fy(-0.88));
+        ctx.closePath();
+    };
+    const partyFill = lit(charMix(HAIR, '#000000', 0.16), 0.20, 0.24);
+
+    if(opt && opt.overCollar) {
+        // _drawMulletPro paints the torso AFTER the head, so the shoulders cut
+        // the mullet off at the collar and left him with a bob. This second
+        // pass puts the hanging length back over the jacket, clipped below the
+        // collar line so it cannot touch the face.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x - 20 * s, y - 2 * s, 40 * s, 24 * s);
+        ctx.clip();
+        ctx.fillStyle = partyFill;
+        partyPath();
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+
+    // Neck, before the hair so the party falls over the nape
+    ctx.fillStyle = lit(charMix(SKIN, '#000000', 0.14), 0.10, 0.28);
     ctx.beginPath();
-    ctx.moveTo(fx(-0.30), hcy - ry * 0.60);
-    ctx.quadraticCurveTo(fx(-1.45), hcy + ry * 0.05, fx(-1.15), hcy + ry * 1.20);
-    ctx.quadraticCurveTo(fx(-0.80), hcy + ry * 1.48, fx(-0.50), hcy + ry * 1.05);
-    ctx.quadraticCurveTo(fx(-0.22), hcy + ry * 0.30, fx(-0.10), hcy - ry * 0.55);
+    ctx.moveTo(fx(-0.52), fy(0.52));
+    ctx.lineTo(fx(0.46), fy(0.68));
+    ctx.lineTo(fx(0.40), fy(1.78));
+    ctx.lineTo(fx(-0.56), fy(1.78));
     ctx.closePath();
     ctx.fill();
 
-    // Skull and jaw — the same rounded mass as the front view, narrower
-    // because we are seeing its depth rather than its width
-    ctx.fillStyle = SKIN;
-    ctx.beginPath();
-    ctx.ellipse(x, hcy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(fx(-0.70), hcy + ry * 0.20);
-    ctx.quadraticCurveTo(fx(0.95), hcy + ry * 0.52, fx(0.66), hcy + ry * 0.96);
-    ctx.quadraticCurveTo(fx(0.00), hcy + ry * 1.12, fx(-0.70), hcy + ry * 0.70);
-    ctx.closePath();
-    ctx.fill();
-    // Nose, on the face side
-    ctx.beginPath();
-    ctx.moveTo(fx(0.90), hcy - ry * 0.06);
-    ctx.lineTo(fx(1.26), hcy + ry * 0.24);
-    ctx.lineTo(fx(0.88), hcy + ry * 0.32);
-    ctx.closePath();
+    ctx.fillStyle = partyFill;
+    partyPath();
     ctx.fill();
 
-    // Business up front — a cap over the crown that stops above the brow, so
-    // the face stays clear
-    ctx.fillStyle = HAIR;
+    // ---- the head itself: one silhouette, brow to nose to lip to chin ----
+    // A profile is read almost entirely off this outline, which is why the
+    // previous ellipse-plus-wedge version had no face in it.
+    ctx.fillStyle = lit(SKIN, 0.11, 0.27);
     ctx.beginPath();
-    ctx.moveTo(fx(0.86), hcy - ry * 0.42);
-    ctx.quadraticCurveTo(fx(0.62), hcy - ry * 1.16, fx(-0.30), hcy - ry * 1.16);
-    ctx.quadraticCurveTo(fx(-1.06), hcy - ry * 1.00, fx(-1.02), hcy + ry * 0.10);
-    ctx.quadraticCurveTo(fx(-0.62), hcy - ry * 0.46, fx(0.10), hcy - ry * 0.58);
-    ctx.quadraticCurveTo(fx(0.60), hcy - ry * 0.64, fx(0.86), hcy - ry * 0.42);
+    ctx.moveTo(fx(-0.18), fy(-1.00));
+    ctx.quadraticCurveTo(fx(0.56), fy(-1.02), fx(0.78), fy(-0.56));  // forehead
+    ctx.quadraticCurveTo(fx(0.90), fy(-0.38), fx(0.84), fy(-0.24));  // brow ridge
+    ctx.quadraticCurveTo(fx(0.78), fy(-0.10), fx(0.90), fy(0.04));   // socket, then bridge
+    ctx.quadraticCurveTo(fx(1.10), fy(0.14), fx(1.12), fy(0.24));    // nose tip
+    ctx.quadraticCurveTo(fx(1.02), fy(0.30), fx(0.84), fy(0.30));    // nostril and base
+    ctx.quadraticCurveTo(fx(0.92), fy(0.42), fx(0.86), fy(0.50));    // upper lip
+    ctx.quadraticCurveTo(fx(0.94), fy(0.60), fx(0.80), fy(0.68));    // lower lip
+    ctx.quadraticCurveTo(fx(0.90), fy(0.80), fx(0.74), fy(0.92));    // chin
+    ctx.quadraticCurveTo(fx(0.20), fy(1.02), fx(-0.38), fy(0.80));   // jaw to the angle
+    ctx.quadraticCurveTo(fx(-0.92), fy(0.56), fx(-1.02), fy(-0.10)); // back of skull
+    ctx.quadraticCurveTo(fx(-1.08), fy(-0.74), fx(-0.18), fy(-1.00));// occiput to crown
     ctx.closePath();
     ctx.fill();
 
-    // Ear, set back at the jaw hinge. At -0.26 it sat out on the cheek and read
-    // as a smudge on his face rather than an ear.
-    ctx.fillStyle = charMix(SKIN, '#000000', 0.22);
+    // Cheekbone catching the light, hollow beneath it, jaw turning away
+    ctx.fillStyle = 'rgba(255,242,220,0.22)';
     ctx.beginPath();
-    ctx.ellipse(fx(-0.52), hcy + ry * 0.06, rx * 0.17, ry * 0.20, 0, 0, Math.PI * 2);
+    ctx.ellipse(fx(0.56), fy(0.20), rx * 0.26, ry * 0.18, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = charMix(SKIN, '#000000', 0.38);
+    ctx.fillStyle = 'rgba(126,80,48,0.20)';
     ctx.beginPath();
-    ctx.ellipse(fx(-0.52), hcy + ry * 0.06, rx * 0.07, ry * 0.09, 0, 0, Math.PI * 2);
+    ctx.moveTo(fx(0.66), fy(0.68));
+    ctx.quadraticCurveTo(fx(0.12), fy(0.84), fx(-0.34), fy(0.62));
+    ctx.quadraticCurveTo(fx(0.06), fy(0.98), fx(0.70), fy(0.86));
+    ctx.closePath();
+    ctx.fill();
+    // Temple plane turning back into shadow
+    ctx.fillStyle = 'rgba(120,74,42,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(fx(-0.56), fy(-0.14), rx * 0.42, ry * 0.52, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Brow, eye and mouth — one eye, placed relative to the face side
-    ctx.strokeStyle = '#4a3a2c';
-    ctx.lineWidth = Math.max(1, 0.9 * s);
+    // Ear at the jaw hinge, drawn BEFORE the hair so the hairline crops it to a
+    // crescent. Painted after the hair it became a pale tongue lying on top of
+    // the mullet; out on the cheek (where the first version put it) it read as
+    // a bruise.
+    ctx.fillStyle = lit(charMix(SKIN, '#000000', 0.12), 0.08, 0.26);
+    ctx.beginPath();
+    ctx.moveTo(fx(-0.14), fy(-0.20));
+    ctx.quadraticCurveTo(fx(-0.44), fy(-0.16), fx(-0.42), fy(0.10));
+    ctx.quadraticCurveTo(fx(-0.40), fy(0.30), fx(-0.22), fy(0.26));
+    ctx.quadraticCurveTo(fx(-0.12), fy(0.06), fx(-0.14), fy(-0.20));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(120,74,42,0.50)';
+    ctx.lineWidth = Math.max(1, 0.45 * s);
+    ctx.beginPath();
+    ctx.moveTo(fx(-0.22), fy(-0.08));
+    ctx.quadraticCurveTo(fx(-0.33), fy(0.06), fx(-0.24), fy(0.18));
+    ctx.stroke();
+
+    // ---- business up front: a THICK cap standing proud of the skull ----
+    // The thin skullcap that hugged the crown was where most of the lost volume
+    // went. This one overhangs the brow with a forelock and rides above the
+    // cranium, so the hair has its own silhouette.
+    ctx.fillStyle = lit(HAIR, 0.22, 0.26);
+    ctx.beginPath();
+    ctx.moveTo(fx(0.80), fy(-0.48));
+    ctx.quadraticCurveTo(fx(1.04), fy(-0.98), fx(0.58), fy(-1.28));   // forelock
+    ctx.quadraticCurveTo(fx(0.00), fy(-1.72), fx(-0.62), fy(-1.26));  // crown
+    ctx.quadraticCurveTo(fx(-1.20), fy(-0.86), fx(-1.24), fy(0.16));  // back of head
+    ctx.quadraticCurveTo(fx(-1.22), fy(0.60), fx(-0.94), fy(0.78));   // nape
+    ctx.quadraticCurveTo(fx(-0.76), fy(0.74), fx(-0.56), fy(0.50));   // hairline, rising
+    ctx.quadraticCurveTo(fx(-0.30), fy(0.30), fx(-0.18), fy(-0.08));  // in front of the ear
+    ctx.quadraticCurveTo(fx(-0.02), fy(-0.34), fx(0.22), fy(-0.50));  // temple
+    ctx.quadraticCurveTo(fx(0.52), fy(-0.64), fx(0.80), fy(-0.48));
+    ctx.closePath();
+    ctx.fill();
+    // Sheen along the crown — the one thing that says "this is a curved mass"
+    ctx.strokeStyle = 'rgba(255,232,192,0.16)';
+    ctx.lineWidth = 1.5 * s;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(fx(0.30), hcy - ry * 0.44);
-    ctx.lineTo(fx(0.82), hcy - ry * 0.34);
+    ctx.moveTo(fx(0.40), fy(-1.12));
+    ctx.quadraticCurveTo(fx(-0.16), fy(-1.42), fx(-0.80), fy(-1.00));
     ctx.stroke();
     ctx.lineCap = 'butt';
+
+    // ---- features, all placed off the face side ----
+    ctx.strokeStyle = '#4a3a2c';
+    ctx.lineWidth = Math.max(1, 0.95 * s);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fx(0.42), fy(-0.36));
+    ctx.lineTo(fx(0.80), fy(-0.28));
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    // Eye: a wedge, not the full round eye a front view gets — the far side of
+    // the eyeball is hidden by the bridge of the nose
     ctx.fillStyle = '#f8f4ec';
     ctx.beginPath();
-    ctx.ellipse(fx(0.56), hcy - ry * 0.12, rx * 0.20, ry * 0.15, 0, 0, Math.PI * 2);
+    ctx.moveTo(fx(0.44), fy(-0.14));
+    ctx.lineTo(fx(0.80), fy(-0.15));
+    ctx.quadraticCurveTo(fx(0.68), fy(0.08), fx(0.44), fy(-0.14));
+    ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#241a12';
     ctx.beginPath();
-    ctx.ellipse(fx(0.64), hcy - ry * 0.12, rx * 0.11, ry * 0.12, 0, 0, Math.PI * 2);
+    ctx.ellipse(fx(0.68), fy(-0.08), rx * 0.14, ry * 0.13, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = charMix(SKIN, '#000000', 0.45);
-    ctx.lineWidth = Math.max(1, 0.7 * s);
+    ctx.strokeStyle = 'rgba(74,58,44,0.80)';
+    ctx.lineWidth = Math.max(1, 0.5 * s);
     ctx.beginPath();
-    ctx.moveTo(fx(0.34), hcy + ry * 0.56);
-    ctx.lineTo(fx(0.86), hcy + ry * 0.52);
+    ctx.moveTo(fx(0.42), fy(-0.17));
+    ctx.lineTo(fx(0.82), fy(-0.18));
     ctx.stroke();
+    // Nostril and the crease from it to the mouth
+    ctx.strokeStyle = 'rgba(150,100,66,0.55)';
+    ctx.lineWidth = Math.max(1, 0.5 * s);
+    ctx.beginPath();
+    ctx.moveTo(fx(0.98), fy(0.26));
+    ctx.lineTo(fx(0.88), fy(0.27));
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fx(0.84), fy(0.33));
+    ctx.lineTo(fx(0.74), fy(0.46));
+    ctx.stroke();
+    // Mouth, set into the lip line rather than floating on the jaw
+    ctx.strokeStyle = 'rgba(138,90,70,0.85)';
+    ctx.lineWidth = Math.max(1, 0.42 * s);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fx(0.58), fy(0.50));
+    ctx.quadraticCurveTo(fx(0.74), fy(0.54), fx(0.86), fy(0.49));
+    ctx.stroke();
+    ctx.lineCap = 'butt';
 }
 
 function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
@@ -2022,6 +2146,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
         ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+        mulletProfileHead(x, y, s, -1, { overCollar: true });
 
         // Arms - raised if holding, extended if hasGun, otherwise hanging
         ctx.fillStyle = '#800020';
@@ -2063,6 +2188,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
         ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+        mulletProfileHead(x, y, s, 1, { overCollar: true });
 
         // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#800020';
@@ -8556,8 +8682,10 @@ function drawLevel5PipeRoom() {
     ctx.fillStyle = 'rgba(80,75,65,0.30)';
     ctx.fillRect(260, 275, 380, 95);
 
+    // The gasket, pipe and valve belong to the ROOM, not to the manager. A
+    // devoured manager must skip only his own body — `continue` here took his
+    // whole pipe station off the wall with him.
     for(let npc of level5.npcPipes) {
-        if(npcDevoured(npc)) continue;
         const pipeY = 210;
         const gasketY = 74; // Lowered from 54 to give ceiling breathing room
 
@@ -8611,12 +8739,12 @@ function drawLevel5PipeRoom() {
 
         // Advance climb/fix state BEFORE drawing so npc.y reflects the
         // current animation frame (PM: climbing_up → fixing → climbing_down → happy).
-        updateNPCPipeAnimation(npc);
+        if(!npcDevoured(npc)) updateNPCPipeAnimation(npc);
 
         // Color-coordinated step-ladder (drawn behind NPC)
         // Skip NPC sprite while its acid-burst melt animation is playing
         const isMeltingL5 = acidBursts.some(ab => ab.npc === npc);
-        if (!isMeltingL5) {
+        if (!isMeltingL5 && !npcDevoured(npc)) {
             drawStepLadder(npc.x, npc.y, npc.color);
             drawNPC(npc);
         }
@@ -8802,9 +8930,11 @@ function drawLevel6EmployeePipeRoom() {
     ctx.fillStyle = 'rgba(20,18,28,0.72)';
     ctx.fillRect(260, 275, 380, 95);
 
-    // NPC pipe stations — RED PM's pipe stays (don't remove red pipe); only skip drawing the NPC person
+    // NPC pipe stations — RED PM's pipe stays (don't remove red pipe); only skip
+    // drawing the NPC person. The same is true of a manager the mutant has
+    // eaten: `continue` here made his gasket, pipe and valve vanish off the
+    // wall along with him.
     for(let npc of level5.npcPipes) {
-        if(npcDevoured(npc)) continue;
         const pipeY = 210;
         const gasketY = 74;
 
@@ -8844,11 +8974,11 @@ function drawLevel6EmployeePipeRoom() {
 
         // Advance climb/fix state BEFORE drawing so npc.y reflects the
         // current animation frame (PM: climbing_up → fixing → climbing_down → happy).
-        updateNPCPipeAnimation(npc);
+        if(!npcDevoured(npc)) updateNPCPipeAnimation(npc);
 
         // RED PM is now a clone in the cloning room — pipe stays, NPC absent (unless factory reset)
         // After factory reset, Red PM returns to work; skip drawing if Red PM is armed & following
-        if(npc.color.name !== 'RED' || (level6.factoryReset && !(level6.cloneFollower.active && level6.cloneFollower.armed))) {
+        if(!npcDevoured(npc) && (npc.color.name !== 'RED' || (level6.factoryReset && !(level6.cloneFollower.active && level6.cloneFollower.armed)))) {
             const isMelting = acidBursts.some(ab => ab.npc === npc);
             if (!isMelting) {
                 drawStepLadder(npc.x, npc.y, npc.color);
@@ -8860,10 +8990,14 @@ function drawLevel6EmployeePipeRoom() {
     // Acid burst dissolve effects
     for(let ab of acidBursts) { drawAcidBurst(ab); }
 
-    // Mullet Pro — walking between doc printer and pipe managers
-    drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
-    if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
-        drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
+    // Mullet Pro — walking between doc printer and pipe managers. He is on the
+    // mutant's menu, so he has to be able to leave the screen; without this he
+    // kept doing his rounds after being eaten.
+    if(!npcDevoured(level5.mulletPro)) {
+        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
+        if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
+            drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
+        }
     }
 
     // Overhead fixtures
@@ -10024,24 +10158,36 @@ function ceoDialogueFor(type) {
 function npcDevoured(n) { return !!(n && (n.eatenByMutant || n.state === 'gone')); }
 
 function findMutantMeal() {
-    // EVERYTHING is food. This used to cover only the pipe-room managers, the
-    // two cloning bosses and the clone follower, so most of the building was
-    // mysteriously inedible — the bridge guard, the CEO, Mullet Pro and the
-    // level-5 managers all walked around untouchable while you starved.
+    // EVERYTHING is food — but only what this room actually DRAWS. That rule is
+    // the whole fix. `npcs` is the levels 1-4 manager list, and startGame boots
+    // initLevel(6), (5) then (1), so it is still populated with three managers
+    // at x=280/390/500 while you play level 6, where nothing renders it. Because
+    // it was searched first, those invisible bodies shadowed the real level-5
+    // managers standing a few pixels away: ACTION ate a ghost, the counter
+    // climbed, the clock topped up, and the manager in front of you never
+    // moved — which read as "the PMs are missing". In the Smartware pipe room,
+    // which has no managers at all, the DEVOUR prompt appeared over bare floor.
     const R = level6.room;
     const near = (x, r) => Math.abs(player.x - x) < (r || 62);
 
-    // Pipe managers, whichever list this room uses
-    for(const list of [npcs, level5.npcPipes]) {
-        if(!list) continue;
-        for(const n of list) {
-            if(!n || n.eatenByMutant || n.state === 'gone') continue;
-            if(!near(n.x)) continue;
-            // level-5 managers only count in the rooms they are actually in
-            if(list === level5.npcPipes && R !== 'employeePipeRoom' && R !== 'pipeRoom') continue;
-            if(list === npcs && R !== 'pipeRoom' && R !== 'employeePipeRoom') continue;
+    // Pipe managers — the level-5 list, in the one level-6 room that draws it
+    if(R === 'employeePipeRoom') {
+        for(const n of level5.npcPipes) {
+            if(!n || npcDevoured(n) || !near(n.x)) continue;
+            // Same visibility rule the room itself uses for RED: he is a clone
+            // in the cloning room until the factory reset, and absent again
+            // while that clone is following you armed.
+            if(n.color.name === 'RED' && !(level6.factoryReset &&
+                !(level6.cloneFollower.active && level6.cloneFollower.armed))) continue;
             return { x: n.x, kill: () => {
                 n.eatenByMutant = true; n.needsDoc = false; n.state = 'gone';
+            } };
+        }
+        // Mullet Pro does his rounds here, and nowhere else in level 6
+        const mp = level5.mulletPro;
+        if(mp && !npcDevoured(mp) && near(mp.x)) {
+            return { x: mp.x, kill: () => {
+                mp.eatenByMutant = true; mp.state = 'gone'; mp.hasDoc = false;
             } };
         }
     }
@@ -10063,18 +10209,8 @@ function findMutantMeal() {
             level6.ceoPursuing = false;
         } };
     }
-    // Mullet Pro, on whichever floor he is wandering
-    const mp = level5.mulletPro;
-    if(mp && !mp.eatenByMutant && (R === 'employeeHallway' || R === 'employeePipeRoom' ||
-       R === 'employeeLobby' || R === 'l6Furnace') && near(mp.x)) {
-        return { x: mp.x, kill: () => {
-            mp.eatenByMutant = true; mp.state = 'gone'; mp.hasDoc = false;
-        } };
-    }
-    // The floor boss, if he is out
-    if(typeof boss !== 'undefined' && boss && boss.active && near(boss.x)) {
-        return { x: boss.x, kill: () => { boss.active = false; } };
-    }
+    // No entry here for `boss`: that is the levels 3-4 floor boss, and level 6
+    // never draws him — offering him was another prompt over an empty room.
     // A clone that followed you down
     const cf = level6.cloneFollower;
     if(cf && cf.active && cf.room === R && near(cf.x)) {
