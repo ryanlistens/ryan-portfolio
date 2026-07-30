@@ -15668,29 +15668,44 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 ctx.lineTo(rx, bot - rl - 1);
                 ctx.stroke();
             }
-            // Cab break — the tractor unit sits at the near end of the side
-            const cabSplit = fx0 + (bx0 - fx0) * 0.30;
+            // Cab break. `rear` says which end of the truck is nearest the
+            // camera, so it has to move the cab along the SIDE face too — not
+            // just swap the end face. Leaving it pinned at the near end put a
+            // cab break under the trailer doors during a turn, and made the
+            // back look like it morphed into a front when the doors rotated
+            // out of view.
+            const cabT = rear ? 0.70 : 0.30;
+            const cabSplit = fx0 + (bx0 - fx0) * cabT;
             ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1.2;
             ctx.beginPath();
-            ctx.moveTo(cabSplit, top - lift * 0.30 + 1);
-            ctx.lineTo(cabSplit, bot - lift * 0.30 - 1);
+            ctx.moveTo(cabSplit, top - lift * cabT + 1);
+            ctx.lineTo(cabSplit, bot - lift * cabT - 1);
             ctx.stroke();
-            // Door glass on the cab side
-            if(!rear && sideL > 14) {
+            // Door glass on the cab side, at whichever end the cab is
+            if(sideL > 14) {
                 ctx.fillStyle = 'rgba(130,190,225,0.75)';
-                const gx0 = fx0 + (bx0 - fx0) * 0.06, gx1 = fx0 + (bx0 - fx0) * 0.24;
+                const g0 = rear ? 0.94 : 0.06, g1 = rear ? 0.76 : 0.24;
+                const gx0 = fx0 + (bx0 - fx0) * g0, gx1 = fx0 + (bx0 - fx0) * g1;
                 ctx.beginPath();
-                ctx.moveTo(gx0, top - lift * 0.06 + 3);
-                ctx.lineTo(gx1, top - lift * 0.24 + 3);
-                ctx.lineTo(gx1, top - lift * 0.24 + 9);
-                ctx.lineTo(gx0, top - lift * 0.06 + 9);
+                ctx.moveTo(gx0, top - lift * g0 + 3);
+                ctx.lineTo(gx1, top - lift * g1 + 3);
+                ctx.lineTo(gx1, top - lift * g1 + 9);
+                ctx.lineTo(gx0, top - lift * g0 + 9);
                 ctx.closePath(); ctx.fill();
             }
             // Exhaust stack behind the cab
-            if(!rear && sideL > 20) {
-                const stx = fx0 + (bx0 - fx0) * 0.30;
+            if(sideL > 20) {
+                const stx = fx0 + (bx0 - fx0) * cabT;
                 ctx.fillStyle = '#4a4a4a';
-                ctx.fillRect(stx - 1, top - lift * 0.30 - 5, 1.8, 6);
+                ctx.fillRect(stx - 1, top - lift * cabT - 5, 1.8, 6);
+            }
+            // Tail lights on the trailer end of the side, so the back of the
+            // truck is identifiable even in full profile
+            if(sideL > 20) {
+                const tl = rear ? 0.06 : 0.94;
+                const tx2 = fx0 + (bx0 - fx0) * tl;
+                ctx.fillStyle = '#ff3020';
+                ctx.fillRect(tx2 - 1, bot - lift * tl - 5, 2, 2);
             }
         }
 
@@ -15814,11 +15829,12 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 // TURNING OUT — swings back from square-on to side profile
                 const p=(phase-0.86)/0.10;
                 const sm=p*p*(3-2*p);
-                drawMWTruck(exitX+sm*8, truckY+(1-sm)*4, 1-sm, 1.12-sm*0.12, true);
+                drawMWTruck(exitX+8+sm*8, truckY+(1-sm)*4, 1-sm, 1.12-sm*0.12, true);
             } else if(phase>=0.96){
                 // Pulling away to the right, accelerating from a standstill
                 const p=(phase-0.96)/0.04;
-                drawMWTruck(exitX+p*p*(wx+ww+64-exitX), truckY, 0, 1, false);
+                const offX = exitX + 16;  // continue from where the turn ended
+                drawMWTruck(offX+p*p*(wx+ww+64-offX), truckY, 0, 1, true);
             }
         }
     }
