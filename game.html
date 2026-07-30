@@ -15668,29 +15668,44 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 ctx.lineTo(rx, bot - rl - 1);
                 ctx.stroke();
             }
-            // Cab break — the tractor unit sits at the near end of the side
-            const cabSplit = fx0 + (bx0 - fx0) * 0.30;
+            // Cab break. `rear` says which end of the truck is nearest the
+            // camera, so it has to move the cab along the SIDE face too — not
+            // just swap the end face. Leaving it pinned at the near end put a
+            // cab break under the trailer doors during a turn, and made the
+            // back look like it morphed into a front when the doors rotated
+            // out of view.
+            const cabT = rear ? 0.70 : 0.30;
+            const cabSplit = fx0 + (bx0 - fx0) * cabT;
             ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1.2;
             ctx.beginPath();
-            ctx.moveTo(cabSplit, top - lift * 0.30 + 1);
-            ctx.lineTo(cabSplit, bot - lift * 0.30 - 1);
+            ctx.moveTo(cabSplit, top - lift * cabT + 1);
+            ctx.lineTo(cabSplit, bot - lift * cabT - 1);
             ctx.stroke();
-            // Door glass on the cab side
-            if(!rear && sideL > 14) {
+            // Door glass on the cab side, at whichever end the cab is
+            if(sideL > 14) {
                 ctx.fillStyle = 'rgba(130,190,225,0.75)';
-                const gx0 = fx0 + (bx0 - fx0) * 0.06, gx1 = fx0 + (bx0 - fx0) * 0.24;
+                const g0 = rear ? 0.94 : 0.06, g1 = rear ? 0.76 : 0.24;
+                const gx0 = fx0 + (bx0 - fx0) * g0, gx1 = fx0 + (bx0 - fx0) * g1;
                 ctx.beginPath();
-                ctx.moveTo(gx0, top - lift * 0.06 + 3);
-                ctx.lineTo(gx1, top - lift * 0.24 + 3);
-                ctx.lineTo(gx1, top - lift * 0.24 + 9);
-                ctx.lineTo(gx0, top - lift * 0.06 + 9);
+                ctx.moveTo(gx0, top - lift * g0 + 3);
+                ctx.lineTo(gx1, top - lift * g1 + 3);
+                ctx.lineTo(gx1, top - lift * g1 + 9);
+                ctx.lineTo(gx0, top - lift * g0 + 9);
                 ctx.closePath(); ctx.fill();
             }
             // Exhaust stack behind the cab
-            if(!rear && sideL > 20) {
-                const stx = fx0 + (bx0 - fx0) * 0.30;
+            if(sideL > 20) {
+                const stx = fx0 + (bx0 - fx0) * cabT;
                 ctx.fillStyle = '#4a4a4a';
-                ctx.fillRect(stx - 1, top - lift * 0.30 - 5, 1.8, 6);
+                ctx.fillRect(stx - 1, top - lift * cabT - 5, 1.8, 6);
+            }
+            // Tail lights on the trailer end of the side, so the back of the
+            // truck is identifiable even in full profile
+            if(sideL > 20) {
+                const tl = rear ? 0.06 : 0.94;
+                const tx2 = fx0 + (bx0 - fx0) * tl;
+                ctx.fillStyle = '#ff3020';
+                ctx.fillRect(tx2 - 1, bot - lift * tl - 5, 2, 2);
             }
         }
 
@@ -15814,11 +15829,12 @@ function drawMarbleWindowScene(wx, wy, ww, wh) {
                 // TURNING OUT — swings back from square-on to side profile
                 const p=(phase-0.86)/0.10;
                 const sm=p*p*(3-2*p);
-                drawMWTruck(exitX+sm*8, truckY+(1-sm)*4, 1-sm, 1.12-sm*0.12, true);
+                drawMWTruck(exitX+8+sm*8, truckY+(1-sm)*4, 1-sm, 1.12-sm*0.12, true);
             } else if(phase>=0.96){
                 // Pulling away to the right, accelerating from a standstill
                 const p=(phase-0.96)/0.04;
-                drawMWTruck(exitX+p*p*(wx+ww+64-exitX), truckY, 0, 1, false);
+                const offX = exitX + 16;  // continue from where the turn ended
+                drawMWTruck(offX+p*p*(wx+ww+64-offX), truckY, 0, 1, true);
             }
         }
     }
@@ -21954,6 +21970,59 @@ function ceoLapels(x, s, topY, ramp) {
 
 
 
+// The CEO's gun arm. This lived at the tail of _drawCEO, which meant it drew
+// AFTER the head — so the shoulder covered the cigar in his mouth. Each facing
+// now calls it as part of the BODY, before its head goes on.
+function ceoGunArm(x, y, facing) {
+
+        const s = 2;
+        const dir = facing === 'left' ? -1 : facing === 'right' ? 1 : 0;
+        const gd = dir === 0 ? 1 : dir;
+        const SLEEVE = charMix(CEO_SUIT, '#ffffff', 0.07);
+        // Shoulder, elbow, wrist. The arm was one charLimb of constant width
+        // straight from shoulder to wrist, which is a tube, not an arm — it read
+        // as deformed because it had no elbow and no taper.
+        const shX = x + (dir === 0 ? 7.0*s  : gd * 1.2*s),  shY = y + (dir === 0 ? 2.2*s : 3.8*s);
+        const elX = x + (dir === 0 ? 8.8*s  : gd * 5.6*s),  elY = y + (dir === 0 ? 7.4*s : 7.6*s);
+        const hx  = x + (dir === 0 ? 11.4*s : gd * 10.2*s), hy = y + (dir === 0 ? 9.4*s : 5.6*s);
+        charLimb(shX, shY, elX, elY, 3.0*s, SLEEVE, (shX + elX) / 2, (shY + elY) / 2 + 0.3*s);
+        charLimb(elX, elY, hx, hy, 2.4*s, SLEEVE, (elX + hx) / 2, (elY + hy) / 2 + 0.2*s);
+        charDeltoid(shX, shY, 1.9*s, charMix(CEO_SUIT, '#ffffff', 0.10));
+
+        ctx.save();
+        ctx.translate(hx, hy);
+        // Palm first, then the revolver, then the fingers curled over the grip.
+        // Drawing the hand and then the whole gun on top of it hid the hand
+        // completely, which is why the gun looked glued straight to his sleeve.
+        ctx.fillStyle = '#c49872';
+        ctx.beginPath(); ctx.arc(0, 0.3*s, 1.5*s, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3b2a1c';                               // grip
+        ctx.fillRect(gd < 0 ? -0.4*s : -0.8*s, 0.2*s, 1.2*s, 2.4*s);
+        ctx.fillStyle = '#55585e';                               // frame
+        ctx.fillRect(gd < 0 ? -2.0*s : -1.0*s, -0.9*s, 3.0*s, 1.8*s);
+        ctx.fillStyle = '#6a6d74';                               // cylinder
+        ctx.beginPath(); ctx.arc(gd * 0.3*s, 0, 0.95*s, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#4a4d53';                               // barrel
+        ctx.fillRect(gd < 0 ? -5.0*s : 1.4*s, -0.55*s, 3.6*s, 1.1*s);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(gd < 0 ? -5.0*s : 1.4*s, -0.55*s, 3.6*s, 0.35*s);
+        // Fingers wrapped round the grip, and the thumb along the frame
+        ctx.fillStyle = '#c08e68';
+        ctx.beginPath();
+        ctx.ellipse(gd * -0.1*s, 0.9*s, 1.05*s, 1.25*s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#cfa47c';
+        ctx.beginPath();
+        ctx.ellipse(gd * -0.5*s, -0.15*s, 0.85*s, 0.6*s, gd * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(120,78,46,0.55)'; ctx.lineWidth = Math.max(1, 0.35*s);
+        ctx.beginPath();
+        ctx.moveTo(gd * -0.9*s, 0.5*s); ctx.lineTo(gd * 0.7*s, 0.6*s);
+        ctx.stroke();
+        ctx.restore();
+}
+
+
 // The CEO's body in PROFILE, drawn back to front, built to the same spec as the
 // cloning boss's side view: torso as deep as the head (his is 25px deep, so the
 // jacket runs 27 at the shoulder and 26 at the hem — a chest seen side-on is
@@ -21971,8 +22040,8 @@ function ceoProfileBody(x, y, s, d, stride, hasGun) {
     // 1 — far arm, behind the body, reaching mid-thigh like the near one.
     // Hung from y+3.8*s: at y+2.2*s the joint sat on the collar line and the
     // arms looked like they grew out of his neck.
-    charLimb(u(-3.4), y + 3.8*s, u(-4.2), y + 9.0*s, 2.8*s, SLEEVE_F, u(-4.0), y + 6.4*s);
-    charLimb(u(-4.2), y + 9.0*s, u(-4.0), y + 13.8*s, 2.3*s, SLEEVE_F, u(-4.5), y + 11.6*s);
+    charLimb(u(-3.4), y + 3.8*s, u(-4.1), y + 9.0*s, 2.8*s, SLEEVE_F, u(-4.0), y + 6.4*s);
+    charLimb(u(-4.1), y + 9.0*s, u(-2.8), y + 13.8*s, 2.3*s, SLEEVE_F, u(-3.7), y + 11.8*s);
 
     // 2 — far leg, set back and darker, swinging behind
     ctx.fillStyle = charMix(CEO_TROUSER, '#000000', 0.28);
@@ -22047,11 +22116,11 @@ function ceoProfileBody(x, y, s, d, stride, hasGun) {
     // is holding the gun: that pose draws its own arm off the same joint, and
     // drawing both gave him two limbs on the same side of his body.
     if(hasGun) return;
-    const nx = u(0.6), ex = u(1.7), ey = y + 9.2*s, hx = u(1.9), hy = y + 15.4*s;
-    charLimb(nx, y + 3.8*s, ex, ey, 3.6*s, 'rgba(0,0,0,0.30)', u(1.5), y + 6.6*s);
-    charLimb(ex, ey, hx, y + 14.6*s, 3.0*s, 'rgba(0,0,0,0.30)', u(2.0), y + 12*s);
-    charLimb(nx, y + 3.8*s, ex, ey, 3.0*s, SLEEVE_N, u(1.5), y + 6.6*s);
-    charLimb(ex, ey, hx, y + 14.6*s, 2.4*s, SLEEVE_N, u(2.0), y + 12*s);
+    const nx = u(0.6), ex = u(0.1), ey = y + 9.2*s, hx = u(1.8), hy = y + 15.4*s;
+    charLimb(nx, y + 3.8*s, ex, ey, 3.6*s, 'rgba(0,0,0,0.30)', u(-0.1), y + 6.6*s);
+    charLimb(ex, ey, hx, y + 14.6*s, 3.0*s, 'rgba(0,0,0,0.30)', u(0.5), y + 12.2*s);
+    charLimb(nx, y + 3.8*s, ex, ey, 3.0*s, SLEEVE_N, u(-0.1), y + 6.6*s);
+    charLimb(ex, ey, hx, y + 14.6*s, 2.4*s, SLEEVE_N, u(0.5), y + 12.2*s);
     charDeltoid(nx, y + 3.8*s, 1.9*s, charMix(CEO_SUIT, '#ffffff', 0.10));
     ctx.fillStyle = '#c49872';
     ctx.beginPath(); ctx.arc(hx, hy, 1.35*s, 0, Math.PI*2); ctx.fill();
@@ -22269,11 +22338,13 @@ function _drawCEO(x, y, facing) {
     if(facing === 'left') {
         const legL = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
         ceoProfileBody(x, y, s, -1, legL, ceo.state === 'hunting');
+        if(ceo.state === 'hunting') ceoGunArm(x, y, 'left');
         ceoProfileHead(x, y, s, -1, skinColor, weatheredSkin);
 
     } else if(facing === 'right') {
         const legR = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
         ceoProfileBody(x, y, s, 1, legR, ceo.state === 'hunting');
+        if(ceo.state === 'hunting') ceoGunArm(x, y, 'right');
         ceoProfileHead(x, y, s, 1, skinColor, weatheredSkin);
 
     } else if(facing === 'forward' || facing === 'down') {
@@ -22368,6 +22439,8 @@ function _drawCEO(x, y, facing) {
         }
         ceoShoe(x - 6.0*s, y + 26*s + leg, 4.5*s, s);
         ceoShoe(x + 1.5*s, y + 26*s - leg, 4.5*s, s);
+
+        if(ceo.state === 'hunting') ceoGunArm(x, y, 'down');
 
         // === HEAD — built as a skull, not a stack of rectangles ===
         // Cranium is wide at the temples and narrows to a heavy jaw; the whole
@@ -22629,54 +22702,6 @@ function _drawCEO(x, y, facing) {
         ctx.fillText('$', sackX, sackY + 3);
     }
 
-    // CEO holding gun when in hunting mode.
-    if(ceo.state === 'hunting') {
-        const s = 2;
-        const dir = facing === 'left' ? -1 : facing === 'right' ? 1 : 0;
-        const gd = dir === 0 ? 1 : dir;
-        const SLEEVE = charMix(CEO_SUIT, '#ffffff', 0.07);
-        // Shoulder, elbow, wrist. The arm was one charLimb of constant width
-        // straight from shoulder to wrist, which is a tube, not an arm — it read
-        // as deformed because it had no elbow and no taper.
-        const shX = x + (dir === 0 ? 7.0*s  : gd * 1.2*s),  shY = y + (dir === 0 ? 2.2*s : 3.8*s);
-        const elX = x + (dir === 0 ? 8.8*s  : gd * 5.6*s),  elY = y + (dir === 0 ? 7.4*s : 7.6*s);
-        const hx  = x + (dir === 0 ? 11.4*s : gd * 10.2*s), hy = y + (dir === 0 ? 9.4*s : 5.6*s);
-        charLimb(shX, shY, elX, elY, 3.0*s, SLEEVE, (shX + elX) / 2, (shY + elY) / 2 + 0.3*s);
-        charLimb(elX, elY, hx, hy, 2.4*s, SLEEVE, (elX + hx) / 2, (elY + hy) / 2 + 0.2*s);
-        charDeltoid(shX, shY, 1.9*s, charMix(CEO_SUIT, '#ffffff', 0.10));
-
-        ctx.save();
-        ctx.translate(hx, hy);
-        // Palm first, then the revolver, then the fingers curled over the grip.
-        // Drawing the hand and then the whole gun on top of it hid the hand
-        // completely, which is why the gun looked glued straight to his sleeve.
-        ctx.fillStyle = '#c49872';
-        ctx.beginPath(); ctx.arc(0, 0.3*s, 1.5*s, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#3b2a1c';                               // grip
-        ctx.fillRect(gd < 0 ? -0.4*s : -0.8*s, 0.2*s, 1.2*s, 2.4*s);
-        ctx.fillStyle = '#55585e';                               // frame
-        ctx.fillRect(gd < 0 ? -2.0*s : -1.0*s, -0.9*s, 3.0*s, 1.8*s);
-        ctx.fillStyle = '#6a6d74';                               // cylinder
-        ctx.beginPath(); ctx.arc(gd * 0.3*s, 0, 0.95*s, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#4a4d53';                               // barrel
-        ctx.fillRect(gd < 0 ? -5.0*s : 1.4*s, -0.55*s, 3.6*s, 1.1*s);
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fillRect(gd < 0 ? -5.0*s : 1.4*s, -0.55*s, 3.6*s, 0.35*s);
-        // Fingers wrapped round the grip, and the thumb along the frame
-        ctx.fillStyle = '#c08e68';
-        ctx.beginPath();
-        ctx.ellipse(gd * -0.1*s, 0.9*s, 1.05*s, 1.25*s, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#cfa47c';
-        ctx.beginPath();
-        ctx.ellipse(gd * -0.5*s, -0.15*s, 0.85*s, 0.6*s, gd * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(120,78,46,0.55)'; ctx.lineWidth = Math.max(1, 0.35*s);
-        ctx.beginPath();
-        ctx.moveTo(gd * -0.9*s, 0.5*s); ctx.lineTo(gd * 0.7*s, 0.6*s);
-        ctx.stroke();
-        ctx.restore();
-    }
 
     // === CASH LIFE METER — 6 money icons above CEO head during murder mode ===
     if(ceo.state === 'hunting' && typeof ceo.health !== 'undefined') {
