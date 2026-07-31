@@ -2212,9 +2212,15 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun) {
     const SLEEVE_N = charMix(JACKET, '#ffffff', 0.12);
     const SLEEVE_F = charMix(JACKET, '#000000', 0.34);
     const HALO = 'rgba(48,0,12,0.38)';
-    const limb2 = (x0, y0, x1, y1, w, col, bx, by) => {
-        charLimb(x0, y0, x1, y1, w + 0.5*s, HALO, bx, by);
-        charLimb(x0, y0, x1, y1, w, col, bx, by);
+    // A whole arm at once: every halo segment first, THEN every sleeve segment.
+    // Doing it per-segment painted the second segment's halo back over the
+    // first segment's sleeve, so the elbow grew a dark ring and the arm read as
+    // a chain of lumps stuck to the chest instead of one limb.
+    const arm = (j, w1, w2, col) => {
+        charLimb(j.sx, j.sy, j.ex, j.ey, w1 + 0.5*s, HALO, j.b1x, j.b1y);
+        charLimb(j.ex, j.ey, j.wx, j.wy, w2 + 0.5*s, HALO, j.b2x, j.b2y);
+        charLimb(j.sx, j.sy, j.ex, j.ey, w1, col, j.b1x, j.b1y);
+        charLimb(j.ex, j.ey, j.wx, j.wy, w2, col, j.b2x, j.b2y);
     };
     const JEAN_N = '#a4c2db', JEAN_F = '#7f9db8';
     const SKIN = '#f5c89a';
@@ -2279,31 +2285,42 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun) {
     ctx.lineTo(u(3.9), shY + 3.0*s);  ctx.lineTo(u(3.2), shY + 2.7*s);
     ctx.closePath(); ctx.fill();
 
-    // 5 — ARMS. A man seen from the side has both shoulders at the SAME
-    // fore-aft position, so both arms hang from one place, one directly behind
-    // the other. Hanging them at u(-1.2) and u(2.0) put an arm at the front of
-    // his chest and another out at his back — front-view anatomy with a profile
-    // head on it. They share a joint now: at rest the near arm covers the far
-    // one and you see a single arm with a sliver behind it, and they separate
-    // fore and aft only as the walk swings them.
+    // 5 — ARMS. A man seen from the side has both shoulders at the same
+    // fore-aft position, so the near arm covers the far one at rest and you see
+    // ONE arm; they separate fore and aft only as the walk swings them. An arm
+    // down the front of the chest and another out at the back is front-view
+    // anatomy with a profile head on it.
+    //
+    // They hang from the SHOULDER, level with the top of the jacket — hung off
+    // jointY = y + 1.0*s they started two thirds of the way down his chest,
+    // which is what made them look stuck on rather than attached.
     if(hasGun) return;   // that pose draws its own arm off the same joint
-    const SHX = 0.9, FARX = 0.2;              // near and far, ~0.7*s apart in depth
+    const shJY = shY + 1.4*s;
+    const NEARX = 1.0, FARX = 0.0;
     if(holding) {
-        limb2(u(FARX - 0.3), jointY, u(FARX - 0.7), y - 4.2*s, 1.7*s, SLEEVE_F, u(FARX - 0.9), y - 1.5*s);
-        limb2(u(FARX - 0.7), y - 4.2*s, u(FARX - 0.2), y - 12.8*s, 1.5*s, SLEEVE_F, u(FARX - 0.8), y - 8.8*s);
-        charHand(u(FARX - 0.2), y - 13.6*s, 1.25*s, charMix(SKIN, '#000000', 0.26));
-        limb2(u(SHX), jointY, u(SHX + 0.4), y - 4.4*s, 1.9*s, SLEEVE_N, u(SHX + 0.6), y - 1.6*s);
-        limb2(u(SHX + 0.4), y - 4.4*s, u(SHX), y - 13.2*s, 1.6*s, SLEEVE_N, u(SHX + 0.5), y - 9.2*s);
-        charDeltoid(u(SHX), jointY, 1.2*s, charMix(JACKET, '#ffffff', 0.18));
-        charHand(u(SHX), y - 14.0*s, 1.4*s, SKIN);
+        arm({ sx: u(FARX), sy: shJY, ex: u(FARX - 0.5), ey: y - 4.2*s,
+              wx: u(FARX), wy: y - 12.8*s,
+              b1x: u(FARX - 0.7), b1y: y - 1.5*s, b2x: u(FARX - 0.6), b2y: y - 8.8*s },
+            1.7*s, 1.5*s, SLEEVE_F);
+        charHand(u(FARX), y - 13.6*s, 1.25*s, charMix(SKIN, '#000000', 0.26));
+        arm({ sx: u(NEARX), sy: shJY, ex: u(NEARX + 0.5), ey: y - 4.4*s,
+              wx: u(NEARX), wy: y - 13.2*s,
+              b1x: u(NEARX + 0.7), b1y: y - 1.6*s, b2x: u(NEARX + 0.6), b2y: y - 9.2*s },
+            1.9*s, 1.6*s, SLEEVE_N);
+        charDeltoid(u(NEARX), shJY, 1.2*s, charMix(JACKET, '#ffffff', 0.18));
+        charHand(u(NEARX), y - 14.0*s, 1.4*s, SKIN);
     } else {
-        limb2(u(FARX), jointY, u(FARX - 0.3), y + 4.0*s, 1.7*s, SLEEVE_F, u(FARX - 0.5), y + 2.3*s);
-        limb2(u(FARX - 0.3), y + 4.0*s, u(FARX + 0.1) - fwd, y + 6.8*s, 1.5*s, SLEEVE_F, u(FARX - 0.2) - fwd*0.6, y + 5.7*s);
-        charHand(u(FARX + 0.1) - fwd, y + 7.6*s, 1.25*s, charMix(SKIN, '#000000', 0.26));
-        limb2(u(SHX), jointY, u(SHX - 0.3), y + 4.0*s, 1.9*s, SLEEVE_N, u(SHX - 0.5), y + 2.3*s);
-        limb2(u(SHX - 0.3), y + 4.0*s, u(SHX + 0.1) + fwd, y + 6.8*s, 1.6*s, SLEEVE_N, u(SHX - 0.2) + fwd*0.6, y + 5.7*s);
-        charDeltoid(u(SHX), jointY, 1.2*s, charMix(JACKET, '#ffffff', 0.18));
-        charHand(u(SHX + 0.1) + fwd, y + 7.6*s, 1.4*s, SKIN);
+        arm({ sx: u(FARX), sy: shJY, ex: u(FARX - 0.4), ey: y + 3.8*s,
+              wx: u(FARX) - fwd, wy: y + 6.8*s,
+              b1x: u(FARX - 0.6), b1y: y + 1.8*s, b2x: u(FARX - 0.5) - fwd*0.6, b2y: y + 5.5*s },
+            1.7*s, 1.5*s, SLEEVE_F);
+        charHand(u(FARX) - fwd, y + 7.6*s, 1.25*s, charMix(SKIN, '#000000', 0.26));
+        arm({ sx: u(NEARX), sy: shJY, ex: u(NEARX - 0.4), ey: y + 3.8*s,
+              wx: u(NEARX) + fwd, wy: y + 6.8*s,
+              b1x: u(NEARX - 0.6), b1y: y + 1.8*s, b2x: u(NEARX - 0.5) + fwd*0.6, b2y: y + 5.5*s },
+            1.9*s, 1.6*s, SLEEVE_N);
+        charDeltoid(u(NEARX), shJY, 1.2*s, charMix(JACKET, '#ffffff', 0.18));
+        charHand(u(NEARX) + fwd, y + 7.6*s, 1.4*s, SKIN);
     }
 }
 
