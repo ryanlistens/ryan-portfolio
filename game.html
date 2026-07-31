@@ -2715,23 +2715,6 @@ function _drawMulletProAsPM(npc) {
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath(); ctx.ellipse(x, y + 34, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
 
-        // Wrench rocking behind sprite during fixing
-        if(isFix) {
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
-            const rock = Math.sin(npc.fixAnim * 5) * 0.45;
-            ctx.translate(x, y - 2);
-            ctx.rotate(rock);
-            ctx.fillStyle = '#e03020';
-            ctx.beginPath();
-            ctx.moveTo(4, -5); ctx.lineTo(56, -3.5); ctx.lineTo(58, 0);
-            ctx.lineTo(56, 3.5); ctx.lineTo(4, 5); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#ff5544'; ctx.fillRect(8, -3.5, 46, 2);
-            ctx.fillStyle = '#555';
-            ctx.beginPath(); ctx.arc(2, 0, 5, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-        }
-
         // The BODY is the shared sprite's back view — head, mullet, jacket and
         // legs — with its arms suppressed so the ladder grip below can supply
         // them. This used to be a hand-built stack of fillRects at s=2: a flat
@@ -2740,53 +2723,60 @@ function _drawMulletProAsPM(npc) {
         // while every other pose had been redrawn.
         drawMulletPro(x, y, 'back', false, false, isClimbing, true);
 
-        // Arms reaching up to the pipe (or ladder rungs while climbing).
-        // FIX state: both hands grip the rotating wrench at two points along
-        // its handle so they track the rotation in world space (no more
-        // floating hands above the tool). Arms are stroked lines from the
-        // shoulders down to the grip points on the wrench.
-        // Anchored to the SHARED sprite's shoulders, not this branch's old s=2
-        // boxes: drawMulletPro hangs its arms from gy - 0.8*2.4 with
-        // gy = y + FOOT_FIX.mulletPro (-7), i.e. y - 8.9, about 16.6 out.
+        // ARMS. He is working on a pipe IN FRONT of him, so from behind the
+        // wrench is up at chest height and the arms reach up to it — the wrench
+        // used to be a 58px handle out at hip height, drawn BEFORE the body, so
+        // his arms crossed his back to reach round it. And they were 3px strokes
+        // of #3a0a0a, the old bespoke torso colour: against the remastered
+        // jacket that reads as two black threads. Same limbs, colours and widths
+        // as the shared sprite's arms now.
         const shoulderY = y - 8.9;
         const leftShoulderX  = x - 16.6;
         const rightShoulderX = x + 16.6;
+        const SL_L = '#5c0016', SL_R = charMix('#800020', '#000000', 0.08);
+        const MP_S = 2.4;
         if(isFix) {
             const rock = Math.sin(npc.fixAnim * 5) * 0.45;
-            const pivotX = x, pivotY = y - 2;
-            // Grip points along the wrench handle (near head + further down)
-            const g1 = 12;  // inner hand near wrench jaw
-            const g2 = 38;  // outer hand for leverage
+            // Chest height, not head height: the shared back view's head runs
+            // from about y-38 down to y-11, so a wrench at y-30 lay across the
+            // back of his skull. His torso spans y-9 to y+12.
+            const pivotX = x + 2, pivotY = y - 4;
             const c = Math.cos(rock), sn = Math.sin(rock);
-            const leftHandX  = pivotX + g1 * c;
-            const leftHandY  = pivotY + g1 * sn;
-            const rightHandX = pivotX + g2 * c;
-            const rightHandY = pivotY + g2 * sn;
-            ctx.strokeStyle = '#3a0a0a';
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'square';
+            // wrench, in FRONT of him now — he is holding it, so it is not
+            // hidden behind his own back
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
+            ctx.translate(pivotX, pivotY);
+            ctx.rotate(rock);
+            ctx.fillStyle = '#e03020';
             ctx.beginPath();
-            ctx.moveTo(leftShoulderX, shoulderY);  ctx.lineTo(leftHandX,  leftHandY);
-            ctx.moveTo(rightShoulderX, shoulderY); ctx.lineTo(rightHandX, rightHandY);
-            ctx.stroke();
-            // Skin-cuff hands gripping the wrench handle
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(leftHandX  - 2, leftHandY  - 2, 4, 4);
-            ctx.fillRect(rightHandX - 2, rightHandY - 2, 4, 4);
+            ctx.moveTo(3, -4); ctx.lineTo(26, -3); ctx.lineTo(28, 0);
+            ctx.lineTo(26, 3); ctx.lineTo(3, 4); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ff5544'; ctx.fillRect(6, -3, 18, 1.6);
+            ctx.fillStyle = '#555';
+            ctx.beginPath(); ctx.arc(1, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            // hands on the handle, arms up to them
+            const g1 = 9, g2 = 21;
+            const leftHandX  = pivotX + g1 * c, leftHandY  = pivotY + g1 * sn;
+            const rightHandX = pivotX + g2 * c, rightHandY = pivotY + g2 * sn;
+            charLimb(leftShoulderX,  shoulderY, leftHandX,  leftHandY,  2.0*MP_S, SL_L,
+                     leftShoulderX - 2, shoulderY + 5);
+            charLimb(rightShoulderX, shoulderY, rightHandX, rightHandY, 2.0*MP_S, SL_R,
+                     rightShoulderX + 4, shoulderY + 4);
+            charHand(leftHandX,  leftHandY,  1.5*MP_S, '#f5c89a');
+            charHand(rightHandX, rightHandY, 1.5*MP_S, '#f5c89a');
         } else {
-            // Climbing — vertical arm rects reaching up to the rung
-            ctx.fillStyle = '#3a0a0a';
-            // Reaching to a rung ABOVE his head. y-14 was only ~5px above the
-            // shoulder once the shoulders moved to the shared sprite's, so the
-            // arms came out as two stubs at his sides.
+            // Climbing — both arms up to a rung above his head
             const climbOff = climbCycle;
             const leftHandY  = (y - 32) - climbOff;
             const rightHandY = (y - 32) + climbOff;
-            ctx.fillRect(leftShoulderX  - 2.4, leftHandY,  4.8, Math.max(2, shoulderY - leftHandY));
-            ctx.fillRect(rightShoulderX - 2.4, rightHandY, 4.8, Math.max(2, shoulderY - rightHandY));
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(leftShoulderX  - 2.4, leftHandY,  4.8, 4.8);
-            ctx.fillRect(rightShoulderX - 2.4, rightHandY, 4.8, 4.8);
+            charLimb(leftShoulderX,  shoulderY, leftShoulderX,  leftHandY,  2.0*MP_S, SL_L,
+                     leftShoulderX - 2, (shoulderY + leftHandY) / 2);
+            charLimb(rightShoulderX, shoulderY, rightShoulderX, rightHandY, 2.0*MP_S, SL_R,
+                     rightShoulderX + 2, (shoulderY + rightHandY) / 2);
+            charHand(leftShoulderX,  leftHandY,  1.5*MP_S, '#f5c89a');
+            charHand(rightShoulderX, rightHandY, 1.5*MP_S, '#f5c89a');
         }
 
         // (legs come from the shared sprite above — its walk bob alternates them
