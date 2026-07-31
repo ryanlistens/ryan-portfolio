@@ -2224,6 +2224,28 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     };
     const JEAN_N = '#a4c2db', JEAN_F = '#7f9db8';
     const SKIN = '#f5c89a';
+    const fU = stride / s;            // the stride, in the same units as u()
+    // Feet point where he is FACING. The shoe was a symmetric rounded rect
+    // anchored with Math.min of the leg's two bottom corners, and pathRoundRect
+    // always extends to the RIGHT in screen space — so in both facings the
+    // overhang landed at the HEEL and the toe was flush with the leg. He stood
+    // with his feet on backwards. Placed from the TOE now, which is forward of
+    // the leg's front edge, with a squared heel block behind so the foot has a
+    // direction at all.
+    const mpShoe = (toeU, topY, col) => {
+        const LEN = 4.6, H = 2.4*s;
+        ctx.fillStyle = col;
+        pathRoundRect(Math.min(u(toeU), u(toeU - LEN)), topY, LEN*s, H, 1*s);
+        ctx.fill();
+        ctx.fillStyle = charMix(col, '#000000', 0.22);
+        ctx.fillRect(Math.min(u(toeU - LEN), u(toeU - LEN + 1.05)),
+                     topY + H*0.42, 1.05*s, H*0.58);
+        // a lighter toe cap, so the front reads as the front
+        ctx.fillStyle = charMix(col, '#ffffff', 0.10);
+        ctx.beginPath();
+        ctx.ellipse(u(toeU - 0.75), topY + H*0.40, 0.85*s, H*0.30, 0, 0, Math.PI*2);
+        ctx.fill();
+    };
     const shY = y - 1.0*s;            // shoulder line, low enough to show neck
     const hemY = y + 8*s;             // same hem the front view uses
     const jointY = y + 1.0*s;         // shoulders, below the collar not on it
@@ -2259,9 +2281,7 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     ctx.moveTo(u(-3.2), y + 7.4*s);       ctx.lineTo(u(0.6), y + 7.4*s);
     ctx.lineTo(u(0.3) - fwd, y + 16*s);   ctx.lineTo(u(-3.2) - fwd, y + 16*s);
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = charMix('#654321', '#000000', 0.26);
-    pathRoundRect(Math.min(u(-3.2) - fwd, u(0.3) - fwd) - (d > 0 ? 1.0*s : 0), y + 16*s, 4.6*s, 2.4*s, 1*s);
-    ctx.fill();
+    mpShoe(0.3 - fU + 1.3, y + 16*s, charMix('#654321', '#000000', 0.26));
 
     // 2 — FAR arm, behind the jacket AND behind the near leg, so the body
     // occludes it. Drawn only when he is actually swinging it or carrying with
@@ -2290,9 +2310,7 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     ctx.fillRect(Math.min(u(-0.6), u(-0.5) + fwd), y + 8.6*s, 0.6*s, 7.4*s);
     ctx.fillStyle = 'rgba(0,0,0,0.10)';                   // knee break, as up front
     ctx.fillRect(Math.min(u(-0.6), u(3.2)), y + 11.6*s, 3.8*s, 0.9*s);
-    ctx.fillStyle = '#654321';
-    pathRoundRect(Math.min(u(-0.5) + fwd, u(2.9) + fwd) - (d > 0 ? 1.0*s : 0), y + 16*s, 4.6*s, 2.4*s, 1*s);
-    ctx.fill();
+    mpShoe(2.9 + fU + 1.3, y + 16*s, '#654321');
 
     // 4 — JACKET. Depth, not width: shallower than the front view is wide, but
     // never shallower than the skull, or the profile is a plank with a ball on
@@ -6593,11 +6611,27 @@ function charRamp(hex, lit, dark) {
              base: hex,
              lit:  lit  || charMix(hex, '#fff', 0.16) };
 }
+// Returns 'rgb(...)', so its own output used to be unusable as an input: the
+// old body did parseInt(a.slice(1), 16) on 'rgb(47,33,24)' -> 'gb(47,33,24)'
+// -> NaN, and NaN >> 16 is 0 in JS, so it silently treated the base as BLACK
+// instead of throwing. Anything built by mixing a mixed colour therefore drifted
+// to black at the dark end — which is why the mullet's hanging length stayed a
+// black lock however light I set the mix. It parses both forms now.
 function charMix(a, b, t) {
-    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-    const r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
-    const g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
-    const bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+    const parse = (c) => {
+        if(c[0] === '#') {
+            let h = c.slice(1);
+            if(h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+            const v = parseInt(h, 16);
+            return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+        }
+        const m = c.match(/-?\d+(\.\d+)?/g);
+        return m ? [+m[0], +m[1], +m[2]] : [0, 0, 0];
+    };
+    const pa = parse(a), pb = parse(b);
+    const r  = Math.round(pa[0] * (1 - t) + pb[0] * t);
+    const g  = Math.round(pa[1] * (1 - t) + pb[1] * t);
+    const bl = Math.round(pa[2] * (1 - t) + pb[2] * t);
     return 'rgb(' + r + ',' + g + ',' + bl + ')';
 }
 
