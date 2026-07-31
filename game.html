@@ -1955,27 +1955,32 @@ function mulletProfileHead(x, y, s, d, opt) {
     // Its top edge meets the cap's cut line at fy(0.0)-fy(0.28), so the two run
     // into each other. Starting it lower left a band of bare scalp between the
     // cropped sides and the hanging length — a bald patch with hair below it.
+    // Length: it hung to fy(2.38), well below the collar, on a man with almost
+    // no visible neck — which is just long hair. It stops at the collar now.
     const partyPath = () => {
         ctx.beginPath();
         ctx.moveTo(fx(-1.12), fy(0.00));
-        ctx.quadraticCurveTo(fx(-1.24), fy(0.80), fx(-1.02), fy(2.10));
-        ctx.quadraticCurveTo(fx(-0.74), fy(2.38), fx(-0.48), fy(1.98));
-        ctx.quadraticCurveTo(fx(-0.34), fy(1.10), fx(-0.40), fy(0.34));
+        ctx.quadraticCurveTo(fx(-1.22), fy(0.62), fx(-1.02), fy(1.34));
+        ctx.quadraticCurveTo(fx(-0.76), fy(1.58), fx(-0.50), fy(1.28));
+        ctx.quadraticCurveTo(fx(-0.36), fy(0.78), fx(-0.40), fy(0.34));
         ctx.quadraticCurveTo(fx(-0.52), fy(0.16), fx(-0.74), fy(0.22));
         ctx.closePath();
     };
-    // Darker than the cap, so where the short hair ends and the long length
-    // begins reads as an edge instead of dissolving into it.
-    const partyFill = lit(charMix(HAIR, '#000000', 0.30), 0.18, 0.24);
+    // Only a shade darker than the cap — enough for the mass to turn away from
+    // the light, not enough to read as a separate object. At 0.30 it looked
+    // like a dark lock stuck onto a lighter head instead of one hairdo.
+    const partyFill = lit(charMix(HAIR, '#000000', 0.08), 0.20, 0.24);
 
     if(opt && opt.overCollar) {
         // _drawMulletPro paints the torso AFTER the head, so the shoulders cut
         // the mullet off at the collar and left him with a bob. This second
         // pass puts the hanging length back over the jacket, clipped below the
         // collar line so it cannot touch the face.
+        // Clipped from the jacket's shoulder line down — mulletProfileBody puts
+        // that at y - 1.0*s, low enough that a little neck shows above it.
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x - 20 * s, y - 2 * s, 40 * s, 24 * s);
+        ctx.rect(x - 20 * s, y - 1.0 * s, 40 * s, 24 * s);
         ctx.clip();
         ctx.fillStyle = partyFill;
         partyPath();
@@ -2095,20 +2100,22 @@ function mulletProfileHead(x, y, s, d, opt) {
     ctx.quadraticCurveTo(fx(0.52), fy(-0.64), fx(0.80), fy(-0.48));
     ctx.closePath();
     ctx.fill();
-    // The cut line itself — where the clippers stopped
-    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-    ctx.lineWidth = Math.max(1, 0.4 * s);
+    // The cut line — a light crease, not an outline. It is the one thing that
+    // says short here / long there now that the two are the same colour.
+    ctx.strokeStyle = 'rgba(0,0,0,0.14)';
+    ctx.lineWidth = Math.max(1, 0.35 * s);
     ctx.beginPath();
     ctx.moveTo(fx(-1.10), fy(0.04));
     ctx.quadraticCurveTo(fx(-1.06), fy(0.26), fx(-0.74), fy(0.28));
     ctx.stroke();
-    // Strand separations down the hanging length
-    ctx.strokeStyle = 'rgba(0,0,0,0.20)';
-    ctx.lineWidth = Math.max(1, 0.35 * s);
+    // Strand separations, running the length of the hanging hair — they carry
+    // the eye from the crown down through the tail so it reads as one mass.
+    ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+    ctx.lineWidth = Math.max(1, 0.32 * s);
     for(const u of [-0.94, -0.72, -0.50]) {
         ctx.beginPath();
-        ctx.moveTo(fx(u), fy(0.60));
-        ctx.quadraticCurveTo(fx(u - 0.05), fy(1.30), fx(u + 0.06), fy(1.98));
+        ctx.moveTo(fx(u), fy(0.06));
+        ctx.quadraticCurveTo(fx(u - 0.05), fy(0.72), fx(u + 0.06), fy(1.32));
         ctx.stroke();
     }
     // Sheen along the crown — the one thing that says "this is a curved mass"
@@ -2184,6 +2191,122 @@ function mulletProfileHead(x, y, s, d, opt) {
     ctx.restore();
 }
 
+// Mullet Pro's body in PROFILE. Both side branches were still the original
+// square build — a symmetric fillRect torso with a plank arm pinned at each
+// side and two rectangular legs — sitting under the redesigned profile head,
+// so he was rounded and modelled face-on and a stack of boxes from the side.
+// Same construction as his front view now (charLimb, charDeltoid, charHand, a
+// tapered torso with a light ramp), and laid out FACE-RELATIVE: one near arm
+// and one far arm at different depths, near and far legs swinging fore and aft.
+// Two arms at the same height on either side of the body is front-view geometry
+// seen sideways, which is what made him a paper man.
+//   d = -1 facing left, +1 facing right
+function mulletProfileBody(x, y, s, d, stride, holding, hasGun) {
+    const u = (k) => x + d * k * s;
+    const fwd = d * stride;
+    const JACKET   = '#800020';
+    // A sleeve seen against a chest of the same cloth is separated by an EDGE,
+    // not by tint — pushing the near sleeve pale enough to see turned it into a
+    // pink smear. Each limb is drawn twice: a wider dark limb first, then the
+    // sleeve on top, so it carries its own dark halo.
+    const SLEEVE_N = charMix(JACKET, '#ffffff', 0.12);
+    const SLEEVE_F = charMix(JACKET, '#000000', 0.34);
+    const HALO = 'rgba(48,0,12,0.38)';
+    const limb2 = (x0, y0, x1, y1, w, col, bx, by) => {
+        charLimb(x0, y0, x1, y1, w + 0.5*s, HALO, bx, by);
+        charLimb(x0, y0, x1, y1, w, col, bx, by);
+    };
+    const JEAN_N = '#a4c2db', JEAN_F = '#7f9db8';
+    const SKIN = '#f5c89a';
+    const shY = y - 1.0*s;            // shoulder line, low enough to show neck
+    const hemY = y + 8*s;             // same hem the front view uses
+    const jointY = y + 1.0*s;         // shoulders, below the collar not on it
+
+    // 1 — FAR leg, set back and darker, swinging behind. In profile the legs
+    // sit one BEHIND the other and overlap; side by side across 10*s is the
+    // front view's spread and reads as a man facing you with a profile head.
+    ctx.fillStyle = JEAN_F;
+    ctx.beginPath();
+    ctx.moveTo(u(-3.2), y + 7.4*s);       ctx.lineTo(u(0.6), y + 7.4*s);
+    ctx.lineTo(u(0.3) - fwd, y + 16*s);   ctx.lineTo(u(-3.2) - fwd, y + 16*s);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = charMix('#654321', '#000000', 0.26);
+    pathRoundRect(Math.min(u(-3.2) - fwd, u(0.3) - fwd) - (d > 0 ? 1.0*s : 0), y + 16*s, 4.6*s, 2.4*s, 1*s);
+    ctx.fill();
+
+    // 2 — NEAR leg, in front, swinging forward. Before the jacket so the hem
+    // overlaps both hips rather than the legs hanging off a floating box.
+    ctx.fillStyle = JEAN_N;
+    ctx.beginPath();
+    ctx.moveTo(u(-0.6), y + 7.4*s);       ctx.lineTo(u(3.2), y + 7.4*s);
+    ctx.lineTo(u(2.9) + fwd, y + 16*s);   ctx.lineTo(u(-0.5) + fwd, y + 16*s);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';                   // edge against the far leg
+    ctx.fillRect(Math.min(u(-0.6), u(-0.5) + fwd), y + 8.6*s, 0.6*s, 7.4*s);
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';                   // knee break, as up front
+    ctx.fillRect(Math.min(u(-0.6), u(3.2)), y + 11.6*s, 3.8*s, 0.9*s);
+    ctx.fillStyle = '#654321';
+    pathRoundRect(Math.min(u(-0.5) + fwd, u(2.9) + fwd) - (d > 0 ? 1.0*s : 0), y + 16*s, 4.6*s, 2.4*s, 1*s);
+    ctx.fill();
+
+    // 3 — JACKET. Depth, not width: shallower than the front view is wide, but
+    // never shallower than the skull, or the profile is a plank with a ball on
+    // top. Chest deepest high, back tapering into the waist.
+    const jg = ctx.createLinearGradient(x - 7*s, 0, x + 7*s, 0);
+    jg.addColorStop(0,    charMix(JACKET, '#ffffff', 0.14));
+    jg.addColorStop(0.55, JACKET);
+    jg.addColorStop(1,    charMix(JACKET, '#000000', 0.22));
+    ctx.fillStyle = jg;
+    ctx.beginPath();
+    ctx.moveTo(u(-5.0), shY + 1.0*s);                              // back of shoulder
+    ctx.quadraticCurveTo(u(-5.6), shY + 4.4*s, u(-4.4), hemY);     // back, tapering in
+    ctx.lineTo(u(4.8), hemY);
+    ctx.quadraticCurveTo(u(6.0), shY + 4.0*s, u(5.6), shY + 0.4*s);// chest, deepest high
+    ctx.quadraticCurveTo(u(0.4), shY - 1.1*s, u(-5.0), shY + 1.0*s);// sloped shoulders
+    ctx.closePath();
+    ctx.fill();
+
+    // 4 — the jacket's open V, a narrow sliver of tee at the FRONT edge only.
+    // Across the middle of the chest it is a black patch, not a collar.
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.moveTo(u(3.5), shY + 0.3*s);  ctx.lineTo(u(5.3), shY + 1.1*s);
+    ctx.lineTo(u(5.0), shY + 3.4*s);  ctx.lineTo(u(3.8), shY + 2.4*s);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = charMix(JACKET, '#000000', 0.34);              // lapel edge
+    ctx.beginPath();
+    ctx.moveTo(u(2.9), shY + 0.1*s);  ctx.lineTo(u(3.6), shY + 0.4*s);
+    ctx.lineTo(u(3.9), shY + 3.0*s);  ctx.lineTo(u(3.2), shY + 2.7*s);
+    ctx.closePath(); ctx.fill();
+
+    // 5 — ARMS. A man seen from the side has both shoulders at the SAME
+    // fore-aft position, so both arms hang from one place, one directly behind
+    // the other. Hanging them at u(-1.2) and u(2.0) put an arm at the front of
+    // his chest and another out at his back — front-view anatomy with a profile
+    // head on it. They share a joint now: at rest the near arm covers the far
+    // one and you see a single arm with a sliver behind it, and they separate
+    // fore and aft only as the walk swings them.
+    if(hasGun) return;   // that pose draws its own arm off the same joint
+    const SHX = 0.9, FARX = 0.2;              // near and far, ~0.7*s apart in depth
+    if(holding) {
+        limb2(u(FARX - 0.3), jointY, u(FARX - 0.7), y - 4.2*s, 1.7*s, SLEEVE_F, u(FARX - 0.9), y - 1.5*s);
+        limb2(u(FARX - 0.7), y - 4.2*s, u(FARX - 0.2), y - 12.8*s, 1.5*s, SLEEVE_F, u(FARX - 0.8), y - 8.8*s);
+        charHand(u(FARX - 0.2), y - 13.6*s, 1.25*s, charMix(SKIN, '#000000', 0.26));
+        limb2(u(SHX), jointY, u(SHX + 0.4), y - 4.4*s, 1.9*s, SLEEVE_N, u(SHX + 0.6), y - 1.6*s);
+        limb2(u(SHX + 0.4), y - 4.4*s, u(SHX), y - 13.2*s, 1.6*s, SLEEVE_N, u(SHX + 0.5), y - 9.2*s);
+        charDeltoid(u(SHX), jointY, 1.2*s, charMix(JACKET, '#ffffff', 0.18));
+        charHand(u(SHX), y - 14.0*s, 1.4*s, SKIN);
+    } else {
+        limb2(u(FARX), jointY, u(FARX - 0.3), y + 4.0*s, 1.7*s, SLEEVE_F, u(FARX - 0.5), y + 2.3*s);
+        limb2(u(FARX - 0.3), y + 4.0*s, u(FARX + 0.1) - fwd, y + 6.8*s, 1.5*s, SLEEVE_F, u(FARX - 0.2) - fwd*0.6, y + 5.7*s);
+        charHand(u(FARX + 0.1) - fwd, y + 7.6*s, 1.25*s, charMix(SKIN, '#000000', 0.26));
+        limb2(u(SHX), jointY, u(SHX - 0.3), y + 4.0*s, 1.9*s, SLEEVE_N, u(SHX - 0.5), y + 2.3*s);
+        limb2(u(SHX - 0.3), y + 4.0*s, u(SHX + 0.1) + fwd, y + 6.8*s, 1.6*s, SLEEVE_N, u(SHX - 0.2) + fwd*0.6, y + 5.7*s);
+        charDeltoid(u(SHX), jointY, 1.2*s, charMix(JACKET, '#ffffff', 0.18));
+        charHand(u(SHX + 0.1) + fwd, y + 7.6*s, 1.4*s, SKIN);
+    }
+}
+
 function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
     const s = 2.4;   // 2 put him 16% shorter than the rest of the cast
     const isBack = (facing === 'back' || facing === 'up');
@@ -2197,86 +2320,13 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     ctx.ellipse(x, y + 18*s, 5*s, 1.5*s, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if(facing === 'left') {
-        mulletProfileHead(x, y, s, -1);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#600018';
-        ctx.fillRect(x + 5*s, y - 2*s, 2*s, 10*s);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
-        mulletProfileHead(x, y, s, -1, { overCollar: true });
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging
-        ctx.fillStyle = '#800020';
-        if(holding) {
-            // Raised arms to carry doc
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 14*s);
-            // Hands at doc level
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // Gun-holding: hide left arm (will be drawn by gun function), show right arm hanging
-            ctx.fillRect(x + 7*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
-        } else {
-            // Normal hanging arms with walking swing
-            ctx.fillRect(x - 9*s + mpStride, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s - mpStride, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s + mpStride, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - mpStride, y + 6*s, 2*s, 2*s);
-        }
-
-        ctx.fillStyle = '#a4c2db';
-        ctx.fillRect(x - 5*s, y + 8*s + mpLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 8*s - mpLegBob, 4*s, 8*s);
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s + mpLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 16*s - mpLegBob, 4*s, 2*s);
-
-    } else if(facing === 'right') {
-        mulletProfileHead(x, y, s, 1);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#600018';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
-        mulletProfileHead(x, y, s, 1, { overCollar: true });
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
-        ctx.fillStyle = '#800020';
-        if(holding) {
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 14*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 14*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            ctx.fillRect(x - 9*s, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
-        } else {
-            // Normal hanging arms with walking swing
-            ctx.fillRect(x - 9*s + mpStride, y, 2*s, 7*s);
-            ctx.fillRect(x + 7*s - mpStride, y, 2*s, 7*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s + mpStride, y + 6*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - mpStride, y + 6*s, 2*s, 2*s);
-        }
-
-        ctx.fillStyle = '#a4c2db';
-        ctx.fillRect(x - 5*s, y + 8*s + mpLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 8*s - mpLegBob, 4*s, 8*s);
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s + mpLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 16*s - mpLegBob, 4*s, 2*s);
+    if(facing === 'left' || facing === 'right') {
+        const d = facing === 'left' ? -1 : 1;
+        mulletProfileHead(x, y, s, d);
+        mulletProfileBody(x, y, s, d, mpStride, holding, hasGun);
+        // The torso is painted over the head's hanging length, so the mullet is
+        // re-stamped on top, clipped below the collar line.
+        mulletProfileHead(x, y, s, d, { overCollar: true });
 
     } else {
       const mpHCy = y - 7.4*s, mpRx = 5.1*s, mpRy = 5.6*s;
