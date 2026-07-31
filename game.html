@@ -2357,7 +2357,11 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     }
 }
 
-function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null) {
+// noArms: draw the body without its arms, so a caller with its own arm pose —
+// the hell renderer's ladder grip and wrench turn — can reuse this body instead
+// of hand-building a whole second Mullet Pro that never sees any of the work
+// done here.
+function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null, noArms = false) {
     const s = 2.4;   // 2 put him 16% shorter than the rest of the cast
     const isBack = (facing === 'back' || facing === 'up');
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
@@ -2623,7 +2627,9 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
             charDeltoid(x + side * mpShX, mpCapY, 1.2*s,
                         side < 0 ? charMix('#800020','#000',0.16) : charMix('#800020','#fff',0.10));
         };
-        if(holding) {
+        if(noArms) {
+            // caller draws its own
+        } else if(holding) {
             mpArm(-1, x - 7.6*s, y - 13.4*s, x - 9.0*s, y - 7*s);
             mpArm( 1, x + 7.6*s, y - 13.4*s, x + 9.0*s, y - 7*s);
             charHand(x - 7.6*s, y - 14.2*s, 1.5*s, '#f5c89a');
@@ -2726,28 +2732,25 @@ function _drawMulletProAsPM(npc) {
             ctx.restore();
         }
 
-        // Back of head — skin patch + mullet hair cascading down the neck
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        // Dark brown mullet from behind — crown + neck cascade
-        ctx.fillStyle = '#3a2a1a';
-        ctx.fillRect(x - 6*s, y - 16*s, 12*s, 6*s); // top/crown
-        ctx.fillRect(x - 5*s, y - 10*s, 10*s, 3*s); // mullet neckline
-        ctx.fillRect(x - 3*s, y - 7*s, 6*s, 4*s);   // mullet tail on neck
-        // Jumpsuit back (dark hell-red) — torso
-        ctx.fillStyle = '#3a0a0a';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#1a0505';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
+        // The BODY is the shared sprite's back view — head, mullet, jacket and
+        // legs — with its arms suppressed so the ladder grip below can supply
+        // them. This used to be a hand-built stack of fillRects at s=2: a flat
+        // brown rectangle for hair, a maroon box for the torso. None of the
+        // remaster reached it, so in hell his back was still the old sprite
+        // while every other pose had been redrawn.
+        drawMulletPro(x, y, 'back', false, false, isClimbing, true);
 
         // Arms reaching up to the pipe (or ladder rungs while climbing).
         // FIX state: both hands grip the rotating wrench at two points along
         // its handle so they track the rotation in world space (no more
         // floating hands above the tool). Arms are stroked lines from the
         // shoulders down to the grip points on the wrench.
-        const shoulderY = y - 2*s;                 // top of torso
-        const leftShoulderX  = x - 7*s;
-        const rightShoulderX = x + 7*s;
+        // Anchored to the SHARED sprite's shoulders, not this branch's old s=2
+        // boxes: drawMulletPro hangs its arms from gy - 0.8*2.4 with
+        // gy = y + FOOT_FIX.mulletPro (-7), i.e. y - 8.9, about 16.6 out.
+        const shoulderY = y - 8.9;
+        const leftShoulderX  = x - 16.6;
+        const rightShoulderX = x + 16.6;
         if(isFix) {
             const rock = Math.sin(npc.fixAnim * 5) * 0.45;
             const pivotX = x, pivotY = y - 2;
@@ -2773,25 +2776,21 @@ function _drawMulletProAsPM(npc) {
         } else {
             // Climbing — vertical arm rects reaching up to the rung
             ctx.fillStyle = '#3a0a0a';
+            // Reaching to a rung ABOVE his head. y-14 was only ~5px above the
+            // shoulder once the shoulders moved to the shared sprite's, so the
+            // arms came out as two stubs at his sides.
             const climbOff = climbCycle;
-            const leftHandY  = (y - 14) - climbOff;
-            const rightHandY = (y - 14) + climbOff;
-            ctx.fillRect(x - 9*s, leftHandY,  2*s, Math.max(2, shoulderY - leftHandY));
-            ctx.fillRect(x + 7*s, rightHandY, 2*s, Math.max(2, shoulderY - rightHandY));
+            const leftHandY  = (y - 32) - climbOff;
+            const rightHandY = (y - 32) + climbOff;
+            ctx.fillRect(leftShoulderX  - 2.4, leftHandY,  4.8, Math.max(2, shoulderY - leftHandY));
+            ctx.fillRect(rightShoulderX - 2.4, rightHandY, 4.8, Math.max(2, shoulderY - rightHandY));
             ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 9*s, leftHandY,  2*s, 2*s);
-            ctx.fillRect(x + 7*s, rightHandY, 2*s, 2*s);
+            ctx.fillRect(leftShoulderX  - 2.4, leftHandY,  4.8, 4.8);
+            ctx.fillRect(rightShoulderX - 2.4, rightHandY, 4.8, 4.8);
         }
 
-        // Legs on rungs — alternating climb (unchanged from previous back pose)
-        ctx.fillStyle = '#a4c2db';
-        const legOffA = isClimbing ? climbCycle : 0;
-        const legOffB = isClimbing ? -climbCycle : 0;
-        ctx.fillRect(x - 5*s, y + 8*s + legOffA, 4*s, 8*s);
-        ctx.fillRect(x + s,   y + 8*s + legOffB, 4*s, 8*s);
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s + legOffA, 4*s, 2*s);
-        ctx.fillRect(x + s,   y + 16*s + legOffB, 4*s, 2*s);
+        // (legs come from the shared sprite above — its walk bob alternates them
+        // on the rungs, which is what the hand-built pair here was doing)
     } else if(isScreaming) {
         // === MUNCH SCREAM POSE — forward-facing mullet pro, hands at cheeks ===
         const s = 2;
