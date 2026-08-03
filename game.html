@@ -1809,7 +1809,46 @@ function checkPromotion() {
 
 
 // SECTION 6: Character Drawing Functions
-function drawAmmoCounter(x, y, ammo) {
+// What is actually in the player's hand in level 6 — the single source of truth.
+// Three separate derivations of this used to live in the draw block, the ammo
+// counter and the fire handler, and they disagreed with each other: carrying
+// only the auto-wrench drew a GHOST GUN with a "1 x bullet" counter over it,
+// because the draw block's else-branch assumed anything that was not the
+// revolver had to be the ghost gun.
+//
+// The holster button swaps SIDEARM <-> WRENCH. Carrying both is the whole point
+// of the button, so the answer is one weapon, never two, and everything that
+// asks — the sprite, the counter and the trigger — asks here.
+function level6Sidearm() {
+    if(level6.hasRevolver && level6.revolverAmmo > 0)
+        return { kind: 'revolver',  ammo: level6.revolverAmmo, draw: drawRevolver };
+    if(level6.hasGhostGun)
+        return { kind: 'ghostGun',  ammo: 1,                   draw: drawGhostGun };
+    return null;
+}
+function level6ActiveWeapon() {
+    if(typeof level6 === 'undefined' || level !== 6) return null;
+    const sidearm = level6Sidearm();
+    const wrench = level6.hasWrenchGun
+        ? { kind: 'wrenchGun', ammo: Math.max(0, 3 - (level6.wrenchUses || 0)), draw: drawWrenchGun }
+        : null;
+    if(sidearm && wrench) return level6.pistolHolstered ? wrench : sidearm;
+    return sidearm || wrench;
+}
+// Draws whichever weapon is in his hand and the ammo that belongs to it. The
+// weapon is deliberately NOT named: the holster button already says which one
+// is up, and a second floating caption over his head only reads as clutter.
+function drawActiveWeapon() {
+    const w = level6ActiveWeapon();
+    if(!w) return;
+    w.draw(player.x, player.y, player.facing);
+    drawAmmoCounter(player.x, player.y, w.ammo, w.kind);
+}
+
+// The count, and an icon of what it counts — no weapon name. `kind` picks the
+// icon so the panel matches the thing in his hand; it used to draw a bullet
+// whatever he was holding, so the auto-wrench reported its uses in cartridges.
+function drawAmmoCounter(x, y, ammo, kind) {
     // Background panel for visibility
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     const panelWidth = 60;
@@ -1832,18 +1871,30 @@ function drawAmmoCounter(x, y, ammo) {
     ctx.font = 'bold 16px Arial';
     ctx.fillText('×', x - panelWidth/2 + 22, y - 50);
 
-    // Bullet icon
-    ctx.fillStyle = '#d4af37'; // Gold bullet
-    ctx.fillRect(x - panelWidth/2 + 32, y - 60, 4, 10);
-    ctx.fillStyle = '#b8941e'; // Darker tip
-    ctx.beginPath();
-    ctx.moveTo(x - panelWidth/2 + 32, y - 60);
-    ctx.lineTo(x - panelWidth/2 + 34, y - 63);
-    ctx.lineTo(x - panelWidth/2 + 36, y - 60);
-    ctx.fill();
-    // Shell casing
-    ctx.fillStyle = '#8b7355';
-    ctx.fillRect(x - panelWidth/2 + 32, y - 50, 4, 3);
+    const ix = x - panelWidth/2 + 32;
+    if(kind === 'wrenchGun') {
+        // Bolt: what the auto-wrench actually throws
+        ctx.fillStyle = '#e8a020';
+        ctx.fillRect(ix - 1, y - 57, 9, 3);
+        ctx.fillStyle = '#c07010';
+        ctx.fillRect(ix - 2, y - 59, 3, 7);
+        ctx.fillRect(ix + 6, y - 59, 3, 7);
+        ctx.fillStyle = '#f0b030';
+        ctx.fillRect(ix + 1, y - 53, 5, 3);
+    } else {
+        // Bullet
+        ctx.fillStyle = '#d4af37'; // Gold bullet
+        ctx.fillRect(ix, y - 60, 4, 10);
+        ctx.fillStyle = '#b8941e'; // Darker tip
+        ctx.beginPath();
+        ctx.moveTo(ix, y - 60);
+        ctx.lineTo(ix + 2, y - 63);
+        ctx.lineTo(ix + 4, y - 60);
+        ctx.fill();
+        // Shell casing
+        ctx.fillStyle = '#8b7355';
+        ctx.fillRect(ix, y - 50, 4, 3);
+    }
 }
 
 function drawHeldDoc(x, y, colorName) {
@@ -23616,8 +23667,11 @@ function drawEquipToggleButton() {
 }
 
 function drawHolsterButton() {
-    // Only show when player has both wrench AND a gun — simple A/B toggle
-    if(typeof level6 === 'undefined' || !level6.hasWrenchGun || !(level6.hasRevolver || level6.hasGhostGun)) return;
+    // Only show when there really are two weapons to swap between. Gating on
+    // hasRevolver alone kept the button up after the last round was spent, so
+    // tapping it toggled a flag that changed nothing.
+    if(typeof level6 === 'undefined' || level !== 6) return;
+    if(!level6.hasWrenchGun || !level6Sidearm()) return;
 
     const btnW = 70, btnH = 50;
     // During the self-destruct sequence, the equip toggle button (78px) sits next
@@ -23627,8 +23681,10 @@ function drawHolsterButton() {
     const btnY = -GY + 5;
     const cx = btnX + btnW / 2, cy = btnY + btnH / 2;
 
-    // Wrench active = pistolHolstered true (pistol holstered, wrench is primary)
-    const wrenchActive = level6.pistolHolstered;
+    // Same source of truth as the sprite and the trigger, so the button cannot
+    // claim the wrench is up while a pistol is in his fist.
+    const act = level6ActiveWeapon();
+    const wrenchActive = !!act && act.kind === 'wrenchGun';
 
     // Background — highlight when wrench is active
     ctx.fillStyle = wrenchActive ? 'rgba(80,50,10,0.92)' : 'rgba(0,0,0,0.5)';
@@ -25362,7 +25418,10 @@ function drawSelfDestructCave2() {
 
     // ── PLAYER (drawn before dialogue so dialogue overlays on top) ──────────
     // Hidden during 'consumed' state — the coffin has pulled the body in.
-    const playerArmed = level6.hasRevolver && level6.revolverAmmo > 0;
+    // Honours the holster: the equip button next to mute says ARMED/UNARMED and
+    // flips level6.pistolHolstered, but this draw ignored it, so the revolver
+    // stayed in his hand while the button read UNARMED.
+    const playerArmed = level6.hasRevolver && level6.revolverAmmo > 0 && !level6.pistolHolstered;
     if(sds.devilState !== 'consumed') {
         drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
         if(playerArmed) {
@@ -26989,9 +27048,10 @@ function drawScene() {
     }
 
     if(level === 6) {
-        const l6HasRevolver = level6.hasRevolver && level6.revolverAmmo > 0 && !level6.pistolHolstered;
-        const l6HasGhostGunActive = level6.hasGhostGun && (level6.pistolHolstered || !(level6.hasRevolver && level6.revolverAmmo > 0));
-        const l6HasGun = l6HasRevolver || l6HasGhostGunActive || level6.hasWrenchGun;
+        // Whether the body sprite draws its armed pose. One question, one answer:
+        // this used to be three flags that could all be true at once, which is
+        // how the auto-wrench and a ghost gun ended up in the same fist.
+        const l6HasGun = !!level6ActiveWeapon();
         if(level6.room === 'pipeRoom') {
             drawLevel6PipeRoom();
 
@@ -27093,7 +27153,7 @@ function drawScene() {
             }
             // Draw player in pipe room
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'megacomputer') {
             drawLevel6MegacomputerRoom();
 
@@ -27103,7 +27163,7 @@ function drawScene() {
             }
             // Draw player in megacomputer room
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'nuclearBridge') {
             drawNuclearAssemblyBridge();
 
@@ -27113,7 +27173,7 @@ function drawScene() {
             }
             // Draw player on bridge
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'marbleRoom') {
             drawLevel6MarbleRoom();
             // Draw armed clone follower in marble room
@@ -27121,7 +27181,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
             if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0) { drawAmmoCounter(player.x, player.y, level6.threeShotRifleAmmo); }
             // Marble room action labels — after player for correct z-order
             { const _mrBrickX = 520, _mrFloorY = 380;
@@ -27143,7 +27203,7 @@ function drawScene() {
             }
             // Draw player in entryway
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
             // Action labels drawn AFTER player so they float above the character
             { const _eelvX = 550, _eelvW = 130;
               if(Math.abs(player.x - 350) < 100 && player.y > 360)
@@ -27155,7 +27215,7 @@ function drawScene() {
             drawLevel6EmployeeLobby();
 
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'cloningRoom') {
             drawLevel6CloningRoom();
 
@@ -27164,7 +27224,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'l6Furnace') {
             drawL6FurnaceRoom();
 
@@ -27173,7 +27233,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'redOffice') {
             // MUTANT ESCAPE finale — RED's office, seen from the inside with
             // the smashed door behind you and the window as the way out.
@@ -27327,7 +27387,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'employeePipeRoom') {
             // Inner try/catch: if room draw throws, reset state and keep rendering player
             try {
@@ -27350,7 +27410,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'underbellyHallway') {
             drawLevel6UnderbellyHallway();
 
@@ -27409,7 +27469,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'underbelly') {
             drawLevel6Underbelly();
 
@@ -27418,7 +27478,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            if(l6HasGun) { if(l6HasRevolver) { drawRevolver(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, level6.revolverAmmo); } else { drawGhostGun(player.x, player.y, player.facing); drawAmmoCounter(player.x, player.y, 1); } }
+            drawActiveWeapon();
         } else if(level6.room === 'ceoOffice') {
             // Screen shake from missile explosion
             if(level6.missileFireTimer > 0) {
@@ -27485,21 +27545,11 @@ function drawScene() {
             // Draw player in CEO office (unless in UI mode, but always during exit sequence)
             const shouldDrawPlayer = (!level6.safeUI && !level6.computerUI) || level6.npcExitSequence;
             if(shouldDrawPlayer && !level6.endingTriggered) {
-                const hasGun = (level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun || level6.hasWrenchGun;
                 // Through drawL6Player, not drawBaldManager: this was the one
                 // room that drew the player sprite directly, so walking in as
                 // the mutant turned you back into the detective on the spot.
-                drawL6Player(player.x, player.y, player.facing, player.holding, hasGun);
-
-                if(hasGun) {
-                    if(level6.hasRevolver && level6.revolverAmmo > 0) {
-                        drawRevolver(player.x, player.y, player.facing);
-                        drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
-                    } else {
-                        drawGhostGun(player.x, player.y, player.facing);
-                        drawAmmoCounter(player.x, player.y, 1);
-                    }
-                }
+                drawL6Player(player.x, player.y, player.facing, player.holding, !!level6ActiveWeapon());
+                drawActiveWeapon();
             }
 
             // CEO entry dialogue overlay
@@ -27644,16 +27694,11 @@ function drawScene() {
             ctx.restore();
         }
 
-        // === AUTO-WRENCH overlay — drawn in all rooms ===
-        if(level6.hasWrenchGun) {
-            drawWrenchGun(player.x, player.y, player.facing);
-            // Uses counter (e.g. "WRENCH 2/3")
-            const usesLeft = 3 - level6.wrenchUses;
-            ctx.fillStyle = usesLeft <= 1 ? '#ff8844' : '#aaaaaa';
-            ctx.font = 'bold 11px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('WRENCH ' + usesLeft + '/3', player.x, player.y - 44);
-        }
+        // The auto-wrench used to be drawn here unconditionally, on top of
+        // whatever gun the room had already put in the same hand, with a
+        // "WRENCH 2/3" caption floating over his head. It is now just another
+        // weapon drawActiveWeapon() can pick, and its count rides the ammo
+        // panel like everything else.
         // Wrench bolts (boomerang projectiles)
         for(const wb of level6.wrenchBolts) {
             drawWrenchProjectile(wb.x, wb.y - 25, wb.rotation);
@@ -32995,8 +33040,11 @@ if (keys[' '] || keys['action']) {
     }
 
     // 4. Gun Firing Logic (only triggers if nothing else was interacted with)
-    // Ghost gun fires when pistol is holstered OR revolver is empty
-    if (level6.hasGhostGun && (level6.pistolHolstered || !(level6.hasRevolver && level6.revolverAmmo > 0))) {
+    // Each branch fires only when its weapon is the one in his hand — same
+    // question the sprite and the ammo panel ask. The ghost gun used to fire
+    // whenever the pistol was holstered, which after the holster button became
+    // a gun/wrench swap meant swapping TO the wrench fired the ghost gun.
+    if (level6ActiveWeapon() && level6ActiveWeapon().kind === 'ghostGun') {
         let vx = 0, vy = 0;
         if (player.facing === 'left') vx = -12;
         else if (player.facing === 'right') vx = 12;
@@ -33011,7 +33059,7 @@ if (keys[' '] || keys['action']) {
         }
         return;
     }
-    if (level6.hasRevolver && level6.revolverAmmo > 0 && !level6.pistolHolstered) {
+    if (level6ActiveWeapon() && level6ActiveWeapon().kind === 'revolver') {
         let vx = 0, vy = 0;
         let facingUsed = player.facing;
         if (player.facing === 'left') vx = -12;
@@ -33055,10 +33103,13 @@ if (keys[' '] || keys['action']) {
         return;
     }
 
-    // Auto-wrench fires in CEO office when no other weapon is active
-    if (level6.hasWrenchGun && level6.wrenchBolts.length === 0) {
-        const hasOtherWeapon = (!level6.pistolHolstered && level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun;
-        if (!hasOtherWeapon) {
+    // The auto-wrench fires when it is the weapon in his hand. It used to be
+    // blocked by merely OWNING a ghost gun, whatever the holster button said,
+    // so swapping to the wrench put it in his fist and left the trigger on the
+    // pistol.
+    if (level6.wrenchBolts.length === 0) {
+        const act = level6ActiveWeapon();
+        if (act && act.kind === 'wrenchGun') {
             let bvx = 0, bvy = 0;
             if(player.facing === 'left')  bvx = -9;
             else if(player.facing === 'right') bvx = 9;
@@ -34827,8 +34878,10 @@ function handleMuteClick(e) {
     const holsterBtnY = muteBtnY;
     const weapons = getLevel6Weapons();
 
-    // Holster button — direct A/B toggle between wrench and gun (no inventory UI)
-    if(typeof level6 !== 'undefined' && level6.hasWrenchGun && (level6.hasRevolver || level6.hasGhostGun) &&
+    // Holster button — direct A/B toggle between wrench and gun (no inventory
+    // UI). The hit box has to match drawHolsterButton's own visibility test, or
+    // there is a dead 70x50 tap target where the button is not drawn.
+    if(typeof level6 !== 'undefined' && level === 6 && level6.hasWrenchGun && level6Sidearm() &&
        x >= holsterBtnX && x <= holsterBtnX + holsterBtnW && y >= holsterBtnY && y <= holsterBtnY + holsterBtnH) {
         level6.pistolHolstered = !level6.pistolHolstered;
         if(e.cancelable) e.preventDefault();
