@@ -2701,9 +2701,9 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
             charHand(x - 7.6*s, y - 14.2*s, 1.5*s, '#f5c89a');
             charHand(x + 7.6*s, y - 14.2*s, 1.5*s, '#f5c89a');
         } else if(hasGun) {
-            // Only the off-hand. drawWeaponInHand supplies the gun arm, so
-            // drawing both here gave him three arms — two hanging at his sides
-            // and a third holding the pistol across his chest.
+            // Only the off-hand. The weapon's own draw supplies the gun arm,
+            // so drawing both here gave him three arms — two hanging at his
+            // sides and a third holding the pistol across his chest.
             mpArm(-1, x - 8.0*s, y + 6.0*s, x - 8.6*s, y + 2.4*s);
             charHand(x - 8.0*s, y + 6.8*s, 1.5*s, '#f5c89a');
         } else {
@@ -2792,40 +2792,20 @@ function _drawMulletProAsPM(npc) {
         const SL_L = '#5c0016', SL_R = charMix('#800020', '#000000', 0.08);
         const MP_S = 2.4;
 
-        // CLIMBING ARMS GO BEHIND THE BODY. He is between the camera and the
-        // ladder, so his arms pass his own torso to reach it: only their outer
-        // edge and his hands show. Drawn after the body they sat on top of his
-        // back and read as arms flung out behind him — that was the fault, not
-        // the reach itself.
+        // Climbing — both arms up to a rung above his head. This is the
+        // pose as it stood before the ladder-grip work; reverted at the
+        // author's request. Drawn BEFORE the body so the arms pass between his
+        // torso and the ladder rather than sitting on top of his back.
         if(isClimbing) {
-            // One hand up the RAIL above his head, the other down at chest
-            // height, swapping over the cycle — deliberately NOT the pipe
-            // managers' tucked-in climb. He is a mullet pro pretending to be
-            // one of them, and he should not move like one.
-            //
-            // The rails, not the rungs: this ladder has six rungs spread over a
-            // height that changes as he climbs, so their spacing runs from 28px
-            // to 71px and no fixed reach lands on one. Snapping to the nearest
-            // rung put his hands at hip height at the top of the ladder. The
-            // rails exist at every height, and are what you hold on a stepladder.
-            //
-            // npc.y, not the local y: while a pipe is cracked the body gets a
-            // pacing/jump offset and the ladder does not move with it.
-            const L = stepLadderGeom(npc.y - FOOT_FIX.mulletProAsPM);
-            const railX = (yy) => L.topHalfW +
-                Math.max(0, Math.min(1, (yy - L.ladderTop) / L.ladderH)) * (L.botHalfW - L.topHalfW);
-            const leadY  = y - 44 - climbCycle;   // reaching hand, above his head
-            const trailY = y - 12 + climbCycle;   // the other one, at his chest
-            const leftLeads = climbCycle >= 0;
-            const lHy = leftLeads ? leadY : trailY, rHy = leftLeads ? trailY : leadY;
-            const lHx = x - railX(lHy),  rHx = x + railX(rHy);
-            // elbow out from the body: a climber's arm is bent, not a vertical bar
-            charLimb(leftShoulderX,  shoulderY, lHx, lHy, 2.0*MP_S, SL_L,
-                     leftShoulderX - 3, (shoulderY + lHy) / 2);
-            charLimb(rightShoulderX, shoulderY, rHx, rHy, 2.0*MP_S, SL_R,
-                     rightShoulderX + 3, (shoulderY + rHy) / 2);
-            charHand(lHx, lHy, 1.5*MP_S, '#f5c89a');
-            charHand(rHx, rHy, 1.5*MP_S, '#f5c89a');
+            const climbOff = climbCycle;
+            const leftHandY  = (y - 32) - climbOff;
+            const rightHandY = (y - 32) + climbOff;
+            charLimb(leftShoulderX,  shoulderY, leftShoulderX,  leftHandY,  2.0*MP_S, SL_L,
+                     leftShoulderX - 2, (shoulderY + leftHandY) / 2);
+            charLimb(rightShoulderX, shoulderY, rightShoulderX, rightHandY, 2.0*MP_S, SL_R,
+                     rightShoulderX + 2, (shoulderY + rightHandY) / 2);
+            charHand(leftShoulderX,  leftHandY,  1.5*MP_S, '#f5c89a');
+            charHand(rightShoulderX, rightHandY, 1.5*MP_S, '#f5c89a');
         }
 
         // The BODY is the shared sprite's back view — head, mullet, jacket and
@@ -2939,6 +2919,16 @@ function drawBaldManager(x, y, ...rest) {
     shadeSprite(x + 0, gy + -14, 42, 58, () => _drawBaldManager(x, gy, ...rest));
 }
 
+// The detective in PROFILE. Same construction as Mullet Pro's profile: a head
+// built from its silhouette rather than a square with one eye on it, and a
+// torso whose DEPTH is drawn, not its front-view width.
+//
+// u(k) walks forward from the body's centre in the direction he faces, so both
+// sides are one description instead of two mirrored blocks that can drift.
+
+
+
+
 function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
     const isWalking = Date.now() - player.lastMove < 150;
@@ -2983,17 +2973,15 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            // One arm. Both put a white bar either side of the document — an
-            // arm at each screen edge, which is the front view's two-handed
-            // carry seen sideways. In profile the near arm covers the far one.
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 17*s);
+            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 17*s);
             ctx.fillStyle = skinColor;
             ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
+            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // No arm from the body at all: drawRevolver draws the near arm
-            // around the gun, and the far one is behind his torso in profile.
-            // Drawing it put a hand out at his back while the gun was out front
-            // — an arm at each screen edge, the flat-paper-man look again.
+            ctx.fillRect(x + 7*s, y + s, 2*s, 9*s);
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(x + 7*s, y + 6*s, 2*s, 2*s);
         } else {
             ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
             ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
@@ -3033,12 +3021,15 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
         ctx.fillStyle = '#fff';
         if(holding) {
-            // one arm, as above — the near one, on the side he is facing
+            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 17*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 17*s);
             ctx.fillStyle = skinColor;
+            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
             ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
         } else if(hasGun) {
-            // as above — the revolver supplies the only arm you can see
+            ctx.fillRect(x - 9*s, y + s, 2*s, 9*s);
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(x - 9*s, y + 6*s, 2*s, 2*s);
         } else {
             ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
             ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
@@ -3138,13 +3129,10 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             charHand(x - 7.6*s, y - 14.2*s, 1.5*s, skinColor);
             charHand(x + 7.6*s, y - 14.2*s, 1.5*s, skinColor);
         } else if(hasGun) {
-            // Only the LEFT arm. drawRevolver supplies the right one — it draws
-            // its own shoulder-to-fist limb around the gun — so drawing both
-            // here gave him three arms: two hanging at his sides and a third
-            // holding the revolver. The two profile branches already skip the
-            // gun-side arm; this one did not.
             bmArm(-1, x - 8.0*s, y + 9.4*s, x - 8.6*s, y + 5.6*s);
             charHand(x - 8.0*s, y + 10.2*s, 1.5*s, skinColor);
+            bmArm( 1, x + 7.8*s, y + 9.4*s, x + 8.4*s, y + 5.6*s);
+            charHand(x + 7.8*s, y + 10.2*s, 1.5*s, skinColor);
         } else {
             bmArm(-1, x - 7.8*s + bmStride, y + 9.4*s, x - 8.6*s, y + 5.6*s);
             bmArm( 1, x + 7.8*s - bmStride, y + 9.4*s, x + 8.6*s, y + 5.6*s);
@@ -4262,10 +4250,7 @@ function _drawNPC(npc) {
         ctx.globalAlpha = 1;
     }
 
-    // npc.facing === 'back' reuses this same pose with the animation off, so a
-    // pipe manager walking away from the camera shows his back instead of
-    // moonwalking. It is the only back view the PM sprite has.
-    if(isClimbing || npc.state === 'fixing' || npc.facing === 'back') {
+    if(isClimbing || npc.state === 'fixing') {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
         const isFix = npc.state === 'fixing';
@@ -6498,33 +6483,7 @@ function drawHandWheelValve(pipeX, pipeY, npc, horizontal) {
 // the hell climbing pose both read this; before, only the ladder knew where its
 // rungs were, and the climber's hands were pinned at +/-16.6 either side of his
 // head — outside the rails, holding air.
-function stepLadderGeom(npcY) {
-    const feetY = npcY + 32;               // NPC feet bottom
-    const floorY = 400;
-    const ladderTop = feetY - 130;         // above window (275), below valve (~196)
-    const ladderH = floorY - ladderTop;
-    const topHalfW = 10, botHalfW = 18, numRungs = 6;
-    // rung i (1..numRungs): its y, and the rails' half-width there
-    const rung = (i) => {
-        const t = i / (numRungs + 1);
-        return { y: ladderTop + t * ladderH, hw: topHalfW + t * (botHalfW - topHalfW) };
-    };
-    const standIdx = Math.round((feetY - ladderTop) / ladderH * (numRungs + 1));
-    return { feetY, floorY, ladderTop, ladderH, topHalfW, botHalfW, numRungs, rung, standIdx };
-}
-// A pipe manager on his ladder, drawn the way the current world says he should
-// look. In hell the pipe managers ARE mullet pros and their ladders go black.
-// Three room renderers each decided that for themselves and only ONE of them
-// ever got the hell branch, so walking into the level 5 pipe room or the level 6
-// employee pipe room in hell put the old square-backed PM and a bright green
-// ladder straight back on screen.
-function drawPipeManagerOnLadder(npc) {
-    drawStepLadder(npc.x, npc.y, hellMode ? { hex: '#0a0a0a', shadow: '#000' } : npc.color);
-    // In hell the mullet pro replaces the PM entirely — no PM underneath — and
-    // carries the same climb/fix/scream animation states.
-    if(hellMode) drawMulletProAsPM(npc);
-    else         drawNPC(npc);
-}
+
 function drawStepLadder(x, npcY, color) {
     // The ladder hangs from the NPC's feet but stands on the fixed floor, so
     // its height varies with npcY — derive the shade box from the same numbers
@@ -6535,10 +6494,18 @@ function drawStepLadder(x, npcY, color) {
                 () => _drawStepLadder(x, npcY, color));
 }
 function _drawStepLadder(x, npcY, color) {
-    const L = stepLadderGeom(npcY);
-    const { feetY, floorY, ladderTop, ladderH, topHalfW, botHalfW, numRungs } = L;
+    const s = 2;
+    const feetY = npcY + 16 * s; // NPC feet bottom
+    const floorY = 400;
+
+    // Ladder extends above window but below valve
+    const ladderTop = feetY - 130; // above window (275), below valve (~196)
+    const ladderH = floorY - ladderTop;
 
     if (ladderH < 20) return;
+
+    const topHalfW = 10;
+    const botHalfW = 18;
 
     // Shadow at base
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -6564,19 +6531,24 @@ function _drawStepLadder(x, npcY, color) {
     ctx.stroke();
 
     // Rungs - metallic gray, more rungs for taller ladder
+    const numRungs = 6;
     ctx.strokeStyle = '#aaa';
     ctx.lineWidth = 2.5;
     for (let i = 1; i <= numRungs; i++) {
-        const r = L.rung(i);
+        const t = i / (numRungs + 1);
+        const rY = ladderTop + t * ladderH;
+        const hw = topHalfW + t * (botHalfW - topHalfW);
         ctx.beginPath();
-        ctx.moveTo(x - r.hw, r.y);
-        ctx.lineTo(x + r.hw, r.y);
+        ctx.moveTo(x - hw, rY);
+        ctx.lineTo(x + hw, rY);
         ctx.stroke();
     }
 
     // Rung where PM stands (highlighted — the rung closest to feet level)
-    const stand = L.rung(L.standIdx);
-    const standY = stand.y, standHW = stand.hw;
+    const standRungIdx = Math.round((feetY - ladderTop) / ladderH * (numRungs + 1));
+    const standT = standRungIdx / (numRungs + 1);
+    const standY = ladderTop + standT * ladderH;
+    const standHW = topHalfW + standT * (botHalfW - topHalfW);
     ctx.strokeStyle = color.hex;
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -7237,34 +7209,220 @@ function _draw3DPrinter(x, y) {
     
 }
 
-const GHOSTGUN_BOX = { dy: -6, hw: 42, hh: 26 };
 function drawGhostGun(x, y, facing) {
-    shadeSprite(x + 0, y + GHOSTGUN_BOX.dy, GHOSTGUN_BOX.hw, GHOSTGUN_BOX.hh,
-                () => _drawGhostGun(x, y, facing), { ground: 0 });
+    shadeSprite(x + 0, y + -15, 48, 45, () => _drawGhostGun(x, y, facing), { ground: 0 });
 }
 function _drawGhostGun(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
-    if(!(player.shootTimer > 0 || Date.now() - player.lastMove < 350)) return;
-    drawWeaponInHand(x, y, facing, ghostGunShape);
+    const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
+    if(!isActive) return;
+    // Only 'forward' (idle, no cardinal direction) falls back to last horizontal
+    // facing so the arm still anchors cleanly; up/down/left/right render directly.
+    if(facing !== 'left' && facing !== 'right' && facing !== 'up' && facing !== 'down') {
+        facing = player.lastHorizFacing || 'right';
+    }
+    const skinColor = '#f5c89a';
+    const sleeveColor = '#800020'; // Red jacket sleeve
+
+    if(facing === 'left') {
+        // LEFT: Proper anatomical arm extended left, gun pointing left
+
+        // Upper arm (shoulder to elbow) - red jacket sleeve
+        const shoulderX = x - 9;
+        const shoulderY = y - 2;
+        const elbowX = x - 17;
+        const elbowY = y - 8;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(shoulderX - 8, shoulderY - 2, 11, 7);
+
+        // Forearm (elbow to wrist)
+        const wristX = x - 28;
+        const wristY = y - 10;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(elbowX - 11, elbowY - 2, 13, 6);
+
+        // Hand gripping gun
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(wristX - 1, wristY - 2, 7, 8);
+
+        // Gun pointing left
+        const gunX = x - 28;
+        const gunY = y - 10;
+
+        // Barrel pointing left
+        ctx.fillStyle = '#999';
+        ctx.fillRect(gunX - 10, gunY - 3, 18, 6);
+
+        // Barrel extension
+        ctx.fillRect(gunX - 16, gunY - 2, 6, 4);
+
+        // Slide/sight
+        ctx.fillStyle = '#777';
+        ctx.fillRect(gunX - 5, gunY - 5, 5, 2);
+
+    } else if(facing === 'right') {
+        // RIGHT: Proper anatomical arm extended right, gun pointing right
+
+        // Upper arm (shoulder to elbow) - red jacket sleeve
+        const shoulderX = x + 9;
+        const shoulderY = y - 2;
+        const elbowX = x + 17;
+        const elbowY = y - 8;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(shoulderX - 3, shoulderY - 2, 11, 7);
+
+        // Forearm (elbow to wrist)
+        const wristX = x + 28;
+        const wristY = y - 10;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(elbowX - 2, elbowY - 2, 13, 6);
+
+        // Hand gripping gun
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(wristX - 6, wristY - 2, 7, 8);
+
+        // Gun pointing right
+        const gunX = x + 28;
+        const gunY = y - 10;
+
+        // Barrel pointing right
+        ctx.fillStyle = '#999';
+        ctx.fillRect(gunX - 8, gunY - 3, 18, 6);
+
+        // Barrel extension
+        ctx.fillRect(gunX + 10, gunY - 2, 6, 4);
+
+        // Slide/sight
+        ctx.fillStyle = '#777';
+        ctx.fillRect(gunX, gunY - 5, 5, 2);
+
+    } else if(facing === 'up') {
+        // UP: Proper anatomical arm raised up, gun pointing up
+
+        // Upper arm (shoulder to elbow) - red jacket sleeve, raised
+        const shoulderX = x + 7;
+        const shoulderY = y - 2;
+        const elbowX = x + 8;
+        const elbowY = y - 15;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(shoulderX - 2, shoulderY, 6, 14);
+
+        // Forearm (elbow to wrist) - extends upward
+        const wristX = x + 8;
+        const wristY = y - 28;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(wristX - 2, elbowY - 2, 5, 15);
+
+        // Hand gripping gun
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(wristX - 3, wristY - 2, 7, 7);
+
+        // Gun pointing up
+        const gunX = x + 8;
+        const gunY = y - 32;
+
+        // Barrel pointing up (rotated)
+        ctx.fillStyle = '#999';
+        ctx.fillRect(gunX - 3, gunY - 16, 6, 18);
+
+        // Barrel extension
+        ctx.fillRect(gunX - 2, gunY - 22, 4, 6);
+
+        // Slide/sight
+        ctx.fillStyle = '#777';
+        ctx.fillRect(gunX - 4, gunY - 5, 2, 5);
+
+    } else {
+        // DOWN: Proper anatomical arm at side, gun holstered
+
+        // Upper arm (shoulder to elbow) - red jacket sleeve, at side
+        const shoulderX = x + 7;
+        const shoulderY = y + 0;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(shoulderX - 2, shoulderY, 5, 10);
+
+        // Forearm (elbow to wrist) - extends downward
+        const elbowY = y + 10;
+        const wristY = y + 18;
+
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(shoulderX - 2, elbowY, 5, 8);
+
+        // Hand gripping gun
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(shoulderX - 3, wristY - 1, 7, 6);
+
+        // Gun holstered at hip
+        const gunX = x + 7;
+        const holsterY = y + 22;
+
+        // Gun grip pointing down, barrel pointing up (holstered)
+        ctx.fillStyle = '#999';
+        ctx.fillRect(gunX - 3, holsterY - 8, 6, 12);
+
+        // Barrel top
+        ctx.fillRect(gunX - 2, holsterY - 10, 4, 3);
+
+        // Slide/sight
+        ctx.fillStyle = '#777';
+        ctx.fillRect(gunX - 2, holsterY - 11, 4, 2);
+    }
 }
 
 // Draw the pipe wrench held by player (melee weapon, level 4)
-const PIPEWRENCH_BOX = { dy: -8, hw: 40, hh: 32 };
 function drawPipeWrench(x, y, facing) {
-    shadeSprite(x + 0, y + PIPEWRENCH_BOX.dy, PIPEWRENCH_BOX.hw, PIPEWRENCH_BOX.hh,
-                () => _drawPipeWrench(x, y, facing), { ground: 0 });
+    shadeSprite(x + 0, y + -11, 21, 26, () => _drawPipeWrench(x, y, facing), { ground: 0 });
 }
 function _drawPipeWrench(x, y, facing) {
-    // At rest the head is cocked up and back; the swing brings it down through
-    // the arc in front of him. The wrench turns in the fist rather than the fist
-    // flying round the shoulder, which keeps the head out of his face — the old
-    // version drew it 28px straight up from a bare sleeve, right across it.
-    let lean = -0.85;
+    const sleeveColor = '#800020';
+    const skinColor = '#f5c89a';
+    const wrenchColor = '#7a7a7a';
+    const wrenchShine = '#aaaaaa';
+
+    // Swing animation angle: swings down (0→π/2) in facing direction
+    let swingAngle = 0;
     if(pipeWrench.swinging && pipeWrench.swingTimer > 0) {
         const t = 1 - (pipeWrench.swingTimer / 22);
-        lean = -0.85 + Math.sin(t * Math.PI) * 1.55;
+        swingAngle = Math.sin(t * Math.PI) * (Math.PI * 0.7);
     }
-    drawWeaponInHand(x, y, facing, pipeWrenchShape, { lean, gripX: 1.4, gripY: -0.6 });
+
+    const dir = (facing === 'left') ? -1 : 1;
+    const armX = x + dir * 9;
+
+    ctx.save();
+    ctx.translate(armX, y - 4);
+    ctx.rotate(dir * swingAngle);
+
+    // Arm sleeve
+    ctx.fillStyle = sleeveColor;
+    ctx.fillRect(-4, -2, 8, 14);
+    // Hand
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-3, 10, 7, 6);
+
+    // Wrench (pointing up-ish, handle down)
+    // Handle
+    ctx.fillStyle = wrenchColor;
+    ctx.fillRect(-3, -18, 6, 28);
+    // Head (open-end jaws)
+    ctx.fillStyle = wrenchColor;
+    ctx.fillRect(-8, -28, 16, 12);
+    // Jaw gap
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-5, -26, 5, 8);
+    ctx.fillRect(0, -26, 5, 8);
+    // Shine
+    ctx.fillStyle = wrenchShine;
+    ctx.fillRect(-2, -22, 2, 14);
+
+    ctx.restore();
 }
 
 // Draw a spinning wrench projectile (boomerang bolt)
@@ -7301,16 +7459,91 @@ function drawWrenchShatter(pieces) {
 }
 
 // Draw auto-wrench held by player (level 6)
-const WRENCHGUN_BOX = { dy: -8, hw: 44, hh: 30 };
 function drawWrenchGun(x, y, facing) {
-    shadeSprite(x + 0, y + WRENCHGUN_BOX.dy, WRENCHGUN_BOX.hw, WRENCHGUN_BOX.hh,
-                () => _drawWrenchGun(x, y, facing), { ground: 0 });
+    shadeSprite(x + -4, y + 0, 46, 46, () => _drawWrenchGun(x, y, facing), { ground: 0 });
 }
 function _drawWrenchGun(x, y, facing) {
-    const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 ||
-                     level6.wrenchBolts.length > 0;
+    const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350 || level6.wrenchBolts.length > 0;
     if(!isActive) return;
-    drawWeaponInHand(x, y, facing, wrenchGunShape);
+    // 'forward' (idle) falls back to last horizontal facing so the arm stays
+    // anchored; up/down/left/right all render their own clean pose.
+    if(facing !== 'left' && facing !== 'right' && facing !== 'up' && facing !== 'down') {
+        facing = player.lastHorizFacing || 'right';
+    }
+    const skinColor = '#f5c89a';
+    const sleeveColor = '#800020';
+
+    if(facing === 'left' || facing === 'right') {
+        const dir = (facing === 'left') ? -1 : 1;
+        // Sleeve
+        ctx.fillStyle = sleeveColor;
+        if(facing === 'left') {
+            ctx.fillRect(x - 20, y - 4, 12, 7);
+            ctx.fillRect(x - 32, y - 6, 14, 6);
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(x - 33, y - 6, 7, 8);
+        } else {
+            ctx.fillRect(x + 8, y - 4, 12, 7);
+            ctx.fillRect(x + 18, y - 6, 14, 6);
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(x + 26, y - 6, 7, 8);
+        }
+        // Wrench (gun-barrel style, pointing in direction)
+        const wx = (facing === 'left') ? x - 34 : x + 28;
+        ctx.fillStyle = '#7a7a7a';
+        if(facing === 'left') {
+            ctx.fillRect(wx - 10, y - 8, 18, 5);
+            ctx.fillRect(wx - 10, y - 13, 8, 12);
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(wx - 9, y - 12, 3, 7);
+            ctx.fillRect(wx - 6, y - 12, 3, 7);
+        } else {
+            ctx.fillRect(wx - 8, y - 8, 18, 5);
+            ctx.fillRect(wx + 2, y - 13, 8, 12);
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(wx + 3, y - 12, 3, 7);
+            ctx.fillRect(wx + 6, y - 12, 3, 7);
+        }
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillRect(facing === 'left' ? wx - 9 : wx - 7, y - 6, 2, 4);
+        return;
+    }
+
+    if(facing === 'up') {
+        // Arm raised straight up, wrench barrel pointing upward
+        ctx.fillStyle = sleeveColor;
+        ctx.fillRect(x + 5, y - 2, 6, 14);   // upper arm
+        ctx.fillRect(x + 5, y - 16, 6, 14);  // forearm
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(x + 5, y - 22, 6, 7);   // hand
+        // Wrench head jaws pointing up
+        ctx.fillStyle = '#7a7a7a';
+        ctx.fillRect(x + 4, y - 38, 8, 16);  // barrel
+        ctx.fillRect(x + 1, y - 42, 14, 6);  // head
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(x + 2, y - 42, 4, 4);   // jaw gap L
+        ctx.fillRect(x + 10, y - 42, 3, 4);  // jaw gap R
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillRect(x + 7, y - 36, 2, 8);   // shine
+        return;
+    }
+
+    // Down
+    // Arm straight down, wrench barrel pointing downward
+    ctx.fillStyle = sleeveColor;
+    ctx.fillRect(x + 5, y, 6, 12);       // upper arm
+    ctx.fillRect(x + 5, y + 10, 6, 10);  // forearm
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(x + 5, y + 18, 6, 6);   // hand
+    // Wrench head jaws pointing down
+    ctx.fillStyle = '#7a7a7a';
+    ctx.fillRect(x + 4, y + 24, 8, 14);  // barrel
+    ctx.fillRect(x + 1, y + 36, 14, 6);  // head
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(x + 2, y + 38, 4, 4);   // jaw gap L
+    ctx.fillRect(x + 10, y + 38, 3, 4);  // jaw gap R
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(x + 7, y + 26, 2, 8);   // shine
 }
 
 // ===========================================================================
@@ -7334,22 +7567,12 @@ function _drawWrenchGun(x, y, facing) {
 // rest of the cast). One shared table at (+/-13.2, -8.4) was right for neither,
 // and grew his gun arm out of a point 3.4px inside his chest.
 //
-// So the SHOULDER and the sleeve come from the carrier, and WEAPON_ARM holds the
 // pose in the detective's units, scaled by the carrier's reach.
-// capR/cap are the shoulder cap each BODY draws over its own arm joints
-// (charDeltoid at bmShX/mpShX). When a weapon is out, the body suppresses that
-// whole arm — cap included — so without redrawing it here the sleeve started as
-// a detached blob with a dark notch between it and the torso.
-const WEAPON_CARRIER = {
-    baldManager: { shX: 6.9 * 2,   shY:  2.2 * 2   + FOOT_FIX.baldManager,
-                   // a shade under the shirt's #fff, the way the body's own
-                   // arms sit at #dcdcdc/#f6f6f6 against it
-                   sleeve: '#dedede',
-                   capR: 1.15 * 2,   cap: '#f6f6f6' },
-    mulletPro:   { shX: 6.9 * 2.4, shY: -0.8 * 2.4 + FOOT_FIX.mulletPro,
-                   sleeve: charMix('#800020', '#000000', 0.08),
-                   capR: 1.2 * 2.4,  cap: charMix('#800020', '#ffffff', 0.10) },
-};
+// Only the sleeve colour is still read from here — the arm geometry was
+// DETECTIVE's shoulder; Mullet Pro is a bigger body (s = 2.4 against 2) and his
+// deltoid is at +/-16.6, -8.9, so hanging his sleeve at the detective's +/-13.8
+// started it above his chest with nothing joining it to the shoulder.
+
 // Which body is under the weapon. The player is Mullet Pro in levels 1-4 and the
 // bald detective in 5 and 6 — deriving this from `level === 6` alone put Mullet
 // Pro's maroon sleeve on the detective's white shirt for the whole of level 5,
@@ -7359,100 +7582,30 @@ const WEAPON_CARRIER = {
 // hasGhostGun and hasWrenchGun are all cleared when it starts), so nothing is
 // ever drawn in that hand and the green sleeve this used to return was a colour
 // invented for a state that cannot happen.
-function playerCarrier() {
-    return (level === 5 || level === 6) ? 'baldManager' : 'mulletPro';
-}
+
 //
-// hx/hy is the centre of the FIST, not the weapon's origin. The arm is drawn to
-// it and the weapon is hung off it, so the sleeve always ends inside the hand;
-// ending the limb at the weapon's origin left its round cap sticking out over
-// the frame as a white lump.
-//
-// 'fore' foreshortens the weapon ALONG ITS OWN AXIS. Firing up the screen is
-// firing away from the camera and firing down is firing at it; either way the
-// barrel points out of the picture plane and you see very little of its length.
-// Drawn at full length instead, the up pose put a 19px barrel straight past the
-// player's ear, which read as holding the gun to his own head.
-// Constant, so they are not re-mixed from hex on every frame.
-const WEAPON_SKIN = '#d4a882', WEAPON_SKIN_SHADE = charMix('#d4a882', '#000000', 0.22);
-// shMul pulls the shoulder INBOARD for the profile facings. C.shX is the
-// carrier's FRONT-view shoulder half-width; seen edge-on the torso is narrower
-// (Mullet Pro is +/-18 front but +/-13.5 in profile), so hanging the arm at the
-// front-view width rooted it 3px outside his body, with the dark tee wedge
-// showing through the gap. That is the detached arm.
-const WEAPON_ARM = {
-    right: { hx:  17.5, hy: -1.4, rot: 0,     flip: false, fore: 1,    bend: [ 16.5, -6], shMul: 0.66 },
-    left:  { hx: -17.5, hy: -1.4, rot: 0,     flip: true,  fore: 1,    bend: [-16.5, -6], shMul: 0.66 },
-    up:    { hx:  15.5, hy:  1.4, rot: -1.15, flip: false, fore: 0.58, bend: [ 16.0, -5], shMul: 1 },
-    down:  { hx:  14.0, hy:  2.6, rot: 0.72,  flip: false, fore: 0.70, bend: [ 15.5, -1], shMul: 1 },
-};
+// Reverted at the author's request to the arm as it stood before the weapon
+// rebuild: a 5.2-wide sleeve from a fixed shoulder to a fixed wrist, with the
+// cuff and fist drawn at the wrist in WORLD space. The per-carrier shoulder,
+// the proportional reach, the foreshortening and the grip-space hand are all
+// gone with it. The weapon SHAPES are untouched.
+
 // Only 'forward'/'back' (idle, no cardinal direction) fall back to the last
 // horizontal facing, so the arm still anchors cleanly.
-function weaponFacing(facing) {
-    return (facing === 'left' || facing === 'right' || facing === 'up' || facing === 'down')
-        ? facing : (player.lastHorizFacing || 'right');
-}
+
 // x,y is the player anchor. shape() draws the weapon with its grip at the
 // origin. opts.gripX/gripY move the point the fist closes on, for a weapon whose
 // handle is not gripped right at the top; opts.lean adds tilt on top of the
 // facing's own rotation, which is how the pipe wrench swings.
-function drawWeaponInHand(x, y, facing, shape, opts) {
-    const A = WEAPON_ARM[weaponFacing(facing)];
-    const C = WEAPON_CARRIER[playerCarrier()];
-    // The pose is authored on the detective; a bigger body reaches further in
-    // proportion, which also drops the fist to where its own hands hang.
-    const reach = C.shX / (6.9 * 2);
-    const sx = (A.hx < 0 ? -1 : 1) * C.shX * A.shMul, sy = C.shY;
-    const hx = A.hx * reach, hy = A.hy * reach;
-    const bx = A.bend[0] * reach, by = A.bend[1] * reach;
-    const o = opts || {};
-    const gripX = o.gripX === undefined ? 2.0 : o.gripX;
-    const gripY = o.gripY === undefined ? -1.4 : o.gripY;
-    // lean is NOT re-signed for the flipped facings: the mirror is applied
-    // before the rotation, so the same local angle already comes out
-    // symmetrically. Negating it swung the pipe wrench's head down behind him
-    // facing left while it rode high facing right.
-    const lean = o.lean || 0;
 
-    // The limb is rooted INSIDE the torso, so it emerges from the body's own
-    // mass. A charDeltoid cap at the shoulder — which is what the bodies use —
-    // is wrong here: on them the cap sits at the top of a full-width arm hanging
-    // DOWN and is subsumed by it, but a weapon arm leaves sideways, so the cap
-    // was left as a lone dark disc standing proud of the shoulder.
-    //
-    // There was also a 'rgba(0,0,0,0.20)' stroke 1.2px wider than the sleeve
-    // under this, to stop a white sleeve vanishing on a white shirt. On Mullet
-    // Pro — maroon sleeve, maroon jacket — that dark rim was the only thing
-    // between arm and torso and it read as a seam. Both bodies separate their
-    // arms by TONE, not by an outline, so this does too.
-    charLimb(x + sx * 0.72, y + sy, x + hx, y + hy, 4.6 * reach, C.sleeve, x + bx, y + by);
-
-    ctx.save();
-    ctx.translate(x + hx, y + hy);
-    if(A.flip) ctx.scale(-1, 1);
-    ctx.rotate(A.rot + lean);
-    // heel of the hand, behind the weapon so the frame sits over it
-    charHand(-0.4, 0.4, 2.6, WEAPON_SKIN_SHADE);
-    ctx.save();
-    ctx.translate(gripX, gripY);
-    ctx.scale(A.fore, 1);                     // foreshorten about the grip, not the muzzle
-    shape();
-    ctx.restore();
-    // The fist closes over the TOP of the grip and leaves its heel showing
-    // below — at this size that read is the whole point of the pose.
-    charHand(0.5, 0.2, 2.2, WEAPON_SKIN);
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';       // knuckles
-    ctx.beginPath(); ctx.arc(0.5, 1.4, 2.0, 0.15, Math.PI - 0.15); ctx.fill();
-    ctx.restore();
-}
 
 // The lit boxes, as named constants so the render checks can read the real
 // numbers instead of copies that can drift. shadeSprite takes HALF-extents, so
 // these are half-widths measured from (x, y + dy) — the old names w/h invited
 // the reader (and the test) to halve them a second time.
-const REVOLVER_BOX = { dy: -6, hw: 44, hh: 26 };
+const REVOLVER_BOX = { dy: -10, w: 68, h: 48 };
 function drawRevolver(x, y, facing) {
-    shadeSprite(x + 0, y + REVOLVER_BOX.dy, REVOLVER_BOX.hw, REVOLVER_BOX.hh,
+    shadeSprite(x + 0, y + REVOLVER_BOX.dy, REVOLVER_BOX.w, REVOLVER_BOX.h,
                 () => _drawRevolver(x, y, facing), { ground: 0 });
 }
 
@@ -7467,234 +7620,105 @@ function drawRevolver(x, y, facing) {
 // came out as a grey block with a grate on it rather than a gun. This is ~23 x
 // 12, laid out front-to-back the way the real thing is: muzzle, barrel,
 // cylinder, trigger, grip.
-function revolverShape() {
-    // ---- GRIP, raked back under the frame
-    ctx.fillStyle = '#4a3122';
-    ctx.beginPath();
-    ctx.moveTo(-2.4, -0.6);
-    ctx.lineTo(1.4, -0.4);
-    ctx.lineTo(0.2, 7.4);
-    ctx.quadraticCurveTo(-1.4, 8.4, -3.2, 7.6);
-    ctx.lineTo(-3.9, 1.0);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';                 // shine down the panel
-    ctx.fillRect(-1.3, 0.9, 1.3, 5.2);
-    ctx.fillStyle = 'rgba(0,0,0,0.26)';                       // backstrap
-    ctx.beginPath();
-    ctx.moveTo(-2.4, -0.6); ctx.lineTo(-3.9, 1.0); ctx.lineTo(-3.2, 7.6);
-    ctx.quadraticCurveTo(-2.5, 8.1, -2.0, 7.8); ctx.lineTo(-2.7, 1.3);
-    ctx.closePath(); ctx.fill();
 
-    // ---- FRAME + BARREL in ONE outline, so the gun has a silhouette
-    const fg = ctx.createLinearGradient(0, -4.0, 0, 3.2);
-    fg.addColorStop(0, '#7d828b'); fg.addColorStop(0.45, '#5a5e66'); fg.addColorStop(1, '#31343a');
-    ctx.fillStyle = fg;
-    ctx.beginPath();
-    ctx.moveTo(-3.2, -1.0);          // back of the frame, below the hammer
-    ctx.lineTo(-2.4, -2.9);          // top strap, rear
-    ctx.lineTo(9.6, -2.9);           // top strap, over the cylinder
-    // The barrel is shallower than the frame — at the same depth the whole
-    // front half came out as one uninterrupted slab.
-    ctx.lineTo(9.8, -1.9);
-    ctx.lineTo(18.6, -1.7);          // barrel, tapering slightly
-    ctx.lineTo(19.4, -1.2);          // muzzle
-    ctx.lineTo(19.4, 0.7);
-    ctx.lineTo(18.6, 1.0);
-    ctx.lineTo(11.4, 1.1);           // under the barrel
-    ctx.lineTo(11.0, 2.7);           // ejector shroud
-    ctx.lineTo(9.0, 2.7);
-    ctx.lineTo(8.6, 1.7);
-    ctx.lineTo(1.2, 1.9);            // frame bottom, back to the grip
-    ctx.lineTo(-2.4, 0.2);
-    ctx.closePath(); ctx.fill();
-
-    // ---- CYLINDER, a bulge with flutes
-    ctx.fillStyle = '#6e727b';
-    pathRoundRect(3.4, -3.3, 6.0, 5.8, 1.3); ctx.fill();
-    ctx.strokeStyle = '#2a2d32'; ctx.lineWidth = 0.6;
-    pathRoundRect(3.4, -3.3, 6.0, 5.8, 1.3); ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,0,0,0.34)';
-    for(let i = 1; i < 4; i++) {
-        const cx = 3.4 + (6.0 / 4) * i;
-        ctx.beginPath(); ctx.moveTo(cx, -2.7); ctx.lineTo(cx, 1.9); ctx.stroke();
-    }
-    ctx.fillStyle = 'rgba(255,255,255,0.20)';
-    ctx.fillRect(4.0, -2.9, 4.8, 1.0);
-
-    // ---- HAMMER spur at the back
-    ctx.fillStyle = '#2b2d33';
-    ctx.beginPath();
-    ctx.moveTo(-3.4, -2.6); ctx.lineTo(-1.6, -3.3); ctx.lineTo(-1.4, -1.5);
-    ctx.lineTo(-3.2, -1.1); ctx.closePath(); ctx.fill();
-
-    // ---- TRIGGER and guard, BEHIND the cylinder where they belong
-    gunTrigger(2.2);
-
-    // ---- MUZZLE and front sight
-    ctx.fillStyle = '#15171b';
-    ctx.fillRect(18.9, -1.1, 0.8, 1.9);
-    ctx.fillStyle = '#23262b';
-    ctx.fillRect(17.2, -2.8, 1.0, 1.2);
-}
 
 // The two wrench weapons wear the same head. It was written out twice, jaw for
 // jaw, differing only in scale and in hexes a pixel apart — so the auto-wrench
 // and the pipe wrench had already started drifting into two different tools.
 // k scales the whole head about the shank.
-const KNURL = [[1, 0], [0.7071, 0.7071], [0, 1], [-0.7071, 0.7071]];
-function wrenchHead(ox, k) {
-    ctx.fillStyle = '#7d838c';
-    pathRoundRect(ox,        -6.2 * k, 5.6 * k, 4.5 * k, 0.9 * k); ctx.fill();  // fixed jaw
-    pathRoundRect(ox,         1.1 * k, 4.7 * k, 3.8 * k, 0.9 * k); ctx.fill();  // sliding jaw
-    ctx.fillStyle = '#4c5158';
-    ctx.fillRect(ox, -2.3 * k, 3.1 * k, 3.6 * k);                               // throat
-    ctx.fillStyle = '#21242a';                                                  // serrated bite
-    for(let i = 0; i < 3; i++) {
-        ctx.fillRect(ox + (0.8 + i * 1.45) * k, -2.5 * k, 0.95 * k, 0.95 * k);
-        ctx.fillRect(ox + (0.8 + i * 1.45) * k,  1.1 * k, 0.95 * k, 0.95 * k);
-    }
-    const nx = ox - 1.2 * k, ny = 0.3 * k, nr = 1.95 * k;                       // adjuster nut
-    ctx.fillStyle = '#9ba1a9';
-    ctx.beginPath(); ctx.arc(nx, ny, nr, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.39)'; ctx.lineWidth = 0.5;
-    for(const [c, sn] of KNURL) {                                               // knurling
-        ctx.beginPath();
-        ctx.moveTo(nx - c * nr, ny - sn * nr);
-        ctx.lineTo(nx + c * nr, ny + sn * nr);
-        ctx.stroke();
-    }
-}
+
 // Trigger and guard — the same four lines in all three guns, with constants that
 // had drifted apart for no reason anyone recorded.
-function gunTrigger(cx) {
-    ctx.strokeStyle = '#3b3e44'; ctx.lineWidth = 1.05;
-    ctx.beginPath(); ctx.arc(cx, 2.95, 2.25, -0.45, Math.PI * 0.93); ctx.stroke();
-    ctx.fillStyle = '#282b31';
-    ctx.fillRect(cx - 0.5, 1.95, 0.9, 1.9);
-}
+
 
 // The GHOST GUN: the pistol you run off the 3D printer. Same rig as the
 // revolver, deliberately a different silhouette — squared polymer slide, a
 // straight blocky grip, no cylinder, and the printed-in layer lines that give
 // it its name. It used to be a grey bar with a smaller grey bar stuck on the
 // end of it, which read as a spatula rather than a gun.
-function ghostGunShape() {
-    // ---- GRIP, straight and blocky where the revolver's is raked
-    ctx.fillStyle = '#4a4e56';
-    ctx.beginPath();
-    ctx.moveTo(-2.2, -0.4);
-    ctx.lineTo(1.6, -0.4);
-    ctx.lineTo(0.7, 7.9);
-    ctx.lineTo(-3.2, 7.5);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.30)';                       // moulded checkering
-    for(let i = 0; i < 4; i++) ctx.fillRect(-2.4 + i * 0.16, 1.5 + i * 1.5, 3.3, 0.5);
 
-    // ---- FRAME + SLIDE in ONE outline, so it has a silhouette
-    const g = ctx.createLinearGradient(0, -3.6, 0, 2.2);
-    g.addColorStop(0, '#8d929b'); g.addColorStop(0.5, '#676c74'); g.addColorStop(1, '#3a3d43');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(-3.0, -0.9);
-    ctx.lineTo(-3.0, -3.5);          // rear of the slide
-    ctx.lineTo(14.2, -3.5);
-    ctx.lineTo(14.9, -2.8);          // muzzle
-    ctx.lineTo(14.9,  0.1);
-    ctx.lineTo(9.6,   0.3);          // under the slide
-    ctx.lineTo(9.2,   1.9);          // dust cover
-    ctx.lineTo(1.4,   2.0);
-    ctx.lineTo(-2.2,  0.2);
-    ctx.closePath(); ctx.fill();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';                 // printed layer lines
-    for(let ly = -3.0; ly < 0; ly += 0.9) ctx.fillRect(-2.6, ly, 16.6, 0.32);
-    ctx.fillStyle = 'rgba(0,0,0,0.42)';                       // ejection port
-    ctx.fillRect(5.6, -3.0, 3.6, 1.5);
-    ctx.fillStyle = 'rgba(0,0,0,0.34)';                       // slide serrations
-    for(let i = 0; i < 3; i++) ctx.fillRect(-2.2 + i * 1.1, -3.2, 0.55, 2.5);
-
-    // ---- SIGHTS, the two nubs that say "pistol" more than anything else here
-    ctx.fillStyle = '#25282d';
-    ctx.fillRect(-2.7, -4.4, 1.6, 1.0);
-    ctx.fillRect(12.6, -4.4, 1.2, 1.0);
-
-    // ---- TRIGGER and guard
-    gunTrigger(3.0);
-
-    // ---- MUZZLE
-    ctx.fillStyle = '#131519';
-    ctx.fillRect(14.3, -2.4, 0.7, 1.9);
-}
 
 // The AUTO-WRENCH: a pistol receiver with a pipe-wrench head where the barrel
 // should be — that head is what the bolts come out of. It used to be an 18x5
 // grey bar with a black square on the end.
-function wrenchGunShape() {
-    // ---- GRIP
-    ctx.fillStyle = '#3f434a';
-    ctx.beginPath();
-    ctx.moveTo(-2.3, -0.5);
-    ctx.lineTo(1.5, -0.4);
-    ctx.lineTo(0.4, 7.6);
-    ctx.quadraticCurveTo(-1.2, 8.4, -3.1, 7.4);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.fillRect(-1.4, 1.0, 1.2, 5.0);
 
-    // ---- RECEIVER
-    const g = ctx.createLinearGradient(0, -3.4, 0, 2.4);
-    g.addColorStop(0, '#8b9099'); g.addColorStop(0.5, '#63686f'); g.addColorStop(1, '#373a40');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(-2.8, -0.8);
-    ctx.lineTo(-2.4, -3.3);
-    ctx.lineTo(8.2, -3.3);
-    ctx.lineTo(9.0, -1.6);           // steps down into the neck
-    ctx.lineTo(12.6, -1.4);
-    ctx.lineTo(12.6,  0.9);
-    ctx.lineTo(8.8,   1.1);
-    ctx.lineTo(8.2,   2.0);
-    ctx.lineTo(1.2,   2.0);
-    ctx.lineTo(-2.1,  0.2);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.30)';                       // vent slots
-    for(let i = 0; i < 3; i++) ctx.fillRect(1.4 + i * 1.9, -2.7, 1.0, 1.9);
-
-    // ---- WRENCH HEAD where the barrel would be
-    wrenchHead(11.6, 1.0);
-
-    // ---- TRIGGER and guard
-    gunTrigger(2.6);
-}
 
 // The level 4 melee PIPE WRENCH: a handle in the fist and the head out at the
 // far end. It used to be drawn as a 16x12 block 28px straight up from a bare
 // sleeve, which put the head squarely across Mullet Pro's face in every facing.
-function pipeWrenchShape() {
-    // ---- HANDLE, tapering out from the fist
-    const g = ctx.createLinearGradient(0, -1.9, 0, 2.2);
-    g.addColorStop(0, '#9298a1'); g.addColorStop(0.5, '#6d737b'); g.addColorStop(1, '#3d4046');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(-3.4, -1.6);
-    ctx.lineTo(11.4, -2.0);
-    ctx.lineTo(11.4,  2.0);
-    ctx.lineTo(-3.4,  2.4);
-    ctx.quadraticCurveTo(-4.6, 0.4, -3.4, -1.6);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.30)';                       // grip ribs
-    for(let i = 0; i < 4; i++) ctx.fillRect(-2.4 + i * 1.5, -1.4, 0.6, 3.4);
 
-    // ---- HEAD, the same one the auto-wrench wears, a touch larger
-    wrenchHead(10.4, 1.12);
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';                 // shine along the shank
-    ctx.fillRect(0.6, -1.4, 8.0, 0.7);
+
+function revolverShape(gripCol) {
+    ctx.fillStyle = gripCol || '#4a3122';                       // grip
+    ctx.beginPath();
+    ctx.moveTo(-1.4, -0.6); ctx.lineTo(1.4, -0.6);
+    ctx.lineTo(0.4, 6.4); ctx.lineTo(-3.0, 6.0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(-1.0, 0.6, 1.0, 4.4);
+    ctx.strokeStyle = '#3a3d43'; ctx.lineWidth = 1.4;           // trigger guard
+    ctx.beginPath(); ctx.arc(1.6, 2.6, 2.2, -0.5, Math.PI * 0.9); ctx.stroke();
+    ctx.fillStyle = '#2b2d33';                                  // hammer
+    ctx.beginPath();
+    ctx.moveTo(-2.6, -2.0); ctx.lineTo(-0.6, -2.2); ctx.lineTo(-0.6, -0.4); ctx.lineTo(-2.8, -0.4);
+    ctx.closePath(); ctx.fill();
+    const fg = ctx.createLinearGradient(0, -3.2, 0, 2.4);       // frame
+    fg.addColorStop(0, '#71757e'); fg.addColorStop(0.5, '#565a62'); fg.addColorStop(1, '#3a3d43');
+    ctx.fillStyle = fg;
+    ctx.fillRect(-2.2, -2.4, 6.2, 4.2);
+    ctx.fillStyle = '#63676f';                                  // cylinder
+    ctx.beginPath(); ctx.roundRect(-0.4, -3.0, 5.0, 5.6, 1.2); ctx.fill();
+    ctx.strokeStyle = '#33363c'; ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.roundRect(-0.4, -3.0, 5.0, 5.6, 1.2); ctx.stroke();
+    for(let i = 1; i < 4; i++) {
+        const cx = -0.4 + (5.0 / 4) * i;
+        ctx.beginPath(); ctx.moveTo(cx, -2.4); ctx.lineTo(cx, 2.0); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(0.2, -2.6, 3.8, 1.0);
+    const bg = ctx.createLinearGradient(0, -1.5, 0, 1.3);       // barrel
+    bg.addColorStop(0, '#6b6f77'); bg.addColorStop(0.55, '#4a4d53'); bg.addColorStop(1, '#2f3238');
+    ctx.fillStyle = bg;
+    ctx.fillRect(4.4, -1.5, 8.0, 2.8);
+    ctx.fillStyle = '#23262b';                                  // front sight
+    ctx.fillRect(11.6, -2.8, 1.0, 1.4);
+    ctx.fillStyle = '#15171b';                                  // muzzle
+    ctx.fillRect(12.0, -1.5, 0.6, 2.8);
 }
 
 function _drawRevolver(x, y, facing) {
     // Concealed when static — only draw when moving or actively shooting
-    if(!(player.shootTimer > 0 || Date.now() - player.lastMove < 350)) return;
-    drawWeaponInHand(x, y, facing, revolverShape);
+    const isActive = player.shootTimer > 0 || Date.now() - player.lastMove < 350;
+    if(!isActive) return;
+    // Only 'forward' (idle, no cardinal direction) falls back to last horizontal
+    // facing so the arm still anchors cleanly; up/down/left/right render directly.
+    if(facing !== 'left' && facing !== 'right' && facing !== 'up' && facing !== 'down') {
+        facing = player.lastHorizFacing || 'right';
+    }
+    // Shoulder and wrist per facing; the arm and the gun are the same everywhere
+    const A = ({
+        right: { sx:  7.5, sy: -1, wx:  19, wy: -4.5, rot: 0,             flip: false, bend: [14, -5] },
+        left:  { sx: -7.5, sy: -1, wx: -19, wy: -4.5, rot: 0,             flip: true,  bend: [-14, -5] },
+        up:    { sx:  6.5, sy: -1, wx:  9.5, wy: -19, rot: -Math.PI / 2,  flip: false, bend: [11, -11] },
+        down:  { sx:  6.5, sy: -1, wx:  12,  wy:  4,  rot: 0.62,          flip: false, bend: [11, 1] },
+    })[facing];
+    const SLEEVE = '#f2f2f2', SKIN = '#d4a882';
+
+    charLimb(x + A.sx, y + A.sy, x + A.wx, y + A.wy, 5.2, SLEEVE, x + A.bend[0], y + A.bend[1]);
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';                          // cuff shadow
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = SKIN;                                        // fist on the grip
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.7, 0, Math.PI * 2); ctx.fill();
+
+    ctx.save();
+    ctx.translate(x + A.wx, y + A.wy);
+    if(A.flip) ctx.scale(-1, 1);
+    ctx.rotate(A.rot);
+    revolverShape();
+    ctx.restore();
+    // the fist reads in front of the grip
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.0, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawCashSack(x, y) {
@@ -9143,7 +9167,8 @@ function drawLevel5PipeRoom() {
         // Skip NPC sprite while its acid-burst melt animation is playing
         const isMeltingL5 = acidBursts.some(ab => ab.npc === npc);
         if (!isMeltingL5 && !npcDevoured(npc)) {
-            drawPipeManagerOnLadder(npc);
+            drawStepLadder(npc.x, npc.y, npc.color);
+            drawNPC(npc);
         }
     }
 
@@ -9378,7 +9403,8 @@ function drawLevel6EmployeePipeRoom() {
         if(!npcDevoured(npc) && (npc.color.name !== 'RED' || (level6.factoryReset && !(level6.cloneFollower.active && level6.cloneFollower.armed)))) {
             const isMelting = acidBursts.some(ab => ab.npc === npc);
             if (!isMelting) {
-                drawPipeManagerOnLadder(npc);
+                drawStepLadder(npc.x, npc.y, npc.color);
+                drawNPC(npc);
             }
         }
     }
@@ -27497,10 +27523,7 @@ function drawScene() {
                     y: npc.y,
                     color: npc.color,
                     state: 'happy',
-                    needsDoc: false,
-                    // was omitted, so every exiting PM faced the camera through
-                    // the whole sequence while Mullet Pro turned
-                    facing: npc.facing
+                    needsDoc: false
                 };
                 drawNPC(tempNPC);
                 if(npc.hasSack) {
@@ -29040,7 +29063,16 @@ function drawScene() {
         // Skip NPC sprite while its acid-burst melt animation is playing
         const isMelting = acidBursts.some(ab => ab.npc === npc);
         if (!isMelting) {
-            drawPipeManagerOnLadder(npc);
+            drawStepLadder(npc.x, npc.y, hellMode ? {hex: '#0a0a0a', shadow: '#000'} : npc.color);
+            if(hellMode) {
+                // Hell mode: PM IS a mullet pro. Draw only the mullet pro
+                // sprite (no PM underneath), and overlay wrench + pipe-crack
+                // animation states so the mullet pro itself appears to climb
+                // and fix the pipe.
+                drawMulletProAsPM(npc);
+            } else {
+                drawNPC(npc);
+            }
         }
     }
 
@@ -30865,11 +30897,7 @@ function update() {
                         } else {
                             pm.x += (dx/dist) * mpSpeed;
                             pm.y += (dy/dist) * mpSpeed;
-                            // Walking up-screen is walking away, so show his
-                            // back; he turns to face the camera again when he
-                            // arrives (pm.arrived, above).
-                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left')
-                                                                    : (dy < 0 ? 'back' : 'forward');
+                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                         }
                     }
                 }
@@ -30892,7 +30920,9 @@ function update() {
                             if(Math.abs(mp.x - safeX) < 12 && Math.abs(mp.y - safeY) < 12) {
                                 mp.mpPhase = 'extracting';
                                 mp.mpExtractStart = Date.now();
-                                mp.facing = 'forward';
+                                // The safe is on the far wall, so working it is
+                                // done with his back to the camera.
+                                mp.facing = 'back';
                                 mp.mpWaypointPhase = null;
                             }
                         }
