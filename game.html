@@ -2827,16 +2827,35 @@ function _drawMulletProAsPM(npc) {
             charHand(leftHandX,  leftHandY,  1.5*MP_S, '#f5c89a');
             charHand(rightHandX, rightHandY, 1.5*MP_S, '#f5c89a');
         } else {
-            // Climbing — both arms up to a rung above his head
-            const climbOff = climbCycle;
-            const leftHandY  = (y - 32) - climbOff;
-            const rightHandY = (y - 32) + climbOff;
-            charLimb(leftShoulderX,  shoulderY, leftShoulderX,  leftHandY,  2.0*MP_S, SL_L,
-                     leftShoulderX - 2, (shoulderY + leftHandY) / 2);
-            charLimb(rightShoulderX, shoulderY, rightShoulderX, rightHandY, 2.0*MP_S, SL_R,
-                     rightShoulderX + 2, (shoulderY + rightHandY) / 2);
-            charHand(leftShoulderX,  leftHandY,  1.5*MP_S, '#f5c89a');
-            charHand(rightShoulderX, rightHandY, 1.5*MP_S, '#f5c89a');
+            // Climbing — one hand up the RAIL above his head, the other down at
+            // chest height, swapping over the cycle. Both arms used to go
+            // straight up together to a fixed y-32 at +/-16.6 — wider than the
+            // rails are at head height, so his hands hung in the gap between
+            // rungs holding nothing, and the pose read as surrender.
+            //
+            // The rails, not the rungs: this ladder has six rungs spread over a
+            // height that changes as he climbs, so their spacing runs from 28px
+            // to 71px and no fixed reach lands on one. Snapping to the nearest
+            // rung put his hands at hip height at the top of the ladder. The
+            // rails exist at every height, and are what you hold on a stepladder.
+            //
+            // npc.y, not the local y: while a pipe is cracked the body gets a
+            // pacing/jump offset and the ladder does not move with it.
+            const L = stepLadderGeom(npc.y - FOOT_FIX.mulletProAsPM);
+            const railX = (yy) => L.topHalfW +
+                Math.max(0, Math.min(1, (yy - L.ladderTop) / L.ladderH)) * (L.botHalfW - L.topHalfW);
+            const leadY  = y - 44 - climbCycle;   // reaching hand, above his head
+            const trailY = y - 12 + climbCycle;   // the other one, at his chest
+            const leftLeads = climbCycle >= 0;
+            const lHy = leftLeads ? leadY : trailY, rHy = leftLeads ? trailY : leadY;
+            const lHx = x - railX(lHy),  rHx = x + railX(rHy);
+            // elbow out from the body: a climber's arm is bent, not a vertical bar
+            charLimb(leftShoulderX,  shoulderY, lHx, lHy, 2.0*MP_S, SL_L,
+                     leftShoulderX - 3, (shoulderY + lHy) / 2);
+            charLimb(rightShoulderX, shoulderY, rHx, rHy, 2.0*MP_S, SL_R,
+                     rightShoulderX + 3, (shoulderY + rHy) / 2);
+            charHand(lHx, lHy, 1.5*MP_S, '#f5c89a');
+            charHand(rHx, rHy, 1.5*MP_S, '#f5c89a');
         }
 
         // (legs come from the shared sprite above — its walk bob alternates them
@@ -6458,6 +6477,25 @@ function drawHandWheelValve(pipeX, pipeY, npc, horizontal) {
 }
 
 // Draw color-coordinated step-ladder for pipe managers
+// The step ladder's geometry, so a climber's hands can land on the rungs the
+// ladder actually draws instead of floating beside them. _drawStepLadder and
+// the hell climbing pose both read this; before, only the ladder knew where its
+// rungs were, and the climber's hands were pinned at +/-16.6 either side of his
+// head — outside the rails, holding air.
+function stepLadderGeom(npcY) {
+    const feetY = npcY + 32;               // NPC feet bottom
+    const floorY = 400;
+    const ladderTop = feetY - 130;         // above window (275), below valve (~196)
+    const ladderH = floorY - ladderTop;
+    const topHalfW = 10, botHalfW = 18, numRungs = 6;
+    // rung i (1..numRungs): its y, and the rails' half-width there
+    const rung = (i) => {
+        const t = i / (numRungs + 1);
+        return { y: ladderTop + t * ladderH, hw: topHalfW + t * (botHalfW - topHalfW) };
+    };
+    const standIdx = Math.round((feetY - ladderTop) / ladderH * (numRungs + 1));
+    return { feetY, floorY, ladderTop, ladderH, topHalfW, botHalfW, numRungs, rung, standIdx };
+}
 function drawStepLadder(x, npcY, color) {
     // The ladder hangs from the NPC's feet but stands on the fixed floor, so
     // its height varies with npcY — derive the shade box from the same numbers
@@ -6468,18 +6506,10 @@ function drawStepLadder(x, npcY, color) {
                 () => _drawStepLadder(x, npcY, color));
 }
 function _drawStepLadder(x, npcY, color) {
-    const s = 2;
-    const feetY = npcY + 16 * s; // NPC feet bottom
-    const floorY = 400;
-
-    // Ladder extends above window but below valve
-    const ladderTop = feetY - 130; // above window (275), below valve (~196)
-    const ladderH = floorY - ladderTop;
+    const L = stepLadderGeom(npcY);
+    const { feetY, floorY, ladderTop, ladderH, topHalfW, botHalfW, numRungs } = L;
 
     if (ladderH < 20) return;
-
-    const topHalfW = 10;
-    const botHalfW = 18;
 
     // Shadow at base
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -6505,24 +6535,19 @@ function _drawStepLadder(x, npcY, color) {
     ctx.stroke();
 
     // Rungs - metallic gray, more rungs for taller ladder
-    const numRungs = 6;
     ctx.strokeStyle = '#aaa';
     ctx.lineWidth = 2.5;
     for (let i = 1; i <= numRungs; i++) {
-        const t = i / (numRungs + 1);
-        const rY = ladderTop + t * ladderH;
-        const hw = topHalfW + t * (botHalfW - topHalfW);
+        const r = L.rung(i);
         ctx.beginPath();
-        ctx.moveTo(x - hw, rY);
-        ctx.lineTo(x + hw, rY);
+        ctx.moveTo(x - r.hw, r.y);
+        ctx.lineTo(x + r.hw, r.y);
         ctx.stroke();
     }
 
     // Rung where PM stands (highlighted — the rung closest to feet level)
-    const standRungIdx = Math.round((feetY - ladderTop) / ladderH * (numRungs + 1));
-    const standT = standRungIdx / (numRungs + 1);
-    const standY = ladderTop + standT * ladderH;
-    const standHW = topHalfW + standT * (botHalfW - topHalfW);
+    const stand = L.rung(L.standIdx);
+    const standY = stand.y, standHW = stand.hw;
     ctx.strokeStyle = color.hex;
     ctx.lineWidth = 3;
     ctx.beginPath();
