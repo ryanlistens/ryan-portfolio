@@ -7315,9 +7315,13 @@ function _drawWrenchGun(x, y, facing) {
 // pose in the detective's units, scaled by the carrier's reach.
 // Only the sleeve colour is still read from here — the arm geometry was
 // reverted to a single fixed shoulder/wrist pair in WEAPON_ARM.
+// The sleeve colour, and where the arm is rooted. WEAPON_ARM's sx/sy are the
+// DETECTIVE's shoulder; Mullet Pro is a bigger body (s = 2.4 against 2) and his
+// deltoid is at +/-16.6, -8.9, so hanging his sleeve at the detective's +/-13.8
+// started it above his chest with nothing joining it to the shoulder.
 const WEAPON_CARRIER = {
-    baldManager: { sleeve: '#f2f2f2' },
-    mulletPro:   { sleeve: charMix('#800020', '#000000', 0.08) },
+    baldManager: { sleeve: '#f2f2f2',                             shX: 13.8, shY: -8.6 },
+    mulletPro:   { sleeve: charMix('#800020', '#000000', 0.08),   shX: 16.6, shY: -8.9 },
 };
 // Which body is under the weapon. The player is Mullet Pro in levels 1-4 and the
 // bald detective in 5 and 6 — deriving this from `level === 6` alone put Mullet
@@ -7359,7 +7363,8 @@ function drawWeaponInHand(x, y, facing, shape, opts) {
     // The sleeve still follows the body it grows out of — that was a separate
     // fix (maroon on the detective's white shirt) and is not part of the arm
     // geometry being reverted.
-    const SLEEVE = WEAPON_CARRIER[playerCarrier()].sleeve, SKIN = '#d4a882';
+    const C = WEAPON_CARRIER[playerCarrier()];
+    const SLEEVE = C.sleeve, SKIN = '#d4a882';
     // opts.gripX/gripY move the point the weapon hangs from, for a handle that
     // is not gripped right at the top; opts.lean adds tilt on top of the
     // facing's own rotation, which is how the pipe wrench swings.
@@ -7367,7 +7372,8 @@ function drawWeaponInHand(x, y, facing, shape, opts) {
     const gripY = o.gripY === undefined ? 0 : o.gripY;
     const lean = o.lean || 0;
 
-    charLimb(x + A.sx, y + A.sy, x + A.wx, y + A.wy, 5.2, SLEEVE, x + A.bend[0], y + A.bend[1]);
+    const shX = (A.sx < 0 ? -1 : 1) * C.shX, shY = C.shY;
+    charLimb(x + shX, y + shY, x + A.wx, y + A.wy, 5.2, SLEEVE, x + A.bend[0], y + A.bend[1]);
     ctx.fillStyle = 'rgba(0,0,0,0.16)';                          // cuff shadow
     ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.9, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = SKIN;                                        // fist on the grip
@@ -30824,7 +30830,9 @@ function update() {
                             if(Math.abs(mp.x - safeX) < 12 && Math.abs(mp.y - safeY) < 12) {
                                 mp.mpPhase = 'extracting';
                                 mp.mpExtractStart = Date.now();
-                                mp.facing = 'forward';
+                                // The safe is on the far wall, so working it is
+                                // done with his back to the camera.
+                                mp.facing = 'back';
                                 mp.mpWaypointPhase = null;
                             }
                         }
