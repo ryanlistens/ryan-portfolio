@@ -2795,23 +2795,37 @@ function _drawMulletProAsPM(npc) {
         // CLIMBING ARMS GO BEHIND THE BODY. He is between the camera and the
         // ladder, so his arms pass his own torso to reach it: only their outer
         // edge and his hands show. Drawn after the body they sat on top of his
-        // back and read as arms flung out behind him.
-        //
-        // Short, too. The ordinary pipe manager climbs with his arms tucked at
-        // the torso's edge and just the hands showing, alternating a few pixels
-        // — that is the house style this has to match. Reaching one arm right
-        // over his own head to a rung, as this did, read as flailing.
+        // back and read as arms flung out behind him — that was the fault, not
+        // the reach itself.
         if(isClimbing) {
-            // his torso runs to +/-17.5 at the shoulders, so the hand sits just
-            // outside that, where the rails pass behind him
-            const handX = 18.5;
-            const lHandY = y - 13 - climbCycle, rHandY = y - 13 + climbCycle;
-            charLimb(leftShoulderX,  shoulderY, x - handX, lHandY, 2.0*MP_S, SL_L,
-                     leftShoulderX - 1, shoulderY - 3);
-            charLimb(rightShoulderX, shoulderY, x + handX, rHandY, 2.0*MP_S, SL_R,
-                     rightShoulderX + 1, shoulderY - 3);
-            charHand(x - handX, lHandY, 1.5*MP_S, '#f5c89a');
-            charHand(x + handX, rHandY, 1.5*MP_S, '#f5c89a');
+            // One hand up the RAIL above his head, the other down at chest
+            // height, swapping over the cycle — deliberately NOT the pipe
+            // managers' tucked-in climb. He is a mullet pro pretending to be
+            // one of them, and he should not move like one.
+            //
+            // The rails, not the rungs: this ladder has six rungs spread over a
+            // height that changes as he climbs, so their spacing runs from 28px
+            // to 71px and no fixed reach lands on one. Snapping to the nearest
+            // rung put his hands at hip height at the top of the ladder. The
+            // rails exist at every height, and are what you hold on a stepladder.
+            //
+            // npc.y, not the local y: while a pipe is cracked the body gets a
+            // pacing/jump offset and the ladder does not move with it.
+            const L = stepLadderGeom(npc.y - FOOT_FIX.mulletProAsPM);
+            const railX = (yy) => L.topHalfW +
+                Math.max(0, Math.min(1, (yy - L.ladderTop) / L.ladderH)) * (L.botHalfW - L.topHalfW);
+            const leadY  = y - 44 - climbCycle;   // reaching hand, above his head
+            const trailY = y - 12 + climbCycle;   // the other one, at his chest
+            const leftLeads = climbCycle >= 0;
+            const lHy = leftLeads ? leadY : trailY, rHy = leftLeads ? trailY : leadY;
+            const lHx = x - railX(lHy),  rHx = x + railX(rHy);
+            // elbow out from the body: a climber's arm is bent, not a vertical bar
+            charLimb(leftShoulderX,  shoulderY, lHx, lHy, 2.0*MP_S, SL_L,
+                     leftShoulderX - 3, (shoulderY + lHy) / 2);
+            charLimb(rightShoulderX, shoulderY, rHx, rHy, 2.0*MP_S, SL_R,
+                     rightShoulderX + 3, (shoulderY + rHy) / 2);
+            charHand(lHx, lHy, 1.5*MP_S, '#f5c89a');
+            charHand(rHx, rHy, 1.5*MP_S, '#f5c89a');
         }
 
         // The BODY is the shared sprite's back view — head, mullet, jacket and
@@ -4248,7 +4262,10 @@ function _drawNPC(npc) {
         ctx.globalAlpha = 1;
     }
 
-    if(isClimbing || npc.state === 'fixing') {
+    // npc.facing === 'back' reuses this same pose with the animation off, so a
+    // pipe manager walking away from the camera shows his back instead of
+    // moonwalking. It is the only back view the PM sprite has.
+    if(isClimbing || npc.state === 'fixing' || npc.facing === 'back') {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
         const isFix = npc.state === 'fixing';
@@ -7397,16 +7414,18 @@ function drawWeaponInHand(x, y, facing, shape, opts) {
     // facing left while it rode high facing right.
     const lean = o.lean || 0;
 
-    // Sleeve then shoulder cap — exactly what both BODIES do for their own arms
-    // (charLimb in a sleeve tone, charDeltoid over the joint). There used to be
-    // a 'rgba(0,0,0,0.20)' stroke 1.2px wider than the sleeve underneath this,
-    // to stop a white sleeve vanishing on a white shirt. On Mullet Pro, whose
-    // sleeve is maroon over a maroon jacket, that dark rim was the only thing
-    // between arm and torso and it read as a gap — the arm looked detached.
-    // Neither body outlines its own arms; they separate by TONE, so this does
-    // too.
-    charLimb(x + sx, y + sy, x + hx, y + hy, 4.6 * reach, C.sleeve, x + bx, y + by);
-    charDeltoid(x + sx, y + sy, C.capR, C.cap);
+    // The limb is rooted INSIDE the torso, so it emerges from the body's own
+    // mass. A charDeltoid cap at the shoulder — which is what the bodies use —
+    // is wrong here: on them the cap sits at the top of a full-width arm hanging
+    // DOWN and is subsumed by it, but a weapon arm leaves sideways, so the cap
+    // was left as a lone dark disc standing proud of the shoulder.
+    //
+    // There was also a 'rgba(0,0,0,0.20)' stroke 1.2px wider than the sleeve
+    // under this, to stop a white sleeve vanishing on a white shirt. On Mullet
+    // Pro — maroon sleeve, maroon jacket — that dark rim was the only thing
+    // between arm and torso and it read as a seam. Both bodies separate their
+    // arms by TONE, not by an outline, so this does too.
+    charLimb(x + sx * 0.72, y + sy, x + hx, y + hy, 4.6 * reach, C.sleeve, x + bx, y + by);
 
     ctx.save();
     ctx.translate(x + hx, y + hy);
@@ -27478,7 +27497,10 @@ function drawScene() {
                     y: npc.y,
                     color: npc.color,
                     state: 'happy',
-                    needsDoc: false
+                    needsDoc: false,
+                    // was omitted, so every exiting PM faced the camera through
+                    // the whole sequence while Mullet Pro turned
+                    facing: npc.facing
                 };
                 drawNPC(tempNPC);
                 if(npc.hasSack) {
@@ -30843,7 +30865,11 @@ function update() {
                         } else {
                             pm.x += (dx/dist) * mpSpeed;
                             pm.y += (dy/dist) * mpSpeed;
-                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
+                            // Walking up-screen is walking away, so show his
+                            // back; he turns to face the camera again when he
+                            // arrives (pm.arrived, above).
+                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left')
+                                                                    : (dy < 0 ? 'back' : 'forward');
                         }
                     }
                 }
