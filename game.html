@@ -2792,40 +2792,20 @@ function _drawMulletProAsPM(npc) {
         const SL_L = '#5c0016', SL_R = charMix('#800020', '#000000', 0.08);
         const MP_S = 2.4;
 
-        // CLIMBING ARMS GO BEHIND THE BODY. He is between the camera and the
-        // ladder, so his arms pass his own torso to reach it: only their outer
-        // edge and his hands show. Drawn after the body they sat on top of his
-        // back and read as arms flung out behind him — that was the fault, not
-        // the reach itself.
+        // Climbing — both arms up to a rung above his head. This is the
+        // pose as it stood before the ladder-grip work; reverted at the
+        // author's request. Drawn BEFORE the body so the arms pass between his
+        // torso and the ladder rather than sitting on top of his back.
         if(isClimbing) {
-            // One hand up the RAIL above his head, the other down at chest
-            // height, swapping over the cycle — deliberately NOT the pipe
-            // managers' tucked-in climb. He is a mullet pro pretending to be
-            // one of them, and he should not move like one.
-            //
-            // The rails, not the rungs: this ladder has six rungs spread over a
-            // height that changes as he climbs, so their spacing runs from 28px
-            // to 71px and no fixed reach lands on one. Snapping to the nearest
-            // rung put his hands at hip height at the top of the ladder. The
-            // rails exist at every height, and are what you hold on a stepladder.
-            //
-            // npc.y, not the local y: while a pipe is cracked the body gets a
-            // pacing/jump offset and the ladder does not move with it.
-            const L = stepLadderGeom(npc.y - FOOT_FIX.mulletProAsPM);
-            const railX = (yy) => L.topHalfW +
-                Math.max(0, Math.min(1, (yy - L.ladderTop) / L.ladderH)) * (L.botHalfW - L.topHalfW);
-            const leadY  = y - 44 - climbCycle;   // reaching hand, above his head
-            const trailY = y - 12 + climbCycle;   // the other one, at his chest
-            const leftLeads = climbCycle >= 0;
-            const lHy = leftLeads ? leadY : trailY, rHy = leftLeads ? trailY : leadY;
-            const lHx = x - railX(lHy),  rHx = x + railX(rHy);
-            // elbow out from the body: a climber's arm is bent, not a vertical bar
-            charLimb(leftShoulderX,  shoulderY, lHx, lHy, 2.0*MP_S, SL_L,
-                     leftShoulderX - 3, (shoulderY + lHy) / 2);
-            charLimb(rightShoulderX, shoulderY, rHx, rHy, 2.0*MP_S, SL_R,
-                     rightShoulderX + 3, (shoulderY + rHy) / 2);
-            charHand(lHx, lHy, 1.5*MP_S, '#f5c89a');
-            charHand(rHx, rHy, 1.5*MP_S, '#f5c89a');
+            const climbOff = climbCycle;
+            const leftHandY  = (y - 32) - climbOff;
+            const rightHandY = (y - 32) + climbOff;
+            charLimb(leftShoulderX,  shoulderY, leftShoulderX,  leftHandY,  2.0*MP_S, SL_L,
+                     leftShoulderX - 2, (shoulderY + leftHandY) / 2);
+            charLimb(rightShoulderX, shoulderY, rightShoulderX, rightHandY, 2.0*MP_S, SL_R,
+                     rightShoulderX + 2, (shoulderY + rightHandY) / 2);
+            charHand(leftShoulderX,  leftHandY,  1.5*MP_S, '#f5c89a');
+            charHand(rightShoulderX, rightHandY, 1.5*MP_S, '#f5c89a');
         }
 
         // The BODY is the shared sprite's back view — head, mullet, jacket and
@@ -4262,10 +4242,7 @@ function _drawNPC(npc) {
         ctx.globalAlpha = 1;
     }
 
-    // npc.facing === 'back' reuses this same pose with the animation off, so a
-    // pipe manager walking away from the camera shows his back instead of
-    // moonwalking. It is the only back view the PM sprite has.
-    if(isClimbing || npc.state === 'fixing' || npc.facing === 'back') {
+    if(isClimbing || npc.state === 'fixing') {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
         const isFix = npc.state === 'fixing';
@@ -7264,7 +7241,7 @@ function _drawPipeWrench(x, y, facing) {
         const t = 1 - (pipeWrench.swingTimer / 22);
         lean = -0.85 + Math.sin(t * Math.PI) * 1.55;
     }
-    drawWeaponInHand(x, y, facing, pipeWrenchShape, { lean, gripX: 1.4, gripY: -0.6 });
+    drawWeaponInHand(x, y, facing, pipeWrenchShape, { lean });
 }
 
 // Draw a spinning wrench projectile (boomerang bolt)
@@ -7336,19 +7313,11 @@ function _drawWrenchGun(x, y, facing) {
 //
 // So the SHOULDER and the sleeve come from the carrier, and WEAPON_ARM holds the
 // pose in the detective's units, scaled by the carrier's reach.
-// capR/cap are the shoulder cap each BODY draws over its own arm joints
-// (charDeltoid at bmShX/mpShX). When a weapon is out, the body suppresses that
-// whole arm — cap included — so without redrawing it here the sleeve started as
-// a detached blob with a dark notch between it and the torso.
+// Only the sleeve colour is still read from here — the arm geometry was
+// reverted to a single fixed shoulder/wrist pair in WEAPON_ARM.
 const WEAPON_CARRIER = {
-    baldManager: { shX: 6.9 * 2,   shY:  2.2 * 2   + FOOT_FIX.baldManager,
-                   // a shade under the shirt's #fff, the way the body's own
-                   // arms sit at #dcdcdc/#f6f6f6 against it
-                   sleeve: '#dedede',
-                   capR: 1.15 * 2,   cap: '#f6f6f6' },
-    mulletPro:   { shX: 6.9 * 2.4, shY: -0.8 * 2.4 + FOOT_FIX.mulletPro,
-                   sleeve: charMix('#800020', '#000000', 0.08),
-                   capR: 1.2 * 2.4,  cap: charMix('#800020', '#ffffff', 0.10) },
+    baldManager: { sleeve: '#f2f2f2' },
+    mulletPro:   { sleeve: charMix('#800020', '#000000', 0.08) },
 };
 // Which body is under the weapon. The player is Mullet Pro in levels 1-4 and the
 // bald detective in 5 and 6 — deriving this from `level === 6` alone put Mullet
@@ -7363,28 +7332,16 @@ function playerCarrier() {
     return (level === 5 || level === 6) ? 'baldManager' : 'mulletPro';
 }
 //
-// hx/hy is the centre of the FIST, not the weapon's origin. The arm is drawn to
-// it and the weapon is hung off it, so the sleeve always ends inside the hand;
-// ending the limb at the weapon's origin left its round cap sticking out over
-// the frame as a white lump.
-//
-// 'fore' foreshortens the weapon ALONG ITS OWN AXIS. Firing up the screen is
-// firing away from the camera and firing down is firing at it; either way the
-// barrel points out of the picture plane and you see very little of its length.
-// Drawn at full length instead, the up pose put a 19px barrel straight past the
-// player's ear, which read as holding the gun to his own head.
-// Constant, so they are not re-mixed from hex on every frame.
-const WEAPON_SKIN = '#d4a882', WEAPON_SKIN_SHADE = charMix('#d4a882', '#000000', 0.22);
-// shMul pulls the shoulder INBOARD for the profile facings. C.shX is the
-// carrier's FRONT-view shoulder half-width; seen edge-on the torso is narrower
-// (Mullet Pro is +/-18 front but +/-13.5 in profile), so hanging the arm at the
-// front-view width rooted it 3px outside his body, with the dark tee wedge
-// showing through the gap. That is the detached arm.
+// Reverted at the author's request to the arm as it stood before the weapon
+// rebuild: a 5.2-wide sleeve from a fixed shoulder to a fixed wrist, with the
+// cuff and fist drawn at the wrist in WORLD space. The per-carrier shoulder,
+// the proportional reach, the foreshortening and the grip-space hand are all
+// gone with it. The weapon SHAPES are untouched.
 const WEAPON_ARM = {
-    right: { hx:  17.5, hy: -1.4, rot: 0,     flip: false, fore: 1,    bend: [ 16.5, -6], shMul: 0.66 },
-    left:  { hx: -17.5, hy: -1.4, rot: 0,     flip: true,  fore: 1,    bend: [-16.5, -6], shMul: 0.66 },
-    up:    { hx:  15.5, hy:  1.4, rot: -1.15, flip: false, fore: 0.58, bend: [ 16.0, -5], shMul: 1 },
-    down:  { hx:  14.0, hy:  2.6, rot: 0.72,  flip: false, fore: 0.70, bend: [ 15.5, -1], shMul: 1 },
+    right: { sx:  13.8, sy: -8.6, wx:  19,  wy: -2.5, rot: 0,            flip: false, bend: [ 16, -5] },
+    left:  { sx: -13.8, sy: -8.6, wx: -19,  wy: -2.5, rot: 0,            flip: true,  bend: [-16, -5] },
+    up:    { sx:  13.8, sy: -8.6, wx:  13,  wy: -8,   rot: -Math.PI / 2, flip: false, bend: [ 15, -6] },
+    down:  { sx:  13.8, sy: -8.6, wx:  13,  wy:  4,   rot: 0.62,         flip: false, bend: [ 15, -1] },
 };
 // Only 'forward'/'back' (idle, no cardinal direction) fall back to the last
 // horizontal facing, so the arm still anchors cleanly.
@@ -7398,52 +7355,34 @@ function weaponFacing(facing) {
 // facing's own rotation, which is how the pipe wrench swings.
 function drawWeaponInHand(x, y, facing, shape, opts) {
     const A = WEAPON_ARM[weaponFacing(facing)];
-    const C = WEAPON_CARRIER[playerCarrier()];
-    // The pose is authored on the detective; a bigger body reaches further in
-    // proportion, which also drops the fist to where its own hands hang.
-    const reach = C.shX / (6.9 * 2);
-    const sx = (A.hx < 0 ? -1 : 1) * C.shX * A.shMul, sy = C.shY;
-    const hx = A.hx * reach, hy = A.hy * reach;
-    const bx = A.bend[0] * reach, by = A.bend[1] * reach;
     const o = opts || {};
-    const gripX = o.gripX === undefined ? 2.0 : o.gripX;
-    const gripY = o.gripY === undefined ? -1.4 : o.gripY;
-    // lean is NOT re-signed for the flipped facings: the mirror is applied
-    // before the rotation, so the same local angle already comes out
-    // symmetrically. Negating it swung the pipe wrench's head down behind him
-    // facing left while it rode high facing right.
+    // The sleeve still follows the body it grows out of — that was a separate
+    // fix (maroon on the detective's white shirt) and is not part of the arm
+    // geometry being reverted.
+    const SLEEVE = WEAPON_CARRIER[playerCarrier()].sleeve, SKIN = '#d4a882';
+    // opts.gripX/gripY move the point the weapon hangs from, for a handle that
+    // is not gripped right at the top; opts.lean adds tilt on top of the
+    // facing's own rotation, which is how the pipe wrench swings.
+    const gripX = o.gripX === undefined ? 0 : o.gripX;
+    const gripY = o.gripY === undefined ? 0 : o.gripY;
     const lean = o.lean || 0;
 
-    // The limb is rooted INSIDE the torso, so it emerges from the body's own
-    // mass. A charDeltoid cap at the shoulder — which is what the bodies use —
-    // is wrong here: on them the cap sits at the top of a full-width arm hanging
-    // DOWN and is subsumed by it, but a weapon arm leaves sideways, so the cap
-    // was left as a lone dark disc standing proud of the shoulder.
-    //
-    // There was also a 'rgba(0,0,0,0.20)' stroke 1.2px wider than the sleeve
-    // under this, to stop a white sleeve vanishing on a white shirt. On Mullet
-    // Pro — maroon sleeve, maroon jacket — that dark rim was the only thing
-    // between arm and torso and it read as a seam. Both bodies separate their
-    // arms by TONE, not by an outline, so this does too.
-    charLimb(x + sx * 0.72, y + sy, x + hx, y + hy, 4.6 * reach, C.sleeve, x + bx, y + by);
+    charLimb(x + A.sx, y + A.sy, x + A.wx, y + A.wy, 5.2, SLEEVE, x + A.bend[0], y + A.bend[1]);
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';                          // cuff shadow
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = SKIN;                                        // fist on the grip
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.7, 0, Math.PI * 2); ctx.fill();
 
     ctx.save();
-    ctx.translate(x + hx, y + hy);
+    ctx.translate(x + A.wx, y + A.wy);
     if(A.flip) ctx.scale(-1, 1);
     ctx.rotate(A.rot + lean);
-    // heel of the hand, behind the weapon so the frame sits over it
-    charHand(-0.4, 0.4, 2.6, WEAPON_SKIN_SHADE);
-    ctx.save();
     ctx.translate(gripX, gripY);
-    ctx.scale(A.fore, 1);                     // foreshorten about the grip, not the muzzle
     shape();
     ctx.restore();
-    // The fist closes over the TOP of the grip and leaves its heel showing
-    // below — at this size that read is the whole point of the pose.
-    charHand(0.5, 0.2, 2.2, WEAPON_SKIN);
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';       // knuckles
-    ctx.beginPath(); ctx.arc(0.5, 1.4, 2.0, 0.15, Math.PI - 0.15); ctx.fill();
-    ctx.restore();
+    // the fist reads in front of the grip
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.0, 0, Math.PI * 2); ctx.fill();
 }
 
 // The lit boxes, as named constants so the render checks can read the real
@@ -27497,10 +27436,7 @@ function drawScene() {
                     y: npc.y,
                     color: npc.color,
                     state: 'happy',
-                    needsDoc: false,
-                    // was omitted, so every exiting PM faced the camera through
-                    // the whole sequence while Mullet Pro turned
-                    facing: npc.facing
+                    needsDoc: false
                 };
                 drawNPC(tempNPC);
                 if(npc.hasSack) {
@@ -30865,11 +30801,7 @@ function update() {
                         } else {
                             pm.x += (dx/dist) * mpSpeed;
                             pm.y += (dy/dist) * mpSpeed;
-                            // Walking up-screen is walking away, so show his
-                            // back; he turns to face the camera again when he
-                            // arrives (pm.arrived, above).
-                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left')
-                                                                    : (dy < 0 ? 'back' : 'forward');
+                            pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                         }
                     }
                 }
