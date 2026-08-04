@@ -2919,6 +2919,135 @@ function drawBaldManager(x, y, ...rest) {
     shadeSprite(x + 0, gy + -14, 42, 58, () => _drawBaldManager(x, gy, ...rest));
 }
 
+// The detective in PROFILE. Same construction as Mullet Pro's profile: a head
+// built from its silhouette rather than a square with one eye on it, and a
+// torso whose DEPTH is drawn, not its front-view width.
+//
+// u(k) walks forward from the body's centre in the direction he faces, so both
+// sides are one description instead of two mirrored blocks that can drift.
+function detectiveProfileHead(x, y, s, d, skin) {
+    const u = (k) => x + d * k * s;
+    const browY = y - 8.6*s, chinY = y - 3.2*s, crownY = y - 12.4*s;
+
+    // ---- SKULL: bald dome, occiput at the back, brow ridge at the front
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.moveTo(u(-4.6), chinY - 0.6*s);              // jaw, back
+    ctx.lineTo(u(-4.9), y - 9.4*s);                  // back of the head
+    ctx.quadraticCurveTo(u(-4.4), crownY, u(-1.2), crownY - 0.3*s);
+    ctx.quadraticCurveTo(u(2.6), crownY, u(4.2), y - 9.6*s);   // forehead
+    ctx.lineTo(u(4.6), browY);                       // brow
+    ctx.lineTo(u(5.4), y - 7.2*s);                   // nose bridge -> tip
+    ctx.lineTo(u(4.3), y - 6.3*s);                   // under the nose
+    ctx.lineTo(u(4.5), y - 5.2*s);                   // top lip
+    ctx.lineTo(u(3.6), y - 4.2*s);                   // mouth / chin step
+    ctx.lineTo(u(3.4), chinY);                       // chin
+    ctx.quadraticCurveTo(u(0.4), chinY + 0.9*s, u(-4.6), chinY - 0.6*s);
+    ctx.closePath(); ctx.fill();
+
+    // pate highlight, the same band the front view carries
+    ctx.fillStyle = '#e8d4b8';
+    ctx.beginPath();
+    ctx.moveTo(u(-4.7), y - 10.2*s);
+    ctx.quadraticCurveTo(u(-4.2), crownY, u(-1.2), crownY - 0.3*s);
+    ctx.quadraticCurveTo(u(2.6), crownY, u(4.1), y - 9.7*s);
+    ctx.lineTo(u(3.6), y - 8.8*s);
+    ctx.quadraticCurveTo(u(-1.0), y - 11.2*s, u(-4.4), y - 9.4*s);
+    ctx.closePath(); ctx.fill();
+
+    // ---- EAR, set back from the brow
+    ctx.fillStyle = charMix(skin, '#000000', 0.10);
+    ctx.beginPath(); ctx.ellipse(u(-1.4), y - 7.4*s, 1.15*s, 1.5*s, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = charMix(skin, '#000000', 0.26);
+    ctx.beginPath(); ctx.ellipse(u(-1.4), y - 7.3*s, 0.5*s, 0.75*s, 0, 0, Math.PI*2); ctx.fill();
+
+    // ---- ONE eye and one brow, set behind the nose, not on the cheek
+    ctx.fillStyle = '#4a3a2c';
+    ctx.fillRect(u(2.6), y - 9.7*s, 1.6*s, 0.36*s);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(u(3.3), browY, 0.85*s, 0.78*s, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(u(3.7), browY, 0.46*s, 0, Math.PI*2); ctx.fill();
+
+    // ---- mouth line, tucked under the nose instead of floating mid-cheek
+    ctx.strokeStyle = 'rgba(90,55,40,0.55)'; ctx.lineWidth = 0.45*s;
+    ctx.beginPath(); ctx.moveTo(u(4.2), y - 4.9*s); ctx.lineTo(u(3.2), y - 4.7*s); ctx.stroke();
+
+    // ---- NECK, behind the jaw
+    ctx.fillStyle = charMix(skin, '#000000', 0.12);
+    ctx.fillRect(u(-2.4), chinY - 0.2*s, 4.0*s, 3.4*s);
+}
+
+function detectiveProfileBody(x, y, s, d, stride, legBob, holding, hasGun, skin) {
+    const u = (k) => x + d * k * s;
+    const SHIRT_N = '#ffffff', SHIRT_F = '#d3d3d3';
+    // The near sleeve needs to be a shade off the shirt or it disappears into
+    // it — the same reason the body's front arms sit at #dcdcdc/#f6f6f6.
+    const SLEEVE_N = '#ececec';
+    const TROU_N  = '#1a1a1a', TROU_F  = '#0d0d0d';
+    const shY = y + 1.6*s, hemY = y + 11*s;
+
+    // ---- FAR leg and FAR arm first: they sit behind the torso
+    ctx.fillStyle = TROU_F;
+    ctx.fillRect(u(-1.6) - (d<0?0:0), y + 15*s - legBob, 4*s, 8*s);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(u(-1.6), y + 23*s - legBob, 4*s, 2*s);
+    if(!holding && !hasGun && Math.abs(stride) > 0.4) {
+        charLimb(u(0.2), shY + 0.6*s, u(-1.4) - stride*0.5, y + 10*s, 1.7*s, SHIRT_F,
+                 u(-0.9), y + 6*s);
+        charHand(u(-1.4) - stride*0.5, y + 10.6*s, 1.0*s, charMix(skin,'#000000',0.18));
+    }
+
+    // ---- TORSO in profile: chest forward, back flatter. Its DEPTH is about
+    // 9*s, not the front view's 14*s.
+    ctx.fillStyle = SHIRT_N;
+    ctx.beginPath();
+    ctx.moveTo(u(-4.4), shY);
+    ctx.quadraticCurveTo(u(-5.0), y + 6*s, u(-4.6), hemY);
+    ctx.lineTo(u(4.0), hemY);
+    ctx.quadraticCurveTo(u(4.9), y + 6*s, u(4.2), shY + 0.4*s);
+    ctx.quadraticCurveTo(u(0.2), shY - 1.0*s, u(-4.4), shY);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';                      // back of the shirt in shade
+    ctx.beginPath();
+    ctx.moveTo(u(-4.4), shY);
+    ctx.quadraticCurveTo(u(-5.0), y + 6*s, u(-4.6), hemY);
+    ctx.lineTo(u(-2.4), hemY); ctx.lineTo(u(-2.4), shY - 0.3*s);
+    ctx.closePath(); ctx.fill();
+
+    // ---- COLLAR and TIE, edge-on at the FRONT of the chest
+    ctx.fillStyle = '#e6e6e6';
+    ctx.beginPath();
+    ctx.moveTo(u(1.0), shY - 0.6*s); ctx.lineTo(u(4.2), shY + 0.2*s);
+    ctx.lineTo(u(3.4), y + 4.0*s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#800020';
+    ctx.beginPath();
+    ctx.moveTo(u(3.0), y + 2.6*s); ctx.lineTo(u(4.3), y + 2.9*s);
+    ctx.lineTo(u(3.6), y + 9.4*s); ctx.lineTo(u(2.9), y + 9.2*s);
+    ctx.closePath(); ctx.fill();
+
+    // ---- BELT and NEAR leg
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(u(-4.7), hemY, 9.0*s, 4*s);
+    ctx.fillStyle = TROU_N;
+    ctx.fillRect(u(-2.4), y + 15*s + legBob, 4.4*s, 8*s);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(u(-2.4), y + 23*s + legBob, 5.2*s, 2*s);     // shoe, toe forward
+
+    // ---- NEAR arm. One arm: in profile the near one covers the far one, and
+    // the gun and carry poses supply their own.
+    if(hasGun) return;
+    if(holding) {
+        charLimb(u(1.4), shY + 0.6*s, u(2.6), y - 5.2*s, 1.9*s, SLEEVE_N, u(3.0), y - 1*s);
+        charHand(u(2.7), y - 6.0*s, 1.1*s, skin);
+    } else {
+        charLimb(u(1.4), shY + 0.6*s, u(1.8) + stride*0.6, y + 10*s, 1.9*s, SLEEVE_N,
+                 u(2.6), y + 6*s);
+        charHand(u(1.8) + stride*0.6, y + 10.6*s, 1.1*s, skin);
+    }
+    charDeltoid(u(1.4), shY + 0.6*s, 1.15*s, '#f6f6f6');
+}
+
 function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const s = 2;
     const isWalking = Date.now() - player.lastMove < 150;
@@ -2940,100 +3069,15 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     const bmStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
     const bmLegBob = bmStride * 0.67; // Y-alternation for legs
 
-    if(facing === 'left') {
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        ctx.fillStyle = '#e8d4b8';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
-
-        ctx.fillStyle = '#000';
-        drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-        ctx.fillRect(x - 3*s, y - 5*s, 3*s, s);
-
-        ctx.fillStyle = skinColor; // neck
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y + s, 14*s, 10*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x + 5*s, y + s, 2*s, 10*s);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y + s, 4*s, 10*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
-        ctx.fillStyle = '#fff';
-        if(holding) {
-            // One arm. Both put a white bar either side of the document — an
-            // arm at each screen edge, which is the front view's two-handed
-            // carry seen sideways. In profile the near arm covers the far one.
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 17*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // No arm from the body at all: drawRevolver draws the near arm
-            // around the gun, and the far one is behind his torso in profile.
-            // Drawing it put a hand out at his back while the gun was out front
-            // — an arm at each screen edge, the flat-paper-man look again.
-        } else {
-            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
-            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s + bmStride, y + 10*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - bmStride, y + 10*s, 2*s, 2*s);
-        }
-
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
-
-    } else if(facing === 'right') {
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        ctx.fillStyle = '#e8d4b8';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 3*s);
-
-        ctx.fillStyle = '#000';
-        drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-        ctx.fillRect(x, y - 5*s, 3*s, s);
-
-        ctx.fillStyle = skinColor; // neck
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y + s, 14*s, 10*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 7*s, y + s, 2*s, 10*s);
-
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 2*s, y + s, 4*s, 10*s);
-
-        // Arms - raised if holding, extended if hasGun, otherwise hanging with swing
-        ctx.fillStyle = '#fff';
-        if(holding) {
-            // one arm, as above — the near one, on the side he is facing
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 17*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x + 7*s, y - 16*s, 2*s, 2*s);
-        } else if(hasGun) {
-            // as above — the revolver supplies the only arm you can see
-        } else {
-            ctx.fillRect(x - 9*s + bmStride, y + s, 2*s, 10*s);
-            ctx.fillRect(x + 7*s - bmStride, y + s, 2*s, 10*s);
-            ctx.fillStyle = skinColor;
-            ctx.fillRect(x - 9*s + bmStride, y + 10*s, 2*s, 2*s);
-            ctx.fillRect(x + 7*s - bmStride, y + 10*s, 2*s, 2*s);
-        }
-
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
+    if(facing === 'left' || facing === 'right') {
+        // A REAL profile. Both side branches used to draw the FRONT torso —
+        // full 14*s width with the tie centred on it — under a flat square head
+        // with one eye and a mouth bar stuck on the front, which is the
+        // goldfish. Mullet Pro got a proper profile earlier in the remaster;
+        // this is the same treatment for the detective.
+        const d = facing === 'left' ? -1 : 1;
+        detectiveProfileBody(x, y, s, d, bmStride, bmLegBob, holding, hasGun, skinColor);
+        detectiveProfileHead(x, y, s, d, skinColor);
 
     } else {
         ctx.fillStyle = skinColor;
