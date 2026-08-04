@@ -513,7 +513,6 @@ Object.values(levelMusic).forEach(audio => {
 let currentMusic = null;
 let musicMuted = false;
 let audioUnlocked = false;
-let holsterOpen = false; // Leather holster inventory UI state
 
 // Music control functions
 let pendingMusicKey = null; // Track music that should play after user interaction
@@ -1618,8 +1617,6 @@ function initLevel(lv) {
         // Marble Room — security checkpoint to CEO
         level6.marbleRoom = { printerLocked: false, emergencyLights: false };
         level6.marblePrinter = { ui: false, printing: false, progress: 0, item: null, choice: 0 };
-        level6.hasThreeShotRifle = false;
-        level6.threeShotRifleAmmo = 0;
         level6.marbleElevatorTransition = false;
         level6.marbleElevatorFadeAlpha = 0;
         level6.marbleElevatorFadeIn = false;
@@ -1835,6 +1832,17 @@ function level6ActiveWeapon() {
     if(sidearm && wrench) return level6.pistolHolstered ? wrench : sidearm;
     return sidearm || wrench;
 }
+// "Is the revolver the weapon in his hand right now?" Six rooms each carried
+// their own fire branch testing `hasRevolver && revolverAmmo > 0`, which does not
+// consult the holster — so swapping to the auto-wrench put the wrench in his fist
+// everywhere and still fired the revolver in every room but the CEO's office.
+// Those branches consume the keypress, so declining here is all that is needed:
+// the shot falls through to the global auto-wrench handler that sits below them.
+function revolverInHand() {
+    const w = level6ActiveWeapon();
+    return !!w && w.kind === 'revolver';
+}
+
 // Draws whichever weapon is in his hand and the ammo that belongs to it. The
 // weapon is deliberately NOT named: the holster button already says which one
 // is up, and a second floating caption over his head only reads as clutter.
@@ -7262,12 +7270,35 @@ function _drawWrenchGun(x, y, facing) {
 // facing up, and the pipe wrench ended up drawn across Mullet Pro's face in all
 // four facings.
 //
-// The two carriers turn out to have near-identical shoulders in RAW anchor
-// coordinates — the weapons are drawn at the player anchor while the bodies
-// shift themselves down by FOOT_FIX first:
-//     bald manager   shoulder (+/-13.2, -8.4)   resting hands (+/-16,  +7.5)
-//     Mullet Pro     shoulder (+/-13.8, -8.6)   gun hand      (+/-16,  +6.6)
-// so one table serves both and only the sleeve colour changes.
+// The carriers do NOT share a shoulder, and an earlier version of this comment
+// claimed they did. Measured off the bodies' own constants rather than by eye:
+//     bald manager  bmShX = 6.9*s, bmCapY = gy + 2.2*s, s = 2,   gy = y - 13
+//                   -> shoulder (+/-13.80, -8.60)
+//     Mullet Pro    mpShX = 6.9*s, mpCapY = gy - 0.8*s, s = 2.4, gy = y -  7
+//                   -> shoulder (+/-16.56, -8.92)
+// Mullet Pro runs 20% larger (s went 2 -> 2.4 so he was not 16% shorter than the
+// rest of the cast). One shared table at (+/-13.2, -8.4) was right for neither,
+// and grew his gun arm out of a point 3.4px inside his chest.
+//
+// So the SHOULDER and the sleeve come from the carrier, and WEAPON_ARM holds the
+// pose in the detective's units, scaled by the carrier's reach.
+const WEAPON_CARRIER = {
+    baldManager: { shX: 6.9 * 2,   shY:  2.2 * 2   + FOOT_FIX.baldManager, sleeve: '#ededed' },
+    mulletPro:   { shX: 6.9 * 2.4, shY: -0.8 * 2.4 + FOOT_FIX.mulletPro,
+                   sleeve: charMix('#800020', '#000000', 0.08) },
+};
+// Which body is under the weapon. The player is Mullet Pro in levels 1-4 and the
+// bald detective in 5 and 6 — deriving this from `level === 6` alone put Mullet
+// Pro's maroon sleeve on the detective's white shirt for the whole of level 5,
+// which is the exact defect this function exists to prevent.
+//
+// Mutant mode is not a case: taking the mutant DISARMS you (hasRevolver,
+// hasGhostGun and hasWrenchGun are all cleared when it starts), so nothing is
+// ever drawn in that hand and the green sleeve this used to return was a colour
+// invented for a state that cannot happen.
+function playerCarrier() {
+    return (level === 5 || level === 6) ? 'baldManager' : 'mulletPro';
+}
 //
 // hx/hy is the centre of the FIST, not the weapon's origin. The arm is drawn to
 // it and the weapon is hung off it, so the sleeve always ends inside the hand;
@@ -7279,11 +7310,13 @@ function _drawWrenchGun(x, y, facing) {
 // barrel points out of the picture plane and you see very little of its length.
 // Drawn at full length instead, the up pose put a 19px barrel straight past the
 // player's ear, which read as holding the gun to his own head.
+// Constant, so they are not re-mixed from hex on every frame.
+const WEAPON_SKIN = '#d4a882', WEAPON_SKIN_SHADE = charMix('#d4a882', '#000000', 0.22);
 const WEAPON_ARM = {
-    right: { sx:  13.2, sy: -8.4, hx:  17.5, hy: -1.4, rot: 0,     flip: false, fore: 1,    bend: [ 16.5, -6] },
-    left:  { sx: -13.2, sy: -8.4, hx: -17.5, hy: -1.4, rot: 0,     flip: true,  fore: 1,    bend: [-16.5, -6] },
-    up:    { sx:  13.2, sy: -8.4, hx:  15.5, hy:  1.4, rot: -1.15, flip: false, fore: 0.58, bend: [ 16.0, -5] },
-    down:  { sx:  13.2, sy: -8.4, hx:  14.0, hy:  2.6, rot: 0.72,  flip: false, fore: 0.70, bend: [ 15.5, -1] },
+    right: { hx:  17.5, hy: -1.4, rot: 0,     flip: false, fore: 1,    bend: [ 16.5, -6] },
+    left:  { hx: -17.5, hy: -1.4, rot: 0,     flip: true,  fore: 1,    bend: [-16.5, -6] },
+    up:    { hx:  15.5, hy:  1.4, rot: -1.15, flip: false, fore: 0.58, bend: [ 16.0, -5] },
+    down:  { hx:  14.0, hy:  2.6, rot: 0.72,  flip: false, fore: 0.70, bend: [ 15.5, -1] },
 };
 // Only 'forward'/'back' (idle, no cardinal direction) fall back to the last
 // horizontal facing, so the arm still anchors cleanly.
@@ -7291,24 +7324,20 @@ function weaponFacing(facing) {
     return (facing === 'left' || facing === 'right' || facing === 'up' || facing === 'down')
         ? facing : (player.lastHorizFacing || 'right');
 }
-// The player is the bald manager in level 6 (white shirt), the mutant while
-// mutant mode is on, and Mullet Pro everywhere else (maroon jacket). A sleeve on
-// a held weapon has to follow the body it grows out of; the ghost gun hard-coded
-// Mullet Pro's maroon and wore it on the white shirt too.
-function playerSleeveColour() {
-    const mm = (level === 6 && typeof level6 !== 'undefined') ? level6.mutantMode : null;
-    if(mm && mm.active) return '#7fa05a';
-    return level === 6 ? '#ededed' : charMix('#800020', '#000000', 0.08);
-}
 // x,y is the player anchor. shape() draws the weapon with its grip at the
 // origin. opts.gripX/gripY move the point the fist closes on, for a weapon whose
 // handle is not gripped right at the top; opts.lean adds tilt on top of the
 // facing's own rotation, which is how the pipe wrench swings.
 function drawWeaponInHand(x, y, facing, shape, opts) {
     const A = WEAPON_ARM[weaponFacing(facing)];
+    const C = WEAPON_CARRIER[playerCarrier()];
+    // The pose is authored on the detective; a bigger body reaches further in
+    // proportion, which also drops the fist to where its own hands hang.
+    const reach = C.shX / (6.9 * 2);
+    const sx = (A.hx < 0 ? -C.shX : C.shX), sy = C.shY;
+    const hx = A.hx * reach, hy = A.hy * reach;
+    const bx = A.bend[0] * reach, by = A.bend[1] * reach;
     const o = opts || {};
-    const SLEEVE = o.sleeve || playerSleeveColour();
-    const SKIN = o.skin || '#d4a882';
     const gripX = o.gripX === undefined ? 2.0 : o.gripX;
     const gripY = o.gripY === undefined ? -1.4 : o.gripY;
     // lean is NOT re-signed for the flipped facings: the mirror is applied
@@ -7319,16 +7348,15 @@ function drawWeaponInHand(x, y, facing, shape, opts) {
 
     // A white sleeve on a white shirt vanished without an edge under it, and the
     // gun looked like it was growing out of the player's hip.
-    charLimb(x + A.sx, y + A.sy, x + A.hx, y + A.hy, 5.8, 'rgba(0,0,0,0.20)', x + A.bend[0], y + A.bend[1]);
-    charLimb(x + A.sx, y + A.sy, x + A.hx, y + A.hy, 4.6, SLEEVE, x + A.bend[0], y + A.bend[1]);
+    charLimb(x + sx, y + sy, x + hx, y + hy, 5.8 * reach, 'rgba(0,0,0,0.20)', x + bx, y + by);
+    charLimb(x + sx, y + sy, x + hx, y + hy, 4.6 * reach, C.sleeve, x + bx, y + by);
 
     ctx.save();
-    ctx.translate(x + A.hx, y + A.hy);
+    ctx.translate(x + hx, y + hy);
     if(A.flip) ctx.scale(-1, 1);
     ctx.rotate(A.rot + lean);
     // heel of the hand, behind the weapon so the frame sits over it
-    ctx.fillStyle = charMix(SKIN, '#000000', 0.22);
-    ctx.beginPath(); ctx.arc(-0.4, 0.4, 2.6, 0, Math.PI * 2); ctx.fill();
+    charHand(-0.4, 0.4, 2.6, WEAPON_SKIN_SHADE);
     ctx.save();
     ctx.translate(gripX, gripY);
     ctx.scale(A.fore, 1);                     // foreshorten about the grip, not the muzzle
@@ -7336,14 +7364,13 @@ function drawWeaponInHand(x, y, facing, shape, opts) {
     ctx.restore();
     // The fist closes over the TOP of the grip and leaves its heel showing
     // below — at this size that read is the whole point of the pose.
-    ctx.fillStyle = SKIN;
-    ctx.beginPath(); ctx.arc(0.5, 0.2, 2.2, 0, Math.PI * 2); ctx.fill();
+    charHand(0.5, 0.2, 2.2, WEAPON_SKIN);
     ctx.fillStyle = 'rgba(0,0,0,0.18)';       // knuckles
     ctx.beginPath(); ctx.arc(0.5, 1.4, 2.0, 0.15, Math.PI - 0.15); ctx.fill();
     ctx.restore();
 }
 
-// The lit boxes, as named constants so the check in gunbox.cjs reads the real
+// The lit boxes, as named constants so the render checks can read the real
 // numbers instead of copies that can drift. shadeSprite takes HALF-extents, so
 // these are half-widths measured from (x, y + dy) — the old names w/h invited
 // the reader (and the test) to halve them a second time.
@@ -7364,9 +7391,9 @@ function drawRevolver(x, y, facing) {
 // came out as a grey block with a grate on it rather than a gun. This is ~23 x
 // 12, laid out front-to-back the way the real thing is: muzzle, barrel,
 // cylinder, trigger, grip.
-function revolverShape(gripCol) {
+function revolverShape() {
     // ---- GRIP, raked back under the frame
-    ctx.fillStyle = gripCol || '#4a3122';
+    ctx.fillStyle = '#4a3122';
     ctx.beginPath();
     ctx.moveTo(-2.4, -0.6);
     ctx.lineTo(1.4, -0.4);
@@ -7425,16 +7452,49 @@ function revolverShape(gripCol) {
     ctx.lineTo(-3.2, -1.1); ctx.closePath(); ctx.fill();
 
     // ---- TRIGGER and guard, BEHIND the cylinder where they belong
-    ctx.strokeStyle = '#3a3d43'; ctx.lineWidth = 1.1;
-    ctx.beginPath(); ctx.arc(2.2, 2.9, 2.2, -0.4, Math.PI * 0.95); ctx.stroke();
-    ctx.fillStyle = '#2b2d33';
-    ctx.fillRect(1.7, 1.9, 0.9, 1.9);
+    gunTrigger(2.2);
 
     // ---- MUZZLE and front sight
     ctx.fillStyle = '#15171b';
     ctx.fillRect(18.9, -1.1, 0.8, 1.9);
     ctx.fillStyle = '#23262b';
     ctx.fillRect(17.2, -2.8, 1.0, 1.2);
+}
+
+// The two wrench weapons wear the same head. It was written out twice, jaw for
+// jaw, differing only in scale and in hexes a pixel apart — so the auto-wrench
+// and the pipe wrench had already started drifting into two different tools.
+// k scales the whole head about the shank.
+const KNURL = [[1, 0], [0.7071, 0.7071], [0, 1], [-0.7071, 0.7071]];
+function wrenchHead(ox, k) {
+    ctx.fillStyle = '#7d838c';
+    pathRoundRect(ox,        -6.2 * k, 5.6 * k, 4.5 * k, 0.9 * k); ctx.fill();  // fixed jaw
+    pathRoundRect(ox,         1.1 * k, 4.7 * k, 3.8 * k, 0.9 * k); ctx.fill();  // sliding jaw
+    ctx.fillStyle = '#4c5158';
+    ctx.fillRect(ox, -2.3 * k, 3.1 * k, 3.6 * k);                               // throat
+    ctx.fillStyle = '#21242a';                                                  // serrated bite
+    for(let i = 0; i < 3; i++) {
+        ctx.fillRect(ox + (0.8 + i * 1.45) * k, -2.5 * k, 0.95 * k, 0.95 * k);
+        ctx.fillRect(ox + (0.8 + i * 1.45) * k,  1.1 * k, 0.95 * k, 0.95 * k);
+    }
+    const nx = ox - 1.2 * k, ny = 0.3 * k, nr = 1.95 * k;                       // adjuster nut
+    ctx.fillStyle = '#9ba1a9';
+    ctx.beginPath(); ctx.arc(nx, ny, nr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.39)'; ctx.lineWidth = 0.5;
+    for(const [c, sn] of KNURL) {                                               // knurling
+        ctx.beginPath();
+        ctx.moveTo(nx - c * nr, ny - sn * nr);
+        ctx.lineTo(nx + c * nr, ny + sn * nr);
+        ctx.stroke();
+    }
+}
+// Trigger and guard — the same four lines in all three guns, with constants that
+// had drifted apart for no reason anyone recorded.
+function gunTrigger(cx) {
+    ctx.strokeStyle = '#3b3e44'; ctx.lineWidth = 1.05;
+    ctx.beginPath(); ctx.arc(cx, 2.95, 2.25, -0.45, Math.PI * 0.93); ctx.stroke();
+    ctx.fillStyle = '#282b31';
+    ctx.fillRect(cx - 0.5, 1.95, 0.9, 1.9);
 }
 
 // The GHOST GUN: the pistol you run off the 3D printer. Same rig as the
@@ -7483,10 +7543,7 @@ function ghostGunShape() {
     ctx.fillRect(12.6, -4.4, 1.2, 1.0);
 
     // ---- TRIGGER and guard
-    ctx.strokeStyle = '#3c3f45'; ctx.lineWidth = 1.0;
-    ctx.beginPath(); ctx.arc(3.0, 3.0, 2.3, -0.5, Math.PI * 0.92); ctx.stroke();
-    ctx.fillStyle = '#24272c';
-    ctx.fillRect(2.2, 2.0, 0.9, 1.9);
+    gunTrigger(3.0);
 
     // ---- MUZZLE
     ctx.fillStyle = '#131519';
@@ -7527,33 +7584,11 @@ function wrenchGunShape() {
     ctx.fillStyle = 'rgba(0,0,0,0.30)';                       // vent slots
     for(let i = 0; i < 3; i++) ctx.fillRect(1.4 + i * 1.9, -2.7, 1.0, 1.9);
 
-    // ---- WRENCH HEAD: a fixed jaw above, a sliding jaw below, gap between
-    ctx.fillStyle = '#7b818a';
-    pathRoundRect(11.6, -6.2, 5.2, 4.2, 0.8); ctx.fill();     // fixed jaw
-    pathRoundRect(11.6,  1.0, 4.4, 3.6, 0.8); ctx.fill();     // sliding jaw
-    ctx.fillStyle = '#4b5057';
-    ctx.fillRect(11.6, -2.2, 3.0, 3.4);                       // jaw throat
-    ctx.fillStyle = '#22252a';                                // serrated bite
-    for(let i = 0; i < 3; i++) {
-        ctx.fillRect(12.4 + i * 1.4, -2.4, 0.9, 0.9);
-        ctx.fillRect(12.4 + i * 1.4,  1.0, 0.9, 0.9);
-    }
-    ctx.fillStyle = '#9aa0a8';                                // knurled adjuster
-    ctx.beginPath(); ctx.arc(10.4, 0.4, 1.9, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.40)'; ctx.lineWidth = 0.5;
-    for(let i = 0; i < 4; i++) {
-        const a = i * Math.PI / 4;
-        ctx.beginPath();
-        ctx.moveTo(10.4 - Math.cos(a) * 1.9, 0.4 - Math.sin(a) * 1.9);
-        ctx.lineTo(10.4 + Math.cos(a) * 1.9, 0.4 + Math.sin(a) * 1.9);
-        ctx.stroke();
-    }
+    // ---- WRENCH HEAD where the barrel would be
+    wrenchHead(11.6, 1.0);
 
     // ---- TRIGGER and guard
-    ctx.strokeStyle = '#3c3f45'; ctx.lineWidth = 1.0;
-    ctx.beginPath(); ctx.arc(2.6, 3.0, 2.2, -0.5, Math.PI * 0.92); ctx.stroke();
-    ctx.fillStyle = '#24272c';
-    ctx.fillRect(1.9, 2.0, 0.9, 1.9);
+    gunTrigger(2.6);
 }
 
 // The level 4 melee PIPE WRENCH: a handle in the fist and the head out at the
@@ -7574,27 +7609,8 @@ function pipeWrenchShape() {
     ctx.fillStyle = 'rgba(0,0,0,0.30)';                       // grip ribs
     for(let i = 0; i < 4; i++) ctx.fillRect(-2.4 + i * 1.5, -1.4, 0.6, 3.4);
 
-    // ---- HEAD: fixed jaw above, adjustable jaw below, throat between
-    ctx.fillStyle = '#7f858e';
-    pathRoundRect(10.2, -7.0, 6.0, 4.8, 1.0); ctx.fill();
-    pathRoundRect(10.2,  1.2, 5.0, 4.0, 1.0); ctx.fill();
-    ctx.fillStyle = '#4d5259';
-    ctx.fillRect(10.2, -2.4, 3.2, 3.8);
-    ctx.fillStyle = '#20232a';                                // teeth
-    for(let i = 0; i < 3; i++) {
-        ctx.fillRect(11.0 + i * 1.5, -2.6, 1.0, 1.0);
-        ctx.fillRect(11.0 + i * 1.5,  1.2, 1.0, 1.0);
-    }
-    ctx.fillStyle = '#9ca2aa';                                // adjuster nut
-    ctx.beginPath(); ctx.arc(9.2, 0.2, 2.0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.38)'; ctx.lineWidth = 0.5;
-    for(let i = 0; i < 4; i++) {
-        const a = i * Math.PI / 4;
-        ctx.beginPath();
-        ctx.moveTo(9.2 - Math.cos(a) * 2.0, 0.2 - Math.sin(a) * 2.0);
-        ctx.lineTo(9.2 + Math.cos(a) * 2.0, 0.2 + Math.sin(a) * 2.0);
-        ctx.stroke();
-    }
+    // ---- HEAD, the same one the auto-wrench wears, a touch larger
+    wrenchHead(10.4, 1.12);
     ctx.fillStyle = 'rgba(255,255,255,0.18)';                 // shine along the shank
     ctx.fillRect(0.6, -1.4, 8.0, 0.7);
 }
@@ -10378,16 +10394,24 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
 // Tracks horizontal movement itself so the gait animates without threading a
 // "walking" flag through a dozen call sites.
 let _mutLastX = null, _mutWalkTimer = 0;
-function drawL6Player(x, y, facing, holding, hasGun) {
+// Draws the level 6 player AND whatever is in his hand. The weapon used to be a
+// second statement repeated verbatim after all 13 calls to this — so adding a
+// room meant remembering both lines, and forgetting the second gave an armed
+// pose holding nothing. `hasGun` is not a parameter any more for the same
+// reason: every caller passed the same derived value, and one had already
+// drifted to computing it inline.
+function drawL6Player(x, y, facing, holding) {
+    const hasGun = !!level6ActiveWeapon();
     const mm = (level === 6) ? level6.mutantMode : null;
     if(mm && mm.active) {
         if(_mutLastX !== null && Math.abs(x - _mutLastX) > 0.4) _mutWalkTimer = 8;
         else if(_mutWalkTimer > 0) _mutWalkTimer--;
         _mutLastX = x;
         drawMutantPlayer(x, y, facing, _mutWalkTimer > 0, mm.eating);
-        return;
+        return;                       // the mutant is disarmed; nothing to hold
     }
     drawBaldManager(x, y, facing, holding, hasGun);
+    drawActiveWeapon();
 }
 
 // Where the dead detective lies, in ONE place. His drawing, his ACTION prompt
@@ -23607,17 +23631,9 @@ function drawMuteIndicator() {
 }
 
 // ── LEATHER HOLSTER BUTTON — tappable next to mute button ──────────────────────
-// Shows only when player has 2+ weapons.  Opens the weapon-swap inventory UI.
-function getLevel6Weapons() {
-    if(typeof level6 === 'undefined' || level !== 6) return [];
-    const weapons = [];
-    if(level6.hasWrenchGun)                                    weapons.push({ name: 'WRENCH', ammo: 3 - (level6.wrenchUses||0), icon: 'W', color: '#e8a020' });
-    if(level6.hasRevolver)                                     weapons.push({ name: 'REVOLVER', ammo: level6.revolverAmmo||0, icon: 'R', color: '#999' });
-    if(level6.hasGhostGun)                                     weapons.push({ name: 'GHOST GUN', ammo: 1, icon: 'G', color: '#4af' });
-    if(typeof ghostGun !== 'undefined' && ghostGun.hasGun)     weapons.push({ name: 'GHOST GUN', ammo: ghostGun.ammo||0, icon: 'G', color: '#4af' });
-    if(typeof pipeWrench !== 'undefined' && pipeWrench.hasWrench) weapons.push({ name: 'PIPE WRENCH', ammo: 3 - (pipeWrench.killCount||0), icon: 'P', color: '#c84' });
-    return weapons;
-}
+// A straight A/B toggle between the sidearm and the auto-wrench. There was also
+// a getLevel6Weapons()/drawHolsterUI() inventory panel behind it, but holsterOpen
+// was never assigned true, so 113 lines of it had been unreachable.
 
 // Self-destruct equip toggle button — sits next to the mute button.
 // Lets the player tap to switch between unarmed and armed (revolver drawn).
@@ -23716,110 +23732,6 @@ function drawHolsterButton() {
     // Swap arrow hint at bottom
     ctx.fillStyle = '#888'; ctx.font = scaledFont(8, '', 'Arial', true); ctx.textAlign = 'center';
     ctx.fillText('\u21c4 swap', cx, btnY + btnH - 4);
-}
-
-function drawHolsterUI() {
-    if(!holsterOpen) return;
-    const weapons = getLevel6Weapons();
-    if(weapons.length < 2) { holsterOpen = false; return; }
-
-    const slotW = 130, slotH = 80, gap = 10;
-    const totalW = weapons.length * slotW + (weapons.length - 1) * gap + 24;
-    const uiX = -GX + (CANVAS_W - totalW) / 2;
-    const uiY = -GY + 70;
-
-    // Panel background — tooled leather with stitched border
-    const leatherGrad = ctx.createLinearGradient(0, uiY - 4, 0, uiY + slotH + 32);
-    leatherGrad.addColorStop(0, 'rgba(46,28,10,0.96)');
-    leatherGrad.addColorStop(1, 'rgba(18,10,3,0.96)');
-    ctx.fillStyle = leatherGrad;
-    pathRoundRect(uiX - 4, uiY - 4, totalW + 8, slotH + 36, 8);
-    ctx.fill();
-    ctx.strokeStyle = '#7a4c1a'; ctx.lineWidth = 2;
-    pathRoundRect(uiX - 4, uiY - 4, totalW + 8, slotH + 36, 8);
-    ctx.stroke();
-    // Stitch line just inside the edge
-    ctx.strokeStyle = 'rgba(200,144,80,0.4)'; ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    pathRoundRect(uiX - 1, uiY - 1, totalW + 2, slotH + 30, 6);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Title
-    ctx.fillStyle = '#c89050'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('INVENTORY', uiX + totalW / 2, uiY + slotH + 22);
-
-    for(let i = 0; i < weapons.length; i++) {
-        const w = weapons[i];
-        const sx = uiX + i * (slotW + gap);
-        const sy = uiY;
-
-        // Slot bg — recessed pocket with inner shading
-        const slotGrad2 = ctx.createLinearGradient(0, sy, 0, sy + slotH);
-        slotGrad2.addColorStop(0, 'rgba(42,27,10,0.92)');
-        slotGrad2.addColorStop(0.5, 'rgba(66,44,17,0.92)');
-        slotGrad2.addColorStop(1, 'rgba(36,23,8,0.92)');
-        ctx.fillStyle = slotGrad2;
-        pathRoundRect(sx, sy, slotW, slotH, 6);
-        ctx.fill();
-        ctx.strokeStyle = '#7a4c1a'; ctx.lineWidth = 1.5;
-        pathRoundRect(sx, sy, slotW, slotH, 6);
-        ctx.stroke();
-
-        // Weapon sprite icon (scaled miniature drawing) with soft display glow
-        ctx.save();
-        const icx = sx + 30, icy = sy + slotH / 2;
-        const iconHalo = ctx.createRadialGradient(icx, icy, 2, icx, icy, 24);
-        iconHalo.addColorStop(0, 'rgba(255,225,160,0.16)');
-        iconHalo.addColorStop(1, 'rgba(255,225,160,0)');
-        ctx.fillStyle = iconHalo;
-        ctx.beginPath(); ctx.arc(icx, icy, 24, 0, Math.PI * 2); ctx.fill();
-        ctx.translate(icx, icy);
-        if(w.name === 'REVOLVER') {
-            // Mini revolver sprite
-            ctx.fillStyle = '#888'; ctx.fillRect(-12, -3, 22, 6);
-            ctx.fillStyle = '#777'; ctx.fillRect(4, 3, 8, 10);
-            ctx.fillStyle = '#555'; ctx.fillRect(-14, -4, 4, 8);
-            ctx.fillStyle = '#999'; ctx.beginPath(); ctx.arc(2, -1, 5, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#666'; ctx.beginPath(); ctx.arc(2, -1, 3, 0, Math.PI*2); ctx.fill();
-        } else if(w.name === 'GHOST GUN') {
-            // Mini ghost gun sprite — spectral blue
-            ctx.fillStyle = '#4af'; ctx.fillRect(-13, -3, 20, 6);
-            ctx.fillStyle = '#28d'; ctx.fillRect(4, 3, 6, 8);
-            ctx.fillStyle = 'rgba(100,220,255,0.5)'; ctx.beginPath(); ctx.arc(-11, 0, 5, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#8ef'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(-11, 0, 7, 0, Math.PI*2); ctx.stroke();
-        } else if(w.name === 'WRENCH' || w.name === 'PIPE WRENCH') {
-            // Mini wrench sprite
-            ctx.fillStyle = '#e8a020'; ctx.fillRect(-12, -4, 18, 8);
-            ctx.fillStyle = '#c07010'; ctx.fillRect(-14, -6, 6, 6); ctx.fillRect(-14, 0, 6, 6);
-            ctx.fillStyle = '#f0b030'; ctx.fillRect(5, -2, 10, 4);
-            ctx.fillStyle = '#c07010'; ctx.fillRect(13, -6, 4, 6); ctx.fillRect(13, 0, 4, 6);
-        } else {
-            // Fallback colored circle
-            ctx.fillStyle = w.color;
-            ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.restore();
-
-        // Weapon name
-        ctx.fillStyle = '#f5e8c0'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'left';
-        ctx.fillText(w.name, sx + 56, sy + 28);
-
-        // Ammo count
-        ctx.fillStyle = '#aaa'; ctx.font = scaledFont(10, '', 'Arial', false);
-        ctx.fillText('AMMO: ' + w.ammo, sx + 56, sy + 46);
-
-        // Ammo pips
-        const maxPips = Math.min(w.ammo, 7);
-        for(let p = 0; p < 7; p++) {
-            ctx.fillStyle = p < maxPips ? w.color : '#333';
-            ctx.beginPath(); ctx.arc(sx + 56 + p * 9, sy + 62, 3.5, 0, Math.PI * 2); ctx.fill();
-        }
-    }
-
-    // Close hint
-    ctx.fillStyle = '#888'; ctx.font = scaledFont(10, '', 'Arial', false); ctx.textAlign = 'center';
-    ctx.fillText('tap weapon to equip  •  tap holster to close', uiX + totalW / 2, uiY + slotH + 32);
 }
 
 // Render the acid-burst + PM-dissolve animation — Raiders of the Lost Ark / Wicked Witch style
@@ -25418,10 +25330,11 @@ function drawSelfDestructCave2() {
 
     // ── PLAYER (drawn before dialogue so dialogue overlays on top) ──────────
     // Hidden during 'consumed' state — the coffin has pulled the body in.
-    // Honours the holster: the equip button next to mute says ARMED/UNARMED and
-    // flips level6.pistolHolstered, but this draw ignored it, so the revolver
-    // stayed in his hand while the button read UNARMED.
-    const playerArmed = level6.hasRevolver && level6.revolverAmmo > 0 && !level6.pistolHolstered;
+    // Asks the same question as everywhere else rather than re-deriving it. The
+    // equip button next to mute reads ARMED/UNARMED and flips pistolHolstered;
+    // this draw used to ignore that, so the revolver stayed in his hand while
+    // the button said UNARMED.
+    const playerArmed = revolverInHand();
     if(sds.devilState !== 'consumed') {
         drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
         if(playerArmed) {
@@ -27048,10 +26961,6 @@ function drawScene() {
     }
 
     if(level === 6) {
-        // Whether the body sprite draws its armed pose. One question, one answer:
-        // this used to be three flags that could all be true at once, which is
-        // how the auto-wrench and a ghost gun ended up in the same fist.
-        const l6HasGun = !!level6ActiveWeapon();
         if(level6.room === 'pipeRoom') {
             drawLevel6PipeRoom();
 
@@ -27152,8 +27061,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player in pipe room
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'megacomputer') {
             drawLevel6MegacomputerRoom();
 
@@ -27162,8 +27070,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player in megacomputer room
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'nuclearBridge') {
             drawNuclearAssemblyBridge();
 
@@ -27172,17 +27079,14 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player on bridge
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'marbleRoom') {
             drawLevel6MarbleRoom();
             // Draw armed clone follower in marble room
             if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'marbleRoom') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
-            if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo > 0) { drawAmmoCounter(player.x, player.y, level6.threeShotRifleAmmo); }
+            drawL6Player(player.x, player.y, player.facing, player.holding);
             // Marble room action labels — after player for correct z-order
             { const _mrBrickX = 520, _mrFloorY = 380;
               if(player.x > _mrBrickX - 80 && !level6.marbleElevatorTransition) {
@@ -27202,8 +27106,7 @@ function drawScene() {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
             // Draw player in entryway
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
             // Action labels drawn AFTER player so they float above the character
             { const _eelvX = 550, _eelvW = 130;
               if(Math.abs(player.x - 350) < 100 && player.y > 360)
@@ -27214,8 +27117,7 @@ function drawScene() {
         } else if(level6.room === 'employeeLobby') {
             drawLevel6EmployeeLobby();
 
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'cloningRoom') {
             drawLevel6CloningRoom();
 
@@ -27223,8 +27125,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'cloningRoom') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'l6Furnace') {
             drawL6FurnaceRoom();
 
@@ -27232,8 +27133,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'l6Furnace') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'redOffice') {
             // MUTANT ESCAPE finale — RED's office, seen from the inside with
             // the smashed door behind you and the window as the way out.
@@ -27314,7 +27214,7 @@ function drawScene() {
                 drawMutantPlayer(0, 0, 'right', true, false);
                 ctx.restore();
             } else {
-                drawL6Player(player.x, player.y, player.facing, player.holding, false);
+                drawL6Player(player.x, player.y, player.facing, player.holding);
             }
             // Prompts
             if(!mm.jumping) {
@@ -27386,8 +27286,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeeHallway') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'employeePipeRoom') {
             // Inner try/catch: if room draw throws, reset state and keep rendering player
             try {
@@ -27409,8 +27308,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.room === 'employeePipeRoom') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'underbellyHallway') {
             drawLevel6UnderbellyHallway();
 
@@ -27468,8 +27366,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'underbellyHallway') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'underbelly') {
             drawLevel6Underbelly();
 
@@ -27477,8 +27374,7 @@ function drawScene() {
             if(level6.cloneFollower.active && level6.cloneFollower.armed && level6.cloneFollower.room === 'underbelly') {
                 drawCloneFollower(level6.cloneFollower.x, level6.cloneFollower.y, level6.cloneFollower.facing);
             }
-            drawL6Player(player.x, player.y, player.facing, player.holding, l6HasGun);
-            drawActiveWeapon();
+            drawL6Player(player.x, player.y, player.facing, player.holding);
         } else if(level6.room === 'ceoOffice') {
             // Screen shake from missile explosion
             if(level6.missileFireTimer > 0) {
@@ -27548,8 +27444,7 @@ function drawScene() {
                 // Through drawL6Player, not drawBaldManager: this was the one
                 // room that drew the player sprite directly, so walking in as
                 // the mutant turned you back into the detective on the spot.
-                drawL6Player(player.x, player.y, player.facing, player.holding, !!level6ActiveWeapon());
-                drawActiveWeapon();
+                drawL6Player(player.x, player.y, player.facing, player.holding);
             }
 
             // CEO entry dialogue overlay
@@ -28867,7 +28762,6 @@ function drawScene() {
         // Draw mute indicator for level 6
         drawMuteIndicator();
         drawHolsterButton();
-        drawHolsterUI();
         ctx.restore(); return;
     }
 
@@ -29375,7 +29269,6 @@ function drawScene() {
         drawEquipToggleButton();
         // Standard wrench/gun holster button (level 6 carry-over) also visible
         drawHolsterButton();
-        drawHolsterUI();
     }
     ctx.restore();
 }
@@ -31674,7 +31567,7 @@ function update() {
                             player.shootTimer = 20;
                         }
                     }
-                    if (level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                    if (revolverInHand() && (keys[' '] || keys['action'])) {
                         keys[' '] = false; keys['action'] = false;
                         const vx = player.facing === 'left' ? -12 : player.facing === 'right' ? 12 : player.x < 350 ? 12 : -12;
                         if (vx !== 0) {
@@ -31808,7 +31701,7 @@ function update() {
                     }
                 }
                 // Fire detective revolver on bridge
-                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                if(revolverInHand() && (keys[' '] || keys['action'])) {
                     keys[' '] = false;
                     keys['action'] = false;
                     let vx = 0;
@@ -31865,15 +31758,7 @@ function update() {
 
                 // Fire weapons
                 if((keys[' ']||keys['action'])) {
-                    if(level6.hasThreeShotRifle && level6.threeShotRifleAmmo>=3) {
-                        keys[' ']=keys['action']=false;
-                        const ang=player.facing==='right'?0:Math.PI;
-                        const vx=Math.cos(ang)*12, vy=0;
-                        for(let s=0;s<3;s++) setTimeout(()=>{bullets.push({x:player.x+vx*4,y:player.y+vy*4,vx,vy,fromCEO:false});},s*80);
-                        level6.threeShotRifleAmmo-=3;
-                        muzzleFlashes.push({x:player.x+vx*4,y:player.y,life:6,facing:player.facing});
-                        player.shootTimer=20;
-                    } else if(level6.hasRevolver && level6.revolverAmmo>0) {
+                    if(revolverInHand()) {
                         keys[' ']=keys['action']=false;
                         const ang=player.facing==='right'?0:Math.PI;
                         const vx=Math.cos(ang)*12;
@@ -32078,7 +31963,7 @@ function update() {
                     }
                 }
                 // Fire revolver in cloning room (action key when not near interactables)
-                if(!actionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                if(!actionConsumed && revolverInHand() && (keys[' '] || keys['action'])) {
                     // Don't fire if near keycard, left door, right exit, or concealed door
                     const nearKeycard = level6.keycardOnGround && Math.abs(player.x - level6.keycardX) < 50;
                     const nearLeftDoor = player.x < 100;
@@ -32214,7 +32099,7 @@ function update() {
                     }
                 }
                 // Fire detective pistol in hallway (only if action wasn't consumed by ammo pickup)
-                if(!hallwayActionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                if(!hallwayActionConsumed && revolverInHand() && (keys[' '] || keys['action'])) {
                     keys[' '] = false;
                     keys['action'] = false;
                     let vx = 0;
@@ -32403,7 +32288,7 @@ function update() {
                     }
                 }
                 // Fire revolver in underbelly hallway
-                if(level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                if(revolverInHand() && (keys[' '] || keys['action'])) {
                     keys[' '] = false;
                     keys['action'] = false;
                     let vx = 0;
@@ -32547,7 +32432,7 @@ function update() {
                     }
                 }
                 // Fire revolver in underbelly (action key when not near interactables)
-                if(!underbellyActionConsumed && level6.hasRevolver && level6.revolverAmmo > 0 && (keys[' '] || keys['action'])) {
+                if(!underbellyActionConsumed && revolverInHand() && (keys[' '] || keys['action'])) {
                     const nearRightExit = player.x > 620;
                     if(!nearRightExit) {
                         keys[' '] = false;
@@ -33044,7 +32929,8 @@ if (keys[' '] || keys['action']) {
     // question the sprite and the ammo panel ask. The ghost gun used to fire
     // whenever the pistol was holstered, which after the holster button became
     // a gun/wrench swap meant swapping TO the wrench fired the ghost gun.
-    if (level6ActiveWeapon() && level6ActiveWeapon().kind === 'ghostGun') {
+    const act = level6ActiveWeapon();
+    if (act && act.kind === 'ghostGun') {
         let vx = 0, vy = 0;
         if (player.facing === 'left') vx = -12;
         else if (player.facing === 'right') vx = 12;
@@ -33059,7 +32945,7 @@ if (keys[' '] || keys['action']) {
         }
         return;
     }
-    if (level6ActiveWeapon() && level6ActiveWeapon().kind === 'revolver') {
+    if (act && act.kind === 'revolver') {
         let vx = 0, vy = 0;
         let facingUsed = player.facing;
         if (player.facing === 'left') vx = -12;
@@ -33107,9 +32993,8 @@ if (keys[' '] || keys['action']) {
     // blocked by merely OWNING a ghost gun, whatever the holster button said,
     // so swapping to the wrench put it in his fist and left the trigger on the
     // pistol.
-    if (level6.wrenchBolts.length === 0) {
-        const act = level6ActiveWeapon();
-        if (act && act.kind === 'wrenchGun') {
+    if (act && act.kind === 'wrenchGun' && level6.wrenchBolts.length === 0) {
+        {
             let bvx = 0, bvy = 0;
             if(player.facing === 'left')  bvx = -9;
             else if(player.facing === 'right') bvx = 9;
@@ -33882,8 +33767,11 @@ if (keys[' '] || keys['action']) {
                 const nearPrinter = level6.room === 'pipeRoom' && Math.abs(player.x - 500) < 55;
                 const inCEOOffice = level6.room === 'ceoOffice';
                 if(!nearPrinter && !inCEOOffice && (keys[' '] || keys['action'])) {
-                    const hasOtherWeapon = (!level6.pistolHolstered && level6.hasRevolver && level6.revolverAmmo > 0) || level6.hasGhostGun;
-                    if(!hasOtherWeapon) {
+                    // Same question as everywhere else. This was the eighth
+                    // hand-rolled copy of it, and it blocked the wrench merely
+                    // because a ghost gun was OWNED, whatever the holster said.
+                    const act = level6ActiveWeapon();
+                    if(act && act.kind === 'wrenchGun') {
                         keys[' '] = false; keys['action'] = false;
                         // Horizontal-only fire: prefer explicit facing, else last
                         // horizontal facing, else position-based fallback (same
@@ -34876,8 +34764,6 @@ function handleMuteClick(e) {
     const equipOffset = (state === 'selfDestructSeq') ? (78 + 8) : 0;
     const holsterBtnX = muteBtnX - holsterBtnW - 8 - equipOffset;
     const holsterBtnY = muteBtnY;
-    const weapons = getLevel6Weapons();
-
     // Holster button — direct A/B toggle between wrench and gun (no inventory
     // UI). The hit box has to match drawHolsterButton's own visibility test, or
     // there is a dead 70x50 tap target where the button is not drawn.
