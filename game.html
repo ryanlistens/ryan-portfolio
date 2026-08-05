@@ -4296,11 +4296,36 @@ function _drawNPC(npc) {
         // instead of mirroring. drawMulletProAsPM's back view already works this
         // way, and mirroring it here is what made his sleeves disagree with his
         // own legs.
-        const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
+        const STRIDE = 4;                       // climb amplitude, below
+        const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * STRIDE : 0;
         const isFix = npc.state === 'fixing';
         // Torquing motion: arms rock side-to-side when fixing
         const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
         const armLit = charMix(npc.color.hex, '#000', 0.10);
+
+        // LEGS FIRST, and only then the torso over the top of them.
+        //
+        // The climb translates each leg down by up to STRIDE while the torso hem
+        // stays put, so on the down stroke the leg tore away from the waist and
+        // left a gap of clear background across the hip. Each leg is extended
+        // upward by the full stride instead of being moved bodily, which keeps
+        // its foot exactly where the animation puts it while the top always
+        // reaches past the hem — and drawing legs before the torso means that
+        // overlap is hidden by the body rather than painted across it.
+        ctx.fillStyle = npcRamp.dark;
+        ctx.fillRect(x - 4*s, y + 6*s - STRIDE + climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillStyle = npcRamp.base;
+        ctx.fillRect(x + s,   y + 6*s - STRIDE - climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillStyle = 'rgba(0,0,0,0.13)';
+        ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 9.4*s - climbCycle, 4*s, 0.8*s);
+        // Shoes
+        ctx.fillStyle = '#fff';
+        pathRoundRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        pathRoundRect(x + s,   y + 13*s - climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(x - 4*s, y + 15.4*s + climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 15.4*s - climbCycle, 4*s, 0.8*s);
 
         // Torso — same build as the front, so the silhouette and the tone match
         // from either side instead of a flat rectangle standing in for a body
@@ -4373,22 +4398,6 @@ function _drawNPC(npc) {
             ctx.fillRect(x - 7.8*s, y - 6*s - climbCycle, 2*s, 3*s);
             ctx.fillRect(x + 5.8*s, y - 6*s + climbCycle, 2*s, 3*s);
         }
-
-        // Legs — same ramp and same knee shadow the front pose carries
-        ctx.fillStyle = npcRamp.dark;
-        ctx.fillRect(x - 4*s, y + 6*s + climbCycle, 4*s, 7*s);
-        ctx.fillStyle = npcRamp.base;
-        ctx.fillRect(x + s, y + 6*s - climbCycle, 4*s, 7*s);
-        ctx.fillStyle = 'rgba(0,0,0,0.13)';
-        ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
-        ctx.fillRect(x + s,   y + 9.4*s - climbCycle, 4*s, 0.8*s);
-        // Shoes
-        ctx.fillStyle = '#fff';
-        pathRoundRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
-        pathRoundRect(x + s,   y + 13*s - climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.fillRect(x - 4*s, y + 15.4*s + climbCycle, 4*s, 0.8*s);
-        ctx.fillRect(x + s,   y + 15.4*s - climbCycle, 4*s, 0.8*s);
     } else {
         // === NORMAL FRONT-FACING SPRITE ===
 
@@ -27589,7 +27598,17 @@ function drawScene() {
                 drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward');
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    drawCashSack(npc.x, npc.y - 46 + bob);
+                    // Carried above his head, but LOWERED into the gap between
+                    // the two of them for the hand-off — holding it over his own
+                    // head is the one place the pipe manager cannot take it from.
+                    // -46 -> +54 lands on the same screen point the PM's turned
+                    // sack uses, so it changes hands without jumping.
+                    let sackY = npc.y - 46;
+                    if(npc.mpPhase === 'delivering' && npc.mpDeliverStart) {
+                        const t = Math.min(1, (Date.now() - npc.mpDeliverStart) / 260);
+                        sackY += 100 * (1 - (1 - t) * (1 - t));   // ease out
+                    }
+                    drawCashSack(npc.x, sackY + bob);
                 }
                 // Draw extracting animation at safe
                 if(npc.extracting) {
@@ -27617,8 +27636,16 @@ function drawScene() {
                 drawNPC(tempNPC);
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    const sackSide = npc.facing === 'left' ? -1 : 1;
-                    drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
+                    if(npc.facing === 'back') {
+                        // Still mid hand-off. The sack sits in the gap BETWEEN
+                        // the two of them, where Mullet Pro just let go of it.
+                        // At his hip it was on the camera side of a man with his
+                        // back to us, which reads as shoved behind his back.
+                        drawCashSack(npc.x, npc.y - 42 + bob);
+                    } else {
+                        const sackSide = npc.facing === 'left' ? -1 : 1;
+                        drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
+                    }
                 }
             }
 
@@ -31076,12 +31103,16 @@ function update() {
                             // Check distance to PM directly
                             const dpx = targetPM ? targetPM.x - mp.x : tX - mp.x;
                             const dpy = targetPM ? targetPM.y - mp.y : tY - mp.y;
-                            // 70, not 40. Mullet Pro's feet reach 39px below his
+                            // 96, not 40. Mullet Pro's feet reach 39px below his
                             // own y and the PM's head 27px above his, so closing
                             // to 40 parked Mullet Pro squarely over the PM's head
                             // and shoulders — burying the turn at the one beat it
-                            // needs to be seen. 70 leaves both bodies clear.
-                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 70) {
+                            // needs to be seen. Clearing the bodies takes 66, but
+                            // the SACK also has to live between them: it is 18
+                            // tall, and at 70 the clear band was 4px, which is
+                            // why it ended up tucked at the pipe manager's hip.
+                            // 96 leaves a 30px band, the sack in the middle of it.
+                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 96) {
                                 mp.mpPhase = 'delivering';
                                 mp.mpDeliverStart = Date.now();
                                 // The PM turns to meet him. Mullet Pro comes down
