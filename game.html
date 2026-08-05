@@ -4271,27 +4271,93 @@ function _drawNPC(npc) {
         ctx.globalAlpha = 1;
     }
 
-    if(isClimbing || npc.state === 'fixing') {
+    // One ramp for the whole sprite. It used to be declared inside the front
+    // branch only, which is how the two halves drifted apart in the first place.
+    const npcRamp = charRamp(npc.color.hex, null, npc.color.shadow);
+
+    // A pipe manager can also simply be TURNED AWAY while standing — he turns to
+    // take the cash sack from Mullet Pro, who hands it over from upstage. That is
+    // the same hooded back, so `facing: 'back'` reuses this pose with the ladder
+    // animation off rather than inventing a second back view.
+    const isBackTurn = !isClimbing && npc.state !== 'fixing' && npc.facing === 'back';
+    if(isClimbing || npc.state === 'fixing' || isBackTurn) {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
-        const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
+        //
+        // This pose never went through the cast shading pass. It was flat fills
+        // of the raw jumpsuit colour while the front was rebuilt on charRamp and
+        // charTorso, so a pipe manager changed material every time he turned:
+        // measured on the same body points, the torso had a tonal spread of 0
+        // against the front's 43, the legs jumped 34 luminance units BRIGHTER
+        // and the hood 16 DARKER. Opposite directions, which is why it read as a
+        // different suit rather than a different angle. Same ramp both ways now.
+        //
+        // The light does not turn with him — the house key is fixed at the top
+        // left — so the shading keeps the SAME screen side it has from the front
+        // instead of mirroring. drawMulletProAsPM's back view already works this
+        // way, and mirroring it here is what made his sleeves disagree with his
+        // own legs.
+        const STRIDE = 4;                       // climb amplitude, below
+        const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * STRIDE : 0;
         const isFix = npc.state === 'fixing';
         // Torquing motion: arms rock side-to-side when fixing
         const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
+        const armLit = charMix(npc.color.hex, '#000', 0.10);
 
-        // Torso (back view — jumpsuit)
-        ctx.fillStyle = npc.color.hex;
-        ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+        // LEGS FIRST, and only then the torso over the top of them.
+        //
+        // The climb translates each leg down by up to STRIDE while the torso hem
+        // stays put, so on the down stroke the leg tore away from the waist and
+        // left a gap of clear background across the hip. Each leg is extended
+        // upward by the full stride instead of being moved bodily, which keeps
+        // its foot exactly where the animation puts it while the top always
+        // reaches past the hem — and drawing legs before the torso means that
+        // overlap is hidden by the body rather than painted across it.
+        ctx.fillStyle = npcRamp.dark;
+        ctx.fillRect(x - 4*s, y + 6*s - STRIDE + climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillStyle = npcRamp.base;
+        ctx.fillRect(x + s,   y + 6*s - STRIDE - climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillStyle = 'rgba(0,0,0,0.13)';
+        ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 9.4*s - climbCycle, 4*s, 0.8*s);
+        // Shoes
+        ctx.fillStyle = '#fff';
+        pathRoundRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        pathRoundRect(x + s,   y + 13*s - climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(x - 4*s, y + 15.4*s + climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 15.4*s - climbCycle, 4*s, 0.8*s);
 
-        // Hood (same color as jumpsuit, covers head)
-        ctx.fillStyle = npc.color.hex;
+        // Torso — same build as the front, so the silhouette and the tone match
+        // from either side instead of a flat rectangle standing in for a body
+        charTorso(x, y - 5*s, y + 6*s, 6.6*s, 5.2*s, npcRamp);
+        // Collar band across the shoulders
+        ctx.fillStyle = npcRamp.dark;
+        ctx.fillRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s);
+
+        // Hood (same colour as the jumpsuit, covers the head)
+        const hoodPath = () => {
+            ctx.beginPath();
+            ctx.moveTo(x - 6*s, y - 5*s);
+            ctx.lineTo(x - 5*s, y - 14*s);
+            ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
+            ctx.lineTo(x + 6*s, y - 5*s);
+            ctx.closePath();
+        };
+        ctx.fillStyle = npcRamp.base;
+        hoodPath(); ctx.fill();
+        // Crown highlight and shaded rim, as the front hood has. Clipped to the
+        // hood: unlike the front's, this silhouette has slanted sides, so an
+        // unclipped rim rect hangs a dark wedge out past the head.
+        ctx.save();
+        hoodPath(); ctx.clip();
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.beginPath();
-        ctx.moveTo(x - 6*s, y - 5*s);
-        ctx.lineTo(x - 5*s, y - 14*s);
-        ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
-        ctx.lineTo(x + 6*s, y - 5*s);
-        ctx.closePath();
+        ctx.ellipse(x, y - 14.3*s, 3.4*s, 1.0*s, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Hood seam down center back
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.fillRect(x - 6*s, y - 12*s, 1.2*s, 7*s);
+        ctx.restore();
+        // Hood seam down centre back — the one mark the front view does not have
         ctx.strokeStyle = npc.color.shadow || '#00000033';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -4301,28 +4367,37 @@ function _drawNPC(npc) {
 
         if(isFix) {
             // Arms reaching forward toward pipe, rocking with torque
-            ctx.fillStyle = npc.color.hex;
+            ctx.fillStyle = npcRamp.dark;
             ctx.fillRect(x - 7*s + torque, y - 4*s, 2*s, 7*s); // left arm
+            ctx.fillStyle = armLit;
             ctx.fillRect(x + 5*s + torque, y - 4*s, 2*s, 7*s); // right arm
             // Hands disappear behind body (reaching into pipe)
+        } else if(isBackTurn) {
+            // Standing with his back to us — arms hang at his sides, on the same
+            // rig, measurements and shading as the front-facing static pose.
+            const capY = y - 3.8*s, shX = 5.6*s;
+            charLimb(x - shX, capY, x - 7.0*s, y + 4.6*s,
+                     2.3*s, npcRamp.dark, x - 7.4*s, y - 0.2*s);
+            charLimb(x + shX, capY, x + 7.0*s, y + 4.6*s,
+                     2.3*s, armLit, x + 7.4*s, y - 0.2*s);
+            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            charHand(x - 7.0*s, y + 5.4*s, 1.4*s, '#f5c89a');
+            charHand(x + 7.0*s, y + 5.4*s, 1.4*s, '#f5c89a');
         } else {
-            // Climbing: arms alternate up/down on ladder
-            ctx.fillStyle = npc.color.hex;
-            ctx.fillRect(x - 8*s, y - 5*s - climbCycle, 2*s, 8*s);
-            ctx.fillRect(x + 6*s, y - 5*s + climbCycle, 2*s, 8*s);
+            // Climbing: arms alternate up/down on ladder. Pulled in from +/-8s
+            // to +/-7.8s: the torso used to be a straight-sided rectangle that
+            // the arms butted against at every height, but charTorso tucks the
+            // waist in, so at the bottom of the stroke the old position left the
+            // arm floating a hair clear of the body.
+            ctx.fillStyle = npcRamp.dark;
+            ctx.fillRect(x - 7.8*s, y - 5*s - climbCycle, 2*s, 8*s);
+            ctx.fillStyle = armLit;
+            ctx.fillRect(x + 5.8*s, y - 5*s + climbCycle, 2*s, 8*s);
             ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 8*s, y - 6*s - climbCycle, 2*s, 3*s);
-            ctx.fillRect(x + 6*s, y - 6*s + climbCycle, 2*s, 3*s);
+            ctx.fillRect(x - 7.8*s, y - 6*s - climbCycle, 2*s, 3*s);
+            ctx.fillRect(x + 5.8*s, y - 6*s + climbCycle, 2*s, 3*s);
         }
-
-        // Legs (jumpsuit color)
-        ctx.fillStyle = npc.color.hex;
-        ctx.fillRect(x - 4*s, y + 6*s + climbCycle, 4*s, 7*s);
-        ctx.fillRect(x + s, y + 6*s - climbCycle, 4*s, 7*s);
-        // Shoes
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3*s);
-        ctx.fillRect(x + s, y + 13*s - climbCycle, 4*s, 3*s);
     } else {
         // === NORMAL FRONT-FACING SPRITE ===
 
@@ -4396,7 +4471,6 @@ function _drawNPC(npc) {
 
         // Torso — shoulders slope out from the neck and the waist tucks in, so
         // the jumpsuit reads as a body rather than a filled rectangle
-        const npcRamp = charRamp(npc.color.hex, null, npc.color.shadow);
         charTorso(x, y - 5*s, y + 6*s, 6.6*s, 5.2*s, npcRamp);
         // Zipper seam down the front
         ctx.strokeStyle = 'rgba(0,0,0,0.20)';
@@ -27524,7 +27598,17 @@ function drawScene() {
                 drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward');
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    drawCashSack(npc.x, npc.y - 46 + bob);
+                    // Carried above his head, but LOWERED into the gap between
+                    // the two of them for the hand-off — holding it over his own
+                    // head is the one place the pipe manager cannot take it from.
+                    // -46 -> +54 lands on the same screen point the PM's turned
+                    // sack uses, so it changes hands without jumping.
+                    let sackY = npc.y - 46;
+                    if(npc.mpPhase === 'delivering' && npc.mpDeliverStart) {
+                        const t = Math.min(1, (Date.now() - npc.mpDeliverStart) / 260);
+                        sackY += 100 * (1 - (1 - t) * (1 - t));   // ease out
+                    }
+                    drawCashSack(npc.x, sackY + bob);
                 }
                 // Draw extracting animation at safe
                 if(npc.extracting) {
@@ -27544,13 +27628,24 @@ function drawScene() {
                     y: npc.y,
                     color: npc.color,
                     state: 'happy',
-                    needsDoc: false
+                    needsDoc: false,
+                    // Without this the clone had no facing at all, so a pipe
+                    // manager stared at the camera through his own hand-off.
+                    facing: npc.facing
                 };
                 drawNPC(tempNPC);
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    const sackSide = npc.facing === 'left' ? -1 : 1;
-                    drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
+                    if(npc.facing === 'back') {
+                        // Still mid hand-off. The sack sits in the gap BETWEEN
+                        // the two of them, where Mullet Pro just let go of it.
+                        // At his hip it was on the camera side of a man with his
+                        // back to us, which reads as shoved behind his back.
+                        drawCashSack(npc.x, npc.y - 42 + bob);
+                    } else {
+                        const sackSide = npc.facing === 'left' ? -1 : 1;
+                        drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
+                    }
                 }
             }
 
@@ -30921,6 +31016,13 @@ function update() {
                             pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                         }
                     }
+                    // Turning back to the camera after taking the sack. Runs
+                    // whether or not he has arrived, so an interrupted walk can
+                    // never strand a pipe manager facing away for good.
+                    if(pm.turnBackAt && Date.now() >= pm.turnBackAt) {
+                        pm.facing = 'forward';
+                        pm.turnBackAt = null;
+                    }
                 }
 
                 // Mullet Pro state machine
@@ -31001,9 +31103,22 @@ function update() {
                             // Check distance to PM directly
                             const dpx = targetPM ? targetPM.x - mp.x : tX - mp.x;
                             const dpy = targetPM ? targetPM.y - mp.y : tY - mp.y;
-                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 40) {
+                            // 96, not 40. Mullet Pro's feet reach 39px below his
+                            // own y and the PM's head 27px above his, so closing
+                            // to 40 parked Mullet Pro squarely over the PM's head
+                            // and shoulders — burying the turn at the one beat it
+                            // needs to be seen. Clearing the bodies takes 66, but
+                            // the SACK also has to live between them: it is 18
+                            // tall, and at 70 the clear band was 4px, which is
+                            // why it ended up tucked at the pipe manager's hip.
+                            // 96 leaves a 30px band, the sack in the middle of it.
+                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 96) {
                                 mp.mpPhase = 'delivering';
                                 mp.mpDeliverStart = Date.now();
+                                // The PM turns to meet him. Mullet Pro comes down
+                                // on him from upstage, so facing Mullet Pro means
+                                // putting his back to the camera.
+                                if(targetPM) targetPM.facing = 'back';
                                 // Face the CAMERA for the hand-off, not the PM.
                                 // He was turning side-on at the exact beat the
                                 // sequence pays off.
@@ -31017,7 +31132,12 @@ function update() {
                         // Short pause — hand sack to PM
                         if(Date.now() - mp.mpDeliverStart > 600) {
                             const targetPM = pms[mp.mpTargetPM];
-                            if(targetPM) targetPM.hasSack = true;
+                            if(targetPM) {
+                                targetPM.hasSack = true;
+                                // Sack in hand — he holds the turn a beat longer,
+                                // then comes back round to the camera with it.
+                                targetPM.turnBackAt = Date.now() + 380;
+                            }
                             mp.hasSack = false;
                             mp.mpTargetPM++;
                             if(mp.mpTargetPM < 4) {
