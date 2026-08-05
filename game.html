@@ -4271,7 +4271,12 @@ function _drawNPC(npc) {
         ctx.globalAlpha = 1;
     }
 
-    if(isClimbing || npc.state === 'fixing') {
+    // A pipe manager can also simply be TURNED AWAY while standing — he turns to
+    // take the cash sack from Mullet Pro, who hands it over from upstage. That is
+    // the same hooded back, so `facing: 'back'` reuses this pose with the ladder
+    // animation off rather than inventing a second back view.
+    const isBackTurn = !isClimbing && npc.state !== 'fixing' && npc.facing === 'back';
+    if(isClimbing || npc.state === 'fixing' || isBackTurn) {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
         const isFix = npc.state === 'fixing';
@@ -4305,6 +4310,20 @@ function _drawNPC(npc) {
             ctx.fillRect(x - 7*s + torque, y - 4*s, 2*s, 7*s); // left arm
             ctx.fillRect(x + 5*s + torque, y - 4*s, 2*s, 7*s); // right arm
             // Hands disappear behind body (reaching into pipe)
+        } else if(isBackTurn) {
+            // Standing with his back to us — arms hang at his sides. Same rig and
+            // same measurements as the front-facing static pose, with the light
+            // and shade swapped left-to-right because we are behind him now.
+            const backRamp = charRamp(npc.color.hex, null, npc.color.shadow);
+            const capY = y - 3.8*s, shX = 5.6*s;
+            charLimb(x - shX, capY, x - 7.0*s, y + 4.6*s,
+                     2.3*s, charMix(npc.color.hex, '#000', 0.10), x - 7.4*s, y - 0.2*s);
+            charLimb(x + shX, capY, x + 7.0*s, y + 4.6*s,
+                     2.3*s, backRamp.dark, x + 7.4*s, y - 0.2*s);
+            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+            charHand(x - 7.0*s, y + 5.4*s, 1.4*s, '#f5c89a');
+            charHand(x + 7.0*s, y + 5.4*s, 1.4*s, '#f5c89a');
         } else {
             // Climbing: arms alternate up/down on ladder
             ctx.fillStyle = npc.color.hex;
@@ -27544,7 +27563,10 @@ function drawScene() {
                     y: npc.y,
                     color: npc.color,
                     state: 'happy',
-                    needsDoc: false
+                    needsDoc: false,
+                    // Without this the clone had no facing at all, so a pipe
+                    // manager stared at the camera through his own hand-off.
+                    facing: npc.facing
                 };
                 drawNPC(tempNPC);
                 if(npc.hasSack) {
@@ -30921,6 +30943,13 @@ function update() {
                             pm.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : 'forward';
                         }
                     }
+                    // Turning back to the camera after taking the sack. Runs
+                    // whether or not he has arrived, so an interrupted walk can
+                    // never strand a pipe manager facing away for good.
+                    if(pm.turnBackAt && Date.now() >= pm.turnBackAt) {
+                        pm.facing = 'forward';
+                        pm.turnBackAt = null;
+                    }
                 }
 
                 // Mullet Pro state machine
@@ -31001,9 +31030,18 @@ function update() {
                             // Check distance to PM directly
                             const dpx = targetPM ? targetPM.x - mp.x : tX - mp.x;
                             const dpy = targetPM ? targetPM.y - mp.y : tY - mp.y;
-                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 40) {
+                            // 70, not 40. Mullet Pro's feet reach 39px below his
+                            // own y and the PM's head 27px above his, so closing
+                            // to 40 parked Mullet Pro squarely over the PM's head
+                            // and shoulders — burying the turn at the one beat it
+                            // needs to be seen. 70 leaves both bodies clear.
+                            if(Math.sqrt(dpx*dpx + dpy*dpy) <= 70) {
                                 mp.mpPhase = 'delivering';
                                 mp.mpDeliverStart = Date.now();
+                                // The PM turns to meet him. Mullet Pro comes down
+                                // on him from upstage, so facing Mullet Pro means
+                                // putting his back to the camera.
+                                if(targetPM) targetPM.facing = 'back';
                                 // Face the CAMERA for the hand-off, not the PM.
                                 // He was turning side-on at the exact beat the
                                 // sequence pays off.
@@ -31017,7 +31055,12 @@ function update() {
                         // Short pause — hand sack to PM
                         if(Date.now() - mp.mpDeliverStart > 600) {
                             const targetPM = pms[mp.mpTargetPM];
-                            if(targetPM) targetPM.hasSack = true;
+                            if(targetPM) {
+                                targetPM.hasSack = true;
+                                // Sack in hand — he holds the turn a beat longer,
+                                // then comes back round to the camera with it.
+                                targetPM.turnBackAt = Date.now() + 380;
+                            }
                             mp.hasSack = false;
                             mp.mpTargetPM++;
                             if(mp.mpTargetPM < 4) {
