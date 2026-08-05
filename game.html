@@ -4392,12 +4392,12 @@ function _drawNPC(npc) {
             // straight-line midpoint, so a hard bow makes the halves diverge and
             // the width step surfaces as a kink at the elbow.
             const capY = y - 3.8*s, shX = 5.6*s;
-            const reachY = y - 18.5*s;    // hands on the underside of the sack
-            const reachX = 4.5*s;         // at its lower corners, gripping it
+            const reachY = y - 18.5*s;    // hands on the front of the sack
+            const reachX = 3.4*s;         // well inside it, closed around it
             charLimb(x - shX, capY, x - reachX, reachY,
-                     2.3*s, npcRamp.dark, x - 4.4*s, y - 11*s);
+                     2.3*s, npcRamp.dark, x - 3.6*s, y - 11*s);
             charLimb(x + shX, capY, x + reachX, reachY,
-                     2.3*s, armLit,       x + 4.4*s, y - 11*s);
+                     2.3*s, armLit,       x + 3.6*s, y - 11*s);
             // No deltoid caps. They work on the hanging pose because the arm
             // drops straight out of them and swallows them; an arm that leaves
             // UPWARD leaves the cap sitting there as a bare ball joint on the
@@ -27626,7 +27626,7 @@ function drawScene() {
                     // sack uses, so it changes hands without jumping.
                     let sackY = npc.y - 46;
                     if(npc.mpPhase === 'delivering' && npc.mpDeliverStart) {
-                        const t = Math.min(1, (Date.now() - npc.mpDeliverStart) / 260);
+                        const t = Math.min(1, (Date.now() - npc.mpDeliverStart) / 150);
                         sackY += 100 * (1 - (1 - t) * (1 - t));   // ease out
                     }
                     drawCashSack(npc.x, sackY + bob);
@@ -27654,19 +27654,16 @@ function drawScene() {
                     // manager stared at the camera through his own hand-off.
                     facing: npc.facing
                 };
+                const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
+                // Mid hand-off the sack goes down BEFORE him, so his hands close
+                // over the front of it. Drawn after, it covered the very hands
+                // that are supposed to be taking it.
+                if(npc.hasSack && npc.facing === 'back') drawCashSack(npc.x, npc.y - 42 + bob);
                 drawNPC(tempNPC);
-                if(npc.hasSack) {
-                    const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
-                    if(npc.facing === 'back') {
-                        // Still mid hand-off. The sack sits in the gap BETWEEN
-                        // the two of them, where Mullet Pro just let go of it.
-                        // At his hip it was on the camera side of a man with his
-                        // back to us, which reads as shoved behind his back.
-                        drawCashSack(npc.x, npc.y - 42 + bob);
-                    } else {
-                        const sackSide = npc.facing === 'left' ? -1 : 1;
-                        drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
-                    }
+                if(npc.hasSack && npc.facing !== 'back') {
+                    // Turned back to the camera — it hangs from his hand now.
+                    const sackSide = npc.facing === 'left' ? -1 : 1;
+                    drawCashSack(npc.x + sackSide * 14, npc.y + 17 + bob);
                 }
             }
 
@@ -31018,7 +31015,12 @@ function update() {
             // NPC exit sequence — Mullet Pro delivers cash to each PM, then brings the last sack to player
             if(level6.npcExitSequence) {
                 level6.npcExitTimer++;
-                const mpSpeed = 4;
+                // 5.5, not 4. Trimming the pauses only got the sequence from 23s
+                // to 19s, because the bulk of it is the walking — he goes back to
+                // the safe for every single sack, four round trips. Every arrival
+                // threshold in here is 8 or more, so a 5.5 step still cannot jump
+                // clean over one.
+                const mpSpeed = 5.5;
                 const safeX = 350, safeY = 162; // Stand in front of safe
                 const pms = level6.exitingNPCs.filter(n => !n.isMulletPro);
                 const mp = level6.exitingNPCs.find(n => n.isMulletPro);
@@ -31082,7 +31084,10 @@ function update() {
 
                     } else if(mp.mpPhase === 'extracting') {
                         // Brief pause at safe — grab sack
-                        if(Date.now() - mp.mpExtractStart > 700) {
+                        // 300, not 700. He opens the safe and lifts out ONE
+                        // sack; three quarters of a second of standing at it
+                        // read as him counting the money.
+                        if(Date.now() - mp.mpExtractStart > 300) {
                             mp.hasSack = true;
                             // Mark one sack claimed
                             const sack = level6.cashSacks.find(s => !s.claimed);
@@ -31151,13 +31156,15 @@ function update() {
                     } else if(mp.mpPhase === 'delivering') {
                         mp.facing = 'forward';
                         // Short pause — hand sack to PM
-                        if(Date.now() - mp.mpDeliverStart > 600) {
+                        // 280, not 600. It is a pass, not a presentation —
+                        // long enough to see the sack change hands and no longer.
+                        if(Date.now() - mp.mpDeliverStart > 280) {
                             const targetPM = pms[mp.mpTargetPM];
                             if(targetPM) {
                                 targetPM.hasSack = true;
                                 // Sack in hand — he holds the turn a beat longer,
                                 // then comes back round to the camera with it.
-                                targetPM.turnBackAt = Date.now() + 380;
+                                targetPM.turnBackAt = Date.now() + 200;
                             }
                             mp.hasSack = false;
                             mp.mpTargetPM++;
