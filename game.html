@@ -4271,6 +4271,10 @@ function _drawNPC(npc) {
         ctx.globalAlpha = 1;
     }
 
+    // One ramp for the whole sprite. It used to be declared inside the front
+    // branch only, which is how the two halves drifted apart in the first place.
+    const npcRamp = charRamp(npc.color.hex, null, npc.color.shadow);
+
     // A pipe manager can also simply be TURNED AWAY while standing — he turns to
     // take the cash sack from Mullet Pro, who hands it over from upstage. That is
     // the same hooded back, so `facing: 'back'` reuses this pose with the ladder
@@ -4278,25 +4282,57 @@ function _drawNPC(npc) {
     const isBackTurn = !isClimbing && npc.state !== 'fixing' && npc.facing === 'back';
     if(isClimbing || npc.state === 'fixing' || isBackTurn) {
         // === BACK-FACING POSE — hooded jumpsuit, facing the pipe ===
+        //
+        // This pose never went through the cast shading pass. It was flat fills
+        // of the raw jumpsuit colour while the front was rebuilt on charRamp and
+        // charTorso, so a pipe manager changed material every time he turned:
+        // measured on the same body points, the torso had a tonal spread of 0
+        // against the front's 43, the legs jumped 34 luminance units BRIGHTER
+        // and the hood 16 DARKER. Opposite directions, which is why it read as a
+        // different suit rather than a different angle. Same ramp both ways now.
+        //
+        // The light does not turn with him — the house key is fixed at the top
+        // left — so the shading keeps the SAME screen side it has from the front
+        // instead of mirroring. drawMulletProAsPM's back view already works this
+        // way, and mirroring it here is what made his sleeves disagree with his
+        // own legs.
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * 4 : 0;
         const isFix = npc.state === 'fixing';
         // Torquing motion: arms rock side-to-side when fixing
         const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
+        const armLit = charMix(npc.color.hex, '#000', 0.10);
 
-        // Torso (back view — jumpsuit)
-        ctx.fillStyle = npc.color.hex;
-        ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);
+        // Torso — same build as the front, so the silhouette and the tone match
+        // from either side instead of a flat rectangle standing in for a body
+        charTorso(x, y - 5*s, y + 6*s, 6.6*s, 5.2*s, npcRamp);
+        // Collar band across the shoulders
+        ctx.fillStyle = npcRamp.dark;
+        ctx.fillRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s);
 
-        // Hood (same color as jumpsuit, covers head)
-        ctx.fillStyle = npc.color.hex;
+        // Hood (same colour as the jumpsuit, covers the head)
+        const hoodPath = () => {
+            ctx.beginPath();
+            ctx.moveTo(x - 6*s, y - 5*s);
+            ctx.lineTo(x - 5*s, y - 14*s);
+            ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
+            ctx.lineTo(x + 6*s, y - 5*s);
+            ctx.closePath();
+        };
+        ctx.fillStyle = npcRamp.base;
+        hoodPath(); ctx.fill();
+        // Crown highlight and shaded rim, as the front hood has. Clipped to the
+        // hood: unlike the front's, this silhouette has slanted sides, so an
+        // unclipped rim rect hangs a dark wedge out past the head.
+        ctx.save();
+        hoodPath(); ctx.clip();
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.beginPath();
-        ctx.moveTo(x - 6*s, y - 5*s);
-        ctx.lineTo(x - 5*s, y - 14*s);
-        ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
-        ctx.lineTo(x + 6*s, y - 5*s);
-        ctx.closePath();
+        ctx.ellipse(x, y - 14.3*s, 3.4*s, 1.0*s, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Hood seam down center back
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.fillRect(x - 6*s, y - 12*s, 1.2*s, 7*s);
+        ctx.restore();
+        // Hood seam down centre back — the one mark the front view does not have
         ctx.strokeStyle = npc.color.shadow || '#00000033';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -4306,42 +4342,53 @@ function _drawNPC(npc) {
 
         if(isFix) {
             // Arms reaching forward toward pipe, rocking with torque
-            ctx.fillStyle = npc.color.hex;
+            ctx.fillStyle = npcRamp.dark;
             ctx.fillRect(x - 7*s + torque, y - 4*s, 2*s, 7*s); // left arm
+            ctx.fillStyle = armLit;
             ctx.fillRect(x + 5*s + torque, y - 4*s, 2*s, 7*s); // right arm
             // Hands disappear behind body (reaching into pipe)
         } else if(isBackTurn) {
-            // Standing with his back to us — arms hang at his sides. Same rig and
-            // same measurements as the front-facing static pose, with the light
-            // and shade swapped left-to-right because we are behind him now.
-            const backRamp = charRamp(npc.color.hex, null, npc.color.shadow);
+            // Standing with his back to us — arms hang at his sides, on the same
+            // rig, measurements and shading as the front-facing static pose.
             const capY = y - 3.8*s, shX = 5.6*s;
             charLimb(x - shX, capY, x - 7.0*s, y + 4.6*s,
-                     2.3*s, charMix(npc.color.hex, '#000', 0.10), x - 7.4*s, y - 0.2*s);
+                     2.3*s, npcRamp.dark, x - 7.4*s, y - 0.2*s);
             charLimb(x + shX, capY, x + 7.0*s, y + 4.6*s,
-                     2.3*s, backRamp.dark, x + 7.4*s, y - 0.2*s);
-            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
-            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+                     2.3*s, armLit, x + 7.4*s, y - 0.2*s);
+            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
             charHand(x - 7.0*s, y + 5.4*s, 1.4*s, '#f5c89a');
             charHand(x + 7.0*s, y + 5.4*s, 1.4*s, '#f5c89a');
         } else {
-            // Climbing: arms alternate up/down on ladder
-            ctx.fillStyle = npc.color.hex;
-            ctx.fillRect(x - 8*s, y - 5*s - climbCycle, 2*s, 8*s);
-            ctx.fillRect(x + 6*s, y - 5*s + climbCycle, 2*s, 8*s);
+            // Climbing: arms alternate up/down on ladder. Pulled in from +/-8s
+            // to +/-7.8s: the torso used to be a straight-sided rectangle that
+            // the arms butted against at every height, but charTorso tucks the
+            // waist in, so at the bottom of the stroke the old position left the
+            // arm floating a hair clear of the body.
+            ctx.fillStyle = npcRamp.dark;
+            ctx.fillRect(x - 7.8*s, y - 5*s - climbCycle, 2*s, 8*s);
+            ctx.fillStyle = armLit;
+            ctx.fillRect(x + 5.8*s, y - 5*s + climbCycle, 2*s, 8*s);
             ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 8*s, y - 6*s - climbCycle, 2*s, 3*s);
-            ctx.fillRect(x + 6*s, y - 6*s + climbCycle, 2*s, 3*s);
+            ctx.fillRect(x - 7.8*s, y - 6*s - climbCycle, 2*s, 3*s);
+            ctx.fillRect(x + 5.8*s, y - 6*s + climbCycle, 2*s, 3*s);
         }
 
-        // Legs (jumpsuit color)
-        ctx.fillStyle = npc.color.hex;
+        // Legs — same ramp and same knee shadow the front pose carries
+        ctx.fillStyle = npcRamp.dark;
         ctx.fillRect(x - 4*s, y + 6*s + climbCycle, 4*s, 7*s);
+        ctx.fillStyle = npcRamp.base;
         ctx.fillRect(x + s, y + 6*s - climbCycle, 4*s, 7*s);
+        ctx.fillStyle = 'rgba(0,0,0,0.13)';
+        ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 9.4*s - climbCycle, 4*s, 0.8*s);
         // Shoes
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3*s);
-        ctx.fillRect(x + s, y + 13*s - climbCycle, 4*s, 3*s);
+        pathRoundRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        pathRoundRect(x + s,   y + 13*s - climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(x - 4*s, y + 15.4*s + climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 15.4*s - climbCycle, 4*s, 0.8*s);
     } else {
         // === NORMAL FRONT-FACING SPRITE ===
 
@@ -4415,7 +4462,6 @@ function _drawNPC(npc) {
 
         // Torso — shoulders slope out from the neck and the waist tucks in, so
         // the jumpsuit reads as a body rather than a filled rectangle
-        const npcRamp = charRamp(npc.color.hex, null, npc.color.shadow);
         charTorso(x, y - 5*s, y + 6*s, 6.6*s, 5.2*s, npcRamp);
         // Zipper seam down the front
         ctx.strokeStyle = 'rgba(0,0,0,0.20)';
