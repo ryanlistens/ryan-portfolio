@@ -2821,20 +2821,26 @@ function _drawMulletProAsPM(npc) {
         // rectangle for hair, a maroon box for the torso. None of the remaster
         // reached it, so in hell his back was still the old sprite while every
         // other pose had been redrawn.
-        // FIXING works exactly like the ordinary pipe manager's (_drawNPC):
-        // the wrench is CLAMPED ON THE PIPE and drawn behind the sprite, and
-        // the arms are two bars at the torso's edges that rock side to side
-        // with the torque while the hands stay hidden, reaching into the pipe.
-        // This used to hold the tool out in front of him with both hands on the
-        // handle, which is not how any other pipe manager in the game works.
-        const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3.6 : 0;
+        // FIXING. Same idea as the ordinary pipe manager's — the wrench is
+        // clamped ON THE PIPE, same pivot, same rock, same ridged red handle —
+        // but he is not a pipe manager, so he grips it with the arms and hands
+        // the shared sprite gives him instead of the PM's two nubs.
+        //
+        // Depth: he faces the pipe, away from us. An arm reaching across his
+        // FRONT is on the far side of his own torso and is hidden by it; what
+        // shows is only what extends past him LATERALLY, out where the handle
+        // sticks out. So the wrench, both arms and both hands are all drawn
+        // BEFORE the body, and the body then covers whatever overlaps it. His
+        // near arm therefore reads as a short sleeve emerging on the handle
+        // side rather than a limb laid across his back.
         if(isFix) {
-            // Same wrench, same pivot and rock as _drawNPC's, so hell reads as
-            // the same job being done by the same tool.
+            const rock = Math.sin(npc.fixAnim * 5) * 0.45;
+            const c = Math.cos(rock), sn = Math.sin(rock);
+            const pivotX = x, pivotY = y - 2;
             ctx.save();
             ctx.globalAlpha = Math.min(1, (npc.fixAnim / 0.2));
-            ctx.translate(x, y - 2);
-            ctx.rotate(Math.sin(npc.fixAnim * 5) * 0.45);
+            ctx.translate(pivotX, pivotY);
+            ctx.rotate(rock);
             ctx.fillStyle = '#e03020';
             ctx.beginPath();
             ctx.moveTo(4, -5); ctx.lineTo(56, -3.5); ctx.lineTo(58, 0);
@@ -2848,19 +2854,23 @@ function _drawMulletProAsPM(npc) {
             ctx.fillStyle = '#555';
             ctx.beginPath(); ctx.arc(2, 0, 5, 0, Math.PI * 2); ctx.fill();
             ctx.restore();
+
+            // Both hands on the handle, out past his torso (+/-17.5) so they are
+            // beside him rather than behind him and actually read. They ride the
+            // rotation, so the grip tracks the tool as it turns.
+            const g1 = 26, g2 = 44;
+            const nearX  = pivotX + g1 * c, nearY  = pivotY + g1 * sn;
+            const farX   = pivotX + g2 * c, farY   = pivotY + g2 * sn;
+            charLimb(leftShoulderX,  shoulderY, nearX, nearY, 2.0*MP_S, SL_L,
+                     x + 2, shoulderY + 4);
+            charLimb(rightShoulderX, shoulderY, farX,  farY,  2.0*MP_S, SL_R,
+                     rightShoulderX + 6, shoulderY + 3);
+            charHand(nearX, nearY, 1.5*MP_S, '#f5c89a');
+            charHand(farX,  farY,  1.5*MP_S, '#f5c89a');
         }
 
-        // The BODY, over the wrench that is clamped on the pipe beyond him.
+        // The BODY last, so it hides the arms where they cross his own front.
         drawMulletPro(x, y, 'back', false, false, isClimbing, true);
-
-        if(isFix) {
-            // Arms reaching forward into the pipe, rocking with the torque —
-            // no hands, they are past his own body and out of sight.
-            charLimb(leftShoulderX  + torque, shoulderY, leftShoulderX  + torque, y + 7,
-                     2.0*MP_S, SL_L, leftShoulderX  + torque, y - 1);
-            charLimb(rightShoulderX + torque, shoulderY, rightShoulderX + torque, y + 7,
-                     2.0*MP_S, SL_R, rightShoulderX + torque, y - 1);
-        }
 
         // (legs come from the shared sprite above — its walk bob alternates them
         // on the rungs, which is what the hand-built pair here was doing)
