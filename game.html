@@ -1283,15 +1283,45 @@ let redsEnding = {
     active: false,
     card: 0,            // >0 while the "RED'S ENDING" title card plays
     letterRead: false,  // the CEO's summons; Red's office door stays shut until it is
-    // furnace execution beats: null -> 'axe' -> 'carry' -> 'burn' -> 'aftermath' -> card
+
+    // === THE SHIFT — the pipe room, played from inside the jumpsuit ===
+    // One full round of the loop the whole game is built on, with the roles
+    // swapped: Mullet Pro prints the doc and brings it to YOU, and it is you
+    // who goes up the ladder with it. 'wait' -> 'doc' -> 'climb' -> 'fix' ->
+    // 'down' -> 'done'.
+    shift: 'wait',
+    pmState: 'happy',   // his pose, handed straight to drawNPC as an NPC state
+    fixAnim: 0,
+    animStart: 0,       // Date.now() at the start of the current climb/fix beat
+    climbFrom: 380,
+    climbTo: 380,
+
+    // === THE FURNACE — execution beats ===
+    // 'wait' (he is standing there, you still have the controls) -> 'axe' ->
+    // 'carry' -> 'burn' -> 'exit' -> 'aftermath' -> card
     exec: null,
     execTimer: 0,
     swing: 0,           // frames into the axe swing itself
     beheaded: false,    // set on impact; Red stops being drawn upright
+    killX: 0,           // where the axe landed — the stain stays there afterwards
     drips: [],          // blood off the axe, left on the floor behind him
     doorOpen: 0,        // 0..1 cloning-lab door, opening then closing behind him
+    ceoFade: 0,         // 0..1 him going through the doorway at the end
     ceoX: 560,
 };
+
+// The flashback takes the controls off him for the climb, the fix and the way
+// back down — and for the whole of the execution. Everywhere movement or a
+// ground clamp is applied, it asks this first.
+function redsLocked() {
+    if(!redsEnding.active) return false;
+    if(redsEnding.shift === 'climb' || redsEnding.shift === 'fix' || redsEnding.shift === 'down') return true;
+    return !!(redsEnding.exec && redsEnding.exec !== 'wait');
+}
+// True only while he is actually off the floor on the ladder.
+function redsOnLadder() {
+    return redsEnding.active && (redsEnding.shift === 'climb' || redsEnding.shift === 'fix' || redsEnding.shift === 'down');
+}
 
 let level5 = {
     room: 'furnaceRoom',
@@ -9312,6 +9342,16 @@ function drawLevel5PipeRoom() {
         // Hand wheel turn-valve on horizontal pipe section (right of elbow)
         drawHandWheelValve(npc.x + 60, pipeY + 25, npc, true);
 
+        // In the flashback the red pipe is the PLAYER's station. Its gasket,
+        // pipe and valve are drawn above like everyone else's, but no second Red
+        // stands at the foot of it, and the ladder is sized off the player's own
+        // height on it rather than off an NPC who is not there.
+        const redsOwnStation = redsEnding.active && npc.color.name === 'RED';
+        if(redsOwnStation) {
+            drawStepLadder(npc.x, redsOnLadder() ? player.y : 368, npc.color);
+            continue;
+        }
+
         // Advance climb/fix state BEFORE drawing so npc.y reflects the
         // current animation frame (PM: climbing_up → fixing → climbing_down → happy).
         if(!npcDevoured(npc)) updateNPCPipeAnimation(npc);
@@ -9347,8 +9387,31 @@ function drawLevel5PipeRoom() {
     // CCTV on back wall, right side — mid-height, pointing left toward PMs
     drawCCTVCamera(640, 185, false);
 
+    // \u2500\u2500 RED'S ENDING \u2014 the shift, called out one step at a time \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    if(redsEnding.active) {
+        const pipe = redsPipe();
+        const mp = level5.mulletPro;
+        if(redsEnding.shift === 'wait') {
+            if(pipe) drawActionLabel('YOUR PIPE', pipe.x, 108, {fontSize: 12, color: '#ff8a7a'});
+            if(mp.hasDoc) {
+                drawActionLabel(Math.abs(player.x - mp.x) < 50
+                        ? '[ ACTION ] - TAKE THE DOC'
+                        : 'MULLET PRO HAS YOUR DOC',
+                    mp.x, 300, {fontSize: 13});
+            }
+        } else if(redsEnding.shift === 'doc' && pipe) {
+            drawActionLabel(Math.abs(player.x - pipe.x) < 44
+                    ? '[ ACTION ] - CLIMB THE LADDER'
+                    : 'TAKE IT TO YOUR PIPE',
+                pipe.x, 300, {fontSize: 13});
+        } else if(redsEnding.shift === 'done' && player.x < 600) {
+            // Shift closed. The letter is the only thing left in the day.
+            drawActionLabel('THE CEO IS WAITING \u2192', 620, 300, {fontSize: 13, color: '#d8c8a0'});
+        }
+    }
+
     // Right edge door prompt
-    if(player.x >= 600) {
+    if(player.x >= 600 && !redsLocked()) {
         drawActionLabel('[ ACTION ] - HALLWAY \u2192', 637, 325);
     }
 }
@@ -9839,6 +9902,28 @@ function drawLevel5Hallway() {
         ctx.lineWidth = 3;
         ctx.strokeRect(portraitX - portraitW/2 - 12, portraitY - 5, portraitW + 24, portraitH + 10);
     }
+
+    // ── RED'S ENDING — which of these doors are his ──────────────────────────
+    // Three of them refuse him and one of them is a trap, and until now all four
+    // did it by silently swallowing the button press.
+    if(redsEnding.active) {
+        for(const office of level5.hallway.offices) {
+            if(office.name === 'RED' || Math.abs(player.x - office.x) >= 40) continue;
+            ctx.fillStyle = 'rgba(20,16,12,0.55)';
+            ctx.fillRect(office.x - 37, officeDoorY - 2, 74, 124);
+            drawActionLabel('NOT YOUR OFFICE', office.x, officeDoorY - 42, {fontSize: 12, color: '#b9b0a4'});
+        }
+        const shiftDone = redsEnding.shift === 'done';
+        if(Math.abs(player.x - level5.hallway.leftDoor.x) < 60) {
+            drawActionLabel(shiftDone ? '← PIPE ROOM' : '[ ACTION ] - YOUR SHIFT ←',
+                            level5.hallway.leftDoor.x + 40, 300, {fontSize: 13});
+        }
+        if(Math.abs(player.x - level5.hallway.rightDoor.x) < 60) {
+            drawActionLabel(shiftDone ? '[ ACTION ] - FURNACE ROOM →' : 'FINISH YOUR SHIFT FIRST',
+                            level5.hallway.rightDoor.x - 40, 300,
+                            {fontSize: 13, color: shiftDone ? '#d8c8a0' : '#b9b0a4'});
+        }
+    }
 }
 
 
@@ -10060,18 +10145,18 @@ function drawLevel5FurnaceRoom() {
         ctx.fillRect(ld.x + 14, ld.y + 30, 2, 5);           // keyhole
     }
 
-    // Nothing to interact with while you are being murdered.
+    // Nothing in this room answers to Red \u2014 no doors, no furnace, no key.
     const redsExec = redsEnding.active && redsEnding.exec;
     if(!redsExec && Math.abs(player.x - level5.furnaceRoom.leftDoor.x) < 50) {
         drawActionLabel('\u2190 HALLWAY', level5.furnaceRoom.leftDoor.x + 15, level5.furnaceRoom.leftDoor.y - 10, {fontSize: 13});
     }
-    if(Math.abs(player.x - furnace.x) < 90 && !player.holding && !level5.redKeyOnGround) {
+    if(!redsExec && Math.abs(player.x - furnace.x) < 90 && !player.holding && !level5.redKeyOnGround) {
         drawActionLabel('FURNACE', furnace.x, furnace.y - 60);
     }
-    if(Math.abs(player.x - furnace.x) < 90 && player.holding) {
+    if(!redsExec && Math.abs(player.x - furnace.x) < 90 && player.holding) {
         drawActionLabel('[ ACTION ] - BURN DOC', furnace.x, furnace.y - 58);
     }
-    if(level5.redKeyOnGround && Math.abs(player.x - furnace.x) < 60 && !player.holding) {
+    if(!redsExec && level5.redKeyOnGround && Math.abs(player.x - furnace.x) < 60 && !player.holding) {
         drawActionLabel('[ ACTION ] - PICK UP KEY', furnace.x, 385 - 36);
     }
 
@@ -10080,7 +10165,40 @@ function drawLevel5FurnaceRoom() {
         const t = redsEnding.execTimer;
         const ex = redsEnding.ceoX;
         const fx = furnace.x;
-        if(redsEnding.exec === 'axe') {
+        const beat = redsEnding.exec;
+
+        // ── What the axe left on the floor, drawn under everyone ─────────────
+        // The stain and the trail belong to the ROOM from the moment they are
+        // made, not to the beat that made them. Drawing them only during 'exit'
+        // meant the floor wiped itself clean for the aftermath hold — the one
+        // shot whose whole job is to be the room the detective finds.
+        if(redsEnding.beheaded) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(84,0,6,0.62)';
+            ctx.beginPath();
+            ctx.ellipse(redsEnding.killX, 404, 34, 8.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(122,0,9,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(redsEnding.killX + 6, 403, 17, 4.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(104,0,7,0.72)';
+            for(const d of redsEnding.drips) {
+                ctx.beginPath(); ctx.ellipse(d.x, 404, d.r * 1.25, d.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        if(beat === 'wait') {
+            // Waiting for him with it lit, axe down at his side. He does not
+            // look up until Red is close enough.
+            const face = ex > player.x ? 'left' : 'right';
+            drawCEO(ex, 380, face);
+            drawBloodyAxeAtSide(ex, 380, false, false);   // not yet, it isn't
+            if(Math.abs(player.x - ex) > 88) {
+                drawActionLabel('MR. PIPERSWORTH', ex, 344, {fontSize: 12, color: '#c9a86a'});
+            }
+        } else if(beat === 'axe') {
             const face = ex > player.x ? 'left' : 'right';
             const side = ex > player.x ? -1 : 1;   // which way he swings
             drawCEO(ex, 380, face);
@@ -10090,30 +10208,67 @@ function drawLevel5FurnaceRoom() {
             // skipped for this pose so there is no third limb.
             drawCEOAxeArm(ex, 380, side, redsEnding.swing);
             if(redsEnding.beheaded) drawBeheadedRed(player.x, 380, side);
-        } else if(redsEnding.exec === 'carry') {
-            // Over the shoulder. The body is a limp jumpsuit with the hood empty.
-            drawCEO(ex, 380, 'left');
-            drawCarriedRed(ex, 380);
-        } else if(redsEnding.exec === 'exit') {
-            // The drips he has already left, then the doorway, then him.
-            ctx.fillStyle = 'rgba(96,0,6,0.62)';
-            for(const d of redsEnding.drips) {
-                ctx.beginPath(); ctx.ellipse(d.x, 404, d.r, d.r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+        } else if(beat === 'carry') {
+            // Over the shoulder. The body is a limp jumpsuit with the hood empty,
+            // and the axe is still in his other hand — it does not vanish for the
+            // walk and reappear at the door.
+            const face = ex > fx ? 'left' : 'right';
+            drawCarriedRed(ex, 380, face);   // behind him — his head reads in front of the body
+            drawCEO(ex, 380, face);
+            drawBloodyAxeAtSide(ex, 380, false);
+        } else if(beat === 'burn') {
+            // He puts him in. The bundle travels from his shoulder to the mouth
+            // of the furnace and shrinks into it — it used to appear full-size
+            // in the middle of the fire and deflate on the spot, with him
+            // teleported to the far side of the furnace to watch it.
+            const face = ex > fx ? 'left' : 'right';
+            drawCEO(ex, 380, face);
+            const p = Math.min(1, t / 46);
+            if(p < 1) {
+                const bx = ex + (fx - ex) * p;
+                const by = 320 + (furnace.y + 6 - 320) * p;
+                const k = 1 - p * 0.72;
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, 1.6 - p);
+                ctx.translate(bx, by);
+                ctx.scale(k, k);
+                ctx.rotate(-0.2 + p * 0.5);
+                // the jumpsuit, charring toward the ember colour as it goes in
+                ctx.fillStyle = charMix(COLORS[0].hex, '#3a0a00', p * 0.7);
+                ctx.fillRect(-24, -11, 48, 22);
+                ctx.fillStyle = charMix(COLORS[0].shadow || '#7a1008', '#2a0600', p * 0.7);
+                ctx.fillRect(-26, 8, 15, 20);
+                ctx.fillRect(-8, 8, 15, 18);
+                ctx.beginPath(); ctx.arc(26, -2, 10, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
             }
+        } else if(beat === 'exit') {
             const rd = level5.furnaceRoom.rightDoor;
             const k = redsEnding.doorOpen;
             if(k > 0) {
+                // The doorway itself — a real steel frame with a light behind it,
+                // rather than a lit rectangle floating on the wall.
+                ctx.fillStyle = '#15120f';
+                ctx.fillRect(rd.x - 30, rd.y - 8, 64, 72);
                 // The lab beyond: cold, clinical, far too bright for this room
                 ctx.save();
-                ctx.beginPath(); ctx.rect(rd.x - 24, rd.y - 4, 52, 66); ctx.clip();
+                ctx.beginPath(); ctx.rect(rd.x - 24, rd.y - 4, 52, 64); ctx.clip();
                 ctx.fillStyle = '#dff3ff';
-                ctx.fillRect(rd.x - 24, rd.y - 4, 52 * k, 66);
+                ctx.fillRect(rd.x - 24, rd.y - 4, 52 * k, 64);
                 const spill = ctx.createRadialGradient(rd.x, rd.y + 30, 4, rd.x, rd.y + 30, 90);
                 spill.addColorStop(0, `rgba(220,245,255,${0.55 * k})`);
                 spill.addColorStop(1, 'rgba(220,245,255,0)');
                 ctx.fillStyle = spill;
                 ctx.fillRect(rd.x - 90, rd.y - 40, 180, 130);
                 ctx.restore();
+                // Frame: jamb, header and the sill it opens onto
+                ctx.strokeStyle = '#4a443c';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(rd.x - 27, rd.y - 6, 58, 68);
+                ctx.fillStyle = '#5c5449';
+                ctx.fillRect(rd.x - 30, rd.y - 12, 64, 7);
+                ctx.fillStyle = '#2a251f';
+                ctx.fillRect(rd.x - 30, rd.y - 12, 64, 2);
                 // and the light thrown out across the floor toward us
                 const floorSpill = ctx.createLinearGradient(rd.x, rd.y + 60, rd.x - 70, 430);
                 floorSpill.addColorStop(0, `rgba(210,240,255,${0.30 * k})`);
@@ -10125,40 +10280,31 @@ function drawLevel5FurnaceRoom() {
                 ctx.closePath(); ctx.fill();
             }
             // Him. Once the door is open he is between us and the lab, so he
-            // goes black — a silhouette in the doorway, which is the shot.
+            // goes black — a silhouette in the doorway, which is the shot. He
+            // fades out as he steps through rather than standing in it until it
+            // shuts on him.
             const inLight = k > 0.15;
-            if(inLight) {
+            const gone = redsEnding.ceoFade;
+            if(gone < 1) {
                 ctx.save();
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.filter = 'brightness(0)';
-                drawCEO(redsEnding.ceoX, 380, 'right');
+                ctx.globalAlpha = 1 - gone;
+                if(inLight) ctx.filter = 'brightness(0)';
+                drawCEO(ex, 380, 'right');
                 ctx.filter = 'none';
-                ctx.restore();
-            } else {
-                drawCEO(redsEnding.ceoX, 380, 'right');
-            }
-            // the axe still in his hand, hanging at his side and still wet
-            drawBloodyAxeAtSide(redsEnding.ceoX, 380, inLight);
-        } else if(redsEnding.exec === 'burn') {
-            drawCEO(fx + 46, 380, 'left');
-            // The jumpsuit going in, shrinking into the mouth of the furnace
-            const k = Math.max(0, 1 - t / 60);
-            if(k > 0) {
-                ctx.save();
-                ctx.globalAlpha = k;
-                ctx.translate(fx, furnace.y + 10);
-                ctx.scale(k, k);
-                ctx.fillStyle = COLORS[0].hex;
-                ctx.fillRect(-12, -16, 24, 32);
+                // the axe still in his hand, hanging at his side and still wet
+                drawBloodyAxeAtSide(ex, 380, inLight);
                 ctx.restore();
             }
         }
-        // 'aftermath' draws nothing extra — the empty room IS the point.
+        // 'aftermath' draws no figures — the stain, the trail and the lit
+        // furnace above are the whole of the shot, and they are already down.
     }
 
-    // Concealed right door — passage to cloning room (visible when unlocked)
+    // Concealed right door — passage to cloning room (visible when unlocked).
+    // Not in the flashback: on this night it is still a wall with a door in it,
+    // and the detective's shortcut has not been cut through it yet.
     const rdX = 640, rdY = 340, rdW = 50, rdH = 60;
-    if (level6.cloningDoorUnlocked) {
+    if (level6.cloningDoorUnlocked && !redsEnding.active) {
         // Open passage with dark interior and green LED edge
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(rdX, rdY, rdW, rdH);
@@ -10187,12 +10333,17 @@ function drawCEOAxeArm(x, y, side, sw) {
     // Shoulder and hand come off the CEO's own rig so the arm starts where his
     // other one does rather than somewhere near it.
     const shX = x + side * 7.0*s, shY = y + 2.2*s;
-    // Shoulder angle through the swing, measured from straight down.
+    // Shoulder angle through the swing, measured from straight down. Negative is
+    // behind him, positive is through and past vertical onto the man — the chop
+    // HAS to end positive. Stopping it at -0.60, a hair off the -0.35 the wind-up
+    // started from, took the axe up and back down on the side it began on, which
+    // is the side Red is not standing on: the head came off next to a blade a
+    // body-width away from it.
     let a;
     if(sw < 34)      a = -0.35 - (sw / 34) * 2.3;           // winding up and over
     else if(sw < 46) a = -2.65 - Math.sin((sw - 34) / 12 * Math.PI) * 0.12;  // held, quivering
-    else if(sw < 58) a = -2.65 + ((sw - 46) / 12) * 2.05;   // the chop
-    else             a = -0.60;                              // followed through, low
+    else if(sw < 58) a = -2.65 + ((sw - 46) / 12) * 3.20;   // the chop, through
+    else             a = 0.55;                               // followed through, low
     const reach = 15*s;
     const handX = shX + Math.sin(a) * side * reach;
     const handY = shY + Math.cos(a) * reach;
@@ -10233,9 +10384,10 @@ function drawCEOAxeArm(x, y, side, sw) {
     charHand(handX, handY, 1.5*s, '#c49872');
 }
 
-// The axe carried at his side on the way out, blade still wet. `dark` renders it
-// as part of the silhouette once he is standing in the lab's light.
-function drawBloodyAxeAtSide(x, y, dark) {
+// The axe carried at his side. `dark` renders it as part of the silhouette once
+// he is standing in the lab's light; `wet` is the blood on the blade, which he
+// has no business carrying in before he has used it.
+function drawBloodyAxeAtSide(x, y, dark, wet = true) {
     ctx.save();
     ctx.translate(x + 16, y + 22);
     ctx.rotate(0.34);
@@ -10246,7 +10398,7 @@ function drawBloodyAxeAtSide(x, y, dark) {
     ctx.beginPath();
     ctx.moveTo(-3, 16); ctx.quadraticCurveTo(-19, 12, -16, 0);
     ctx.lineTo(-3, 3); ctx.closePath(); ctx.fill();
-    if(!dark) {
+    if(!dark && wet) {
         // the wet edge, and a bead about to go
         ctx.fillStyle = 'rgba(120,0,8,0.85)';
         ctx.beginPath();
@@ -10259,57 +10411,135 @@ function drawBloodyAxeAtSide(x, y, dark) {
 }
 
 // Red after the axe: the body folded on the floor, the hood a short distance
-// off, and the spill between them.
+// off, and the spill between them. `side` is the direction the swing carried,
+// so the hood comes to rest on the far side of the body from the CEO.
+//
+// Built out of the same rounded limbs the standing jumpsuit uses rather than
+// stacked rectangles — as four flat boxes it read as a red brick with a
+// doughnut beside it, and nothing in the shape said body.
 function drawBeheadedRed(x, y, side) {
     const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
+    const gy = y + 24;                       // the floor line the body lies on
+
+    // The spill, spreading from the neck toward the hood
     ctx.save();
-    // Pool first, under everything
-    ctx.fillStyle = 'rgba(90,0,6,0.55)';
-    ctx.beginPath(); ctx.ellipse(x, y + 30, 26, 6, 0, 0, Math.PI * 2); ctx.fill();
-    // Body, crumpled on its side
-    ctx.translate(x, y + 20);
-    ctx.rotate(side * 0.12);
-    ctx.fillStyle = ramp.base;
-    ctx.fillRect(-19, -12, 38, 20);
-    ctx.fillStyle = ramp.dark;
-    ctx.fillRect(-17, 6, 15, 8);
-    ctx.fillRect(2, 6, 15, 8);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(-19, 12, 8, 5);
-    ctx.fillRect(11, 12, 8, 5);
-    // Stump
-    ctx.fillStyle = '#6b0008';
-    ctx.fillRect(side * 15, -12, 6, 7);
+    ctx.fillStyle = 'rgba(86,0,6,0.5)';
+    ctx.beginPath(); ctx.ellipse(x + side * 12, gy + 8, 30, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(112,0,8,0.5)';
+    ctx.beginPath(); ctx.ellipse(x + side * 20, gy + 7, 15, 4.5, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-    // The hood, come to rest a little way off
+
     ctx.save();
-    ctx.translate(x + side * 40, y + 26);
-    ctx.rotate(side * 0.9);
+    ctx.translate(x, gy);
+    ctx.scale(side, 1);                      // draw him fallen to the right, then mirror
+    ctx.rotate(-0.06);
+
+    // Legs, folded under him — far leg first so the near one overlaps it
+    charLimb(-4, -4, -20, 1, 9, ramp.dark, -13, -8);
+    charLimb(-20, 1, -30, 5, 8, ramp.dark, -26, 0);
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath(); ctx.ellipse(-33, 6, 6, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+    charLimb(-3, 1, -19, 7, 9, ramp.base, -12, -2);
+    charLimb(-19, 7, -30, 11, 8, ramp.base, -25, 6);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-33, 12, 6, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+
+    // Torso, on its side, shoulder end toward the swing
     ctx.fillStyle = ramp.base;
-    ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath(); ctx.arc(-2, 1, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-7, -11);
+    ctx.quadraticCurveTo(10, -14, 17, -9);
+    ctx.quadraticCurveTo(21, -1, 16, 6);
+    ctx.quadraticCurveTo(4, 9, -6, 6);
+    ctx.quadraticCurveTo(-10, -2, -7, -11);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';      // the underside, away from the key light
+    ctx.beginPath();
+    ctx.moveTo(-6, 2); ctx.quadraticCurveTo(4, 9, 16, 6);
+    ctx.quadraticCurveTo(17, 2, 15, 1); ctx.quadraticCurveTo(3, 4, -5, -1);
+    ctx.closePath(); ctx.fill();
+
+    // The arm that ended up under him, and the one flung out past the neck
+    charLimb(8, -6, 20, 2, 7, ramp.dark, 16, -5);
+    charHand(22, 3, 3.4, charMix('#c49872', '#000', 0.25));
+    charLimb(9, -3, 24, -9, 7.5, ramp.base, 18, -10);
+    charHand(27, -10, 3.6, '#c49872');
+
+    // The neck, opened
+    ctx.fillStyle = '#5e0007';
+    ctx.beginPath(); ctx.ellipse(17, -7, 4.5, 5, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8d0510';
+    ctx.beginPath(); ctx.ellipse(17.5, -7, 2.4, 2.8, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // The hood, come to rest a little way off, mouth toward us and empty
+    ctx.save();
+    ctx.translate(x + side * 44, gy + 4);
+    ctx.rotate(side * 0.8);
+    ctx.fillStyle = ramp.base;
+    ctx.beginPath(); ctx.ellipse(0, 0, 12, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = ramp.dark;
+    ctx.beginPath(); ctx.ellipse(-1, 2, 10.5, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#160406';
+    ctx.beginPath(); ctx.ellipse(-1.5, 2.5, 7, 5.4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 }
 
-// Red over the CEO's shoulder — a limp jumpsuit, hood hanging empty.
-function drawCarriedRed(x, y) {
+// Red over the CEO's shoulder — a limp jumpsuit with nothing in the hood.
+//
+// Drawn BEHIND the CEO, and laid out in his own coordinates: at y the sprite's
+// head runs -19..+1, the shoulders sit at +1 and the feet at +36. So the torso
+// crosses above the shoulder line with his head in front of it, the legs hang
+// clear of his body on the side he is walking toward, and the arms and the
+// empty hood swing on the other. Slung on top of him instead, at any height,
+// it covered his face and read as a red hat.
+//
+// `facing` is the CEO's.
+function drawCarriedRed(x, y, facing) {
     const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
+    const s = facing === 'left' ? -1 : 1;
     ctx.save();
-    ctx.translate(x - 6, y - 66);
-    ctx.rotate(-0.25);
+    ctx.translate(x, y);
+    ctx.scale(s, 1);
+
+    // Arms and the empty hood, hanging down his back
+    charLimb(-14, -14, -22, 2, 6.5, ramp.dark, -21, -7);
+    charLimb(-22, 2, -25, 13, 6, ramp.dark, -25, 8);
+    charHand(-26, 15, 3.2, charMix('#c49872', '#000', 0.22));
+    ctx.fillStyle = ramp.dark;                       // the hood, swinging low
+    ctx.beginPath(); ctx.ellipse(-29, -3, 9, 11, 0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#170406';
+    ctx.beginPath(); ctx.ellipse(-30, -2, 5.6, 7, 0.28, 0, Math.PI * 2); ctx.fill();
+
+    // Torso, laid across his shoulders — hips over the near one, neck end out
+    // past the far one, sagging a little in the middle the way a dead weight does
     ctx.fillStyle = ramp.base;
-    ctx.fillRect(-26, -8, 52, 16);          // torso across the shoulders
-    ctx.fillStyle = ramp.dark;
-    ctx.fillRect(-30, 4, 16, 22);           // legs hanging down his back
-    ctx.fillRect(-12, 4, 16, 20);
+    ctx.beginPath();
+    ctx.moveTo(-19, -30);
+    ctx.quadraticCurveTo(2, -35, 24, -27);
+    ctx.quadraticCurveTo(29, -18, 23, -9);
+    ctx.quadraticCurveTo(1, -3, -18, -10);
+    ctx.quadraticCurveTo(-24, -20, -19, -30);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(-18, -16); ctx.quadraticCurveTo(1, -3, 23, -9);
+    ctx.quadraticCurveTo(25, -13, 22, -13); ctx.quadraticCurveTo(1, -8, -17, -20);
+    ctx.closePath(); ctx.fill();
+
+    // The neck, opened, hanging off the back of his shoulder
+    ctx.fillStyle = '#5e0007';
+    ctx.beginPath(); ctx.ellipse(-20, -21, 4.2, 5.4, 0.2, 0, Math.PI * 2); ctx.fill();
+
+    // Legs hanging down his chest, boots swinging at the bottom
+    charLimb(16, -16, 22, 2, 8, ramp.base, 21, -7);
+    charLimb(22, 2, 21, 17, 7.5, ramp.base, 23, 10);
     ctx.fillStyle = '#fff';
-    ctx.fillRect(-30, 26, 16, 6);           // boots
-    ctx.fillRect(-12, 24, 16, 6);
-    ctx.fillStyle = ramp.base;               // the empty hood, lolling
-    ctx.beginPath(); ctx.arc(28, 2, 11, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.arc(30, 4, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(21, 20, 6.2, 4, 0, 0, Math.PI * 2); ctx.fill();
+    charLimb(14, -14, 15, 3, 8, ramp.dark, 15, -6);
+    charLimb(15, 3, 12, 17, 7.5, ramp.dark, 15, 11);
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath(); ctx.ellipse(12, 20, 6.2, 4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 }
 
@@ -27457,11 +27687,28 @@ function drawScene() {
         } else if(redsEnding.active) {
             // You are RED. Same sprite the pipe managers have always used, so the
             // flashback shows you the job from inside the jumpsuit you have spent
-            // five levels handing documents to.
-            if(!redsEnding.beheaded && !(redsEnding.exec && redsEnding.exec !== 'axe')) {
+            // five levels handing documents to — including the climb and the
+            // wrench, which are that sprite's own animations, not new ones.
+            const execHidesHim = redsEnding.exec && redsEnding.exec !== 'wait' && redsEnding.exec !== 'axe';
+            if(!redsEnding.beheaded && !execHidesHim) {
+                // Up at the pipe he is a red jumpsuit in front of a red pipe on a
+                // red ladder, and he vanishes into his own station. A soft pool of
+                // shade behind him puts the wall back a plane and leaves him the
+                // only lit thing at the top of the shot.
+                if(redsOnLadder()) {
+                    const halo = ctx.createRadialGradient(player.x, player.y + 6, 6, player.x, player.y + 6, 54);
+                    halo.addColorStop(0, 'rgba(10,5,3,0.66)');
+                    halo.addColorStop(0.6, 'rgba(10,5,3,0.38)');
+                    halo.addColorStop(1, 'rgba(10,5,3,0)');
+                    ctx.fillStyle = halo;
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y + 6, 54, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 drawNPC({ x: player.x, y: player.y, color: COLORS[0],
-                          state: 'happy', needsDoc: false, facing: player.facing });
-                if(player.holding) drawHeldDoc(player.x, player.y, player.holding);
+                          state: redsEnding.pmState, needsDoc: false, crackStartTime: null,
+                          fixAnim: redsEnding.fixAnim, facing: player.facing });
+                if(player.holding && !redsOnLadder()) drawHeldDoc(player.x, player.y, player.holding);
             }
         } else {
             drawBaldManager(player.x, player.y, player.facing, player.holding);
@@ -29848,13 +30095,21 @@ function startRedsEnding() {
     redsEnding.active = true;
     redsEnding.card = 1;
     redsEnding.letterRead = false;
+    redsEnding.shift = 'wait';
+    redsEnding.pmState = 'happy';
+    redsEnding.fixAnim = 0;
+    redsEnding.animStart = 0;
+    redsEnding.climbFrom = 380;
+    redsEnding.climbTo = 380;
     redsEnding.exec = null;
     redsEnding.execTimer = 0;
     redsEnding.swing = 0;
     redsEnding.beheaded = false;
+    redsEnding.killX = 0;
     redsEnding.drips = [];
     redsEnding.doorOpen = 0;
-    redsEnding.ceoX = 560;
+    redsEnding.ceoFade = 0;
+    redsEnding.ceoX = 470;
 
     level = 5;
     state = 'playing';
@@ -29870,6 +30125,228 @@ function startRedsEnding() {
     player.x = 350; player.y = 400; player.facing = 'forward';
     player.holding = null;
     playMusic('level5');
+}
+
+// Red's own pipe — the red one, second from the left. In the flashback nobody
+// is standing at it, because the man who stands at it is the one you are
+// playing.
+function redsPipe() {
+    return redsEnding.active ? level5.npcPipes.find(n => n.color && n.color.name === 'RED') : null;
+}
+
+// THE SHIFT. The game's core loop, run from the other end of it: the pipe opens
+// up, Mullet Pro prints the doc that closes it and walks it over, and it is Red
+// who takes it up the ladder. Five levels of handing paper to these men, and
+// this is the one time you find out what they do with it.
+function updateRedsPipeShift() {
+    const pipe = redsPipe();
+    if(!pipe) return;
+    const mp = level5.mulletPro;
+    const walkTo = (tx, speed) => {
+        if(Math.abs(mp.x - tx) <= speed) { mp.x = tx; return true; }
+        const dir = mp.x < tx ? 1 : -1;
+        mp.x += dir * speed;
+        mp.facing = dir > 0 ? 'right' : 'left';
+        return false;
+    };
+
+    // His pipe has been open since before he walked in. It never bursts here —
+    // there is no losing the flashback, only walking to the end of it — so the
+    // stress climbs to its top phase and sits there. Arming it is gated on the
+    // beats BEFORE the wrench, or the fix would re-open the pipe it just shut.
+    if(!pipe.crackStartTime && (redsEnding.shift === 'wait' || redsEnding.shift === 'doc')) {
+        pipe.needsDoc = true;
+        pipe.crackStartTime = Date.now();
+        pipe.state = 'happy';
+        pipe.y = 368;
+    }
+
+    // Mullet Pro's half of the job.
+    if(mp.state === 'walkingToComputer') {
+        if(walkTo(level5.computer.x, 2)) {
+            mp.hasDoc = true;
+            mp.docColor = COLORS[0];
+            mp.state = 'bringingToRed';
+        }
+    } else if(mp.state === 'bringingToRed') {
+        // He stops short of the ladder and holds it out, the same way he has
+        // held it out to you from the other side of this exchange all game.
+        if(walkTo(pipe.x - 40, 2)) mp.facing = 'right';
+    } else if(mp.state === 'backToPrinter') {
+        // Back to the printer for good. 'idle' parks him there — it is the state
+        // drawMulletPro reads to stop playing the walk cycle on the spot.
+        if(walkTo(level5.computer.x, 2)) { mp.facing = 'forward'; mp.state = 'idle'; }
+    }
+}
+
+// THE FURNACE. Returns true once the execution has taken the frame over; while
+// it returns false Red still has the controls and the caller lets him walk.
+//
+// The staging is the whole point of this beat: the CEO waits AT the furnace with
+// it already lit, so the killing happens within arm's reach of the thing the
+// body is going into. The earlier version had him start across the room and walk
+// the whole floor to wherever Red happened to stop, kill him against the far
+// wall, and then walk the body all the way back — three long crossings of an
+// empty room, and the murder itself staged in the corner by the door.
+function updateRedsExecution() {
+    player.y = 380;
+    const fx = level5.furnaceRoom.furnace.x;
+    const rd = level5.furnaceRoom.rightDoor.x;
+
+    if(!redsEnding.exec) {
+        // He is already in here. The door bolts behind Red on the way in —
+        // that part was never his — and the axe is down at his side.
+        redsEnding.exec = 'wait';
+        redsEnding.execTimer = 0;
+        redsEnding.ceoX = fx + 120;
+        SFX.play('hatchOpen');   // the bolt going across the door behind him
+        return false;
+    }
+    redsEnding.execTimer++;
+    const t = redsEnding.execTimer;
+
+    if(redsEnding.exec === 'wait') {
+        // Stall on the far side of the room and he comes and gets you. Same
+        // ending, taken at his pace instead of yours.
+        if(t > 300) {
+            redsEnding.ceoX += (player.x > redsEnding.ceoX ? 1 : -1) * 1.15;
+        }
+        if(Math.abs(player.x - redsEnding.ceoX) < 88) {
+            redsEnding.exec = 'axe';
+            redsEnding.execTimer = 0;
+            SFX.play('bossAlert');
+            return true;
+        }
+        return false;
+    }
+
+    if(redsEnding.exec === 'axe') {
+        // Red turns to face him — he watched it come.
+        player.facing = redsEnding.ceoX > player.x ? 'right' : 'left';
+        // Close the last stride, then swing. 0..34 raise, 34..46 held at the
+        // top, 46..58 the chop, impact at 58, then a beat on the body.
+        const stand = player.x + (redsEnding.ceoX > player.x ? 34 : -34);
+        if(Math.abs(redsEnding.ceoX - stand) > 2.6) {
+            redsEnding.ceoX += redsEnding.ceoX < stand ? 2.6 : -2.6;
+        } else {
+            redsEnding.swing++;
+            if(redsEnding.swing === 58) {
+                SFX.play('hurt');
+                redsEnding.beheaded = true;
+                redsEnding.killX = player.x;
+            }
+            if(redsEnding.swing > 100) { redsEnding.exec = 'carry'; redsEnding.execTimer = 0; }
+        }
+    } else if(redsEnding.exec === 'carry') {
+        // Body over the shoulder, walked the few steps to the furnace door. The
+        // stopping mark is the one 'burn' draws him on, so there is no jump
+        // across the furnace when the beat changes.
+        const stand = fx + (redsEnding.ceoX > fx ? 46 : -46);
+        if(Math.abs(redsEnding.ceoX - stand) > 2.2) {
+            redsEnding.ceoX += redsEnding.ceoX < stand ? 2.2 : -2.2;
+        } else {
+            redsEnding.ceoX = stand;
+            // A beat standing at the mouth of it with the body still up before
+            // the door opens — the walk itself is only a few steps now.
+            if(t > 75) {
+                redsEnding.exec = 'burn';
+                redsEnding.execTimer = 0;
+                level5.furnaceRoom.furnace.flameTime = Date.now();
+                SFX.play('furnaceBurn');
+            }
+        }
+    } else if(redsEnding.exec === 'burn') {
+        // Burns like a document, because to this company that is all he was.
+        // Same furnace, same flare, same as the coloured docs you have been
+        // feeding it all game. The flame is re-lit once as it takes him.
+        if(t === 46) { level5.furnaceRoom.furnace.flameTime = Date.now(); SFX.play('furnaceBurn'); }
+        if(t > 130) { redsEnding.exec = 'exit'; redsEnding.execTimer = 0; }
+    } else if(redsEnding.exec === 'exit') {
+        // Out to the cloning lab with the axe still wet, leaving a trail of it
+        // across the floor behind him.
+        if(redsEnding.ceoX < rd - 26) {
+            redsEnding.ceoX += 1.9;
+            if(t % 22 === 0) {
+                redsEnding.drips.push({ x: redsEnding.ceoX + 12, r: 1.6 + Math.random() * 2.2 });
+            }
+        } else if(redsEnding.ceoFade === 0 && redsEnding.doorOpen < 1) {
+            // Door slides open — the lab's light behind him. Gated on him not
+            // having stepped through yet: without that, the closing branch below
+            // drops doorOpen under 1, this one re-opens it and resets the clock,
+            // and the door hangs there cycling forever.
+            redsEnding.doorOpen = Math.min(1, redsEnding.doorOpen + 0.035);
+            if(redsEnding.doorOpen >= 1) redsEnding.execTimer = 0;
+        } else if(t < 55) {
+            // The held beat: a silhouette in a lit doorway, which is the shot
+        } else if(redsEnding.ceoFade < 1) {
+            // and then he steps through it and is gone before it shuts, rather
+            // than standing there until the door closes on his face.
+            redsEnding.ceoX += 1.3;
+            redsEnding.ceoFade = Math.min(1, redsEnding.ceoFade + 0.05);
+        } else if(redsEnding.doorOpen > 0) {
+            redsEnding.doorOpen = Math.max(0, redsEnding.doorOpen - 0.045);
+        } else {
+            redsEnding.exec = 'aftermath';
+            redsEnding.execTimer = 0;
+        }
+    } else if(redsEnding.exec === 'aftermath') {
+        // Hold on the room he left: the stain, the trail to the door, the
+        // furnace still lit. This IS the furnace room the detective walks into
+        // in level 6 — then close the case.
+        if(t > 170) {
+            redsEnding.active = false;
+            redsEnding.exec = null;
+            level = 6;
+            level6.missileCaseClosedCard = 'fading';
+            level6.missileCaseClosedTimer = 0;
+            level6.detectiveTransAlpha = 0;
+            playMusic('level5');
+        }
+    }
+    return true;
+}
+
+// The climb, the fix and the climb back down, on the same timings the pipe
+// managers have always used — 1.5s up, 2s of wrench, 1.5s down — so it is
+// recognisably the animation you have been watching them play since level 1.
+function updateRedsClimb() {
+    const now = Date.now();
+    if(redsEnding.shift === 'climb' || redsEnding.shift === 'down') {
+        const t = Math.min((now - redsEnding.animStart) / 1500, 1);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        player.y = redsEnding.climbFrom + (redsEnding.climbTo - redsEnding.climbFrom) * eased;
+        if(t >= 1) {
+            player.y = redsEnding.climbTo;
+            if(redsEnding.shift === 'climb') {
+                redsEnding.shift = 'fix';
+                redsEnding.pmState = 'fixing';
+                redsEnding.fixAnim = 0;
+                redsEnding.animStart = now;
+                // The doc goes into the pipe. That is the whole of what it was for.
+                player.holding = null;
+            } else {
+                redsEnding.shift = 'done';
+                redsEnding.pmState = 'happy';
+                level5.mulletPro.state = 'backToPrinter';
+                SFX.play('pickup');
+            }
+        }
+        return;
+    }
+    if(redsEnding.shift === 'fix') {
+        const prevBeat = Math.floor(redsEnding.fixAnim / 0.4);
+        redsEnding.fixAnim += 0.02;
+        if(Math.floor(redsEnding.fixAnim / 0.4) !== prevBeat) SFX.play('wrench');
+        if(now - redsEnding.animStart >= 2000) {
+            const pipe = redsPipe();
+            if(pipe) { pipe.needsDoc = false; pipe.crackStartTime = null; }
+            redsEnding.shift = 'down';
+            redsEnding.pmState = 'climbing_down';
+            redsEnding.animStart = now;
+            redsEnding.climbFrom = player.y;
+            redsEnding.climbTo = 380;
+        }
+    }
 }
 
 // The missile takes you with it. You and the CEO die in the same blast, and
@@ -30498,8 +30975,17 @@ function update() {
             return; // Pause all other logic while fading in
         }
 
+        // RED'S ENDING runs its own version of the room: the doc comes to YOU,
+        // and the ladder is yours to climb. The ordinary sim below would have
+        // Mullet Pro delivering to a RED pipe manager who, in the flashback, is
+        // standing here holding the controller.
+        if(redsEnding.active) {
+            updateRedsPipeShift();
+            updateRedsClimb();
+        }
+
         // Mullet Pro AI
-        if(level5.mulletPro.state === 'walkingToComputer') {
+        else if(level5.mulletPro.state === 'walkingToComputer') {
             if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
                 const direction = level5.mulletPro.x < level5.computer.x ? 1 : -1;
                 level5.mulletPro.x += direction * 2;
@@ -30540,8 +31026,11 @@ function update() {
             }
         }
 
-        // NPC crack spawning
-        for(let npc of level5.npcPipes) {
+        // NPC crack spawning. Suspended for the flashback: the only pipe open in
+        // there is Red's own, it is opened by hand in updateRedsPipeShift, and
+        // it is not on a burst timer. There is nothing to fail here — the
+        // flashback has already happened, and it only ends one way.
+        for(let npc of (redsEnding.active ? [] : level5.npcPipes)) {
             if(npcDevoured(npc)) continue;
             if(!npc.needsDoc && npc.state === 'happy' && Math.random() < 0.0003) {
                 npc.needsDoc = true;
@@ -30626,11 +31115,40 @@ function update() {
 
         // PIPE ROOM
         if(level5.room === 'pipeRoom') {
-            player.y = 380;
+            if(!redsOnLadder()) player.y = 380;
             const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
 
+            // RED'S ENDING — his shift. Take the doc off Mullet Pro, carry it to
+            // the ladder under his own pipe, and go up with it.
+            if(redsEnding.active) {
+                const pipe = redsPipe();
+                if((keys[' '] || keys['action']) && !redsLocked()) {
+                    if(redsEnding.shift === 'wait' && atMulletPro && level5.mulletPro.hasDoc) {
+                        player.holding = 'RED';
+                        level5.mulletPro.hasDoc = false;
+                        level5.mulletPro.docColor = null;
+                        level5.mulletPro.state = 'backToPrinter';
+                        level5.mulletPro.facing = 'left';
+                        redsEnding.shift = 'doc';
+                        SFX.play('pickup');
+                        keys[' '] = false; keys['action'] = false;
+                    } else if(redsEnding.shift === 'doc' && pipe && player.holding === 'RED'
+                              && Math.abs(player.x - pipe.x) < 44) {
+                        player.x = pipe.x;
+                        redsEnding.shift = 'climb';
+                        redsEnding.pmState = 'climbing_up';
+                        redsEnding.animStart = Date.now();
+                        redsEnding.climbFrom = 380;
+                        // 210 puts him where a pipe manager sits at the top of
+                        // his own ladder, which is where the wrench meets the pipe.
+                        redsEnding.climbTo = 210;
+                        keys[' '] = false; keys['action'] = false;
+                    }
+                }
+            }
+
             // Water fountain — drink for +1 life (30s cooldown)
-            if((keys[' '] || keys['action']) && Math.abs(player.x - 110) < 40 && lives < 3) {
+            if(!redsEnding.active && (keys[' '] || keys['action']) && Math.abs(player.x - 110) < 40 && lives < 3) {
                 const curCycle = Math.floor(Date.now() / 30000);
                 if(fountainLastCycle !== curCycle) {
                     fountainLastCycle = curCycle;
@@ -30643,7 +31161,7 @@ function update() {
             }
 
             // Steal doc from Mullet Pro directly
-            if((keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
+            if(!redsEnding.active && (keys[' '] || keys['action']) && atMulletPro && level5.mulletPro.hasDoc && !player.holding) {
                 player.holding = level5.mulletPro.docColor.name;
                 level5.mulletPro.hasDoc = false;
                 level5.mulletPro.docColor = null;
@@ -30655,7 +31173,8 @@ function update() {
             }
 
             // Transition to hallway — auto when revisiting from level 6, action-based in normal level 5
-            if(level6.cloningDoorUnlocked ? player.x > 660 : (player.x >= 630 && (keys[' '] || keys['action']))) {
+            if(!redsLocked() &&
+               (level6.cloningDoorUnlocked ? player.x > 660 : (player.x >= 630 && (keys[' '] || keys['action'])))) {
                 level5.room = 'hallway';
                 player.x = 80;
                 keys[' '] = false;
@@ -30677,7 +31196,11 @@ function update() {
                 keys['action'] = false;
             }
 
-            if(fromL6 ? player.x > 660 : (player.x > 620 && (keys[' '] || keys['action']))) {
+            // The summons keeps. In the flashback the furnace door does not open
+            // until his pipe is shut — he finishes the shift first, the way he
+            // has finished every other one, and THEN goes to see the boss.
+            const furnaceHeld = redsEnding.active && redsEnding.shift !== 'done';
+            if(!furnaceHeld && (fromL6 ? player.x > 660 : (player.x > 620 && (keys[' '] || keys['action'])))) {
                 level5.room = 'furnaceRoom';
                 player.x = 80;
                 player.y = 380;
@@ -30767,32 +31290,37 @@ function update() {
                 }
             }
 
-            // Interact with monitor - expanded range for easier access (center/right position)
+            // Desk interactions — the monitor on the right, and on RED's desk the
+            // CEO's letter on the left. Their reach overlaps across 40px in the
+            // middle of the desk, and the monitor was simply tested first, so
+            // standing ON the letter opened the email instead. In RED'S ENDING
+            // that is the one interaction the flashback cannot proceed without,
+            // with a prompt on screen pointing straight at it. Whichever of the
+            // two you are actually nearer to now wins.
             const deskX = 350;
             const deskY = 250;
             const monitorX = deskX + 10;
-            if(Math.abs(player.x - monitorX) < 40 && player.y > deskY + 30 && player.y < deskY + 70) {
-                if(keys[' '] || keys['action']) {
-                    SFX.play('pageTurn');
-                    level5.viewingEmail = true;
-                    level5.emailScrollOffset = 0;
-                    if(level5.currentOffice === 'BLUE') level5.blueEmailRead = true;
-                    if(level5.currentOffice === 'RED') level5.redEmailRead = true;
-                    keys[' '] = false;
-                    keys['action'] = false;
-                }
-            }
-
-            // Interact with letter (RED only) - on LEFT side of desk
             const letterX = deskX - 25;
-            if(level5.currentOffice === 'RED' && Math.abs(player.x - letterX) < 35 && player.y > deskY + 30 && player.y < deskY + 70) {
-                if(keys[' '] || keys['action']) {
+            const atDesk = player.y > deskY + 30 && player.y < deskY + 70;
+            const hasLetter = level5.currentOffice === 'RED';
+            const dMonitor = Math.abs(player.x - monitorX);
+            const dLetter = Math.abs(player.x - letterX);
+            if(atDesk && (keys[' '] || keys['action'])) {
+                if(hasLetter && dLetter < 35 && dLetter <= dMonitor) {
                     SFX.play('pageTurn');
                     level5.viewingLetter = true;
                     level5.letterScrollOffset = 0;
                     level5.ceoLetterOpened = true;
                     // This is the summons. Reading it is what lets Red leave.
                     redsEnding.letterRead = true;
+                    keys[' '] = false;
+                    keys['action'] = false;
+                } else if(dMonitor < 40) {
+                    SFX.play('pageTurn');
+                    level5.viewingEmail = true;
+                    level5.emailScrollOffset = 0;
+                    if(level5.currentOffice === 'BLUE') level5.blueEmailRead = true;
+                    if(level5.currentOffice === 'RED') level5.redEmailRead = true;
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -30952,82 +31480,14 @@ function update() {
                     player.y = 380;
 
                     // RED'S ENDING — the summons was an appointment with an axe.
-                    // The CEO is already in here when Red walks in, and the beats
-                    // run themselves: the swing, the carry, the furnace, and then
-                    // the room exactly as the detective will find it.
+                    // Nothing in this room is his any more: not the furnace, not
+                    // the doors, not the key. Only the walk toward the man who
+                    // sent for him, and that one is still his to take, so the
+                    // 'wait' beat falls through to the movement at the bottom of
+                    // the level instead of returning here.
                     if(redsEnding.active) {
-                        if(!redsEnding.exec) { redsEnding.exec = 'axe'; redsEnding.execTimer = 0; SFX.play('bossAlert'); }
-                        redsEnding.execTimer++;
-                        const t = redsEnding.execTimer;
-                        if(redsEnding.exec === 'axe') {
-                            // Close the distance first, from whichever side he
-                            // came in on, and only then start the swing.
-                            const stand = player.x + (redsEnding.ceoX > player.x ? 34 : -34);
-                            if(Math.abs(redsEnding.ceoX - stand) > 2.6) {
-                                redsEnding.ceoX += redsEnding.ceoX < stand ? 2.6 : -2.6;
-                            } else {
-                                // 0..34 raise, 34..46 hold at the top, 46..58 chop,
-                                // impact at 58, then a beat on the body.
-                                redsEnding.swing++;
-                                if(redsEnding.swing === 58) { SFX.play('hurt'); redsEnding.beheaded = true; }
-                                if(redsEnding.swing > 100) {
-                                    redsEnding.exec = 'carry'; redsEnding.execTimer = 0;
-                                }
-                            }
-                        } else if(redsEnding.exec === 'carry') {
-                            // Body over the shoulder, walked to the furnace door.
-                            // From EITHER side: Red can be killed anywhere along
-                            // the room, so a one-way walk left him standing where
-                            // he swung while the furnace waited across the floor.
-                            const fx = level5.furnaceRoom.furnace.x;
-                            const stand = fx + (redsEnding.ceoX > fx ? 46 : -46);
-                            if(Math.abs(redsEnding.ceoX - stand) > 2.2) {
-                                redsEnding.ceoX += redsEnding.ceoX < stand ? 2.2 : -2.2;
-                            } else if(t > 40) {
-                                redsEnding.exec = 'burn'; redsEnding.execTimer = 0;
-                                level5.furnaceRoom.furnace.flameTime = Date.now();
-                                SFX.play('furnaceBurn');
-                            }
-                        } else if(redsEnding.exec === 'burn') {
-                            // Burns like a document, because to this company that
-                            // is all he was. Same furnace, same flare, same as the
-                            // coloured docs you have been feeding it all game.
-                            if(t > 150) { redsEnding.exec = 'exit'; redsEnding.execTimer = 0; }
-                        } else if(redsEnding.exec === 'exit') {
-                            // He walks out to the cloning lab with the axe still
-                            // wet, leaving a trail of it across the floor.
-                            const rd = level5.furnaceRoom.rightDoor.x;
-                            if(redsEnding.ceoX < rd - 26) {
-                                redsEnding.ceoX += 1.9;
-                                if(t % 22 === 0) {
-                                    redsEnding.drips.push({ x: redsEnding.ceoX + 12, r: 1.6 + Math.random() * 2.2 });
-                                }
-                            } else if(redsEnding.doorOpen < 1 && t < 400) {
-                                // Door slides open — the lab's light behind him
-                                redsEnding.doorOpen = Math.min(1, redsEnding.doorOpen + 0.035);
-                                if(redsEnding.doorOpen >= 1) redsEnding.execTimer = 400;
-                            } else if(t < 460) {
-                                // A held beat of him standing in the light
-                            } else if(redsEnding.doorOpen > 0) {
-                                redsEnding.doorOpen = Math.max(0, redsEnding.doorOpen - 0.045);
-                            } else {
-                                redsEnding.exec = 'aftermath'; redsEnding.execTimer = 0;
-                            }
-                        } else if(redsEnding.exec === 'aftermath') {
-                            // Hold on the empty room — this IS the furnace room the
-                            // detective walks into in level 6 — then close the case.
-                            if(t > 150) {
-                                redsEnding.active = false;
-                                redsEnding.exec = null;
-                                level = 6;
-                                level6.missileCaseClosedCard = 'fading';
-                                level6.missileCaseClosedTimer = 0;
-                                level6.detectiveTransAlpha = 0;
-                                playMusic('level5');
-                            }
-                        }
-                        return;
-                    }
+                        if(updateRedsExecution()) return;
+                    } else {
 
                     const furnace = level5.furnaceRoom.furnace;
                     const leftDoor = level5.furnaceRoom.leftDoor;
@@ -31103,10 +31563,16 @@ function update() {
                         player.y = 380;
                         level6.lastExitEdge = 'right'; // entered from right (furnace room door)
                     }
+
+                    } // end of the ordinary furnace room (see RED'S ENDING above)
                 }
-        
-                // Horizontal movement for pipe room, hallway, and furnace room
-                if(level5.room === 'pipeRoom' || level5.room === 'hallway' || level5.room === 'furnaceRoom') {
+
+                // Horizontal movement for pipe room, hallway, and furnace room.
+                // Red keeps the controls for everything except the ladder and the
+                // execution — including the walk across the furnace room floor,
+                // which is his to take.
+                if(!redsLocked() &&
+                   (level5.room === 'pipeRoom' || level5.room === 'hallway' || level5.room === 'furnaceRoom')) {
                     player.y = 380;
                     const prevX = player.x;
                     if(keys['ArrowLeft'] || keys['left']) {
@@ -35434,7 +35900,11 @@ function gameLoop() {
     counter += now - lastTime;
     lastTime = now;
     
-    if(state === 'playing' && !resetting && counter >= 1000 && !(level === 6 && (level6.caseClosedCard || level6.youBlewItCard || level6.missileCaseClosedCard || level6.newCEOCard || level6.detectiveTitleCard || level6.detectiveFadeIn))) {
+    // The clock is held through RED'S ENDING. It rides on level 5, so it was
+    // inheriting level 5's 180-second shift — and running it out threw the
+    // player onto the "didn't burn 6 documents in time" game over, in a
+    // flashback where there are no documents to burn and only one way out.
+    if(state === 'playing' && !resetting && counter >= 1000 && !redsEnding.active && !(level === 6 && (level6.caseClosedCard || level6.youBlewItCard || level6.missileCaseClosedCard || level6.newCEOCard || level6.detectiveTitleCard || level6.detectiveFadeIn))) {
         timer--;
         counter = 0;
         document.getElementById('timer').textContent = timer;
