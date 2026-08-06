@@ -1288,6 +1288,8 @@ let redsEnding = {
     execTimer: 0,
     swing: 0,           // frames into the axe swing itself
     beheaded: false,    // set on impact; Red stops being drawn upright
+    drips: [],          // blood off the axe, left on the floor behind him
+    doorOpen: 0,        // 0..1 cloning-lab door, opening then closing behind him
     ceoX: 560,
 };
 
@@ -10092,6 +10094,51 @@ function drawLevel5FurnaceRoom() {
             // Over the shoulder. The body is a limp jumpsuit with the hood empty.
             drawCEO(ex, 380, 'left');
             drawCarriedRed(ex, 380);
+        } else if(redsEnding.exec === 'exit') {
+            // The drips he has already left, then the doorway, then him.
+            ctx.fillStyle = 'rgba(96,0,6,0.62)';
+            for(const d of redsEnding.drips) {
+                ctx.beginPath(); ctx.ellipse(d.x, 404, d.r, d.r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+            }
+            const rd = level5.furnaceRoom.rightDoor;
+            const k = redsEnding.doorOpen;
+            if(k > 0) {
+                // The lab beyond: cold, clinical, far too bright for this room
+                ctx.save();
+                ctx.beginPath(); ctx.rect(rd.x - 24, rd.y - 4, 52, 66); ctx.clip();
+                ctx.fillStyle = '#dff3ff';
+                ctx.fillRect(rd.x - 24, rd.y - 4, 52 * k, 66);
+                const spill = ctx.createRadialGradient(rd.x, rd.y + 30, 4, rd.x, rd.y + 30, 90);
+                spill.addColorStop(0, `rgba(220,245,255,${0.55 * k})`);
+                spill.addColorStop(1, 'rgba(220,245,255,0)');
+                ctx.fillStyle = spill;
+                ctx.fillRect(rd.x - 90, rd.y - 40, 180, 130);
+                ctx.restore();
+                // and the light thrown out across the floor toward us
+                const floorSpill = ctx.createLinearGradient(rd.x, rd.y + 60, rd.x - 70, 430);
+                floorSpill.addColorStop(0, `rgba(210,240,255,${0.30 * k})`);
+                floorSpill.addColorStop(1, 'rgba(210,240,255,0)');
+                ctx.fillStyle = floorSpill;
+                ctx.beginPath();
+                ctx.moveTo(rd.x - 24, rd.y + 60); ctx.lineTo(rd.x + 28, rd.y + 60);
+                ctx.lineTo(rd.x + 60, 430); ctx.lineTo(rd.x - 80, 430);
+                ctx.closePath(); ctx.fill();
+            }
+            // Him. Once the door is open he is between us and the lab, so he
+            // goes black — a silhouette in the doorway, which is the shot.
+            const inLight = k > 0.15;
+            if(inLight) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.filter = 'brightness(0)';
+                drawCEO(redsEnding.ceoX, 380, 'right');
+                ctx.filter = 'none';
+                ctx.restore();
+            } else {
+                drawCEO(redsEnding.ceoX, 380, 'right');
+            }
+            // the axe still in his hand, hanging at his side and still wet
+            drawBloodyAxeAtSide(redsEnding.ceoX, 380, inLight);
         } else if(redsEnding.exec === 'burn') {
             drawCEO(fx + 46, 380, 'left');
             // The jumpsuit going in, shrinking into the mouth of the furnace
@@ -10184,6 +10231,31 @@ function drawCEOAxeArm(x, y, side, sw) {
 
     // The hand last, closed over the haft
     charHand(handX, handY, 1.5*s, '#c49872');
+}
+
+// The axe carried at his side on the way out, blade still wet. `dark` renders it
+// as part of the silhouette once he is standing in the lab's light.
+function drawBloodyAxeAtSide(x, y, dark) {
+    ctx.save();
+    ctx.translate(x + 16, y + 22);
+    ctx.rotate(0.34);
+    ctx.strokeStyle = dark ? '#000' : '#6b4a2a';
+    ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(0, 18); ctx.stroke();
+    ctx.fillStyle = dark ? '#000' : '#b9bec6';
+    ctx.beginPath();
+    ctx.moveTo(-3, 16); ctx.quadraticCurveTo(-19, 12, -16, 0);
+    ctx.lineTo(-3, 3); ctx.closePath(); ctx.fill();
+    if(!dark) {
+        // the wet edge, and a bead about to go
+        ctx.fillStyle = 'rgba(120,0,8,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(-16, 0); ctx.quadraticCurveTo(-19, 12, -3, 16);
+        ctx.lineTo(-5, 12); ctx.quadraticCurveTo(-15, 9, -14, 1);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-13, 15, 1.6, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
 }
 
 // Red after the axe: the body folded on the floor, the hood a short distance
@@ -29780,6 +29852,8 @@ function startRedsEnding() {
     redsEnding.execTimer = 0;
     redsEnding.swing = 0;
     redsEnding.beheaded = false;
+    redsEnding.drips = [];
+    redsEnding.doorOpen = 0;
     redsEnding.ceoX = 560;
 
     level = 5;
@@ -30916,8 +30990,29 @@ function update() {
                             }
                         } else if(redsEnding.exec === 'burn') {
                             // Burns like a document, because to this company that
-                            // is all he was.
-                            if(t > 150) { redsEnding.exec = 'aftermath'; redsEnding.execTimer = 0; }
+                            // is all he was. Same furnace, same flare, same as the
+                            // coloured docs you have been feeding it all game.
+                            if(t > 150) { redsEnding.exec = 'exit'; redsEnding.execTimer = 0; }
+                        } else if(redsEnding.exec === 'exit') {
+                            // He walks out to the cloning lab with the axe still
+                            // wet, leaving a trail of it across the floor.
+                            const rd = level5.furnaceRoom.rightDoor.x;
+                            if(redsEnding.ceoX < rd - 26) {
+                                redsEnding.ceoX += 1.9;
+                                if(t % 22 === 0) {
+                                    redsEnding.drips.push({ x: redsEnding.ceoX + 12, r: 1.6 + Math.random() * 2.2 });
+                                }
+                            } else if(redsEnding.doorOpen < 1 && t < 400) {
+                                // Door slides open — the lab's light behind him
+                                redsEnding.doorOpen = Math.min(1, redsEnding.doorOpen + 0.035);
+                                if(redsEnding.doorOpen >= 1) redsEnding.execTimer = 400;
+                            } else if(t < 460) {
+                                // A held beat of him standing in the light
+                            } else if(redsEnding.doorOpen > 0) {
+                                redsEnding.doorOpen = Math.max(0, redsEnding.doorOpen - 0.045);
+                            } else {
+                                redsEnding.exec = 'aftermath'; redsEnding.execTimer = 0;
+                            }
                         } else if(redsEnding.exec === 'aftermath') {
                             // Hold on the empty room — this IS the furnace room the
                             // detective walks into in level 6 — then close the case.
