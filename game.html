@@ -9387,26 +9387,17 @@ function drawLevel5PipeRoom() {
     // CCTV on back wall, right side — mid-height, pointing left toward PMs
     drawCCTVCamera(640, 185, false);
 
-    // \u2500\u2500 RED'S ENDING \u2014 the shift, called out one step at a time \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-    if(redsEnding.active) {
+    // RED'S ENDING says none of this out loud. The pipe that is his is the one
+    // swelling with nobody on the ladder; the doc that is his is the one Mullet
+    // Pro is standing there holding out. The only tell is the outline the rest
+    // of the level already uses for a thing you are close enough to touch \u2014
+    // silent, and only when you are standing at it.
+    if(redsEnding.active && redsEnding.shift === 'doc' && !redsLocked()) {
         const pipe = redsPipe();
-        const mp = level5.mulletPro;
-        if(redsEnding.shift === 'wait') {
-            if(pipe) drawActionLabel('YOUR PIPE', pipe.x, 108, {fontSize: 12, color: '#ff8a7a'});
-            if(mp.hasDoc) {
-                drawActionLabel(Math.abs(player.x - mp.x) < 50
-                        ? '[ ACTION ] - TAKE THE DOC'
-                        : 'MULLET PRO HAS YOUR DOC',
-                    mp.x, 300, {fontSize: 13});
-            }
-        } else if(redsEnding.shift === 'doc' && pipe) {
-            drawActionLabel(Math.abs(player.x - pipe.x) < 44
-                    ? '[ ACTION ] - CLIMB THE LADDER'
-                    : 'TAKE IT TO YOUR PIPE',
-                pipe.x, 300, {fontSize: 13});
-        } else if(redsEnding.shift === 'done' && player.x < 600) {
-            // Shift closed. The letter is the only thing left in the day.
-            drawActionLabel('THE CEO IS WAITING \u2192', 620, 300, {fontSize: 13, color: '#d8c8a0'});
+        if(pipe && player.holding === 'RED' && Math.abs(player.x - pipe.x) < 44) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(pipe.x - 20, 250, 40, 156);
         }
     }
 
@@ -9854,8 +9845,11 @@ function drawLevel5Hallway() {
         ctx.strokeRect(level5.hallway.leftDoor.x - 12, level5.hallway.leftDoor.y - 2, 54, 64);
     }
 
-    // White outline for right door when in range
-    if(Math.abs(player.x - level5.hallway.rightDoor.x) < 50) {
+    // White outline for right door when in range. In the flashback it stays dark
+    // until his pipe is shut and then comes on by itself, which is the only thing
+    // that ever says the shift is over.
+    if(Math.abs(player.x - level5.hallway.rightDoor.x) < 50 &&
+       !(redsEnding.active && redsEnding.shift !== 'done')) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;
         ctx.strokeRect(level5.hallway.rightDoor.x - 12, level5.hallway.rightDoor.y - 2, 54, 64);
@@ -9876,8 +9870,12 @@ function drawLevel5Hallway() {
         ctx.stroke();
     }
 
-    // White outline for office doors when in range + lock/unlock prompts
+    // White outline for office doors when in range + lock/unlock prompts.
+    // Three of these four are somebody else's door in the flashback, and they
+    // say so by staying dark when he walks up to them — the same way every
+    // other door in the level says it is open by lighting up.
     for(let office of level5.hallway.offices) {
+        if(redsEnding.active && office.name !== 'RED') continue;
         if(Math.abs(player.x - office.x) < 40) {
             // RED door lock prompts
             if(office.name === 'RED' && level5.redDoorLocked) {
@@ -9903,27 +9901,6 @@ function drawLevel5Hallway() {
         ctx.strokeRect(portraitX - portraitW/2 - 12, portraitY - 5, portraitW + 24, portraitH + 10);
     }
 
-    // ── RED'S ENDING — which of these doors are his ──────────────────────────
-    // Three of them refuse him and one of them is a trap, and until now all four
-    // did it by silently swallowing the button press.
-    if(redsEnding.active) {
-        for(const office of level5.hallway.offices) {
-            if(office.name === 'RED' || Math.abs(player.x - office.x) >= 40) continue;
-            ctx.fillStyle = 'rgba(20,16,12,0.55)';
-            ctx.fillRect(office.x - 37, officeDoorY - 2, 74, 124);
-            drawActionLabel('NOT YOUR OFFICE', office.x, officeDoorY - 42, {fontSize: 12, color: '#b9b0a4'});
-        }
-        const shiftDone = redsEnding.shift === 'done';
-        if(Math.abs(player.x - level5.hallway.leftDoor.x) < 60) {
-            drawActionLabel(shiftDone ? '← PIPE ROOM' : '[ ACTION ] - YOUR SHIFT ←',
-                            level5.hallway.leftDoor.x + 40, 300, {fontSize: 13});
-        }
-        if(Math.abs(player.x - level5.hallway.rightDoor.x) < 60) {
-            drawActionLabel(shiftDone ? '[ ACTION ] - FURNACE ROOM →' : 'FINISH YOUR SHIFT FIRST',
-                            level5.hallway.rightDoor.x - 40, 300,
-                            {fontSize: 13, color: shiftDone ? '#d8c8a0' : '#b9b0a4'});
-        }
-    }
 }
 
 
@@ -10190,14 +10167,13 @@ function drawLevel5FurnaceRoom() {
         }
 
         if(beat === 'wait') {
-            // Waiting for him with it lit, axe down at his side. He does not
-            // look up until Red is close enough.
+            // Waiting for him with it lit, axe down at his side. Nothing names
+            // him and nothing tells you to go over: a man is standing at the
+            // furnace at the end of the room holding an axe, and the door you
+            // came in by has just been barred behind you.
             const face = ex > player.x ? 'left' : 'right';
             drawCEO(ex, 380, face);
-            drawBloodyAxeAtSide(ex, 380, false, false);   // not yet, it isn't
-            if(Math.abs(player.x - ex) > 88) {
-                drawActionLabel('MR. PIPERSWORTH', ex, 344, {fontSize: 12, color: '#c9a86a'});
-            }
+            drawBloodyAxeAtSide(ex, 380, face, false, false);   // not wet yet, it isn't
         } else if(beat === 'axe') {
             const face = ex > player.x ? 'left' : 'right';
             const side = ex > player.x ? -1 : 1;   // which way he swings
@@ -10215,7 +10191,7 @@ function drawLevel5FurnaceRoom() {
             const face = ex > fx ? 'left' : 'right';
             drawCarriedRed(ex, 380, face);   // behind him — his head reads in front of the body
             drawCEO(ex, 380, face);
-            drawBloodyAxeAtSide(ex, 380, false);
+            drawBloodyAxeAtSide(ex, 380, face, false);
         } else if(beat === 'burn') {
             // He puts him in. The bundle travels from his shoulder to the mouth
             // of the furnace and shrinks into it — it used to appear full-size
@@ -10243,40 +10219,44 @@ function drawLevel5FurnaceRoom() {
                 ctx.restore();
             }
         } else if(beat === 'exit') {
-            const rd = level5.furnaceRoom.rightDoor;
             const k = redsEnding.doorOpen;
             if(k > 0) {
-                // The doorway itself — a real steel frame with a light behind it,
-                // rather than a lit rectangle floating on the wall.
+                // The SAME door that is drawn shut in this wall the whole time
+                // he is in here, opening — same box, so the light comes out of
+                // the thing you have been looking at rather than a new rectangle
+                // appearing on the wall. Behind it is the cloning lab, which the
+                // detective will reach from its own side six months from now.
+                const dx = 640, dy = 340, dw = 50, dh = 60;
+                const cx = dx + dw / 2;
                 ctx.fillStyle = '#15120f';
-                ctx.fillRect(rd.x - 30, rd.y - 8, 64, 72);
+                ctx.fillRect(dx - 4, dy - 6, dw + 8, dh + 10);
                 // The lab beyond: cold, clinical, far too bright for this room
                 ctx.save();
-                ctx.beginPath(); ctx.rect(rd.x - 24, rd.y - 4, 52, 64); ctx.clip();
+                ctx.beginPath(); ctx.rect(dx + 2, dy + 2, dw - 4, dh - 4); ctx.clip();
                 ctx.fillStyle = '#dff3ff';
-                ctx.fillRect(rd.x - 24, rd.y - 4, 52 * k, 64);
-                const spill = ctx.createRadialGradient(rd.x, rd.y + 30, 4, rd.x, rd.y + 30, 90);
+                ctx.fillRect(dx + 2, dy + 2, (dw - 4) * k, dh - 4);
+                const spill = ctx.createRadialGradient(cx, dy + 30, 4, cx, dy + 30, 90);
                 spill.addColorStop(0, `rgba(220,245,255,${0.55 * k})`);
                 spill.addColorStop(1, 'rgba(220,245,255,0)');
                 ctx.fillStyle = spill;
-                ctx.fillRect(rd.x - 90, rd.y - 40, 180, 130);
+                ctx.fillRect(dx - 90, dy - 40, 180, 130);
                 ctx.restore();
-                // Frame: jamb, header and the sill it opens onto
+                // Frame: jamb and header
                 ctx.strokeStyle = '#4a443c';
                 ctx.lineWidth = 4;
-                ctx.strokeRect(rd.x - 27, rd.y - 6, 58, 68);
+                ctx.strokeRect(dx, dy, dw, dh);
                 ctx.fillStyle = '#5c5449';
-                ctx.fillRect(rd.x - 30, rd.y - 12, 64, 7);
+                ctx.fillRect(dx - 5, dy - 8, dw + 10, 7);
                 ctx.fillStyle = '#2a251f';
-                ctx.fillRect(rd.x - 30, rd.y - 12, 64, 2);
+                ctx.fillRect(dx - 5, dy - 8, dw + 10, 2);
                 // and the light thrown out across the floor toward us
-                const floorSpill = ctx.createLinearGradient(rd.x, rd.y + 60, rd.x - 70, 430);
+                const floorSpill = ctx.createLinearGradient(cx, dy + dh, cx - 70, 430);
                 floorSpill.addColorStop(0, `rgba(210,240,255,${0.30 * k})`);
                 floorSpill.addColorStop(1, 'rgba(210,240,255,0)');
                 ctx.fillStyle = floorSpill;
                 ctx.beginPath();
-                ctx.moveTo(rd.x - 24, rd.y + 60); ctx.lineTo(rd.x + 28, rd.y + 60);
-                ctx.lineTo(rd.x + 60, 430); ctx.lineTo(rd.x - 80, 430);
+                ctx.moveTo(dx + 2, dy + dh); ctx.lineTo(dx + dw - 2, dy + dh);
+                ctx.lineTo(dx + dw + 28, 430); ctx.lineTo(dx - 56, 430);
                 ctx.closePath(); ctx.fill();
             }
             // Him. Once the door is open he is between us and the lab, so he
@@ -10292,7 +10272,7 @@ function drawLevel5FurnaceRoom() {
                 drawCEO(ex, 380, 'right');
                 ctx.filter = 'none';
                 // the axe still in his hand, hanging at his side and still wet
-                drawBloodyAxeAtSide(ex, 380, inLight);
+                drawBloodyAxeAtSide(ex, 380, 'right', inLight);
                 ctx.restore();
             }
         }
@@ -10300,11 +10280,30 @@ function drawLevel5FurnaceRoom() {
         // furnace above are the whole of the shot, and they are already down.
     }
 
-    // Concealed right door — passage to cloning room (visible when unlocked).
-    // Not in the flashback: on this night it is still a wall with a door in it,
-    // and the detective's shortcut has not been cut through it yet.
+    // The right door has always been there. What level 6 changes is not the
+    // building — it is what you know about it: you come back at it from the
+    // cloning lab, from a floor below, and only then does the wall you have
+    // walked past all game turn out to have had a way through it. So in the
+    // flashback the door is drawn shut and flush, six months before anyone on
+    // this side of it knows what it opens onto, and the CEO walks out through
+    // it. The lit green passage below is the AFTER state — the door standing
+    // open because the detective opened it — and that is the only part of this
+    // that has not happened yet.
     const rdX = 640, rdY = 340, rdW = 50, rdH = 60;
-    if (level6.cloningDoorUnlocked && !redsEnding.active) {
+    if (redsEnding.active && redsEnding.doorOpen <= 0) {
+        // Shut, unmarked, the same grey as the wall it is set into. Easy to walk
+        // past — which is exactly what everyone has done with it until now.
+        ctx.fillStyle = '#221d19';
+        ctx.fillRect(rdX, rdY, rdW, rdH);
+        ctx.fillStyle = '#282219';
+        ctx.fillRect(rdX + 3, rdY + 3, rdW - 6, rdH - 6);
+        ctx.strokeStyle = '#161210';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rdX, rdY, rdW, rdH);
+        ctx.fillStyle = '#3a332c';
+        ctx.fillRect(rdX + 6, rdY + 28, 12, 3);          // the handle, barely lit
+    }
+    else if (level6.cloningDoorUnlocked && !redsEnding.active) {
         // Open passage with dark interior and green LED edge
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(rdX, rdY, rdW, rdH);
@@ -10332,7 +10331,14 @@ function drawCEOAxeArm(x, y, side, sw) {
     const s = 2;
     // Shoulder and hand come off the CEO's own rig so the arm starts where his
     // other one does rather than somewhere near it.
-    const shX = x + side * 7.0*s, shY = y + 2.2*s;
+    //
+    // It did not. x + side*14, y + 4.4 is a point at WAIST height and a body's
+    // width out to the side of him — the swing arm grew out of the air beside
+    // his hip. In profile the near shoulder is barely off his centre line, and
+    // it is up under his collar: y - 19 with a 30px reach drops the hand exactly
+    // on ceoAxeHand, so the axe hangs in the same fist whether he is holding it
+    // or swinging it.
+    const shX = x + side * 3.2, shY = y - 19;
     // Shoulder angle through the swing, measured from straight down. Negative is
     // behind him, positive is through and past vertical onto the man — the chop
     // HAS to end positive. Stopping it at -0.60, a hair off the -0.35 the wind-up
@@ -10384,30 +10390,58 @@ function drawCEOAxeArm(x, y, side, sw) {
     charHand(handX, handY, 1.5*s, '#c49872');
 }
 
-// The axe carried at his side. `dark` renders it as part of the silhouette once
-// he is standing in the lab's light; `wet` is the blood on the blade, which he
-// has no business carrying in before he has used it.
-function drawBloodyAxeAtSide(x, y, dark, wet = true) {
+// The axe held down at his side, gripped in his fist. `facing` is the CEO's;
+// `dark` renders it as part of the silhouette once he is standing in the lab's
+// light; `wet` is the blood on the blade, which he has no business carrying in
+// before he has used it.
+//
+// It used to be placed at a flat offset from his centre, which put it a hand's
+// width off the only hand he has on that side and directly over the cash sack
+// hanging there — so it read as an axe stuck in a bag of money rather than as
+// something a man was holding. It hangs off ceoAxeHand now, blade down by his
+// shoe, with the fist closed over the haft last so the grip reads.
+function drawBloodyAxeAtSide(x, y, facing, dark, wet = true) {
+    const h = ceoAxeHand(x, y, facing);
     ctx.save();
-    ctx.translate(x + 16, y + 22);
-    ctx.rotate(0.34);
+    ctx.translate(h.x, h.y);
+    ctx.scale(h.dd, 1);          // drawn facing right, mirrored for the other way
+    ctx.rotate(0.22);            // the head tips out from his leg, not into it
+    // Haft, from above the fist down past his knee
     ctx.strokeStyle = dark ? '#000' : '#6b4a2a';
     ctx.lineWidth = 5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(0, 18); ctx.stroke();
+    // Almost nothing of the haft stands above the fist — any more and it lies
+    // across his shirt and tie instead of hanging beside his leg.
+    ctx.beginPath(); ctx.moveTo(-1, -3); ctx.lineTo(2, 25); ctx.stroke();
+    if(!dark) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(-2.2, -2); ctx.lineTo(0.7, 23); ctx.stroke();
+    }
+    // Head: bit, cheek and poll, hanging at the bottom of the haft
     ctx.fillStyle = dark ? '#000' : '#b9bec6';
     ctx.beginPath();
-    ctx.moveTo(-3, 16); ctx.quadraticCurveTo(-19, 12, -16, 0);
-    ctx.lineTo(-3, 3); ctx.closePath(); ctx.fill();
+    ctx.moveTo(5, 24); ctx.quadraticCurveTo(21, 20, 18, 7);
+    ctx.lineTo(4, 11); ctx.closePath(); ctx.fill();
+    if(!dark) {
+        ctx.fillStyle = '#e6ebf2';
+        ctx.beginPath();
+        ctx.moveTo(18, 7); ctx.quadraticCurveTo(21, 20, 19.5, 19.5); ctx.lineTo(17, 8);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#7d838c';
+        ctx.fillRect(-1, 10, 7, 8);
+    }
     if(!dark && wet) {
         // the wet edge, and a bead about to go
         ctx.fillStyle = 'rgba(120,0,8,0.85)';
         ctx.beginPath();
-        ctx.moveTo(-16, 0); ctx.quadraticCurveTo(-19, 12, -3, 16);
-        ctx.lineTo(-5, 12); ctx.quadraticCurveTo(-15, 9, -14, 1);
+        ctx.moveTo(18, 7); ctx.quadraticCurveTo(21, 20, 5, 24);
+        ctx.lineTo(7, 20); ctx.quadraticCurveTo(17, 17, 16, 8);
         ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(-13, 15, 1.6, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(15, 23, 1.6, 2.4, 0, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
+    // The fist last, closed over the haft where the sack used to hang
+    if(!dark) charHand(h.x, h.y, 3.0, '#c49872');
+    else { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(h.x, h.y, 3.0, 0, Math.PI * 2); ctx.fill(); }
 }
 
 // Red after the axe: the body folded on the floor, the hood a short distance
@@ -23502,6 +23536,22 @@ function ceoProfileHead(x, y, s, d, skinColor, weatheredSkin) {
     }
 }
 
+// True while the flashback has him in the furnace room with the axe. Both of
+// his level 6 props — the bribe in one hand, the revolver in the other — are
+// off him for the whole of it.
+function ceoIsExecutioner() {
+    return typeof redsEnding !== 'undefined' && redsEnding.active && !!redsEnding.exec;
+}
+
+// Where the axe sits in his fist, in world space, for whichever way he is
+// turned. Derived from the same anchor _drawCEO hangs the cash sack off, so the
+// axe is gripped by the hand that exists rather than parked near it.
+function ceoAxeHand(x, y, facing) {
+    const gy = y + FOOT_FIX.ceo;
+    const dd = facing === 'left' ? -1 : 1;
+    return { x: x + dd * 3.6, y: gy + 30.8, dd };
+}
+
 function _drawCEO(x, y, facing) {
     const s = 2;
 
@@ -23518,13 +23568,13 @@ function _drawCEO(x, y, facing) {
     if(facing === 'left') {
         const legL = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
         ceoProfileBody(x, y, s, -1, legL, ceo.state === 'hunting');
-        if(ceo.state === 'hunting') ceoGunArm(x, y, 'left');
+        if(ceo.state === 'hunting' && !ceoIsExecutioner()) ceoGunArm(x, y, 'left');
         ceoProfileHead(x, y, s, -1, skinColor, weatheredSkin);
 
     } else if(facing === 'right') {
         const legR = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
         ceoProfileBody(x, y, s, 1, legR, ceo.state === 'hunting');
-        if(ceo.state === 'hunting') ceoGunArm(x, y, 'right');
+        if(ceo.state === 'hunting' && !ceoIsExecutioner()) ceoGunArm(x, y, 'right');
         ceoProfileHead(x, y, s, 1, skinColor, weatheredSkin);
 
     } else if(facing === 'forward' || facing === 'down') {
@@ -23624,7 +23674,7 @@ function _drawCEO(x, y, facing) {
         ceoShoe(x - 6.0*s, y + 26*s + leg, 4.5*s, s);
         ceoShoe(x + 1.5*s, y + 26*s - leg, 4.5*s, s);
 
-        if(ceo.state === 'hunting') ceoGunArm(x, y, 'down');
+        if(ceo.state === 'hunting' && !ceoIsExecutioner()) ceoGunArm(x, y, 'down');
 
         // === HEAD — built as a skull, not a stack of rectangles ===
         // Cranium is wide at the temples and narrows to a heavy jaw; the whole
@@ -23983,7 +24033,11 @@ function _drawCEO(x, y, facing) {
         ctx.stroke();
     }
 
-    if(ceo.state === 'offering') {
+    // In RED'S ENDING that hand has an axe in it. `ceo` is a level 6 object and
+    // the flashback inherits whatever state level 6 left him in — which is
+    // 'offering', so he was carrying the bribe through the whole execution and
+    // the axe drew across it: a cash sack with an axe stuck in it.
+    if(ceo.state === 'offering' && !ceoIsExecutioner()) {
         const handX = ceoHands.sack.x, handY = ceoHands.sack.y;
         const sackX = handX, sackY = handY + 9;      // hangs below the fist
 
