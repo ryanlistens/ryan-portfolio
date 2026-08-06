@@ -1286,6 +1286,8 @@ let redsEnding = {
     // furnace execution beats: null -> 'axe' -> 'carry' -> 'burn' -> 'aftermath' -> card
     exec: null,
     execTimer: 0,
+    swing: 0,           // frames into the axe swing itself
+    beheaded: false,    // set on impact; Red stops being drawn upright
     ceoX: 560,
 };
 
@@ -10039,6 +10041,23 @@ function drawLevel5FurnaceRoom() {
     }
 
     // ── UI labels — drawn after all geometry/props so they float above everything ──
+    // The door bolts behind him. He was never getting back out of this room —
+    // the sequence takes the controls the moment he steps in — and it should
+    // LOOK that way rather than just refusing to respond.
+    if(redsEnding.active && redsEnding.exec) {
+        const ld = level5.furnaceRoom.leftDoor;
+        ctx.fillStyle = '#241109';
+        ctx.fillRect(ld.x - 10, ld.y, 50, 60);
+        ctx.fillStyle = '#3a3a3e';
+        ctx.fillRect(ld.x - 14, ld.y + 26, 58, 9);          // the bar across it
+        ctx.fillStyle = '#1e1e21';
+        ctx.fillRect(ld.x - 14, ld.y + 32, 58, 3);
+        ctx.fillStyle = '#c8a010';
+        ctx.beginPath(); ctx.arc(ld.x + 15, ld.y + 30.5, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5a4700';
+        ctx.fillRect(ld.x + 14, ld.y + 30, 2, 5);           // keyhole
+    }
+
     // Nothing to interact with while you are being murdered.
     const redsExec = redsEnding.active && redsEnding.exec;
     if(!redsExec && Math.abs(player.x - level5.furnaceRoom.leftDoor.x) < 50) {
@@ -10060,9 +10079,15 @@ function drawLevel5FurnaceRoom() {
         const ex = redsEnding.ceoX;
         const fx = furnace.x;
         if(redsEnding.exec === 'axe') {
-            // Red still standing; the CEO walks in on him with the axe up.
-            drawCEO(ex, 380, 'left');
-            drawExecutionAxe(ex - 18, 380, Math.min(1, t / 70));
+            const face = ex > player.x ? 'left' : 'right';
+            const side = ex > player.x ? -1 : 1;   // which way he swings
+            drawCEO(ex, 380, face);
+            // The swing arm and the axe together, anchored on his shoulder and
+            // ending in his hand — the same way the devil's pitchfork is held,
+            // rather than a shape floating beside him. His own right arm is
+            // skipped for this pose so there is no third limb.
+            drawCEOAxeArm(ex, 380, side, redsEnding.swing);
+            if(redsEnding.beheaded) drawBeheadedRed(player.x, 380, side);
         } else if(redsEnding.exec === 'carry') {
             // Over the shoulder. The body is a limp jumpsuit with the hood empty.
             drawCEO(ex, 380, 'left');
@@ -10106,20 +10131,92 @@ function drawLevel5FurnaceRoom() {
     }
 }
 
-// The axe, raised and brought down over the swing. `k` runs 0..1.
-function drawExecutionAxe(x, y, k) {
-    const swing = k < 0.7 ? -1.1 + k * 0.4 : (-0.82 + (k - 0.7) / 0.3 * 2.0);
+// The CEO's swing arm WITH the axe in the hand at the end of it. `side` is the
+// direction he is swinging (-1 left, +1 right); `sw` is the frame count into the
+// swing: 0..34 raise it over his head, 34..46 hold at the top, 46..58 chop, and
+// after 58 it is buried in the floor where the neck was.
+function drawCEOAxeArm(x, y, side, sw) {
+    const s = 2;
+    // Shoulder and hand come off the CEO's own rig so the arm starts where his
+    // other one does rather than somewhere near it.
+    const shX = x + side * 7.0*s, shY = y + 2.2*s;
+    // Shoulder angle through the swing, measured from straight down.
+    let a;
+    if(sw < 34)      a = -0.35 - (sw / 34) * 2.3;           // winding up and over
+    else if(sw < 46) a = -2.65 - Math.sin((sw - 34) / 12 * Math.PI) * 0.12;  // held, quivering
+    else if(sw < 58) a = -2.65 + ((sw - 46) / 12) * 2.05;   // the chop
+    else             a = -0.60;                              // followed through, low
+    const reach = 15*s;
+    const handX = shX + Math.sin(a) * side * reach;
+    const handY = shY + Math.cos(a) * reach;
+    const armColour = charMix(CEO_SUIT, '#000000', 0.13);
+    // Upper arm and forearm, bending at the elbow toward the swing
+    const elX = shX + Math.sin(a * 0.55) * side * reach * 0.55;
+    const elY = shY + Math.cos(a * 0.55) * reach * 0.55;
+    charLimb(shX, shY, elX, elY, 2.9*s, armColour, shX + side*1.2*s, shY + 3*s);
+    charLimb(elX, elY, handX, handY, 2.4*s, armColour, elX + side*1.0*s, (elY + handY) / 2);
+    charDeltoid(shX, shY, 1.8*s, charMix(CEO_SUIT, '#000000', 0.15));
+
+    // The axe, gripped AT the hand and pointing on along the arm's line
     ctx.save();
-    ctx.translate(x, y - 40);
-    ctx.rotate(swing);
+    ctx.translate(handX, handY);
+    // Point the haft along the arm's OWN direction rather than off the swing
+    // angle. Derived from the shoulder->hand vector, so it lines up whichever
+    // side he swings from; the hand-rolled version had it pointing at the floor
+    // at the top of the raise.
+    ctx.rotate(Math.atan2(handX - shX, -(handY - shY)));
     ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -46); ctx.stroke();
-    ctx.fillStyle = '#c8ccd2';
+    ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(0, -42); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-1.4, 6); ctx.lineTo(-1.4, -40); ctx.stroke();
+    // Head: bit, cheek and poll
+    ctx.fillStyle = '#b9bec6';
     ctx.beginPath();
-    ctx.moveTo(-2, -46); ctx.lineTo(-20, -40); ctx.lineTo(-18, -26); ctx.lineTo(-2, -30);
+    ctx.moveTo(-3, -40); ctx.quadraticCurveTo(-22, -36, -19, -22);
+    ctx.lineTo(-3, -26); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e6ebf2';
+    ctx.beginPath();
+    ctx.moveTo(-19, -22); ctx.quadraticCurveTo(-22, -36, -20.5, -35); ctx.lineTo(-18, -23);
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#8a9099';
-    ctx.fillRect(-4, -48, 8, 22);
+    ctx.fillStyle = '#7d838c';
+    ctx.fillRect(-4, -44, 8, 20);
+    ctx.restore();
+
+    // The hand last, closed over the haft
+    charHand(handX, handY, 1.5*s, '#c49872');
+}
+
+// Red after the axe: the body folded on the floor, the hood a short distance
+// off, and the spill between them.
+function drawBeheadedRed(x, y, side) {
+    const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
+    ctx.save();
+    // Pool first, under everything
+    ctx.fillStyle = 'rgba(90,0,6,0.55)';
+    ctx.beginPath(); ctx.ellipse(x, y + 30, 26, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // Body, crumpled on its side
+    ctx.translate(x, y + 20);
+    ctx.rotate(side * 0.12);
+    ctx.fillStyle = ramp.base;
+    ctx.fillRect(-19, -12, 38, 20);
+    ctx.fillStyle = ramp.dark;
+    ctx.fillRect(-17, 6, 15, 8);
+    ctx.fillRect(2, 6, 15, 8);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-19, 12, 8, 5);
+    ctx.fillRect(11, 12, 8, 5);
+    // Stump
+    ctx.fillStyle = '#6b0008';
+    ctx.fillRect(side * 15, -12, 6, 7);
+    ctx.restore();
+    // The hood, come to rest a little way off
+    ctx.save();
+    ctx.translate(x + side * 40, y + 26);
+    ctx.rotate(side * 0.9);
+    ctx.fillStyle = ramp.base;
+    ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.arc(-2, 1, 7, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 }
 
@@ -23164,7 +23261,11 @@ function _drawCEO(x, y, facing) {
         // The right one is skipped while he is hunting: that pose draws its own
         // arm holding the revolver, and drawing both left him with a third limb.
         const ceoCapY = y + 2.2*s, ceoShX = 7.0*s;
-        const ceoAiming = (ceo.state === 'hunting');
+        // The right arm is skipped while a pose supplies its own — aiming the
+        // revolver, or swinging the axe in RED'S ENDING. Drawing both leaves him
+        // with a third limb.
+        const ceoAiming = (ceo.state === 'hunting') ||
+                          (typeof redsEnding !== 'undefined' && redsEnding.active && redsEnding.exec === 'axe');
         const ceoArm = (side, colour) => {
             const ax = x + side * ceoShX, ex = x + side * 7.9*s, ey = y + 8.8*s;
             charLimb(ax, ceoCapY, ex, ey, 2.9*s, colour, x + side * 8.2*s, y + 5.4*s);
@@ -27285,7 +27386,7 @@ function drawScene() {
             // You are RED. Same sprite the pipe managers have always used, so the
             // flashback shows you the job from inside the jumpsuit you have spent
             // five levels handing documents to.
-            if(!(redsEnding.exec && redsEnding.exec !== 'axe')) {
+            if(!redsEnding.beheaded && !(redsEnding.exec && redsEnding.exec !== 'axe')) {
                 drawNPC({ x: player.x, y: player.y, color: COLORS[0],
                           state: 'happy', needsDoc: false, facing: player.facing });
                 if(player.holding) drawHeldDoc(player.x, player.y, player.holding);
@@ -29677,6 +29778,9 @@ function startRedsEnding() {
     redsEnding.letterRead = false;
     redsEnding.exec = null;
     redsEnding.execTimer = 0;
+    redsEnding.swing = 0;
+    redsEnding.beheaded = false;
+    redsEnding.ceoX = 560;
 
     level = 5;
     state = 'playing';
@@ -30782,11 +30886,19 @@ function update() {
                         redsEnding.execTimer++;
                         const t = redsEnding.execTimer;
                         if(redsEnding.exec === 'axe') {
-                            // The CEO closes the distance and swings.
-                            if(redsEnding.ceoX > player.x + 34) redsEnding.ceoX -= 2.6;
-                            else if(t > 70) {
-                                redsEnding.exec = 'carry'; redsEnding.execTimer = 0;
-                                SFX.play('hurt');
+                            // Close the distance first, from whichever side he
+                            // came in on, and only then start the swing.
+                            const stand = player.x + (redsEnding.ceoX > player.x ? 34 : -34);
+                            if(Math.abs(redsEnding.ceoX - stand) > 2.6) {
+                                redsEnding.ceoX += redsEnding.ceoX < stand ? 2.6 : -2.6;
+                            } else {
+                                // 0..34 raise, 34..46 hold at the top, 46..58 chop,
+                                // impact at 58, then a beat on the body.
+                                redsEnding.swing++;
+                                if(redsEnding.swing === 58) { SFX.play('hurt'); redsEnding.beheaded = true; }
+                                if(redsEnding.swing > 100) {
+                                    redsEnding.exec = 'carry'; redsEnding.execTimer = 0;
+                                }
                             }
                         } else if(redsEnding.exec === 'carry') {
                             // Body over the shoulder, walked to the furnace door.
