@@ -1271,6 +1271,24 @@ let hellMode = false;
 let hellLevelComplete = false;
 
 
+// RED'S ENDING — the detective's flashback. Reached by picking up the black box
+// while wearing the hat: instead of closing the case on the spot, you play the
+// last shift of the pipe manager whose disappearance the case is about.
+//
+// It rides on LEVEL 5's rooms rather than new ones, because it is the same
+// building — the hallway, the four offices, the pipe room and the furnace are
+// exactly where the detective has already walked. What changes is who you are
+// in them, which doors will open, and what is waiting at the end.
+let redsEnding = {
+    active: false,
+    card: 0,            // >0 while the "RED'S ENDING" title card plays
+    letterRead: false,  // the CEO's summons; Red's office door stays shut until it is
+    // furnace execution beats: null -> 'axe' -> 'carry' -> 'burn' -> 'aftermath' -> card
+    exec: null,
+    execTimer: 0,
+    ceoX: 560,
+};
+
 let level5 = {
     room: 'furnaceRoom',
     hellMode: false,
@@ -10021,7 +10039,9 @@ function drawLevel5FurnaceRoom() {
     }
 
     // ── UI labels — drawn after all geometry/props so they float above everything ──
-    if(Math.abs(player.x - level5.furnaceRoom.leftDoor.x) < 50) {
+    // Nothing to interact with while you are being murdered.
+    const redsExec = redsEnding.active && redsEnding.exec;
+    if(!redsExec && Math.abs(player.x - level5.furnaceRoom.leftDoor.x) < 50) {
         drawActionLabel('\u2190 HALLWAY', level5.furnaceRoom.leftDoor.x + 15, level5.furnaceRoom.leftDoor.y - 10, {fontSize: 13});
     }
     if(Math.abs(player.x - furnace.x) < 90 && !player.holding && !level5.redKeyOnGround) {
@@ -10032,6 +10052,36 @@ function drawLevel5FurnaceRoom() {
     }
     if(level5.redKeyOnGround && Math.abs(player.x - furnace.x) < 60 && !player.holding) {
         drawActionLabel('[ ACTION ] - PICK UP KEY', furnace.x, 385 - 36);
+    }
+
+    // RED'S ENDING execution, drawn over the room it happens in.
+    if(redsEnding.active && redsEnding.exec) {
+        const t = redsEnding.execTimer;
+        const ex = redsEnding.ceoX;
+        const fx = furnace.x;
+        if(redsEnding.exec === 'axe') {
+            // Red still standing; the CEO walks in on him with the axe up.
+            drawCEO(ex, 380, 'left');
+            drawExecutionAxe(ex - 18, 380, Math.min(1, t / 70));
+        } else if(redsEnding.exec === 'carry') {
+            // Over the shoulder. The body is a limp jumpsuit with the hood empty.
+            drawCEO(ex, 380, 'left');
+            drawCarriedRed(ex, 380);
+        } else if(redsEnding.exec === 'burn') {
+            drawCEO(fx + 46, 380, 'left');
+            // The jumpsuit going in, shrinking into the mouth of the furnace
+            const k = Math.max(0, 1 - t / 60);
+            if(k > 0) {
+                ctx.save();
+                ctx.globalAlpha = k;
+                ctx.translate(fx, furnace.y + 10);
+                ctx.scale(k, k);
+                ctx.fillStyle = COLORS[0].hex;
+                ctx.fillRect(-12, -16, 24, 32);
+                ctx.restore();
+            }
+        }
+        // 'aftermath' draws nothing extra — the empty room IS the point.
     }
 
     // Concealed right door — passage to cloning room (visible when unlocked)
@@ -10054,6 +10104,44 @@ function drawLevel5FurnaceRoom() {
             drawActionLabel('CLONING LAB →', rdX + rdW/2, rdY - 6, {color: '#00ff88', fontSize: 14});
         }
     }
+}
+
+// The axe, raised and brought down over the swing. `k` runs 0..1.
+function drawExecutionAxe(x, y, k) {
+    const swing = k < 0.7 ? -1.1 + k * 0.4 : (-0.82 + (k - 0.7) / 0.3 * 2.0);
+    ctx.save();
+    ctx.translate(x, y - 40);
+    ctx.rotate(swing);
+    ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -46); ctx.stroke();
+    ctx.fillStyle = '#c8ccd2';
+    ctx.beginPath();
+    ctx.moveTo(-2, -46); ctx.lineTo(-20, -40); ctx.lineTo(-18, -26); ctx.lineTo(-2, -30);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#8a9099';
+    ctx.fillRect(-4, -48, 8, 22);
+    ctx.restore();
+}
+
+// Red over the CEO's shoulder — a limp jumpsuit, hood hanging empty.
+function drawCarriedRed(x, y) {
+    const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
+    ctx.save();
+    ctx.translate(x - 6, y - 66);
+    ctx.rotate(-0.25);
+    ctx.fillStyle = ramp.base;
+    ctx.fillRect(-26, -8, 52, 16);          // torso across the shoulders
+    ctx.fillStyle = ramp.dark;
+    ctx.fillRect(-30, 4, 16, 22);           // legs hanging down his back
+    ctx.fillRect(-12, 4, 16, 20);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-30, 26, 16, 6);           // boots
+    ctx.fillRect(-12, 24, 16, 6);
+    ctx.fillStyle = ramp.base;               // the empty hood, lolling
+    ctx.beginPath(); ctx.arc(28, 2, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.arc(30, 4, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
 }
 
 // Yellow cat drawing — sits, looks around, walks toward player
@@ -27150,6 +27238,31 @@ function drawScene() {
         drawOfficeRoom(level5.currentOffice);
     }
     
+    // RED'S ENDING title card, and the summons prompt while his door is shut.
+    if(redsEnding.active && redsEnding.card > 0) {
+        const t = redsEnding.card;
+        const a = t < 30 ? t / 30 : (t < 130 ? 1 : Math.max(0, (160 - t) / 30));
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#0a0406';
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 26px Georgia, serif';
+        ctx.fillStyle = '#8a8a8a';
+        ctx.fillText('SIX MONTHS EARLIER', 350, 200);
+        ctx.font = 'bold 64px Georgia, serif';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
+        ctx.strokeText("RED'S ENDING", 350, 280);
+        ctx.fillStyle = COLORS[0].hex;
+        ctx.fillText("RED'S ENDING", 350, 280);
+        ctx.textAlign = 'left';
+        ctx.restore();
+    } else if(redsEnding.active && !redsEnding.letterRead &&
+              level5.room === 'office' && level5.currentOffice === 'RED' &&
+              !level5.viewingLetter) {
+        drawActionLabel('READ THE LETTER ON THE DESK', 350, 120, {fontSize: 12, color: '#d8c8a0'});
+    }
+
     if(level5.viewingEmail && level5.currentOffice) {
         drawEmailUI(level5.currentOffice);
     } else if(level5.viewingLetter) {
@@ -27168,6 +27281,15 @@ function drawScene() {
         if(level5.napReclining && level5.currentOffice === 'BLUE') {
             // Boss is asleep on futon — show reclining figure
             drawRecliningBoss(560, 360);
+        } else if(redsEnding.active) {
+            // You are RED. Same sprite the pipe managers have always used, so the
+            // flashback shows you the job from inside the jumpsuit you have spent
+            // five levels handing documents to.
+            if(!(redsEnding.exec && redsEnding.exec !== 'axe')) {
+                drawNPC({ x: player.x, y: player.y, color: COLORS[0],
+                          state: 'happy', needsDoc: false, facing: player.facing });
+                if(player.holding) drawHeldDoc(player.x, player.y, player.holding);
+            }
         } else {
             drawBaldManager(player.x, player.y, player.facing, player.holding);
             if(player.holding) {
@@ -27175,8 +27297,12 @@ function drawScene() {
             }
         }
 
-        // Radio prompt — drawn after the player so it floats above him
-        if(level5.currentOffice === 'YELLOW' || level5.currentOffice === 'RED') {
+        // Radio prompt — drawn after the player so it floats above him.
+        // Gated on being IN the office, not merely on which office was last
+        // entered: without the room check the stereo prompt follows you out
+        // into the hallway and the furnace room.
+        if(level5.room === 'office' && !(redsEnding.active && redsEnding.exec) &&
+           (level5.currentOffice === 'YELLOW' || level5.currentOffice === 'RED')) {
             const _radX = level5.currentOffice === 'YELLOW' ? RADIO_YELLOW_X : RADIO_RED_X;
             if(Math.abs(player.x - _radX) < 46 && player.y > RADIO_Y - 40) {
                 const _lbl = level5.currentOffice === 'YELLOW'
@@ -29538,6 +29664,36 @@ function drawScene() {
 }
 
 
+// RED'S ENDING. The detective picks the flight recorder out of the crater and
+// the picture goes with it: you are RED, on the last shift of his life, in the
+// building you have spent the whole game walking through from the other side.
+//
+// Level 5's rooms are reused deliberately — the hallway, the offices, the pipe
+// room and the furnace are already the right rooms. Only three of them will
+// open to Red, and one of them is a trap.
+function startRedsEnding() {
+    redsEnding.active = true;
+    redsEnding.card = 1;
+    redsEnding.letterRead = false;
+    redsEnding.exec = null;
+    redsEnding.execTimer = 0;
+
+    level = 5;
+    state = 'playing';
+    initLevel(5);
+    // Straight into his own office, door shut, letter on the desk.
+    level5.room = 'office';
+    level5.currentOffice = 'RED';
+    level5.redDoorLocked = false;
+    level5.ceoLetterOpened = false;
+    level5.viewingLetter = false;
+    level5.viewingEmail = false;
+    level5.viewingPortrait = false;
+    player.x = 350; player.y = 400; player.facing = 'forward';
+    player.holding = null;
+    playMusic('level5');
+}
+
 // The missile takes you with it. You and the CEO die in the same blast, and
 // what stands up in the Devil's lair afterwards is HIM — unarmed, because the
 // blast took the guns along with the body. There is no hatch and no chute on
@@ -30136,6 +30292,12 @@ function update() {
     
     // LEVEL 5 LOGIC
     if(level === 5) {
+        // RED'S ENDING title card holds the level still while it plays.
+        if(redsEnding.active && redsEnding.card > 0) {
+            redsEnding.card++;
+            if(redsEnding.card > 160) redsEnding.card = 0;
+            return;
+        }
         // Nap fade transition (Blue office futon)
         if(level5.napFadeOut) {
             level5.napFadeAlpha = Math.min(1, level5.napFadeAlpha + 0.04);
@@ -30350,6 +30512,13 @@ function update() {
                 const atOfficeDoor = Math.abs(player.x - office.x) < 40;
                 if(atOfficeDoor && (keys[' '] || keys['action'])) {
                     // RED door lock mechanic
+                    // In the flashback only RED's own office opens to him. The
+                    // other three are somebody else's door, and he has no reason
+                    // and no key to be behind any of them.
+                    if(redsEnding.active && office.name !== 'RED') {
+                        keys[' '] = false; keys['action'] = false;
+                        break;
+                    }
                     if(office.name === 'RED' && level5.redDoorLocked) {
                         if(level5.hasRedKey) {
                             // Unlock the door (player must press action again to enter)
@@ -30383,8 +30552,12 @@ function update() {
 
         // OFFICE
         else if(level5.room === 'office' && level5.currentOffice) {
+            // The summons gate. Red does not go anywhere until he has read what
+            // the CEO left on his desk, because that letter is the reason the
+            // rest of the flashback happens at all.
+            const summonsGate = redsEnding.active && !redsEnding.letterRead;
             // Exit office
-            if(player.y > 420 && Math.abs(player.x - 350) < 70 && (keys[' '] || keys['action'])) {
+            if(!summonsGate && player.y > 420 && Math.abs(player.x - 350) < 70 && (keys[' '] || keys['action'])) {
                 level5.room = 'hallway';
                 const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
                 player.x = office.x;
@@ -30440,6 +30613,8 @@ function update() {
                     level5.viewingLetter = true;
                     level5.letterScrollOffset = 0;
                     level5.ceoLetterOpened = true;
+                    // This is the summons. Reading it is what lets Red leave.
+                    redsEnding.letterRead = true;
                     keys[' '] = false;
                     keys['action'] = false;
                 }
@@ -30597,7 +30772,56 @@ function update() {
                 // FURNACE ROOM
                 else if(level5.room === 'furnaceRoom') {
                     player.y = 380;
-            
+
+                    // RED'S ENDING — the summons was an appointment with an axe.
+                    // The CEO is already in here when Red walks in, and the beats
+                    // run themselves: the swing, the carry, the furnace, and then
+                    // the room exactly as the detective will find it.
+                    if(redsEnding.active) {
+                        if(!redsEnding.exec) { redsEnding.exec = 'axe'; redsEnding.execTimer = 0; SFX.play('bossAlert'); }
+                        redsEnding.execTimer++;
+                        const t = redsEnding.execTimer;
+                        if(redsEnding.exec === 'axe') {
+                            // The CEO closes the distance and swings.
+                            if(redsEnding.ceoX > player.x + 34) redsEnding.ceoX -= 2.6;
+                            else if(t > 70) {
+                                redsEnding.exec = 'carry'; redsEnding.execTimer = 0;
+                                SFX.play('hurt');
+                            }
+                        } else if(redsEnding.exec === 'carry') {
+                            // Body over the shoulder, walked to the furnace door.
+                            // From EITHER side: Red can be killed anywhere along
+                            // the room, so a one-way walk left him standing where
+                            // he swung while the furnace waited across the floor.
+                            const fx = level5.furnaceRoom.furnace.x;
+                            const stand = fx + (redsEnding.ceoX > fx ? 46 : -46);
+                            if(Math.abs(redsEnding.ceoX - stand) > 2.2) {
+                                redsEnding.ceoX += redsEnding.ceoX < stand ? 2.2 : -2.2;
+                            } else if(t > 40) {
+                                redsEnding.exec = 'burn'; redsEnding.execTimer = 0;
+                                level5.furnaceRoom.furnace.flameTime = Date.now();
+                                SFX.play('furnaceBurn');
+                            }
+                        } else if(redsEnding.exec === 'burn') {
+                            // Burns like a document, because to this company that
+                            // is all he was.
+                            if(t > 150) { redsEnding.exec = 'aftermath'; redsEnding.execTimer = 0; }
+                        } else if(redsEnding.exec === 'aftermath') {
+                            // Hold on the empty room — this IS the furnace room the
+                            // detective walks into in level 6 — then close the case.
+                            if(t > 150) {
+                                redsEnding.active = false;
+                                redsEnding.exec = null;
+                                level = 6;
+                                level6.missileCaseClosedCard = 'fading';
+                                level6.missileCaseClosedTimer = 0;
+                                level6.detectiveTransAlpha = 0;
+                                playMusic('level5');
+                            }
+                        }
+                        return;
+                    }
+
                     const furnace = level5.furnaceRoom.furnace;
                     const leftDoor = level5.furnaceRoom.leftDoor;
             
@@ -33236,11 +33460,12 @@ if (keys[' '] || keys['action']) {
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
         level6.blackBoxPickedUp = true;
         if(level6.hasDetectiveHat) {
-            // Detective: case closed via black box evidence
-            level6.missileCaseClosedCard = 'fading';
-            level6.missileCaseClosedTimer = 0;
-            level6.detectiveTransAlpha = 0;
-            playMusic('level5');
+            // Detective: the recorder does not close the case on the spot any
+            // more. It puts him inside it — RED'S ENDING, the last shift of the
+            // pipe manager the case is about. The CASE CLOSED card now plays at
+            // the far end of that flashback, not here.
+            startRedsEnding();
+            return;
         } else {
             // NOT a promotion. You are standing in a crater holding the flight
             // recorder of the man you vaporised — the mushroom cloud card, and
