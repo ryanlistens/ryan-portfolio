@@ -1221,7 +1221,14 @@ let selfDestructSeq = {
     tvSubtitleShownAt: 0,      // Date.now() when current subtitle started (for fade-in)
     tvFadeStartedAt: 0,        // Date.now() when fade-to-black started
     deathBySafeRoom: false,
-    throneTransitionTimer: 0, // >0 while "YOUR OWN PERSONAL HELL" card plays before safe-room teleport
+    // Who is standing in the cave. false = the bald boss, down the hatch on the
+    // self-destruct route. true = the CEO, because you shot the missile in his
+    // office and the blast took you both — he walks the lair unarmed.
+    asCEO: false,
+    // Which ending the transition card is announcing when throneTransitionTimer
+    // runs: 'personalHell' -> the safe room, 'newCeo' -> taking the top job.
+    endingCard: null,
+    throneTransitionTimer: 0, // >0 while an ending transition card plays
     coffinConsumeTimer: 0,    // >0 while player is being pulled into the coffin after a devil stab
     mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
     roach: {x: 80, y: 295, antennaPhase: 0}
@@ -1566,6 +1573,14 @@ function initLevel(lv) {
         level6.missileExplosionTime = 0;
         level6.craterActive = false;
         level6.craterParticles = [];
+        // Restarting the level clears who you were down in the lair. The hatch
+        // route resets these on its way in, but the missile route does not go
+        // through the hatch, so a replay after nuking yourself would otherwise
+        // still be carrying the CEO's body.
+        selfDestructSeq.asCEO = false;
+        selfDestructSeq.endingCard = null;
+        selfDestructSeq.throneTransitionTimer = 0;
+        selfDestructSeq.coffinConsumeTimer = 0;
         level6.blackBoxDropped = false;
         level6.blackBoxX = 0;
         level6.blackBoxY = 0;
@@ -25552,10 +25567,15 @@ function drawSelfDestructCave2() {
     // the button said UNARMED.
     const playerArmed = revolverInHand();
     if(sds.devilState !== 'consumed') {
-        drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
-        if(playerArmed) {
-            drawRevolver(player.x, player.y, player.facing);
-            drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
+        // On the missile route the body in the cave is the CEO's, not the bald
+        // boss's — and he has nothing in his hands, which is the whole point.
+        if(sds.asCEO) drawCEO(player.x, player.y, player.facing);
+        else {
+            drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
+            if(playerArmed) {
+                drawRevolver(player.x, player.y, player.facing);
+                drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
+            }
         }
     }
     // Pitchfork impale overlay — blood spurt and tine punch-through on the player during the stab
@@ -25708,7 +25728,17 @@ function drawSelfDestructCave2() {
     // ── THRONE TRANSITION CARD ("YOUR OWN PERSONAL HELL") ────────────────────
     // Plays after the player takes the throne, before dropping into the safe
     // room apartment. Full-screen overlay, fades in/out over ~180 frames.
-    if(sds.throneTransitionTimer > 0) {
+    if(sds.throneTransitionTimer > 0 && sds.endingCard === 'newCeo') {
+        // Taking the throne just fades out. The NEW CEO card that follows opens
+        // on its own black stage, so anything drawn here would only be something
+        // to wipe off again.
+        const t = sds.throneTransitionTimer;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, t / 45));
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 700, 500);
+        ctx.restore();
+    } else if(sds.throneTransitionTimer > 0) {
         const t = sds.throneTransitionTimer;
         let alpha;
         if(t < 30)       alpha = t / 30;          // fade in
@@ -29508,6 +29538,52 @@ function drawScene() {
 }
 
 
+// The missile takes you with it. You and the CEO die in the same blast, and
+// what stands up in the Devil's lair afterwards is HIM — unarmed, because the
+// blast took the guns along with the body. There is no hatch and no chute on
+// this route: you were vaporised in the office, so the cut is straight to the
+// cave. He cannot fight, so the Devil finishes him and the coffin carries him
+// to the safe room rather than into hell mode.
+function enterDevilsLairAsCEO() {
+    Object.assign(selfDestructSeq, {
+        room: 'cave2', hatchOpenAnim: 1, countdown: 0,
+        countdownTimer: 0, countdownStarted: false,
+        playerY: 380, chuteArrivedCave: true, chuteAtBottom: true,
+        devilState: 'seated', devilX: 600, devilRiseTimer: 0,
+        devilWaitTimer: 0, devilFrame: 0, devilHp: 3,
+        devilDialogue: false, devilDialogueLine: 0,
+        devilDialogueChars: 0, devilDialogueComplete: false,
+        coffinRisingTimer: 0, coffinY: 480, coffinDescending: false,
+        lidOpenAmt: 0, lidSlamTimer: 0, killWindowTimer: 0,
+        weaponSwapped: false, armSwapShown: false,
+        stabAnimTimer: 0, throneActionAvailable: false,
+        // The stab locks the devil at stabLockX. It is only ever written on the
+        // way into 'stabbing', so a fresh run down here would otherwise inherit
+        // whatever the last one left, and an undefined one puts a NaN into the
+        // devil's gradients.
+        stabLockX: 600, stabFaceRight: false,
+        hellCardShowing: false, hellCardTimer: 0,
+        chairSitting: false, tvEndTimer: 0, tvEndStarted: false,
+        tvSubtitleIndex: -1, tvSubtitleShownAt: 0, tvFadeStartedAt: 0,
+        deathBySafeRoom: true, asCEO: true,
+        endingCard: null, throneTransitionTimer: 0, coffinConsumeTimer: 0,
+        mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
+        roach: {x: 80, y: 295, antennaPhase: 0}
+    });
+    // Disarmed, and it has to stick in three places: the cave's fire path tests
+    // revolverAmmo, the equip button tests hasRevolver, and the holster button
+    // tests the wrench. Leave any one of them and he can shoot his way out of
+    // the ending whose whole point is that he cannot.
+    level6.hasRevolver = false;
+    level6.revolverAmmo = 0;
+    level6.hasGhostGun = false;
+    level6.hasWrenchGun = false;
+    level6.pistolHolstered = false;
+    player.x = 120; player.y = 380; player.facing = 'right';
+    state = 'selfDestructSeq';
+    playMusic('hellmode');
+}
+
 // SECTION 13: Update Function - Level 5 Logic
 function update() {
     // Track the most recent horizontal facing so weapons without up/down
@@ -29776,6 +29852,23 @@ function update() {
                     if(sds.coffinConsumeTimer === 20) SFX.play('hatchOpen');
                 } else if(sds.coffinConsumeTimer <= 90) {
                     sds.coffinY += 3;
+                } else if(sds.asCEO) {
+                    // The CEO's route. He never chose the hatch, so hell mode is
+                    // not his — the coffin carries him to the safe room, and the
+                    // PERSONAL HELL card announces it. That card used to play for
+                    // the man who BEAT the devil, which never made much sense;
+                    // it belongs to the one the devil got.
+                    //
+                    // Start the card ONCE and fall through, rather than resetting
+                    // the timer and returning the way the hell branch does. That
+                    // branch can return because it changes `state` and never
+                    // comes back here; this one stays in the sequence, so
+                    // returning just re-ran the consume from the top every frame
+                    // and the transition below never got to tick.
+                    if(sds.throneTransitionTimer === 0 && sds.endingCard !== 'personalHell') {
+                        sds.endingCard = 'personalHell';
+                        sds.throneTransitionTimer = 1;
+                    }
                 } else {
                     // Transition to nebulous hell work sim
                     playMusic('hellmode');
@@ -29801,16 +29894,33 @@ function update() {
             if(sds.throneActionAvailable && !sds.coffinDescending && sds.throneTransitionTimer === 0 &&
                (keys[' '] || keys['action']) && player.x > 530) {
                 keys[' '] = false; keys['action'] = false;
+                sds.endingCard = 'newCeo';
                 sds.throneTransitionTimer = 1;
             }
             // Throne transition card — plays for ~180 frames (3 sec), then teleport
             if(sds.throneTransitionTimer > 0) {
                 sds.throneTransitionTimer++;
                 if(sds.throneTransitionTimer >= 180) {
-                    sds.room = 'safeRoom';
-                    sds.deathBySafeRoom = false; // this is the KILL-devil ending
-                    player.x = 350; player.y = floorY;
-                    player.facing = 'forward';
+                    if(sds.endingCard === 'newCeo') {
+                        // You killed the devil and took the chair. This is where
+                        // the NEW CEO celebration lives now — it used to be the
+                        // reward for picking a flight recorder out of a crater.
+                        // The card paints its own full-screen stage, so handing
+                        // back to level 6 cannot flash the office underneath it.
+                        state = 'playing';
+                        level = 6;
+                        level6.newCEOCard = true;
+                        level6.newCEOTimer = 0;
+                        level6.newCEOPhase = 'celebration';
+                        level6.newCEOHoistStarted = false;
+                        level6.detectiveTransAlpha = 1;
+                        playMusic('newceo');
+                    } else {
+                        sds.room = 'safeRoom';
+                        player.x = 350; player.y = floorY;
+                        player.facing = 'forward';
+                    }
+                    sds.endingCard = null;
                     sds.throneTransitionTimer = 0;
                 }
                 return;
@@ -33057,7 +33167,8 @@ function update() {
                                 hellCardShowing: false, hellCardTimer: 0,
                                 chairSitting: false, tvEndTimer: 0, tvEndStarted: false,
                                 tvSubtitleIndex: -1, tvSubtitleShownAt: 0, tvFadeStartedAt: 0,
-                                deathBySafeRoom: false,
+                                deathBySafeRoom: false, asCEO: false,
+                                endingCard: null,
                                 throneTransitionTimer: 0, coffinConsumeTimer: 0,
                                 mouse: {x: 720, y: 380, vx: -0.6, state: 'entering', wanderTimer: 0, targetX: 100, targetY: 380},
                                 roach: {x: 80, y: 295, antennaPhase: 0}
@@ -33131,13 +33242,14 @@ if (keys[' '] || keys['action']) {
             level6.detectiveTransAlpha = 0;
             playMusic('level5');
         } else {
-            // Pipe boss: you seized the opportunity — new CEO!
-            level6.newCEOCard = 'fading';
-            level6.newCEOTimer = 0;
+            // NOT a promotion. You are standing in a crater holding the flight
+            // recorder of the man you vaporised — the mushroom cloud card, and
+            // another go at level 6. Taking the top job is the reward for the
+            // throne at the bottom of the hatch now, not for this.
+            level6.youBlewItCard = 'fading';
+            level6.youBlewItTimer = 0;
             level6.detectiveTransAlpha = 0;
-            level6.newCEOPhase = 'celebration';
-            level6.newCEOHoistStarted = false;
-            playMusic('newceo');
+            playMusic('blewit');
         }
         return;
     }
@@ -33754,11 +33866,14 @@ if (keys[' '] || keys['action']) {
                         // Check if player is within blast radius
                         const playerDist = Math.sqrt(Math.pow(player.x - blastCenterX, 2) + Math.pow(player.y - blastCenterY, 2));
                         if(playerDist < blastRadius) {
-                            // Suicidal missile — always "you blew it" mushroom cloud, never new CEO card
-                            level6.youBlewItCard = 'fading';
-                            level6.youBlewItTimer = 0;
-                            level6.detectiveTransAlpha = 0;
-                            playMusic('blewit');
+                            // Suicidal missile. It used to end on the mushroom
+                            // cloud card; now it hands you the CEO's body and
+                            // drops you both into the Devil's lair. Score is
+                            // awarded here because the return skips the award at
+                            // the bottom of this block.
+                            score += 5000;
+                            enterDevilsLairAsCEO();
+                            return;
                         }
 
                         // Screen shake effect
@@ -34159,7 +34274,9 @@ if (keys[' '] || keys['action']) {
                             const ceoDist = Math.sqrt(Math.pow(ceo.x-250,2)+Math.pow(ceo.y-130,2));
                             if(ceoDist < 200 && ceo.state !== 'dead') { ceo.state='dead'; ceo.deathRoom=level6.room; ceo.health=0; level6.ceoDefeated=true; level6.safeUnlocked=true; level6.blackBoxDropped=true; level6.blackBoxX=ceo.x; level6.blackBoxY=ceo.y; }
                             const playerDist = Math.sqrt(Math.pow(player.x-250,2)+Math.pow(player.y-130,2));
-                            if(playerDist < 200) { level6.youBlewItCard='fading'; level6.youBlewItTimer=0; level6.detectiveTransAlpha=0; playMusic('blewit'); }
+                            // Same blast, same ending — the auto-wrench can set
+                            // the missile off too, and this path was a separate copy.
+                            if(playerDist < 200) { score += 5000; enterDevilsLairAsCEO(); return; }
                             level6.missileFireTimer = 30; score += 5000;
                             bulletImpact(bx, by);
                             wb.going = false;
