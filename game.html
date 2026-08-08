@@ -1298,15 +1298,10 @@ let redsEnding = {
     fixAnim: 0,
     fixStart: 0,
 
-    // === THE WAY BACK ===
-    // The flashback does not hand straight over to the end card. It comes back
-    // to the present first — the crater, the box, the detective standing where
-    // he was standing — because that is the shot that ties the two together.
-    outroFade: 0,       // furnace room going to black on the way out
-    outro: 0,           // >0 while the crater hold plays, before the end card
-    returnX: 350,       // where he was when he picked the recorder up
-    returnY: 300,
-    returnFacing: 'right',
+    // The furnace room going to black at the end of it. The flashback does not
+    // come back to the present — the execution is the last thing you see, and
+    // it goes out on its own rather than being followed by a second ending.
+    outroFade: 0,
 
     // === THE FURNACE — execution beats ===
     // 'wait' (he is standing there, you still have the controls) -> 'axe' ->
@@ -27724,34 +27719,6 @@ function drawScene() {
         drawOfficeRoom(level5.currentOffice);
     }
     
-    // RED'S ENDING title card.
-    if(redsEnding.active && redsEnding.card > 0) {
-        const t = redsEnding.card;
-        const a = t < 30 ? t / 30 : (t < 130 ? 1 : Math.max(0, (160 - t) / 30));
-        ctx.save();
-        ctx.globalAlpha = a;
-        ctx.fillStyle = '#0a0406';
-        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-        ctx.textAlign = 'center';
-        ctx.font = 'bold 26px Georgia, serif';
-        ctx.fillStyle = '#8a8a8a';
-        ctx.fillText('SIX MONTHS EARLIER', 350, 200);
-        ctx.font = 'bold 64px Georgia, serif';
-        ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
-        ctx.strokeText("RED'S ENDING", 350, 280);
-        ctx.fillStyle = COLORS[0].hex;
-        ctx.fillText("RED'S ENDING", 350, 280);
-        ctx.textAlign = 'left';
-        ctx.restore();
-    }
-
-    // The way back out: the furnace room going to black before the picture
-    // returns to the crater it came from.
-    if(redsEnding.active && redsEnding.outroFade > 0) {
-        ctx.fillStyle = `rgba(4,2,3,${Math.min(1, redsEnding.outroFade)})`;
-        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-    }
-
     if(level5.viewingEmail && level5.currentOffice) {
         drawEmailUI(level5.currentOffice);
     } else if(level5.viewingLetter) {
@@ -27813,6 +27780,41 @@ function drawScene() {
 
         // Cinematic atmosphere grade (skipped while reading docs full-screen)
         applyRoomAtmosphere();
+    }
+
+    // ── RED'S ENDING's two black frames, drawn LAST ────────────────────────
+    // Both of these used to sit above, before the player and the atmosphere
+    // grade — so Red stood on top of his own title card, lit, in the middle of
+    // the text, and the room's colour pass lifted the black back off afterwards.
+    //
+    // The card starts FULLY OPAQUE and only fades off at the end. Ramping it up
+    // from zero meant the pickup cut to Red's office at full brightness, which
+    // then dimmed under the card and came back — the room arriving before its
+    // own title, twice. ACTION goes straight to black now.
+    if(redsEnding.active && redsEnding.card > 0) {
+        const t = redsEnding.card;
+        const a = t < 130 ? 1 : Math.max(0, (160 - t) / 30);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#0a0406';
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 26px Georgia, serif';
+        ctx.fillStyle = '#8a8a8a';
+        ctx.fillText('SIX MONTHS EARLIER', 350, 200);
+        ctx.font = 'bold 64px Georgia, serif';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
+        ctx.strokeText("RED'S ENDING", 350, 280);
+        ctx.fillStyle = COLORS[0].hex;
+        ctx.fillText("RED'S ENDING", 350, 280);
+        ctx.textAlign = 'left';
+        ctx.restore();
+    }
+
+    // And the furnace room going down to black at the end of the whole thing.
+    if(redsEnding.active && redsEnding.outroFade > 0) {
+        ctx.fillStyle = `rgba(4,2,3,${Math.min(1, redsEnding.outroFade)})`;
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
     if(fadeAlpha > 0) {
@@ -29021,23 +29023,6 @@ function drawScene() {
             }
         }
 
-        // === RED'S ENDING comes back to the crater before the end card ===
-        // The room underneath is live: the detective on his feet where he was
-        // when he reached for the recorder, the box still lying in the hole the
-        // missile made. Up out of black, a long hold, then away — so the card
-        // that follows lands on something the player has just been looking at
-        // instead of arriving off the back of a furnace six months earlier.
-        if(redsEnding.active && redsEnding.outro > 0) {
-            const t = redsEnding.outro;
-            const dark = t <= REDS_OUT_IN ? 1 - t / REDS_OUT_IN
-                       : t <= REDS_OUT_HOLD ? 0
-                       : (t - REDS_OUT_HOLD) / (REDS_OUT_END - REDS_OUT_HOLD);
-            if(dark > 0) {
-                ctx.fillStyle = `rgba(4,2,3,${Math.min(1, dark)})`;
-                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-            }
-        }
-
         // === MISSILE CASE CLOSED — Detective finds black box in rubble ===
         if(level6.missileCaseClosedCard === 'fading') {
             ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
@@ -29176,12 +29161,67 @@ function drawScene() {
             ctx.fillText('Case Closed.', 350, 90);
             ctx.shadowBlur = 0;
 
-            // Subtitle — the missile quote, cleaner spacing
+            // Subtitle — the whole case in one sentence: where he is standing,
+            // what the missile did, what he found in it, and what it proves.
             ctx.fillStyle = '#ffd700';
             ctx.font = 'italic 14px Arial';
-            ctx.fillText('The missile blew the case wide open,', 350, 125);
-            ctx.fillText('as well as the CEO, thanks to a mysterious', 350, 145);
-            ctx.fillText('black box found within the rubble.', 350, 165);
+            ctx.fillText('Standing in the crater of the missile which blew', 350, 122);
+            ctx.fillText('Aldon Pipersworth wide open, you find evidence of', 350, 141);
+            ctx.fillText("Red's cold-blooded murder in the rubble —", 350, 160);
+            ctx.fillText('proving how justice was served with a bang.', 350, 179);
+
+            // The hole itself. The card used to be a flat field of debris with
+            // things lying on it; the sentence says he is standing IN a crater,
+            // so there is one — a scorched bowl blown out of the floor, with the
+            // rubble thrown up around its lip.
+            {
+                const cx = 350, cy = 366, crx = 196, cry = 52;
+                // A floor for it to be a hole IN. Without this the bowl was dark
+                // paint on a black card and only its lip showed — a ring, not a
+                // crater. The ground is lit from the cloud above it and falls off
+                // toward the bottom of the frame.
+                // Feathered at the top — a hard stop put a ruled line straight
+                // across the card where the floor began.
+                const ground = ctx.createLinearGradient(0, 258, 0, 470);
+                ground.addColorStop(0, 'rgba(72,56,42,0)');
+                ground.addColorStop(0.30, 'rgba(70,54,41,0.42)');
+                ground.addColorStop(0.55, 'rgba(52,40,30,0.72)');
+                ground.addColorStop(1, 'rgba(18,13,9,0.9)');
+                ctx.fillStyle = ground;
+                ctx.fillRect(-GX, 258, CANVAS_W, 228);
+                // and the blast scorch spreading out from the hole across it
+                const scorch = ctx.createRadialGradient(cx, cy, 30, cx, cy, 330);
+                scorch.addColorStop(0, 'rgba(12,6,3,0.85)');
+                scorch.addColorStop(0.45, 'rgba(20,11,6,0.5)');
+                scorch.addColorStop(1, 'rgba(20,11,6,0)');
+                ctx.fillStyle = scorch;
+                ctx.fillRect(-GX, 290, CANVAS_W, 200);
+
+                const bowl = ctx.createRadialGradient(cx, cy - 10, 6, cx, cy, crx);
+                bowl.addColorStop(0, 'rgba(0,0,0,0.96)');
+                bowl.addColorStop(0.62, 'rgba(6,3,2,0.9)');
+                bowl.addColorStop(1, 'rgba(10,6,4,0.15)');
+                ctx.fillStyle = bowl;
+                ctx.beginPath(); ctx.ellipse(cx, cy, crx, cry, 0, 0, Math.PI * 2); ctx.fill();
+                // Scorched lip, hottest on the near side
+                ctx.strokeStyle = 'rgba(120,52,14,0.5)';
+                ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.ellipse(cx, cy, crx * 0.92, cry * 0.92, 0, 0, Math.PI * 2); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,120,30,0.16)';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.ellipse(cx, cy + 2, crx * 0.86, cry * 0.84, 0, 0, Math.PI); ctx.stroke();
+                // Cracks running out of it
+                ctx.strokeStyle = 'rgba(90,44,16,0.42)';
+                ctx.lineWidth = 1.6;
+                for(let ck = 0; ck < 9; ck++) {
+                    const a0 = (ck / 9) * Math.PI * 2 + 0.3;
+                    const r0 = crx * 0.9, r1 = r0 + 26 + (ck % 3) * 16;
+                    ctx.beginPath();
+                    ctx.moveTo(cx + Math.cos(a0) * r0, cy + Math.sin(a0) * cry * 0.9);
+                    ctx.lineTo(cx + Math.cos(a0 + 0.06) * r1, cy + Math.sin(a0 + 0.06) * cry * 1.5);
+                    ctx.stroke();
+                }
+            }
 
             // Ground / rubble field — layered debris with depth
             // Far rubble (smaller, darker)
@@ -29239,19 +29279,56 @@ function drawScene() {
             ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(7, 'bold', 'monospace', true); ctx.textAlign = 'center';
             ctx.fillText('BLACK BOX', bbX + bbW/2, bbY + bbH - 6);
 
-            // Fedora silhouette resting on rubble — slightly larger
-            ctx.fillStyle = '#444';
-            ctx.beginPath();
-            ctx.ellipse(350, 395, 35, 12, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#2a2a2a';
-            ctx.beginPath();
-            ctx.moveTo(324, 395); ctx.lineTo(331, 374); ctx.lineTo(343, 383);
-            ctx.lineTo(357, 383); ctx.lineTo(369, 374); ctx.lineTo(376, 395);
-            ctx.closePath(); ctx.fill();
-            // Hat band
-            ctx.fillStyle = '#555';
-            ctx.fillRect(335, 382, 30, 3);
+            // The two things either side of it that make the sentence true.
+            // Left, in the debris: Red's hood, the same shape it came to rest in
+            // on the furnace room floor six months ago — the murder. Right, half
+            // buried: the axe that did it. The recorder between them is what ties
+            // one to the other, and the hole they are all lying in is the answer.
+            // A fedora used to sit here on its own, which said the detective was
+            // present but nothing at all about what he had found.
+            {
+                const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
+                // Red's hood, tipped on its side in the rubble
+                ctx.save();
+                ctx.translate(232, 396);
+                ctx.rotate(-0.42);
+                ctx.fillStyle = ramp.base;
+                ctx.beginPath(); ctx.ellipse(0, 0, 21, 17, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = ramp.dark;
+                ctx.beginPath(); ctx.ellipse(-2, 4, 18.5, 14, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#160406';
+                ctx.beginPath(); ctx.ellipse(-3, 5, 12.5, 9.5, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+                // Grit lying over its near edge, so it sits IN the rubble
+                ctx.fillStyle = 'rgba(58,46,38,0.75)';
+                ctx.fillRect(218, 408, 18, 7);
+                ctx.fillRect(240, 405, 13, 6);
+
+                // The axe, buried head-down on the far side
+                ctx.save();
+                ctx.translate(468, 398);
+                ctx.rotate(0.62);
+                ctx.strokeStyle = '#5b3f24'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -54); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,255,255,0.09)'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(-1.8, 2); ctx.lineTo(-1.8, -50); ctx.stroke();
+                ctx.fillStyle = '#8e939b';
+                ctx.beginPath();
+                ctx.moveTo(-4, 2); ctx.quadraticCurveTo(-27, -3, -23, -20);
+                ctx.lineTo(-4, -15); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#b9bec6';
+                ctx.beginPath();
+                ctx.moveTo(-23, -20); ctx.quadraticCurveTo(-27, -3, -25, -4); ctx.lineTo(-21.5, -19);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#6a7078';
+                ctx.fillRect(-6, -18, 8, 16);
+                ctx.restore();
+                // and the grit banked against it
+                ctx.fillStyle = 'rgba(58,46,38,0.8)';
+                ctx.fillRect(446, 400, 26, 9);
+                ctx.fillStyle = 'rgba(74,60,49,0.7)';
+                ctx.fillRect(462, 396, 16, 7);
+            }
 
             // Score + menu
             if(level6.missileCaseClosedTimer >= 30) {
@@ -30187,15 +30264,8 @@ function drawScene() {
 // Level 5's rooms are reused deliberately — the hallway, the offices, the pipe
 // room and the furnace are already the right rooms. Only three of them will
 // open to Red, and one of them is a trap.
-//
-// Where he is standing when he presses ACTION is kept, because the flashback
-// comes back to this exact shot at the far end of it — see updateRedsReturn.
 function startRedsEnding() {
-    redsEnding.returnX = player.x;
-    redsEnding.returnY = player.y;
-    redsEnding.returnFacing = player.facing;
     redsEnding.active = true;
-    redsEnding.outro = 0;
     redsEnding.outroFade = 0;
     beginRedsFlashback();
 }
@@ -30240,32 +30310,6 @@ function beginRedsFlashback() {
 // it is where the wrench meets the pipe — and 380 is the floor he steps off.
 const REDS_RUNG_TOP = 210, REDS_RUNG_BOTTOM = 380;
 
-// The way back, in frames: up out of black onto the crater, a hold on it, then
-// away to the end card.
-const REDS_OUT_IN   = 45;      // fading up on the CEO office
-const REDS_OUT_HOLD = 210;     // the shot: crater, box, detective over it
-const REDS_OUT_END  = 250;     // gone; the end card takes it from here
-
-// The last thing the flashback does is come back. The end card is about the
-// missile, the recorder and a dead CEO, and cutting to it straight off a man
-// being burned in a furnace six months earlier reads as a non-sequitur — the
-// two halves never touch. So the picture returns to the present first and
-// holds on the shot that joins them: the crater the missile made, the black
-// box lying in it, and the detective standing over it exactly where he was
-// when he picked it up. Then the card, which is now a summary of something
-// you have just watched rather than an announcement out of nowhere.
-function updateRedsReturn() {
-    redsEnding.outro++;
-    if(redsEnding.outro <= REDS_OUT_END) return;
-    // Hand over. The recorder is his now, and the case closes on it.
-    level6.blackBoxPickedUp = true;
-    redsEnding.active = false;
-    redsEnding.outro = 0;
-    redsEnding.outroFade = 0;
-    level6.missileCaseClosedCard = 'fading';
-    level6.missileCaseClosedTimer = 0;
-    level6.detectiveTransAlpha = 0;
-}
 
 // Red's own pipe — the red one, second from the left. In the flashback nobody
 // is standing at it, because the man who stands at it is the one you are
@@ -30492,21 +30536,20 @@ function updateRedsExecution() {
         // furnace still lit. This IS the furnace room the detective walks into
         // in level 6. Then the picture goes down on it and comes back up six
         // months later, in the crater, on the man holding the recorder.
+        // Then out. Straight from this room to the card — the execution is the
+        // last thing you see of the story, and it is strong enough to end on.
+        // Returning to the present first put a second, quieter ending after it
+        // and took the air out of both.
         if(t > 170) redsEnding.outroFade = Math.min(1, redsEnding.outroFade + 0.035);
         if(redsEnding.outroFade >= 1) {
+            redsEnding.active = false;
             redsEnding.exec = null;
             redsEnding.execTimer = 0;
+            redsEnding.outroFade = 0;
             level = 6;
-            level6.room = 'ceoOffice';
-            // Back to the frame we left: him on his feet over the box, where he
-            // was standing when he reached for it. It is still on the floor —
-            // blackBoxPickedUp does not go up until the card takes over — because
-            // the evidence lying in the crater IS the shot.
-            player.x = redsEnding.returnX;
-            player.y = redsEnding.returnY;
-            player.facing = redsEnding.returnFacing;
-            player.holding = null;
-            redsEnding.outro = 1;
+            level6.missileCaseClosedCard = 'fading';
+            level6.missileCaseClosedTimer = 0;
+            level6.detectiveTransAlpha = 0;
             playMusic('level5');
         }
     }
@@ -31783,15 +31826,6 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
-            // RED'S ENDING comes back here before it hands over to the end card.
-            // The world is frozen for the hold: no input, no AI, nothing but the
-            // clock. See updateRedsReturn.
-            if(redsEnding.active && redsEnding.outro > 0) {
-                updateRedsReturn();
-                keys[' '] = false; keys['action'] = false;
-                return;
-            }
-
             // === MUTANT ESCAPE — countdown, feeding, and the escape beats ===
             {
                 const mm = level6.mutantMode;
@@ -34322,19 +34356,15 @@ if (keys[' '] || keys['action']) {
     // 0.5. Black Box Pickup (after missile explosion — CEO was killed by missile)
     if (level6.blackBoxDropped && !level6.blackBoxPickedUp &&
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
+        level6.blackBoxPickedUp = true;
         if(level6.hasDetectiveHat) {
             // Detective: the recorder does not close the case on the spot any
             // more. It puts him inside it — RED'S ENDING, the last shift of the
             // pipe manager the case is about. The CASE CLOSED card now plays at
             // the far end of that flashback, not here.
-            //
-            // blackBoxPickedUp stays FALSE through the hold: the shot is him
-            // standing over the box, and the box stops being drawn the moment
-            // that flag goes up. It is set on the far side, in the flashback.
             startRedsEnding();
             return;
         } else {
-            level6.blackBoxPickedUp = true;
             // NOT a promotion. You are standing in a crater holding the flight
             // recorder of the man you vaporised — the mushroom cloud card, and
             // another go at level 6. Taking the top job is the reward for the
