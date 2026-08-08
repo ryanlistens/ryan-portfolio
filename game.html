@@ -1297,6 +1297,8 @@ let redsEnding = {
     fixing: false,
     fixAnim: 0,
     fixStart: 0,
+    offerTimer: 0,      // how long he has been holding Red's doc out
+    redDeferUntil: 0,   // Red is skipped in the print queue until this time
 
     // The furnace room going to black at the end of it. The flashback does not
     // come back to the present — the execution is the last thing you see, and
@@ -1397,6 +1399,7 @@ let level5 = {
         furnace: {x: 350, y: 280, flameTime: 0, glowPhase: 0}
     },
     computer: {x: 180, y: 350},
+    crackTimer: 0,
     docsCollected: 0,
     npcPipes: []
 };
@@ -1503,6 +1506,7 @@ function initLevel(lv) {
     level5.furnaceRoom.furnace.flameTime = 0;
     level5.furnaceRoom.furnace.glowPhase = 0;
     level5.hallway.trafficTimer = 0;
+    level5.crackTimer = 0;
     level5.docsCollected = 0;
     level5.npcPipes = [
         {x: 280, y: 368, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
@@ -29279,56 +29283,13 @@ function drawScene() {
             ctx.fillStyle = '#ff6666'; ctx.font = scaledFont(7, 'bold', 'monospace', true); ctx.textAlign = 'center';
             ctx.fillText('BLACK BOX', bbX + bbW/2, bbY + bbH - 6);
 
-            // The two things either side of it that make the sentence true.
-            // Left, in the debris: Red's hood, the same shape it came to rest in
-            // on the furnace room floor six months ago — the murder. Right, half
-            // buried: the axe that did it. The recorder between them is what ties
-            // one to the other, and the hole they are all lying in is the answer.
-            // A fedora used to sit here on its own, which said the detective was
-            // present but nothing at all about what he had found.
-            {
-                const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
-                // Red's hood, tipped on its side in the rubble
-                ctx.save();
-                ctx.translate(232, 396);
-                ctx.rotate(-0.42);
-                ctx.fillStyle = ramp.base;
-                ctx.beginPath(); ctx.ellipse(0, 0, 21, 17, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = ramp.dark;
-                ctx.beginPath(); ctx.ellipse(-2, 4, 18.5, 14, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#160406';
-                ctx.beginPath(); ctx.ellipse(-3, 5, 12.5, 9.5, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
-                // Grit lying over its near edge, so it sits IN the rubble
-                ctx.fillStyle = 'rgba(58,46,38,0.75)';
-                ctx.fillRect(218, 408, 18, 7);
-                ctx.fillRect(240, 405, 13, 6);
-
-                // The axe, buried head-down on the far side
-                ctx.save();
-                ctx.translate(468, 398);
-                ctx.rotate(0.62);
-                ctx.strokeStyle = '#5b3f24'; ctx.lineWidth = 7; ctx.lineCap = 'round';
-                ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -54); ctx.stroke();
-                ctx.strokeStyle = 'rgba(255,255,255,0.09)'; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.moveTo(-1.8, 2); ctx.lineTo(-1.8, -50); ctx.stroke();
-                ctx.fillStyle = '#8e939b';
-                ctx.beginPath();
-                ctx.moveTo(-4, 2); ctx.quadraticCurveTo(-27, -3, -23, -20);
-                ctx.lineTo(-4, -15); ctx.closePath(); ctx.fill();
-                ctx.fillStyle = '#b9bec6';
-                ctx.beginPath();
-                ctx.moveTo(-23, -20); ctx.quadraticCurveTo(-27, -3, -25, -4); ctx.lineTo(-21.5, -19);
-                ctx.closePath(); ctx.fill();
-                ctx.fillStyle = '#6a7078';
-                ctx.fillRect(-6, -18, 8, 16);
-                ctx.restore();
-                // and the grit banked against it
-                ctx.fillStyle = 'rgba(58,46,38,0.8)';
-                ctx.fillRect(446, 400, 26, 9);
-                ctx.fillStyle = 'rgba(74,60,49,0.7)';
-                ctx.fillRect(462, 396, 16, 7);
-            }
+            // Nothing else is in the hole with it. A hood and an axe were laid
+            // either side of the recorder to spell the sentence out, and both are
+            // continuity errors: the hood went into the furnace with him six
+            // months ago, and the axe is already planted in the tree in Red's own
+            // office long before any of this. The recorder is the evidence by
+            // itself — it is a complete recording of RED'S ENDING, which is the
+            // whole reason the case closes — and it does not need illustrating.
 
             // Score + menu
             if(level6.missileCaseClosedTimer >= 30) {
@@ -30279,7 +30240,8 @@ function beginRedsFlashback() {
     redsEnding.fixing = false;
     redsEnding.fixAnim = 0;
     redsEnding.fixStart = 0;
-    redsEnding.nextDoc = null;
+    redsEnding.offerTimer = 0;
+    redsEnding.redDeferUntil = 0;
     redsEnding.exec = null;
     redsEnding.execTimer = 0;
     redsEnding.swing = 0;
@@ -30306,6 +30268,16 @@ function beginRedsFlashback() {
     playMusic('level5');
 }
 
+// How often a new bulge comes up in the pipe room, in frames. Levels 1-4 use a
+// 3-5 second setTimeout in spawnCracks(); at 60fps this is the same beat, run off
+// the game clock so it stops when the level does.
+const L5_CRACK_INTERVAL = 300;   // ~5s
+
+// How long Mullet Pro holds Red's doc out before giving up on him, in frames.
+const REDS_OFFER_PATIENCE = 380;      // ~6.3s
+// and how long Red goes to the back of the queue for after turning him down.
+const REDS_OFFER_DEFER_MS = 13000;
+
 // The rungs. 210 is where a pipe manager sits when he is working the bulge —
 // it is where the wrench meets the pipe — and 380 is the floor he steps off.
 const REDS_RUNG_TOP = 210, REDS_RUNG_BOTTOM = 380;
@@ -30316,6 +30288,31 @@ const REDS_RUNG_TOP = 210, REDS_RUNG_BOTTOM = 380;
 // playing.
 function redsPipe() {
     return redsEnding.active ? level5.npcPipes.find(n => n.color && n.color.name === 'RED') : null;
+}
+
+// Who Mullet Pro prints for next: whoever has been open longest. Red's pipe is
+// skipped in three cases.
+//
+// Red already has the paper, or is up the ladder on it — otherwise a second copy
+// gets printed for a job that is being done.
+//
+// And Red has just refused it. His bulge is the one that never bursts, so it is
+// permanently the oldest job on the floor: oldest-first alone had Mullet Pro
+// printing for Red, walking it over, being ignored, walking it back and printing
+// for Red again, forever, while the other three pipes went untended. Turning him
+// down puts Red at the back of the queue for a while.
+function redsNextOpenPipe() {
+    const now = Date.now();
+    const open = level5.npcPipes.filter(n => {
+        if(!n.needsDoc || !n.crackStartTime || npcDevoured(n)) return false;
+        if(n.color.name === 'RED') {
+            if(player.holding === 'RED' || redsEnding.onLadder) return false;
+            if(now < redsEnding.redDeferUntil) return false;
+        }
+        return true;
+    });
+    open.sort((a, b) => a.crackStartTime - b.crackStartTime);
+    return open[0] || null;
 }
 
 // THE SHIFT. An ordinary day: the room's own sim runs untouched, bulges coming
@@ -30333,22 +30330,6 @@ function redsPipe() {
 function updateRedsPipeShift() {
     const mp = level5.mulletPro;
     const pipe = redsPipe();
-
-    // Whoever has been waiting longest gets the next doc. Only while he is still
-    // deciding — once he is carrying one, the choice is made.
-    if(mp.state === 'walkingToComputer' && !mp.hasDoc) {
-        // Red's pipe drops out of the queue the moment Red has the paper for it
-        // in his own hand or is already up the ladder on it. Without that he
-        // prints a second copy for a job that is being done, walks it over, and
-        // is still standing there holding it when the bulge is long gone.
-        const open = level5.npcPipes.filter(n => {
-            if(!n.needsDoc || !n.crackStartTime || npcDevoured(n)) return false;
-            if(n.color.name === 'RED' && (player.holding === 'RED' || redsEnding.onLadder)) return false;
-            return true;
-        });
-        open.sort((a, b) => a.crackStartTime - b.crackStartTime);
-        redsEnding.nextDoc = open[0] || null;
-    }
 
     // Holding the RED doc: walk it to the foot of Red's ladder and wait there.
     if(mp.hasDoc && mp.docColor && mp.docColor.name === 'RED' && pipe) {
@@ -30368,9 +30349,25 @@ function updateRedsPipeShift() {
             const dir = mp.x < stand ? 1 : -1;
             mp.x += dir * 2;
             mp.facing = dir > 0 ? 'right' : 'left';
+            redsEnding.offerTimer = 0;
         } else {
             mp.x = stand;
             mp.facing = 'right';              // held out, toward the ladder
+            // He does not stand there all shift. If Red will not take it he
+            // takes the paper back and gets on with the round — otherwise one
+            // man ignoring his own bulge freezes every other delivery in the
+            // room, the other three pipes burst unattended, and the floor stops
+            // being a floor. Red's bulge stays open, so it is still the oldest
+            // job on the list and he comes back to it with another copy.
+            redsEnding.offerTimer++;
+            if(redsEnding.offerTimer > REDS_OFFER_PATIENCE) {
+                redsEnding.offerTimer = 0;
+                redsEnding.redDeferUntil = Date.now() + REDS_OFFER_DEFER_MS;
+                mp.hasDoc = false;
+                mp.docColor = null;
+                mp.state = 'walkingToComputer';
+                mp.facing = 'forward';
+            }
         }
     }
 }
@@ -31199,18 +31196,29 @@ function update() {
                 level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
             } else {
                 // In the flashback he prints for whoever is actually open, so the
-                // paper turns up when a bulge does instead of at random.
-                const pick = (redsEnding.active && redsEnding.nextDoc)
-                    ? redsEnding.nextDoc.color
-                    : COLORS[Math.floor(Math.random() * 4)];
-                level5.mulletPro.hasDoc = true;
-                level5.mulletPro.docColor = pick;
-                level5.mulletPro.state = 'walkingToNPC';
-                const targetNPC = level5.npcPipes.find(n => n.color.name === level5.mulletPro.docColor.name);
-                // Red's doc has nobody to hand it to but the player, so it gets
-                // no walk target and updateRedsPipeShift carries it over instead.
-                level5.mulletPro.walkTarget = (redsEnding.active && pick.name === 'RED') ? null : targetNPC;
-                level5.mulletPro.facing = 'forward';
+                // paper turns up when a bulge does instead of at random — and if
+                // nothing is open he waits at the printer rather than carrying
+                // paper around for pipes that are fine.
+                let pick = null;
+                if(redsEnding.active) {
+                    const open = redsNextOpenPipe();
+                    if(open) pick = open.color;
+                } else {
+                    pick = COLORS[Math.floor(Math.random() * 4)];
+                }
+                if(!pick) {
+                    level5.mulletPro.facing = 'forward';
+                } else {
+                    level5.mulletPro.hasDoc = true;
+                    level5.mulletPro.docColor = pick;
+                    level5.mulletPro.state = 'walkingToNPC';
+                    const targetNPC = level5.npcPipes.find(n => n.color.name === pick.name);
+                    // Red's doc has nobody to hand it to but the player, so it
+                    // gets no walk target — updateRedsPipeShift carries it over
+                    // and waits with it instead.
+                    level5.mulletPro.walkTarget = (redsEnding.active && pick.name === 'RED') ? null : targetNPC;
+                    level5.mulletPro.facing = 'forward';
+                }
             }
         }
 
@@ -31240,15 +31248,31 @@ function update() {
             }
         }
 
-        // NPC crack spawning — runs in the flashback too, on all four pipes.
-        // Bulges come up in their own time and Red's is one of them; that is what
-        // makes it a shift rather than an errand.
-        for(let npc of level5.npcPipes) {
-            if(npcDevoured(npc)) continue;
-            if(!npc.needsDoc && npc.state === 'happy' && Math.random() < 0.0003) {
+        // MUSICAL CHAIRS — the same rhythm the pipes have had since level 1.
+        //
+        // spawnCracks() drives levels 1-4 off a clock: every few seconds it takes
+        // ONE manager at random out of whoever is idle, cracks his pipe, puts him
+        // in 'stressed' and sounds pipeCrack. Level 5 was rolling
+        // Math.random() < 0.0003 per pipe per frame instead — about one bulge per
+        // pipe per MINUTE, arriving with no cue and no 'stressed' state, so the
+        // room mostly sat there doing nothing and no manager ever visibly reacted.
+        // Same clock, same one-at-a-time pick, same sound now.
+        level5.crackTimer++;
+        if(level5.crackTimer >= L5_CRACK_INTERVAL) {
+            level5.crackTimer = 0;
+            const available = level5.npcPipes.filter(n =>
+                !npcDevoured(n) && !n.needsDoc && n.state === 'happy');
+            if(available.length) {
+                const npc = available[Math.floor(Math.random() * available.length)];
                 npc.needsDoc = true;
                 npc.crackStartTime = Date.now();
+                npc.state = 'stressed';
+                SFX.play('pipeCrack');
             }
+        }
+
+        for(let npc of level5.npcPipes) {
+            if(npcDevoured(npc)) continue;
 
             // Red's own pipe never bursts on him. There is nothing to fail in a
             // flashback — it has already happened, and it ends the way it ends —
@@ -31363,7 +31387,6 @@ function update() {
                     mp.state = 'walkingToComputer';
                     mp.walkTarget = null;
                     mp.facing = 'forward';
-                    redsEnding.nextDoc = null;
                     SFX.play('pickup');
                     keys[' '] = false; keys['action'] = false;
                 } else if(pipe && Math.abs(player.x - pipe.x) < 40) {
