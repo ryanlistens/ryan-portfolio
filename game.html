@@ -1284,17 +1284,20 @@ let redsEnding = {
     card: 0,            // >0 while the "RED'S ENDING" title card plays
     letterRead: false,  // the CEO's summons; Red's office door stays shut until it is
 
-    // === THE SHIFT — the pipe room, played from inside the jumpsuit ===
-    // One full round of the loop the whole game is built on, with the roles
-    // swapped: Mullet Pro prints the doc and brings it to YOU, and it is you
-    // who goes up the ladder with it. 'wait' -> 'doc' -> 'climb' -> 'fix' ->
-    // 'down' -> 'done'.
-    shift: 'wait',
-    pmState: 'happy',   // his pose, handed straight to drawNPC as an NPC state
+    // === THE SHIFT — the pipe room, worked from inside the jumpsuit ===
+    // An ordinary day. The room runs exactly as it always has: bulges come up
+    // on all four pipes in turn, Mullet Pro prints for whoever needs one, and
+    // the other three managers go up and down their own ladders all shift. The
+    // only difference is that when the bulge is on the RED pipe it is yours,
+    // and doing something about it is four separate motions rather than one
+    // button: take the doc, get on the ladder, climb to the bulge, put the
+    // wrench on it, climb back down. And you can always just walk out instead.
+    onLadder: false,
+    climbing: 0,        // -1 going down, +1 going up, 0 holding on
+    fixing: false,
     fixAnim: 0,
-    animStart: 0,       // Date.now() at the start of the current climb/fix beat
-    climbFrom: 380,
-    climbTo: 380,
+    fixStart: 0,
+    intro: 0,           // >0 while the crater hold plays, before the flashback
 
     // === THE FURNACE — execution beats ===
     // 'wait' (he is standing there, you still have the controls) -> 'axe' ->
@@ -1313,14 +1316,26 @@ let redsEnding = {
 // The flashback takes the controls off him for the climb, the fix and the way
 // back down — and for the whole of the execution. Everywhere movement or a
 // ground clamp is applied, it asks this first.
+// Walking is off while he is on the ladder or has the wrench on the pipe, and
+// for the whole of the execution. Everywhere movement or a ground clamp is
+// applied, it asks this first.
 function redsLocked() {
     if(!redsEnding.active) return false;
-    if(redsEnding.shift === 'climb' || redsEnding.shift === 'fix' || redsEnding.shift === 'down') return true;
+    if(redsEnding.onLadder) return true;
     return !!(redsEnding.exec && redsEnding.exec !== 'wait');
 }
-// True only while he is actually off the floor on the ladder.
+// True while he is on the rungs — the ladder is sized off him and the floor
+// clamp lets go of him for as long as this holds.
 function redsOnLadder() {
-    return redsEnding.active && (redsEnding.shift === 'climb' || redsEnding.shift === 'fix' || redsEnding.shift === 'down');
+    return redsEnding.active && redsEnding.onLadder;
+}
+// The pose the jumpsuit is drawn in, straight out of the pipe managers' own
+// state names so it plays their animations rather than new ones.
+function redsPmState() {
+    if(redsEnding.fixing) return 'fixing';
+    if(redsEnding.onLadder && redsEnding.climbing > 0) return 'climbing_up';
+    if(redsEnding.onLadder && redsEnding.climbing < 0) return 'climbing_down';
+    return 'happy';
 }
 
 let level5 = {
@@ -9392,9 +9407,9 @@ function drawLevel5PipeRoom() {
     // Pro is standing there holding out. The only tell is the outline the rest
     // of the level already uses for a thing you are close enough to touch \u2014
     // silent, and only when you are standing at it.
-    if(redsEnding.active && redsEnding.shift === 'doc' && !redsLocked()) {
+    if(redsEnding.active && !redsEnding.onLadder) {
         const pipe = redsPipe();
-        if(pipe && player.holding === 'RED' && Math.abs(player.x - pipe.x) < 44) {
+        if(pipe && Math.abs(player.x - pipe.x) < 40) {
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             ctx.strokeRect(pipe.x - 20, 250, 40, 156);
@@ -9845,11 +9860,8 @@ function drawLevel5Hallway() {
         ctx.strokeRect(level5.hallway.leftDoor.x - 12, level5.hallway.leftDoor.y - 2, 54, 64);
     }
 
-    // White outline for right door when in range. In the flashback it stays dark
-    // until his pipe is shut and then comes on by itself, which is the only thing
-    // that ever says the shift is over.
-    if(Math.abs(player.x - level5.hallway.rightDoor.x) < 50 &&
-       !(redsEnding.active && redsEnding.shift !== 'done')) {
+    // White outline for right door when in range
+    if(Math.abs(player.x - level5.hallway.rightDoor.x) < 50) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;
         ctx.strokeRect(level5.hallway.rightDoor.x - 12, level5.hallway.rightDoor.y - 2, 54, 64);
@@ -12446,16 +12458,20 @@ function drawOfficeRoom(officeName) {
         drawActionLabel('[ ACTION ] - EXIT TO HALLWAY', 350, 414, {fontSize: 14});
     }
 
-    // Monitor interaction prompt
-    if(Math.abs(player.x - deskX) < 60 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
-        drawActionLabel('[ ACTION ] - VIEW MONITOR', deskX, deskY - 10, {fontSize: 14});
-    }
-
-    // Letter interaction prompt (RED office only)
-    if(officeName === 'RED') {
+    // Desk prompts. Their ranges overlap across the middle of the desk and only
+    // one of them can fire — whichever you are nearer to — so only that one is
+    // offered. Both used to light up at once, which meant standing on the letter
+    // and being told you could view the monitor, and then getting the letter.
+    if(!level5.viewingEmail && !level5.viewingLetter &&
+       player.y > deskY + 30 && player.y < deskY + 70) {
         const letterX = deskX - 25;
-        if(Math.abs(player.x - letterX) < 35 && player.y > deskY + 30 && player.y < deskY + 70 && !level5.viewingEmail && !level5.viewingLetter) {
+        const dMonitor = Math.abs(player.x - (deskX + 10));
+        const dLetter = Math.abs(player.x - letterX);
+        const letterWins = officeName === 'RED' && dLetter < 35 && dLetter <= dMonitor;
+        if(letterWins) {
             drawActionLabel('[ ACTION ] - VIEW LETTER', letterX, deskY - 2, {fontSize: 14});
+        } else if(Math.abs(player.x - deskX) < 60) {
+            drawActionLabel('[ ACTION ] - VIEW MONITOR', deskX, deskY - 10, {fontSize: 14});
         }
     }
 
@@ -22193,7 +22209,11 @@ function drawLevel6CEOOffice() {
         ctx.textAlign = 'center';
         ctx.fillText('BLACK BOX', bbx, bby + 14);
 
-        if(Math.abs(player.x - bbx) < 40 && Math.abs(player.y - bby) < 40) {
+        // The prompt goes the moment he presses it. The box stays on the floor
+        // through RED'S ENDING's opening hold — that shot is him standing over
+        // it — but he has already picked it up, so nothing should still be
+        // asking him to.
+        if(Math.abs(player.x - bbx) < 40 && Math.abs(player.y - bby) < 40 && !redsEnding.intro) {
             drawActionLabel('[ ACTION ] - PICK UP', bbx, bby - 20, {fontSize: 14});
         }
     }
@@ -27695,29 +27715,11 @@ function drawScene() {
         drawOfficeRoom(level5.currentOffice);
     }
     
-    // RED'S ENDING title card, and the summons prompt while his door is shut.
+    // Coming up out of the card. The title itself played back in the crater, on
+    // the far side of this — all that is left here is the building arriving.
     if(redsEnding.active && redsEnding.card > 0) {
-        const t = redsEnding.card;
-        const a = t < 30 ? t / 30 : (t < 130 ? 1 : Math.max(0, (160 - t) / 30));
-        ctx.save();
-        ctx.globalAlpha = a;
-        ctx.fillStyle = '#0a0406';
+        ctx.fillStyle = `rgba(6,3,4,${Math.max(0, 1 - redsEnding.card / 46)})`;
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-        ctx.textAlign = 'center';
-        ctx.font = 'bold 26px Georgia, serif';
-        ctx.fillStyle = '#8a8a8a';
-        ctx.fillText('SIX MONTHS EARLIER', 350, 200);
-        ctx.font = 'bold 64px Georgia, serif';
-        ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
-        ctx.strokeText("RED'S ENDING", 350, 280);
-        ctx.fillStyle = COLORS[0].hex;
-        ctx.fillText("RED'S ENDING", 350, 280);
-        ctx.textAlign = 'left';
-        ctx.restore();
-    } else if(redsEnding.active && !redsEnding.letterRead &&
-              level5.room === 'office' && level5.currentOffice === 'RED' &&
-              !level5.viewingLetter) {
-        drawActionLabel('READ THE LETTER ON THE DESK', 350, 120, {fontSize: 12, color: '#d8c8a0'});
     }
 
     if(level5.viewingEmail && level5.currentOffice) {
@@ -27745,24 +27747,17 @@ function drawScene() {
             // wrench, which are that sprite's own animations, not new ones.
             const execHidesHim = redsEnding.exec && redsEnding.exec !== 'wait' && redsEnding.exec !== 'axe';
             if(!redsEnding.beheaded && !execHidesHim) {
-                // Up at the pipe he is a red jumpsuit in front of a red pipe on a
-                // red ladder, and he vanishes into his own station. A soft pool of
-                // shade behind him puts the wall back a plane and leaves him the
-                // only lit thing at the top of the shot.
-                if(redsOnLadder()) {
-                    const halo = ctx.createRadialGradient(player.x, player.y + 6, 6, player.x, player.y + 6, 54);
-                    halo.addColorStop(0, 'rgba(10,5,3,0.66)');
-                    halo.addColorStop(0.6, 'rgba(10,5,3,0.38)');
-                    halo.addColorStop(1, 'rgba(10,5,3,0)');
-                    ctx.fillStyle = halo;
-                    ctx.beginPath();
-                    ctx.arc(player.x, player.y + 6, 54, 0, Math.PI * 2);
-                    ctx.fill();
-                }
+                // No spotlight and no vignette on him. He is a red jumpsuit on a
+                // red ladder in front of a red pipe, which is exactly what every
+                // other manager in this room has looked like since level 1, and
+                // singling him out with a pool of shade that followed him up the
+                // rungs said "this one is the player" in a game that does not
+                // otherwise say anything.
                 drawNPC({ x: player.x, y: player.y, color: COLORS[0],
-                          state: redsEnding.pmState, needsDoc: false, crackStartTime: null,
-                          fixAnim: redsEnding.fixAnim, facing: player.facing });
-                if(player.holding && !redsOnLadder()) drawHeldDoc(player.x, player.y, player.holding);
+                          state: redsPmState(), needsDoc: false, crackStartTime: null,
+                          fixAnim: redsEnding.fixAnim,
+                          facing: redsEnding.onLadder ? 'back' : player.facing });
+                if(player.holding && !redsEnding.onLadder) drawHeldDoc(player.x, player.y, player.holding);
             }
         } else {
             drawBaldManager(player.x, player.y, player.facing, player.holding);
@@ -28996,6 +28991,42 @@ function drawScene() {
             }
         }
 
+        // === RED'S ENDING opens over the crater it is a flashback from ===
+        // The room underneath is live and untouched — the detective standing
+        // where you left him, the box still at his feet. It dims under the card
+        // rather than cutting to one, because by now the missile is several
+        // rooms and a boss behind the player and the card on its own does not
+        // say what it is a flashback FROM.
+        if(redsEnding.active && redsEnding.intro > 0) {
+            const t = redsEnding.intro;
+            const dim = t <= REDS_INTRO_HOLD ? 0
+                      : t <= REDS_INTRO_DIM ? (t - REDS_INTRO_HOLD) / (REDS_INTRO_DIM - REDS_INTRO_HOLD) * 0.82
+                      : t <= REDS_INTRO_CARD ? 0.82
+                      : 0.82 + (t - REDS_INTRO_CARD) / (REDS_INTRO_END - REDS_INTRO_CARD) * 0.18;
+            ctx.fillStyle = `rgba(6,3,4,${Math.min(1, dim)})`;
+            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+
+            // The card, over the rubble it belongs to
+            const ct = t - REDS_INTRO_HOLD - 24;
+            if(ct > 0) {
+                const a = Math.min(1, ct / 34) *
+                          (t > REDS_INTRO_CARD ? Math.max(0, 1 - (t - REDS_INTRO_CARD) / 28) : 1);
+                ctx.save();
+                ctx.globalAlpha = a;
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 26px Georgia, serif';
+                ctx.fillStyle = '#8a8a8a';
+                ctx.fillText('SIX MONTHS EARLIER', 350, 200);
+                ctx.font = 'bold 64px Georgia, serif';
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
+                ctx.strokeText("RED'S ENDING", 350, 280);
+                ctx.fillStyle = COLORS[0].hex;
+                ctx.fillText("RED'S ENDING", 350, 280);
+                ctx.textAlign = 'left';
+                ctx.restore();
+            }
+        }
+
         // === MISSILE CASE CLOSED — Detective finds black box in rubble ===
         if(level6.missileCaseClosedCard === 'fading') {
             ctx.fillStyle = `rgba(0,0,0,${level6.detectiveTransAlpha})`;
@@ -30145,16 +30176,35 @@ function drawScene() {
 // Level 5's rooms are reused deliberately — the hallway, the offices, the pipe
 // room and the furnace are already the right rooms. Only three of them will
 // open to Red, and one of them is a trap.
+// The picture does not cut. By the time the recorder is in his hand the missile
+// is a long way back for the player — several rooms, a boss and a mushroom cloud
+// ago — so the flashback holds first on the thing it is a flashback FROM: the
+// detective standing in the crater that used to be the CEO's office, over the
+// box he has just picked up. That shot dims, SIX MONTHS EARLIER comes up over
+// the rubble, and only then does the building come back with Red inside it.
+//
+// The hold runs in LEVEL 6, on the real room — it is not a still. Level 5 is not
+// touched until beginRedsFlashback() at the end of it.
 function startRedsEnding() {
     redsEnding.active = true;
+    redsEnding.intro = 1;
+    redsEnding.card = 0;
+    // No music cue here. Level 6 is already silent on this route and the crater
+    // should stay that way — the level 5 stereo comes up on the far side of the
+    // card, with the building.
+}
+
+// The other side of the card: the building, six months earlier, Red in it.
+function beginRedsFlashback() {
+    redsEnding.intro = 0;
     redsEnding.card = 1;
     redsEnding.letterRead = false;
-    redsEnding.shift = 'wait';
-    redsEnding.pmState = 'happy';
+    redsEnding.onLadder = false;
+    redsEnding.climbing = 0;
+    redsEnding.fixing = false;
     redsEnding.fixAnim = 0;
-    redsEnding.animStart = 0;
-    redsEnding.climbFrom = 380;
-    redsEnding.climbTo = 380;
+    redsEnding.fixStart = 0;
+    redsEnding.nextDoc = null;
     redsEnding.exec = null;
     redsEnding.execTimer = 0;
     redsEnding.swing = 0;
@@ -30181,6 +30231,18 @@ function startRedsEnding() {
     playMusic('level5');
 }
 
+// The rungs. 210 is where a pipe manager sits when he is working the bulge —
+// it is where the wrench meets the pipe — and 380 is the floor he steps off.
+const REDS_RUNG_TOP = 210, REDS_RUNG_BOTTOM = 380;
+
+// The opening hold, in frames. A beat on the crater as it is, then the picture
+// goes down and the card comes up over it, then it all goes to black and the
+// building comes back.
+const REDS_INTRO_HOLD = 70;    // the room, untouched — that is where you are
+const REDS_INTRO_DIM  = 130;   // rubble dimming under the card
+const REDS_INTRO_CARD = 300;   // SIX MONTHS EARLIER / RED'S ENDING, held
+const REDS_INTRO_END  = 340;   // fully black; cut to the office behind it
+
 // Red's own pipe — the red one, second from the left. In the flashback nobody
 // is standing at it, because the man who stands at it is the one you are
 // playing.
@@ -30188,48 +30250,106 @@ function redsPipe() {
     return redsEnding.active ? level5.npcPipes.find(n => n.color && n.color.name === 'RED') : null;
 }
 
-// THE SHIFT. The game's core loop, run from the other end of it: the pipe opens
-// up, Mullet Pro prints the doc that closes it and walks it over, and it is Red
-// who takes it up the ladder. Five levels of handing paper to these men, and
-// this is the one time you find out what they do with it.
+// THE SHIFT. An ordinary day: the room's own sim runs untouched, bulges coming
+// up on all four pipes in turn and Mullet Pro doing his rounds for whoever needs
+// one. This adds exactly two things to it.
+//
+// One, he prints for a pipe that is actually open rather than for a colour
+// picked out of the air, so when YOUR bulge comes up he is the one who turns up
+// with the paper for it — which is the entire transaction you have been on the
+// other end of since level 1.
+//
+// Two, a doc for the RED pipe cannot be delivered by walking into it, because
+// the man who stands at that pipe is holding the controller. He carries it over
+// and waits with it held out until you take it off him.
 function updateRedsPipeShift() {
-    const pipe = redsPipe();
-    if(!pipe) return;
     const mp = level5.mulletPro;
-    const walkTo = (tx, speed) => {
-        if(Math.abs(mp.x - tx) <= speed) { mp.x = tx; return true; }
-        const dir = mp.x < tx ? 1 : -1;
-        mp.x += dir * speed;
-        mp.facing = dir > 0 ? 'right' : 'left';
-        return false;
-    };
+    const pipe = redsPipe();
 
-    // His pipe has been open since before he walked in. It never bursts here —
-    // there is no losing the flashback, only walking to the end of it — so the
-    // stress climbs to its top phase and sits there. Arming it is gated on the
-    // beats BEFORE the wrench, or the fix would re-open the pipe it just shut.
-    if(!pipe.crackStartTime && (redsEnding.shift === 'wait' || redsEnding.shift === 'doc')) {
-        pipe.needsDoc = true;
-        pipe.crackStartTime = Date.now();
-        pipe.state = 'happy';
-        pipe.y = 368;
+    // Whoever has been waiting longest gets the next doc. Only while he is still
+    // deciding — once he is carrying one, the choice is made.
+    if(mp.state === 'walkingToComputer' && !mp.hasDoc) {
+        // Red's pipe drops out of the queue the moment Red has the paper for it
+        // in his own hand or is already up the ladder on it. Without that he
+        // prints a second copy for a job that is being done, walks it over, and
+        // is still standing there holding it when the bulge is long gone.
+        const open = level5.npcPipes.filter(n => {
+            if(!n.needsDoc || !n.crackStartTime || npcDevoured(n)) return false;
+            if(n.color.name === 'RED' && (player.holding === 'RED' || redsEnding.onLadder)) return false;
+            return true;
+        });
+        open.sort((a, b) => a.crackStartTime - b.crackStartTime);
+        redsEnding.nextDoc = open[0] || null;
     }
 
-    // Mullet Pro's half of the job.
-    if(mp.state === 'walkingToComputer') {
-        if(walkTo(level5.computer.x, 2)) {
-            mp.hasDoc = true;
-            mp.docColor = COLORS[0];
-            mp.state = 'bringingToRed';
+    // Holding the RED doc: walk it to the foot of Red's ladder and wait there.
+    if(mp.hasDoc && mp.docColor && mp.docColor.name === 'RED' && pipe) {
+        mp.walkTarget = null;                 // the generic delivery must not fire
+        // If the bulge went away while he was carrying it — Red got there first,
+        // or took it off him — the paper is waste and he goes back to the
+        // printer with it rather than holding it out at a pipe that is shut.
+        if(!pipe.needsDoc) {
+            mp.hasDoc = false;
+            mp.docColor = null;
+            mp.state = 'walkingToComputer';
+            mp.facing = 'forward';
+            return;
         }
-    } else if(mp.state === 'bringingToRed') {
-        // He stops short of the ladder and holds it out, the same way he has
-        // held it out to you from the other side of this exchange all game.
-        if(walkTo(pipe.x - 40, 2)) mp.facing = 'right';
-    } else if(mp.state === 'backToPrinter') {
-        // Back to the printer for good. 'idle' parks him there — it is the state
-        // drawMulletPro reads to stop playing the walk cycle on the spot.
-        if(walkTo(level5.computer.x, 2)) { mp.facing = 'forward'; mp.state = 'idle'; }
+        const stand = pipe.x - 40;
+        if(Math.abs(mp.x - stand) > 2) {
+            const dir = mp.x < stand ? 1 : -1;
+            mp.x += dir * 2;
+            mp.facing = dir > 0 ? 'right' : 'left';
+        } else {
+            mp.x = stand;
+            mp.facing = 'right';              // held out, toward the ladder
+        }
+    }
+}
+
+// Red's own half: the ladder, worked a rung at a time. ACTION gets him onto it,
+// UP and DOWN move him on it, ACTION at the bulge puts the wrench on, and DOWN
+// off the bottom rung puts him back on the floor. It used to be one button and
+// a four-second animation played at him.
+function updateRedsLadder() {
+    const pipe = redsPipe();
+    if(!pipe) return;
+
+    // The wrench. Two seconds of it, the same as every manager in the building.
+    if(redsEnding.fixing) {
+        const prevBeat = Math.floor(redsEnding.fixAnim / 0.4);
+        redsEnding.fixAnim += 0.02;
+        if(Math.floor(redsEnding.fixAnim / 0.4) !== prevBeat) SFX.play('wrench');
+        if(Date.now() - redsEnding.fixStart >= 2000) {
+            redsEnding.fixing = false;
+            redsEnding.fixAnim = 0;
+            pipe.needsDoc = false;
+            pipe.crackStartTime = null;
+            SFX.play('pickup');
+        }
+        redsEnding.climbing = 0;
+        return;
+    }
+
+    if(!redsEnding.onLadder) { redsEnding.climbing = 0; return; }
+
+    // On the rungs. Up and down only — he has both hands on the ladder.
+    const up = keys['ArrowUp'] || keys['up'];
+    const down = keys['ArrowDown'] || keys['down'];
+    const speed = 2.4 * stepScale();
+    redsEnding.climbing = 0;
+    if(up && !down) {
+        player.y = Math.max(REDS_RUNG_TOP, player.y - speed);
+        redsEnding.climbing = 1;
+    } else if(down && !up) {
+        player.y = Math.min(REDS_RUNG_BOTTOM, player.y + speed);
+        redsEnding.climbing = -1;
+        // Off the bottom rung and back onto the floor.
+        if(player.y >= REDS_RUNG_BOTTOM) {
+            redsEnding.onLadder = false;
+            redsEnding.climbing = 0;
+            player.y = 380;
+        }
     }
 }
 
@@ -30360,48 +30480,6 @@ function updateRedsExecution() {
     return true;
 }
 
-// The climb, the fix and the climb back down, on the same timings the pipe
-// managers have always used — 1.5s up, 2s of wrench, 1.5s down — so it is
-// recognisably the animation you have been watching them play since level 1.
-function updateRedsClimb() {
-    const now = Date.now();
-    if(redsEnding.shift === 'climb' || redsEnding.shift === 'down') {
-        const t = Math.min((now - redsEnding.animStart) / 1500, 1);
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        player.y = redsEnding.climbFrom + (redsEnding.climbTo - redsEnding.climbFrom) * eased;
-        if(t >= 1) {
-            player.y = redsEnding.climbTo;
-            if(redsEnding.shift === 'climb') {
-                redsEnding.shift = 'fix';
-                redsEnding.pmState = 'fixing';
-                redsEnding.fixAnim = 0;
-                redsEnding.animStart = now;
-                // The doc goes into the pipe. That is the whole of what it was for.
-                player.holding = null;
-            } else {
-                redsEnding.shift = 'done';
-                redsEnding.pmState = 'happy';
-                level5.mulletPro.state = 'backToPrinter';
-                SFX.play('pickup');
-            }
-        }
-        return;
-    }
-    if(redsEnding.shift === 'fix') {
-        const prevBeat = Math.floor(redsEnding.fixAnim / 0.4);
-        redsEnding.fixAnim += 0.02;
-        if(Math.floor(redsEnding.fixAnim / 0.4) !== prevBeat) SFX.play('wrench');
-        if(now - redsEnding.animStart >= 2000) {
-            const pipe = redsPipe();
-            if(pipe) { pipe.needsDoc = false; pipe.crackStartTime = null; }
-            redsEnding.shift = 'down';
-            redsEnding.pmState = 'climbing_down';
-            redsEnding.animStart = now;
-            redsEnding.climbFrom = player.y;
-            redsEnding.climbTo = 380;
-        }
-    }
-}
 
 // The missile takes you with it. You and the CEO die in the same blast, and
 // what stands up in the Devil's lair afterwards is HIM — unarmed, because the
@@ -31002,9 +31080,11 @@ function update() {
     // LEVEL 5 LOGIC
     if(level === 5) {
         // RED'S ENDING title card holds the level still while it plays.
+        // The fade up off the card. Short, and it does not hold the level still
+        // for long — he is standing in his own office and the day is running.
         if(redsEnding.active && redsEnding.card > 0) {
             redsEnding.card++;
-            if(redsEnding.card > 160) redsEnding.card = 0;
+            if(redsEnding.card > 46) { redsEnding.card = 0; return; }
             return;
         }
         // Nap fade transition (Blue office futon)
@@ -31029,27 +31109,32 @@ function update() {
             return; // Pause all other logic while fading in
         }
 
-        // RED'S ENDING runs its own version of the room: the doc comes to YOU,
-        // and the ladder is yours to climb. The ordinary sim below would have
-        // Mullet Pro delivering to a RED pipe manager who, in the flashback, is
-        // standing here holding the controller.
+        // RED'S ENDING adds to the room's own sim rather than replacing it —
+        // it is an ordinary shift, and the other three managers are working it.
         if(redsEnding.active) {
             updateRedsPipeShift();
-            updateRedsClimb();
+            updateRedsLadder();
         }
 
         // Mullet Pro AI
-        else if(level5.mulletPro.state === 'walkingToComputer') {
+        if(level5.mulletPro.state === 'walkingToComputer') {
             if(Math.abs(level5.mulletPro.x - level5.computer.x) > 5) {
                 const direction = level5.mulletPro.x < level5.computer.x ? 1 : -1;
                 level5.mulletPro.x += direction * 2;
                 level5.mulletPro.facing = direction > 0 ? 'right' : 'left';
             } else {
+                // In the flashback he prints for whoever is actually open, so the
+                // paper turns up when a bulge does instead of at random.
+                const pick = (redsEnding.active && redsEnding.nextDoc)
+                    ? redsEnding.nextDoc.color
+                    : COLORS[Math.floor(Math.random() * 4)];
                 level5.mulletPro.hasDoc = true;
-                level5.mulletPro.docColor = COLORS[Math.floor(Math.random() * 4)];
+                level5.mulletPro.docColor = pick;
                 level5.mulletPro.state = 'walkingToNPC';
                 const targetNPC = level5.npcPipes.find(n => n.color.name === level5.mulletPro.docColor.name);
-                level5.mulletPro.walkTarget = targetNPC;
+                // Red's doc has nobody to hand it to but the player, so it gets
+                // no walk target and updateRedsPipeShift carries it over instead.
+                level5.mulletPro.walkTarget = (redsEnding.active && pick.name === 'RED') ? null : targetNPC;
                 level5.mulletPro.facing = 'forward';
             }
         }
@@ -31080,18 +31165,22 @@ function update() {
             }
         }
 
-        // NPC crack spawning. Suspended for the flashback: the only pipe open in
-        // there is Red's own, it is opened by hand in updateRedsPipeShift, and
-        // it is not on a burst timer. There is nothing to fail here — the
-        // flashback has already happened, and it only ends one way.
-        for(let npc of (redsEnding.active ? [] : level5.npcPipes)) {
+        // NPC crack spawning — runs in the flashback too, on all four pipes.
+        // Bulges come up in their own time and Red's is one of them; that is what
+        // makes it a shift rather than an errand.
+        for(let npc of level5.npcPipes) {
             if(npcDevoured(npc)) continue;
             if(!npc.needsDoc && npc.state === 'happy' && Math.random() < 0.0003) {
                 npc.needsDoc = true;
                 npc.crackStartTime = Date.now();
             }
 
-            if(npc.needsDoc && npc.crackStartTime) {
+            // Red's own pipe never bursts on him. There is nothing to fail in a
+            // flashback — it has already happened, and it ends the way it ends —
+            // so his bulge sits at full stress until he gets to it, and the acid
+            // burst is left for the managers who are actually standing there.
+            const redsOwn = redsEnding.active && npc.color.name === 'RED';
+            if(npc.needsDoc && npc.crackStartTime && !redsOwn) {
                 if(Date.now() - npc.crackStartTime > 15000) {
                     createExplosion(npc.x + 10, 252);
                     acidBursts.push({
@@ -31172,32 +31261,43 @@ function update() {
             if(!redsOnLadder()) player.y = 380;
             const atMulletPro = Math.abs(player.x - level5.mulletPro.x) < 50;
 
-            // RED'S ENDING — his shift. Take the doc off Mullet Pro, carry it to
-            // the ladder under his own pipe, and go up with it.
-            if(redsEnding.active) {
+            // RED'S ENDING — the job, one motion at a time. ACTION off Mullet
+            // Pro takes the doc; ACTION at the ladder gets him on it; UP and
+            // DOWN are the rungs (updateRedsLadder); ACTION at the bulge puts
+            // the wrench on it. Nothing here is compulsory — the door is open
+            // the whole time and he can walk out of the last shift of his life
+            // without doing it.
+            if(redsEnding.active && !redsEnding.fixing && (keys[' '] || keys['action'])) {
                 const pipe = redsPipe();
-                if((keys[' '] || keys['action']) && !redsLocked()) {
-                    if(redsEnding.shift === 'wait' && atMulletPro && level5.mulletPro.hasDoc) {
-                        player.holding = 'RED';
-                        level5.mulletPro.hasDoc = false;
-                        level5.mulletPro.docColor = null;
-                        level5.mulletPro.state = 'backToPrinter';
-                        level5.mulletPro.facing = 'left';
-                        redsEnding.shift = 'doc';
-                        SFX.play('pickup');
-                        keys[' '] = false; keys['action'] = false;
-                    } else if(redsEnding.shift === 'doc' && pipe && player.holding === 'RED'
-                              && Math.abs(player.x - pipe.x) < 44) {
-                        player.x = pipe.x;
-                        redsEnding.shift = 'climb';
-                        redsEnding.pmState = 'climbing_up';
-                        redsEnding.animStart = Date.now();
-                        redsEnding.climbFrom = 380;
-                        // 210 puts him where a pipe manager sits at the top of
-                        // his own ladder, which is where the wrench meets the pipe.
-                        redsEnding.climbTo = 210;
+                const mp = level5.mulletPro;
+                if(redsEnding.onLadder) {
+                    // At the bulge with the doc: put the wrench on it.
+                    if(player.y <= REDS_RUNG_TOP + 10 && player.holding === 'RED' &&
+                       pipe && pipe.needsDoc) {
+                        redsEnding.fixing = true;
+                        redsEnding.fixAnim = 0;
+                        redsEnding.fixStart = Date.now();
+                        player.holding = null;      // it goes into the pipe
                         keys[' '] = false; keys['action'] = false;
                     }
+                } else if(atMulletPro && mp.hasDoc && mp.docColor &&
+                          mp.docColor.name === 'RED' && !player.holding) {
+                    player.holding = 'RED';
+                    mp.hasDoc = false;
+                    mp.docColor = null;
+                    mp.state = 'walkingToComputer';
+                    mp.walkTarget = null;
+                    mp.facing = 'forward';
+                    redsEnding.nextDoc = null;
+                    SFX.play('pickup');
+                    keys[' '] = false; keys['action'] = false;
+                } else if(pipe && Math.abs(player.x - pipe.x) < 40) {
+                    // Get on the ladder. He can go up it empty-handed too — it
+                    // is his ladder, and there is nothing stopping him.
+                    player.x = pipe.x;
+                    redsEnding.onLadder = true;
+                    redsEnding.climbing = 0;
+                    keys[' '] = false; keys['action'] = false;
                 }
             }
 
@@ -31250,11 +31350,7 @@ function update() {
                 keys['action'] = false;
             }
 
-            // The summons keeps. In the flashback the furnace door does not open
-            // until his pipe is shut — he finishes the shift first, the way he
-            // has finished every other one, and THEN goes to see the boss.
-            const furnaceHeld = redsEnding.active && redsEnding.shift !== 'done';
-            if(!furnaceHeld && (fromL6 ? player.x > 660 : (player.x > 620 && (keys[' '] || keys['action'])))) {
+            if(fromL6 ? player.x > 660 : (player.x > 620 && (keys[' '] || keys['action']))) {
                 level5.room = 'furnaceRoom';
                 player.x = 80;
                 player.y = 380;
@@ -31655,6 +31751,20 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // RED'S ENDING opens on the crater, not on a title card. The room
+            // holds exactly as he left it — detective on his feet over the box —
+            // while the picture dims and the card comes up over the rubble. The
+            // world is frozen for it: no input, no AI, nothing but the clock.
+            if(redsEnding.active && redsEnding.intro > 0) {
+                redsEnding.intro++;
+                keys[' '] = false; keys['action'] = false;
+                if(redsEnding.intro > REDS_INTRO_END) {
+                    level6.blackBoxPickedUp = true;
+                    beginRedsFlashback();
+                }
+                return;
+            }
+
             // === MUTANT ESCAPE — countdown, feeding, and the escape beats ===
             {
                 const mm = level6.mutantMode;
@@ -34185,15 +34295,19 @@ if (keys[' '] || keys['action']) {
     // 0.5. Black Box Pickup (after missile explosion — CEO was killed by missile)
     if (level6.blackBoxDropped && !level6.blackBoxPickedUp &&
         Math.abs(player.x - level6.blackBoxX) < 40 && Math.abs(player.y - level6.blackBoxY) < 40) {
-        level6.blackBoxPickedUp = true;
         if(level6.hasDetectiveHat) {
             // Detective: the recorder does not close the case on the spot any
             // more. It puts him inside it — RED'S ENDING, the last shift of the
             // pipe manager the case is about. The CASE CLOSED card now plays at
             // the far end of that flashback, not here.
+            //
+            // blackBoxPickedUp stays FALSE through the hold: the shot is him
+            // standing over the box, and the box stops being drawn the moment
+            // that flag goes up. It is set on the far side, in the flashback.
             startRedsEnding();
             return;
         } else {
+            level6.blackBoxPickedUp = true;
             // NOT a promotion. You are standing in a crater holding the flight
             // recorder of the man you vaporised — the mushroom cloud card, and
             // another go at level 6. Taking the top job is the reward for the
