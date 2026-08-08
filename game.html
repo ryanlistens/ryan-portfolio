@@ -1297,7 +1297,16 @@ let redsEnding = {
     fixing: false,
     fixAnim: 0,
     fixStart: 0,
-    intro: 0,           // >0 while the crater hold plays, before the flashback
+
+    // === THE WAY BACK ===
+    // The flashback does not hand straight over to the end card. It comes back
+    // to the present first — the crater, the box, the detective standing where
+    // he was standing — because that is the shot that ties the two together.
+    outroFade: 0,       // furnace room going to black on the way out
+    outro: 0,           // >0 while the crater hold plays, before the end card
+    returnX: 350,       // where he was when he picked the recorder up
+    returnY: 300,
+    returnFacing: 'right',
 
     // === THE FURNACE — execution beats ===
     // 'wait' (he is standing there, you still have the controls) -> 'axe' ->
@@ -22209,11 +22218,11 @@ function drawLevel6CEOOffice() {
         ctx.textAlign = 'center';
         ctx.fillText('BLACK BOX', bbx, bby + 14);
 
-        // The prompt goes the moment he presses it. The box stays on the floor
-        // through RED'S ENDING's opening hold — that shot is him standing over
-        // it — but he has already picked it up, so nothing should still be
-        // asking him to.
-        if(Math.abs(player.x - bbx) < 40 && Math.abs(player.y - bby) < 40 && !redsEnding.intro) {
+        // The box is still on the floor when the flashback returns to this room
+        // at the end — that shot is the evidence lying in the crater — but he
+        // picked it up a whole flashback ago, so nothing should be asking him to
+        // do it again.
+        if(Math.abs(player.x - bbx) < 40 && Math.abs(player.y - bby) < 40 && !redsEnding.active) {
             drawActionLabel('[ ACTION ] - PICK UP', bbx, bby - 20, {fontSize: 14});
         }
     }
@@ -27715,10 +27724,31 @@ function drawScene() {
         drawOfficeRoom(level5.currentOffice);
     }
     
-    // Coming up out of the card. The title itself played back in the crater, on
-    // the far side of this — all that is left here is the building arriving.
+    // RED'S ENDING title card.
     if(redsEnding.active && redsEnding.card > 0) {
-        ctx.fillStyle = `rgba(6,3,4,${Math.max(0, 1 - redsEnding.card / 46)})`;
+        const t = redsEnding.card;
+        const a = t < 30 ? t / 30 : (t < 130 ? 1 : Math.max(0, (160 - t) / 30));
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#0a0406';
+        ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 26px Georgia, serif';
+        ctx.fillStyle = '#8a8a8a';
+        ctx.fillText('SIX MONTHS EARLIER', 350, 200);
+        ctx.font = 'bold 64px Georgia, serif';
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
+        ctx.strokeText("RED'S ENDING", 350, 280);
+        ctx.fillStyle = COLORS[0].hex;
+        ctx.fillText("RED'S ENDING", 350, 280);
+        ctx.textAlign = 'left';
+        ctx.restore();
+    }
+
+    // The way back out: the furnace room going to black before the picture
+    // returns to the crater it came from.
+    if(redsEnding.active && redsEnding.outroFade > 0) {
+        ctx.fillStyle = `rgba(4,2,3,${Math.min(1, redsEnding.outroFade)})`;
         ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
     }
 
@@ -28991,39 +29021,20 @@ function drawScene() {
             }
         }
 
-        // === RED'S ENDING opens over the crater it is a flashback from ===
-        // The room underneath is live and untouched — the detective standing
-        // where you left him, the box still at his feet. It dims under the card
-        // rather than cutting to one, because by now the missile is several
-        // rooms and a boss behind the player and the card on its own does not
-        // say what it is a flashback FROM.
-        if(redsEnding.active && redsEnding.intro > 0) {
-            const t = redsEnding.intro;
-            const dim = t <= REDS_INTRO_HOLD ? 0
-                      : t <= REDS_INTRO_DIM ? (t - REDS_INTRO_HOLD) / (REDS_INTRO_DIM - REDS_INTRO_HOLD) * 0.82
-                      : t <= REDS_INTRO_CARD ? 0.82
-                      : 0.82 + (t - REDS_INTRO_CARD) / (REDS_INTRO_END - REDS_INTRO_CARD) * 0.18;
-            ctx.fillStyle = `rgba(6,3,4,${Math.min(1, dim)})`;
-            ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
-
-            // The card, over the rubble it belongs to
-            const ct = t - REDS_INTRO_HOLD - 24;
-            if(ct > 0) {
-                const a = Math.min(1, ct / 34) *
-                          (t > REDS_INTRO_CARD ? Math.max(0, 1 - (t - REDS_INTRO_CARD) / 28) : 1);
-                ctx.save();
-                ctx.globalAlpha = a;
-                ctx.textAlign = 'center';
-                ctx.font = 'bold 26px Georgia, serif';
-                ctx.fillStyle = '#8a8a8a';
-                ctx.fillText('SIX MONTHS EARLIER', 350, 200);
-                ctx.font = 'bold 64px Georgia, serif';
-                ctx.strokeStyle = '#000'; ctx.lineWidth = 7;
-                ctx.strokeText("RED'S ENDING", 350, 280);
-                ctx.fillStyle = COLORS[0].hex;
-                ctx.fillText("RED'S ENDING", 350, 280);
-                ctx.textAlign = 'left';
-                ctx.restore();
+        // === RED'S ENDING comes back to the crater before the end card ===
+        // The room underneath is live: the detective on his feet where he was
+        // when he reached for the recorder, the box still lying in the hole the
+        // missile made. Up out of black, a long hold, then away — so the card
+        // that follows lands on something the player has just been looking at
+        // instead of arriving off the back of a furnace six months earlier.
+        if(redsEnding.active && redsEnding.outro > 0) {
+            const t = redsEnding.outro;
+            const dark = t <= REDS_OUT_IN ? 1 - t / REDS_OUT_IN
+                       : t <= REDS_OUT_HOLD ? 0
+                       : (t - REDS_OUT_HOLD) / (REDS_OUT_END - REDS_OUT_HOLD);
+            if(dark > 0) {
+                ctx.fillStyle = `rgba(4,2,3,${Math.min(1, dark)})`;
+                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
             }
         }
 
@@ -30176,27 +30187,21 @@ function drawScene() {
 // Level 5's rooms are reused deliberately — the hallway, the offices, the pipe
 // room and the furnace are already the right rooms. Only three of them will
 // open to Red, and one of them is a trap.
-// The picture does not cut. By the time the recorder is in his hand the missile
-// is a long way back for the player — several rooms, a boss and a mushroom cloud
-// ago — so the flashback holds first on the thing it is a flashback FROM: the
-// detective standing in the crater that used to be the CEO's office, over the
-// box he has just picked up. That shot dims, SIX MONTHS EARLIER comes up over
-// the rubble, and only then does the building come back with Red inside it.
 //
-// The hold runs in LEVEL 6, on the real room — it is not a still. Level 5 is not
-// touched until beginRedsFlashback() at the end of it.
+// Where he is standing when he presses ACTION is kept, because the flashback
+// comes back to this exact shot at the far end of it — see updateRedsReturn.
 function startRedsEnding() {
+    redsEnding.returnX = player.x;
+    redsEnding.returnY = player.y;
+    redsEnding.returnFacing = player.facing;
     redsEnding.active = true;
-    redsEnding.intro = 1;
-    redsEnding.card = 0;
-    // No music cue here. Level 6 is already silent on this route and the crater
-    // should stay that way — the level 5 stereo comes up on the far side of the
-    // card, with the building.
+    redsEnding.outro = 0;
+    redsEnding.outroFade = 0;
+    beginRedsFlashback();
 }
 
-// The other side of the card: the building, six months earlier, Red in it.
+// The building, six months earlier, Red in it.
 function beginRedsFlashback() {
-    redsEnding.intro = 0;
     redsEnding.card = 1;
     redsEnding.letterRead = false;
     redsEnding.onLadder = false;
@@ -30235,13 +30240,32 @@ function beginRedsFlashback() {
 // it is where the wrench meets the pipe — and 380 is the floor he steps off.
 const REDS_RUNG_TOP = 210, REDS_RUNG_BOTTOM = 380;
 
-// The opening hold, in frames. A beat on the crater as it is, then the picture
-// goes down and the card comes up over it, then it all goes to black and the
-// building comes back.
-const REDS_INTRO_HOLD = 70;    // the room, untouched — that is where you are
-const REDS_INTRO_DIM  = 130;   // rubble dimming under the card
-const REDS_INTRO_CARD = 300;   // SIX MONTHS EARLIER / RED'S ENDING, held
-const REDS_INTRO_END  = 340;   // fully black; cut to the office behind it
+// The way back, in frames: up out of black onto the crater, a hold on it, then
+// away to the end card.
+const REDS_OUT_IN   = 45;      // fading up on the CEO office
+const REDS_OUT_HOLD = 210;     // the shot: crater, box, detective over it
+const REDS_OUT_END  = 250;     // gone; the end card takes it from here
+
+// The last thing the flashback does is come back. The end card is about the
+// missile, the recorder and a dead CEO, and cutting to it straight off a man
+// being burned in a furnace six months earlier reads as a non-sequitur — the
+// two halves never touch. So the picture returns to the present first and
+// holds on the shot that joins them: the crater the missile made, the black
+// box lying in it, and the detective standing over it exactly where he was
+// when he picked it up. Then the card, which is now a summary of something
+// you have just watched rather than an announcement out of nowhere.
+function updateRedsReturn() {
+    redsEnding.outro++;
+    if(redsEnding.outro <= REDS_OUT_END) return;
+    // Hand over. The recorder is his now, and the case closes on it.
+    level6.blackBoxPickedUp = true;
+    redsEnding.active = false;
+    redsEnding.outro = 0;
+    redsEnding.outroFade = 0;
+    level6.missileCaseClosedCard = 'fading';
+    level6.missileCaseClosedTimer = 0;
+    level6.detectiveTransAlpha = 0;
+}
 
 // Red's own pipe — the red one, second from the left. In the flashback nobody
 // is standing at it, because the man who stands at it is the one you are
@@ -30466,14 +30490,23 @@ function updateRedsExecution() {
     } else if(redsEnding.exec === 'aftermath') {
         // Hold on the room he left: the stain, the trail to the door, the
         // furnace still lit. This IS the furnace room the detective walks into
-        // in level 6 — then close the case.
-        if(t > 170) {
-            redsEnding.active = false;
+        // in level 6. Then the picture goes down on it and comes back up six
+        // months later, in the crater, on the man holding the recorder.
+        if(t > 170) redsEnding.outroFade = Math.min(1, redsEnding.outroFade + 0.035);
+        if(redsEnding.outroFade >= 1) {
             redsEnding.exec = null;
+            redsEnding.execTimer = 0;
             level = 6;
-            level6.missileCaseClosedCard = 'fading';
-            level6.missileCaseClosedTimer = 0;
-            level6.detectiveTransAlpha = 0;
+            level6.room = 'ceoOffice';
+            // Back to the frame we left: him on his feet over the box, where he
+            // was standing when he reached for it. It is still on the floor —
+            // blackBoxPickedUp does not go up until the card takes over — because
+            // the evidence lying in the crater IS the shot.
+            player.x = redsEnding.returnX;
+            player.y = redsEnding.returnY;
+            player.facing = redsEnding.returnFacing;
+            player.holding = null;
+            redsEnding.outro = 1;
             playMusic('level5');
         }
     }
@@ -31080,11 +31113,10 @@ function update() {
     // LEVEL 5 LOGIC
     if(level === 5) {
         // RED'S ENDING title card holds the level still while it plays.
-        // The fade up off the card. Short, and it does not hold the level still
-        // for long — he is standing in his own office and the day is running.
+        // RED'S ENDING title card holds the level still while it plays.
         if(redsEnding.active && redsEnding.card > 0) {
             redsEnding.card++;
-            if(redsEnding.card > 46) { redsEnding.card = 0; return; }
+            if(redsEnding.card > 160) redsEnding.card = 0;
             return;
         }
         // Nap fade transition (Blue office futon)
@@ -31751,17 +31783,12 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
-            // RED'S ENDING opens on the crater, not on a title card. The room
-            // holds exactly as he left it — detective on his feet over the box —
-            // while the picture dims and the card comes up over the rubble. The
-            // world is frozen for it: no input, no AI, nothing but the clock.
-            if(redsEnding.active && redsEnding.intro > 0) {
-                redsEnding.intro++;
+            // RED'S ENDING comes back here before it hands over to the end card.
+            // The world is frozen for the hold: no input, no AI, nothing but the
+            // clock. See updateRedsReturn.
+            if(redsEnding.active && redsEnding.outro > 0) {
+                updateRedsReturn();
                 keys[' '] = false; keys['action'] = false;
-                if(redsEnding.intro > REDS_INTRO_END) {
-                    level6.blackBoxPickedUp = true;
-                    beginRedsFlashback();
-                }
                 return;
             }
 
