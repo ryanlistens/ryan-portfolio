@@ -1149,6 +1149,7 @@ let level6 = {
     blackBoxY: 0,
     ceoAshX: null,      // exactly where he was standing when it went off
     ceoAshY: null,
+    ceoAshCollapse: 0,  // frames into him folding down into his own dust
     blackBoxPickedUp: false,
     youBlewItCard: false,
     youBlewItTimer: 0,
@@ -1666,6 +1667,7 @@ function initLevel(lv) {
         level6.blackBoxY = 0;
         level6.ceoAshX = null;
         level6.ceoAshY = null;
+        level6.ceoAshCollapse = 0;
         level6.blackBoxPickedUp = false;
         level6.youBlewItCard = false;
         level6.youBlewItTimer = 0;
@@ -22254,18 +22256,51 @@ function drawLevel6CEOOffice() {
         // Not a body and not a shadow on the floor. He is still standing where he
         // was standing, burned all the way through and holding his own shape the
         // way a cigarette holds its shape after it has gone out — caramelised
-        // ash, crusted and cracked, with the fire still in the cracks. Anything
-        // touches it and it is gone.
+        // ash, crusted and cracked, with the fire still in the cracks.
+        //
+        // And that is all he has been doing since the blast: standing. When the
+        // picture comes back to this room at the end of RED'S ENDING he finally
+        // goes, folding straight down into his own dust — which is what the
+        // return is FOR. Holding on a room where nothing happens is a still; the
+        // last thing left of him giving way while you look at it is an ending.
         (function drawAsh() {
             const ash  = '#241f1c', ashLit = '#3a322c', crust = '#4a4038';
             const seed = (n) => Math.sin(n * 12.9898) * 43758.5453 % 1;
+            // 0 while he stands, 1 once he is a pile on the floor
+            const cf = level6.ceoAshCollapse || 0;
+            // The tremor comes first and he does not start dropping until it is
+            // over, so there is a beat of him failing before he fails.
+            const k  = Math.max(0, Math.min(1, (cf - 26) / (ASH_COLLAPSE_FRAMES - 26)));
+            const fall = k * k * (3 - 2 * k);            // eased
+            const shudder = cf > 0 && cf < 30 ? Math.sin(cf * 1.7) * (1 - cf / 30) * 2.2 : 0;
+
             ctx.save();
             ctx.translate(gx, gy);
-            // the pile it is standing in
+            // the pile at his feet, which is where all of him ends up
             ctx.fillStyle = 'rgba(14,10,8,0.9)';
-            ctx.beginPath(); ctx.ellipse(0, 22, 30, 11, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(0, 22, 30 + fall * 15, 11 + fall * 4, 0, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = 'rgba(58,48,40,0.7)';
-            ctx.beginPath(); ctx.ellipse(-2, 20, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(-2, 20, 22 + fall * 16, 7 + fall * 5, 0, 0, Math.PI * 2); ctx.fill();
+            if(fall > 0.35) {
+                // heaped up out of what came down
+                ctx.fillStyle = 'rgba(38,31,26,0.92)';
+                ctx.beginPath();
+                ctx.ellipse(0, 16, 20 * fall, 8 * fall, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = 'rgba(70,58,48,0.5)';
+                ctx.beginPath();
+                ctx.ellipse(-4, 13, 12 * fall, 4.5 * fall, 0, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Everything of him that is still standing collapses straight down
+            // into that pile, spreading as it goes.
+            if(fall < 1) {
+            ctx.save();
+            ctx.translate(shudder, 18);
+            ctx.scale(1 + fall * 0.5, Math.max(0.001, 1 - fall));
+            ctx.translate(-shudder, -18);
+            ctx.globalAlpha = 1 - fall * 0.55;
 
             const limb = (x0, y0, x1, y1, w) => {
                 ctx.strokeStyle = ash; ctx.lineWidth = w; ctx.lineCap = 'round';
@@ -22330,6 +22365,8 @@ function drawLevel6CEOOffice() {
                 ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
             }
             ctx.lineCap = 'butt';
+            ctx.restore();          // end of the collapsing body
+            }
             // Flaked away at the edges — it is not holding together
             ctx.fillStyle = 'rgba(52,44,37,0.8)';
             for(let i = 0; i < 9; i++) {
@@ -22339,13 +22376,29 @@ function drawLevel6CEOOffice() {
                             1.6 + (i % 3) * 0.9, 1.1 + (i % 2) * 0.7, a, 0, Math.PI * 2);
                 ctx.fill();
             }
-            // ash lifting off him
-            for(let i = 0; i < 5; i++) {
-                const ph = (t / 2600 + i * 0.2) % 1;
-                ctx.fillStyle = `rgba(120,106,92,${0.3 * (1 - ph)})`;
-                ctx.beginPath();
-                ctx.arc(-8 + i * 5 + Math.sin(t / 900 + i) * 4, -46 - ph * 30, 1.4 + ph * 1.6, 0, Math.PI * 2);
-                ctx.fill();
+            // Ash lifting off him while he stands; and when he goes, the dust of
+            // him thrown out low and wide, settling back down over the pile.
+            if(fall <= 0) {
+                for(let i = 0; i < 5; i++) {
+                    const ph = (t / 2600 + i * 0.2) % 1;
+                    ctx.fillStyle = `rgba(120,106,92,${0.3 * (1 - ph)})`;
+                    ctx.beginPath();
+                    ctx.arc(-8 + i * 5 + Math.sin(t / 900 + i) * 4, -46 - ph * 30, 1.4 + ph * 1.6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else {
+                for(let i = 0; i < 26; i++) {
+                    const a  = seed(i * 4.7) * Math.PI * 2;
+                    const sp = 0.35 + seed(i * 9.3) * 0.65;
+                    const ph = Math.min(1, fall / (0.35 + sp * 0.5));
+                    const px = Math.cos(a) * (10 + sp * 46) * ph;
+                    const py = -34 * (1 - ph) + Math.sin(a) * 7 * ph + ph * ph * 24;
+                    const al = 0.5 * (1 - ph) + 0.06;
+                    ctx.fillStyle = `rgba(${132 - (i % 4) * 14},${116 - (i % 3) * 12},${100 - (i % 5) * 9},${al})`;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 1.2 + sp * 2.6 * (1 - ph * 0.5), 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
             ctx.restore();
         })();
@@ -30549,6 +30602,10 @@ const REDS_OUT_IN   = 78;    // ~1.3s up out of black
 const REDS_OUT_HOLD = 250;   // the recorder in the crater, held
 const REDS_OUT_END  = 340;   // ~1.5s back down; the card takes it from here
 const REDS_OUT_ZOOM = 1.45;  // gentle push in, from 1:1 on the whole room
+// He has been standing there since the blast. He gives way partway through the
+// hold — long enough after the picture is up that you have found him first.
+const REDS_ASH_AT      = 118;
+const ASH_COLLAPSE_FRAMES = 112;   // ~1.9s — at 64 it was over before you saw it
 
 
 // The rungs. 210 is where a pipe manager sits when he is working the bulge —
@@ -32135,6 +32192,10 @@ function update() {
             if(redsEnding.active && redsEnding.outro > 0) {
                 redsEnding.outro++;
                 keys[' '] = false; keys['action'] = false;
+                // The one thing that happens in this room. Six months of standing
+                // and he goes while you are looking at him.
+                if(redsEnding.outro === REDS_ASH_AT) SFX.play('bridgeFall');
+                if(redsEnding.outro >= REDS_ASH_AT) level6.ceoAshCollapse++;
                 if(redsEnding.outro > REDS_OUT_END) {
                     redsEnding.active = false;
                     redsEnding.outro = 0;
