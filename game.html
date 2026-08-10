@@ -1300,10 +1300,13 @@ let redsEnding = {
     offerTimer: 0,      // how long he has been holding Red's doc out
     redDeferUntil: 0,   // Red is skipped in the print queue until this time
 
-    // The furnace room going to black at the end of it. The flashback does not
-    // come back to the present — the execution is the last thing you see, and
-    // it goes out on its own rather than being followed by a second ending.
-    outroFade: 0,
+    // The way out: the furnace room to black, then back to the present as a
+    // slow push on the recorder lying in the crater, then away to the card.
+    outroFade: 0,       // furnace room going to black
+    outro: 0,           // >0 while the crater close-up plays
+    returnX: 350,       // where he was standing when he picked the recorder up
+    returnY: 300,
+    returnFacing: 'right',
 
     // === THE FURNACE — execution beats ===
     // 'wait' (he is standing there, you still have the controls) -> 'axe' ->
@@ -22189,8 +22192,57 @@ function drawLevel6CEOOffice() {
         ctx.fill();
     }
 
+    // === WHAT IS LEFT OF ALDON PIPERSWORTH ===
+    // Not a body. He was standing between the warhead and the floor when it went
+    // off, so what the room keeps is his shadow: the scorch burned into every
+    // surface EXCEPT the strip he was blocking, thrown away from the blast and
+    // stretched long by the angle. The recorder is lying in it.
+    if(level6.craterActive && level6.blackBoxDropped) {
+        const bx = level6.blackBoxX, by = level6.blackBoxY;
+        const dx = bx - 170, dy = by - 105;              // away from ground zero
+        const len = Math.max(1, Math.hypot(dx, dy));
+        const ang = Math.atan2(dy, dx) + Math.PI / 2;    // figure's long axis
+        ctx.save();
+        ctx.translate(bx, by + 16);
+        ctx.rotate(ang);
+        ctx.scale(1, 1.1 + Math.min(0.5, len / 520));    // longer the further out
+        // Scorch banked up around the edge of it, so the pale shape reads as
+        // protected ground rather than as something painted on
+        ctx.fillStyle = 'rgba(6,3,1,0.78)';
+        ctx.beginPath(); ctx.ellipse(0, -20, 33, 50, 0, 0, Math.PI * 2); ctx.fill();
+        // The man himself, in unburned floor
+        ctx.fillStyle = 'rgba(156,132,102,0.82)';
+        ctx.beginPath();
+        ctx.arc(0, -52, 9.5, 0, Math.PI * 2); ctx.fill();               // head
+        ctx.beginPath();                                                 // torso
+        ctx.moveTo(-11, -41);
+        ctx.quadraticCurveTo(0, -45, 11, -41);
+        ctx.lineTo(9, -12); ctx.lineTo(-9, -12);
+        ctx.closePath(); ctx.fill();
+        // arms flung up — the last thing he did was see it coming
+        ctx.save(); ctx.translate(-10, -39); ctx.rotate(0.75);
+        ctx.fillRect(-4, -22, 7, 24); ctx.restore();
+        ctx.save(); ctx.translate(10, -39); ctx.rotate(-0.75);
+        ctx.fillRect(-3, -22, 7, 24); ctx.restore();
+        ctx.fillRect(-9, -13, 7, 22);                                    // legs
+        ctx.fillRect(2, -13, 7, 22);
+        // Edges eaten away — nothing about this is a clean outline
+        ctx.fillStyle = 'rgba(9,5,2,0.5)';
+        for(let n = 0; n < 16; n++) {
+            const na = (n / 16) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.ellipse(Math.cos(na) * 14, -30 + Math.sin(na) * 31,
+                        2.2 + (n % 3) * 1.3, 1.6 + (n % 4) * 0.9, na, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
     // === BLACK BOX (dropped after missile kills CEO) ===
-    if(level6.blackBoxDropped && !level6.blackBoxPickedUp) {
+    // Still drawn through RED'S ENDING's closing shot: that whole frame is the
+    // recorder lying in the crater, and it is the last thing the game shows of
+    // the case before the card.
+    if(level6.blackBoxDropped && (!level6.blackBoxPickedUp || redsEnding.outro > 0)) {
         const bbx = level6.blackBoxX;
         const bby = level6.blackBoxY;
 
@@ -22211,11 +22263,14 @@ function drawLevel6CEOOffice() {
         // Hazard stripe
         ctx.fillStyle = '#ff6600';
         ctx.fillRect(bbx - 8, bby - 2, 16, 4);
-        // Label
-        ctx.fillStyle = '#ff6600';
-        ctx.font = scaledFont(5, 'bold', 'monospace', true);
-        ctx.textAlign = 'center';
-        ctx.fillText('BLACK BOX', bbx, bby + 14);
+        // Label — off during RED'S ENDING's closing shot, where it is a piece of
+        // evidence lying in a crater rather than a thing you can walk up to
+        if(!redsEnding.outro) {
+            ctx.fillStyle = '#ff6600';
+            ctx.font = scaledFont(5, 'bold', 'monospace', true);
+            ctx.textAlign = 'center';
+            ctx.fillText('BLACK BOX', bbx, bby + 14);
+        }
 
         // The box is still on the floor when the flashback returns to this room
         // at the end — that shot is the evidence lying in the crater — but he
@@ -27838,6 +27893,28 @@ function drawScene() {
     }
 
     if(level === 6) {
+        // RED'S ENDING closes on a slow push into the crater, centred on the
+        // recorder. The whole level 6 scene is drawn through this transform and
+        // popped again before the fades and cards below, which stay full-frame.
+        // A slow push, NOT a crop. Opening hard at 2.9x scaled flat vector art
+        // up into a field of large abstract shapes — no extra detail arrives, the
+        // room stops being legible as a room, and whatever prop happens to be
+        // near the recorder fills a third of the frame. It starts at 1:1 on the
+        // whole office and drifts in toward the recorder instead, which is a
+        // camera move rather than a magnifying glass.
+        const redsPush = redsEnding.active && redsEnding.outro > 0;
+        if(redsPush) {
+            const t = Math.min(1, redsEnding.outro / REDS_OUT_END);
+            const e = t * t * (3 - 2 * t);                 // ease in and out
+            const z = 1 + e * (REDS_OUT_ZOOM - 1);
+            const cx = 350 + (level6.blackBoxX - 350) * e;
+            const cy = 240 + (level6.blackBoxY - 240) * e;
+            ctx.save();
+            ctx.translate(350, 240);
+            ctx.scale(z, z);
+            ctx.translate(-cx, -cy);
+        }
+
         if(level6.room === 'pipeRoom') {
             drawLevel6PipeRoom();
 
@@ -28628,6 +28705,20 @@ function drawScene() {
                 ctx.fillStyle = '#2b2b2b';
                 ctx.font = 'bold 20px Arial';
                 ctx.fillText('CONFIRM', 350, 445);
+            }
+        }
+
+        if(redsPush) ctx.restore();
+
+        // and the fade at both ends of that shot, full-frame over the push
+        if(redsPush) {
+            const t = redsEnding.outro;
+            const dark = t <= REDS_OUT_IN ? 1 - t / REDS_OUT_IN
+                       : t <= REDS_OUT_HOLD ? 0
+                       : (t - REDS_OUT_HOLD) / (REDS_OUT_END - REDS_OUT_HOLD);
+            if(dark > 0) {
+                ctx.fillStyle = `rgba(3,2,2,${Math.min(1, dark)})`;
+                ctx.fillRect(-GX, -GY, CANVAS_W, CANVAS_H);
             }
         }
 
@@ -30226,7 +30317,12 @@ function drawScene() {
 // room and the furnace are already the right rooms. Only three of them will
 // open to Red, and one of them is a trap.
 function startRedsEnding() {
+    // Kept for the close: the picture comes back to this spot at the end.
+    redsEnding.returnX = player.x;
+    redsEnding.returnY = player.y;
+    redsEnding.returnFacing = player.facing;
     redsEnding.active = true;
+    redsEnding.outro = 0;
     redsEnding.outroFade = 0;
     beginRedsFlashback();
 }
@@ -30277,6 +30373,17 @@ const L5_CRACK_INTERVAL = 300;   // ~5s
 const REDS_OFFER_PATIENCE = 380;      // ~6.3s
 // and how long Red goes to the back of the queue for after turning him down.
 const REDS_OFFER_DEFER_MS = 13000;
+
+// The way back, in frames. Deliberately slow at both ends: the picture comes up
+// on the recorder rather than cutting to the room, holds, and goes down again
+// without hurrying. It used to blink — level 6 was handed back with its fade
+// alpha at zero, so the office flashed at full brightness for a frame before
+// anything faded anywhere.
+const REDS_OUT_IN   = 78;    // ~1.3s up out of black
+const REDS_OUT_HOLD = 250;   // the recorder in the crater, held
+const REDS_OUT_END  = 340;   // ~1.5s back down; the card takes it from here
+const REDS_OUT_ZOOM = 1.45;  // gentle push in, from 1:1 on the whole room
+
 
 // The rungs. 210 is where a pipe manager sits when he is working the bulge —
 // it is where the wrench meets the pipe — and 380 is the floor he steps off.
@@ -30390,6 +30497,14 @@ function updateRedsLadder() {
             redsEnding.fixAnim = 0;
             pipe.needsDoc = false;
             pipe.crackStartTime = null;
+            // Back in the rotation. The musical-chairs spawn only picks pipes
+            // whose manager is 'happy', and the crack that opened this one put
+            // him in 'stressed' — clearing needsDoc without clearing that left
+            // Red's pipe permanently ineligible, so he got exactly one bulge per
+            // flashback and the station went quiet for the rest of the shift.
+            pipe.state = 'happy';
+            pipe.y = 368;
+            redsEnding.redDeferUntil = 0;
             SFX.play('pickup');
         }
         redsEnding.climbing = 0;
@@ -30533,20 +30648,20 @@ function updateRedsExecution() {
         // furnace still lit. This IS the furnace room the detective walks into
         // in level 6. Then the picture goes down on it and comes back up six
         // months later, in the crater, on the man holding the recorder.
-        // Then out. Straight from this room to the card — the execution is the
-        // last thing you see of the story, and it is strong enough to end on.
-        // Returning to the present first put a second, quieter ending after it
-        // and took the air out of both.
-        if(t > 170) redsEnding.outroFade = Math.min(1, redsEnding.outroFade + 0.035);
+        // Then down to black, and back to the present on the one object that
+        // carries the story out of the furnace room: the recorder, in the crater,
+        // where the last thing standing over it was the man who is now on it.
+        if(t > 170) redsEnding.outroFade = Math.min(1, redsEnding.outroFade + 0.03);
         if(redsEnding.outroFade >= 1) {
-            redsEnding.active = false;
             redsEnding.exec = null;
             redsEnding.execTimer = 0;
-            redsEnding.outroFade = 0;
             level = 6;
-            level6.missileCaseClosedCard = 'fading';
-            level6.missileCaseClosedTimer = 0;
-            level6.detectiveTransAlpha = 0;
+            level6.room = 'ceoOffice';
+            player.x = redsEnding.returnX;
+            player.y = redsEnding.returnY;
+            player.facing = redsEnding.returnFacing;
+            player.holding = null;
+            redsEnding.outro = 1;
             playMusic('level5');
         }
     }
@@ -31849,6 +31964,24 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // RED'S ENDING's close-up. The world is frozen for it — no input, no
+            // AI, nothing but the clock — and at the end it hands over to the card.
+            if(redsEnding.active && redsEnding.outro > 0) {
+                redsEnding.outro++;
+                keys[' '] = false; keys['action'] = false;
+                if(redsEnding.outro > REDS_OUT_END) {
+                    redsEnding.active = false;
+                    redsEnding.outro = 0;
+                    redsEnding.outroFade = 0;
+                    level6.missileCaseClosedCard = 'fading';
+                    level6.missileCaseClosedTimer = 0;
+                    // Already black behind the card — starting this at 0 is what
+                    // made the office flash back for a frame.
+                    level6.detectiveTransAlpha = 1;
+                }
+                return;
+            }
+
             // === MUTANT ESCAPE — countdown, feeding, and the escape beats ===
             {
                 const mm = level6.mutantMode;
