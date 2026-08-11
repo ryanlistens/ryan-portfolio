@@ -11011,8 +11011,15 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     // the caged sprite: squared skull with a bulging brow, thick brows,
     // sunken red sockets with darting orange pupils, gritted teeth, pulsing
     // temple veins, red PipeTech jumpsuit with a PT patch, heavy boots.
-    // Only the posture is new — the hunched, knuckle-forward run from his
-    // escape animation.
+    //
+    // What is new is that he is BUILT like something instead of stacked. He had
+    // no neck — the skull sat flat on the collar — the shoulders were inside the
+    // torso outline so the bare forearms hung off him like loose tubes, and both
+    // halves were mirror-symmetric with the head shifted three pixels, so left
+    // and right were the same drawing and nothing about him leaned. He hunches
+    // now: shoulders up around the jaw, spine tipped the way he is going, near
+    // arm in front of the torso and far arm behind it, knuckles carried low and
+    // forward. The comment always claimed that run. This is it.
     const t = Date.now();
     const dir = (facing === 'left') ? -1 : 1;
     const isBack = (facing === 'back' || facing === 'up');
@@ -11020,20 +11027,83 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     const breathe = Math.sin(t / 800) * 2;              // matches cage breathing
     const bob = walking ? Math.abs(gait) * -3 : breathe * 0.5;
     const hipY = y + 4 + bob;
+    // How far the whole upper body is tipped along the way he is facing. Zero
+    // from behind — there is no lean to read on a back.
+    const lean = isBack ? 0 : dir * 5;
 
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath(); ctx.ellipse(x, y + 30, 26, 5.5, 0, 0, Math.PI * 2); ctx.fill();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // ── Legs — thick jumpsuit legs into heavy boots (cage palette)
+    // Shoulder anchors, up near the jaw where a hunch puts them. Everything that
+    // hangs off him hangs off these, so the arms cannot drift off the body.
+    const shY = y - 19 + bob;
+    const shL = x + lean - 16, shR = x + lean + 16;
+    const sleeveDark = charMix('#cc2222', '#000', 0.16);
+    const sleeveLit  = '#cc2222';
+
+    // One arm, hung from a shoulder and carried low and forward. `depth` is -1
+    // for the far arm (drawn before the torso) and +1 for the near one.
+    const mutantArm = (sgn, depth) => {
+        const sw = Math.sin(t / 110 + (sgn < 0 ? Math.PI : 0)) * (walking ? 7 : 0);
+        const sx = sgn < 0 ? shL : shR;
+        // knuckles ahead of him, and further ahead on the near side
+        const handX = sx + dir * (9 + depth * 3) + sgn * 5 + sw;
+        const handY = y + 15 + Math.abs(sw) * 0.25;
+        const elbowX = sx + sgn * 8 + dir * 3;
+        const elbowY = y - 3 + bob;
+        ctx.strokeStyle = depth < 0 ? sleeveDark : sleeveLit;
+        ctx.lineWidth = depth < 0 ? 10 : 11;
+        ctx.beginPath();
+        ctx.moveTo(sx, shY);
+        ctx.quadraticCurveTo(elbowX + sgn * 3, elbowY - 4, elbowX, elbowY);
+        ctx.stroke();
+        ctx.lineWidth = depth < 0 ? 8.6 : 9.4;          // forearm, tapering
+        ctx.beginPath();
+        ctx.moveTo(elbowX, elbowY);
+        ctx.quadraticCurveTo(elbowX + (handX - elbowX) * 0.5, elbowY + 7, handX, handY - 4);
+        ctx.stroke();
+        // Deltoid cap sitting PROUD of the torso, so the joint is visible
+        charDeltoid(sx, shY, 7.2, depth < 0 ? charMix('#cc2222', '#000', 0.24)
+                                            : charMix('#cc2222', '#fff', 0.14));
+        // Cuff — the sleeve ends somewhere instead of becoming a wrist by magic
+        ctx.strokeStyle = depth < 0 ? charMix('#991a1a', '#000', 0.2) : '#991a1a';
+        ctx.lineWidth = depth < 0 ? 9.4 : 10.2;
+        ctx.beginPath();
+        ctx.moveTo(handX - dir * 1.5, handY - 6.5); ctx.lineTo(handX, handY - 4.5);
+        ctx.stroke();
+        // Bare wrist into a closed fist carried knuckle-down
+        const skin = depth < 0 ? charMix('#c4a882', '#000', 0.18) : '#c4a882';
+        ctx.strokeStyle = skin; ctx.lineWidth = depth < 0 ? 7.6 : 8.4;
+        ctx.beginPath();
+        ctx.moveTo(handX, handY - 4); ctx.lineTo(handX + dir * 1.5, handY + 2);
+        ctx.stroke();
+        ctx.fillStyle = skin;
+        ctx.beginPath();
+        ctx.ellipse(handX + dir * 2, handY + 3.5, depth < 0 ? 4.4 : 4.9,
+                    depth < 0 ? 3.8 : 4.3, dir * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(90,58,30,0.28)';           // knuckles
+        for(let kx = -1; kx <= 1; kx++) {
+            ctx.beginPath();
+            ctx.ellipse(handX + dir * 2 + kx * 3, handY + 6, 1.5, 1.1, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    };
+
+    // ── FAR ARM, behind everything
+    if(!isBack) mutantArm(-dir, -1);
+
+    // ── Legs — thick jumpsuit legs into heavy boots (cage palette). Bent, with
+    // his weight forward over them.
     for(const [sgn, ph] of [[-1, 0], [1, Math.PI]]) {
         const sw = Math.sin(t / 110 + ph) * (walking ? 6 : 0);
-        ctx.strokeStyle = '#cc2222';
+        ctx.strokeStyle = sgn * dir < 0 ? charMix('#cc2222', '#000', 0.12) : '#cc2222';
         ctx.lineWidth = 12;
         ctx.beginPath();
         ctx.moveTo(x + sgn * 8, hipY + 6);
-        ctx.quadraticCurveTo(x + sgn * 10 + sw * 0.4, y + 18, x + sgn * 9 + sw, y + 25);
+        ctx.quadraticCurveTo(x + sgn * 10 + dir * 2 + sw * 0.4, y + 18, x + sgn * 9 + sw, y + 25);
         ctx.stroke();
         // Heavy boot
         ctx.fillStyle = '#333';
@@ -11044,26 +11114,55 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
         ctx.fill();
     }
 
-    // ── Torso — red jumpsuit, darker seams, bright collar. Silhouette is kept
-    // exactly as the caged mutant's; only the light modelling is added, so the
-    // two still read as the same creature.
+    // ── Torso — red jumpsuit, darker seams, bright collar. Tipped forward from
+    // the hips, so the chest leads and the back rounds off behind it.
     const mtG = ctx.createLinearGradient(x - 23, 0, x + 23, 0);
     mtG.addColorStop(0,    charMix('#cc2222', '#fff', 0.14));
     mtG.addColorStop(0.40, '#cc2222');
     mtG.addColorStop(1,    charMix('#cc2222', '#000', 0.28));
     ctx.fillStyle = mtG;
+    // The hunch is IN the outline: the trailing side swells up and back into a
+    // rounded spine, the leading side tucks under the chest. Pasting a darker
+    // panel on top of a symmetric torso instead put a hard step down his back
+    // that read as a drawing mistake rather than a shoulder blade.
     ctx.beginPath();
-    ctx.moveTo(x - 17, hipY + 8);
-    ctx.quadraticCurveTo(x - 23, y - 12 + bob, x - 15 + dir * 3, y - 21 + bob);
-    ctx.lineTo(x + 15 + dir * 3, y - 21 + bob);
-    ctx.quadraticCurveTo(x + 23, y - 12 + bob, x + 17, hipY + 8);
+    ctx.moveTo(x - dir * 16, hipY + 8);
+    ctx.quadraticCurveTo(x - dir * 25, y - 12 + bob, x - dir * 19 + lean, y - 24 + bob);
+    ctx.quadraticCurveTo(x + lean, y - 30 + bob, x + dir * 15 + lean, y - 21 + bob);
+    ctx.quadraticCurveTo(x + dir * 20, y - 8 + bob, x + dir * 16, hipY + 8);
     ctx.closePath();
     ctx.fill();
+    // Shading down the rounded back, feathered along that same edge
+    const backG = ctx.createLinearGradient(x - dir * 24, 0, x - dir * 4, 0);
+    backG.addColorStop(0, 'rgba(0,0,0,0.30)');
+    backG.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = backG;
+    ctx.beginPath();
+    ctx.moveTo(x - dir * 16, hipY + 8);
+    ctx.quadraticCurveTo(x - dir * 25, y - 12 + bob, x - dir * 19 + lean, y - 24 + bob);
+    ctx.lineTo(x - dir * 4 + lean, y - 27 + bob);
+    ctx.lineTo(x - dir * 4, hipY + 8);
+    ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#991a1a';                      // fold seams, as in the cage
-    ctx.fillRect(x - 8, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
-    ctx.fillRect(x + 6, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
-    ctx.fillStyle = '#e63333';                      // collar
-    ctx.fillRect(x - 13 + dir * 2, y - 23 + bob, 26, 5);
+    ctx.fillRect(x - 8 + lean * 0.4, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
+    ctx.fillRect(x + 6 + lean * 0.4, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
+
+    // ── Neck — short, thick, and forward. He had none: the skull sat straight
+    // on the collar, which is most of why he read as a stack of boxes.
+    const neckX = x + lean * 1.5;
+    ctx.strokeStyle = charMix('#c4a882', '#000', 0.22);
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(x + lean * 0.7, y - 20 + bob);
+    ctx.lineTo(neckX, y - 28 + bob);
+    ctx.stroke();
+    ctx.fillStyle = '#e63333';                      // collar, riding the hunch
+    ctx.beginPath();
+    ctx.moveTo(x + lean - 14, y - 20 + bob);
+    ctx.quadraticCurveTo(x + lean, y - 25 + bob, x + lean + 14, y - 20 + bob);
+    ctx.quadraticCurveTo(x + lean, y - 18 + bob, x + lean - 14, y - 20 + bob);
+    ctx.closePath(); ctx.fill();
+
     // PipeTech patch — on the CHEST, so from behind it is a back yoke seam
     if(isBack) {
         ctx.strokeStyle = 'rgba(120,20,20,0.55)'; ctx.lineWidth = 1;
@@ -11072,56 +11171,30 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
         ctx.stroke();
     } else {
         ctx.fillStyle = '#ddd';
-        ctx.fillRect(x + dir * 8, y - 15 + bob, 9, 7);
+        ctx.fillRect(x + dir * 7 + lean * 0.5, y - 15 + bob, 9, 7);
         ctx.fillStyle = '#333';
         ctx.font = scaledFont(5, 'bold', 'Arial', true);
         ctx.textAlign = 'center';
-        ctx.fillText('PT', x + dir * 12.5, y - 9.5 + bob);
+        ctx.fillText('PT', x + dir * 11.5 + lean * 0.5, y - 9.5 + bob);
     }
 
-    // ── Arms — oversized, jumpsuit sleeve to bare hands (cage colours). Heavy
-    // at the shoulder and tapering to the wrist, hung from deltoid caps like
-    // the rest of the cast rather than being uniform bars.
-    for(const [sgn, ph] of [[-1, Math.PI], [1, 0]]) {
-        const sw = Math.sin(t / 110 + ph) * (walking ? 7 : 0);
-        const sleeve = sgn < 0 ? charMix('#cc2222', '#000', 0.16) : '#cc2222';
-        ctx.strokeStyle = sleeve;
-        ctx.lineWidth = 10.5;
-        ctx.beginPath();
-        ctx.moveTo(x + sgn * 15, y - 17 + bob);
-        ctx.quadraticCurveTo(x + sgn * 24, y - 6 + bob, x + sgn * 23 + sw * 0.6, y + 4);
-        ctx.stroke();
-        ctx.lineWidth = 9;                           // lower sleeve, slightly narrower
-        ctx.beginPath();
-        ctx.moveTo(x + sgn * 23 + sw * 0.6, y + 4);
-        ctx.quadraticCurveTo(x + sgn * 23 + sw * 0.85, y + 8, x + sgn * 22 + sw, y + 12);
-        ctx.stroke();
-        // Deltoid cap over the shoulder joint
-        charDeltoid(x + sgn * 15.5, y - 17 + bob, 6,
-                    sgn < 0 ? charMix('#cc2222', '#000', 0.08) : charMix('#cc2222', '#fff', 0.12));
-        ctx.strokeStyle = '#c4a882';                // forearm / hand
-        ctx.lineWidth = 8.4;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(x + sgn * 22 + sw, y + 12);
-        ctx.lineTo(x + sgn * 22 + sw, y + 19);
-        ctx.stroke();
-        ctx.lineCap = 'butt';
-        // Knuckle shading so the fist reads as a mass, not a stub
-        ctx.fillStyle = 'rgba(90,58,30,0.22)';
-        ctx.beginPath();
-        ctx.ellipse(x + sgn * 22 + sw, y + 18, 3.6, 2.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-    }
+    // ── NEAR ARM, in front of the torso
+    if(!isBack) mutantArm(dir, 1);
+    else { mutantArm(-1, -1); mutantArm(1, -1); }
 
-    // ── Head — oversized and squared, with the bulging forehead
-    const hy = y - 34 + bob;
+    // ── Head — oversized and squared, with the bulging forehead, carried out
+    // ahead of the shoulders on that neck
+    const hx = x + lean * 2.1;
+    const hy = y - 37 + bob;
     ctx.fillStyle = '#c4a882';
-    pathRoundRect(x + dir * 3 - 14, hy - 11, 28, 24, 4);
+    pathRoundRect(hx - 14, hy - 11, 28, 24, 4);
     ctx.fill();
     ctx.fillStyle = '#b89a72';                      // brow ridge
-    pathRoundRect(x + dir * 3 - 16, hy - 14, 32, 9, 3);
+    pathRoundRect(hx - 16, hy - 14, 32, 9, 3);
     ctx.fill();
+    // jaw shadow under the skull, so it sits ON the neck instead of over it
+    ctx.fillStyle = 'rgba(70,44,22,0.3)';
+    ctx.beginPath(); ctx.ellipse(hx - lean * 0.4, hy + 12, 11, 3.4, 0, 0, Math.PI * 2); ctx.fill();
     // Sunken sockets with orange irises and darting pupils — none of which
     // exist on the back of a head. Charging away from the camera he used to
     // keep his glowing eyes and bared teeth pointed straight at it.
@@ -11129,63 +11202,66 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     if(isBack) {
         ctx.fillStyle = 'rgba(0,0,0,0.20)';             // occipital shading
         ctx.beginPath();
-        ctx.ellipse(x + dir * 3, hy + 8, 12, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(hx, hy + 8, 12, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#b89a72';                      // matted crown hair
-        pathRoundRect(x + dir * 3 - 12, hy - 6, 24, 9, 3);
+        pathRoundRect(hx - 12, hy - 6, 24, 9, 3);
         ctx.fill();
         ctx.strokeStyle = 'rgba(70,44,22,0.45)'; ctx.lineWidth = 1;
         for(const sx of [-6, 0, 6]) {
             ctx.beginPath();
-            ctx.moveTo(x + dir * 3 + sx, hy - 5);
-            ctx.lineTo(x + dir * 3 + sx * 1.15, hy + 3);
+            ctx.moveTo(hx + sx, hy - 5);
+            ctx.lineTo(hx + sx * 1.15, hy + 3);
             ctx.stroke();
         }
         ctx.fillStyle = '#a98d68';                      // ears
-        ctx.beginPath(); ctx.ellipse(x + dir * 3 - 14, hy + 1, 2.2, 4.0, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(x + dir * 3 + 14, hy + 1, 2.2, 4.0, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx - 14, hy + 1, 2.2, 4.0, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx + 14, hy + 1, 2.2, 4.0, 0, 0, Math.PI*2); ctx.fill();
     } else {
+    // Trailing ear, so the skull has a far side to it
+    ctx.fillStyle = '#a98d68';
+    ctx.beginPath(); ctx.ellipse(hx - dir * 14, hy + 1, 2.4, 4.2, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#600';
-    ctx.fillRect(x + dir * 3 - 10, hy - 4, 8, 7);
-    ctx.fillRect(x + dir * 3 + 3, hy - 4, 8, 7);
+    ctx.fillRect(hx - 10, hy - 4, 8, 7);
+    ctx.fillRect(hx + 3, hy - 4, 8, 7);
     ctx.fillStyle = '#ff3300';
-    ctx.fillRect(x + dir * 3 - 8, hy - 2, 5, 4);
-    ctx.fillRect(x + dir * 3 + 5, hy - 2, 5, 4);
+    ctx.fillRect(hx - 8, hy - 2, 5, 4);
+    ctx.fillRect(hx + 5, hy - 2, 5, 4);
     ctx.fillStyle = '#000';
-    ctx.fillRect(x + dir * 3 - 7 + pupilOffset, hy - 1, 2, 2);
-    ctx.fillRect(x + dir * 3 + 6 + pupilOffset, hy - 1, 2, 2);
-    // Thick angry eyebrows
+    ctx.fillRect(hx - 7 + pupilOffset, hy - 1, 2, 2);
+    ctx.fillRect(hx + 6 + pupilOffset, hy - 1, 2, 2);
+    // Thick angry eyebrows, the leading one dropped lower
     ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(x + dir * 3 - 11, hy - 8, 9, 3);
-    ctx.fillRect(x + dir * 3 + 2, hy - 8, 9, 3);
+    ctx.fillRect(hx - 11, hy - 8 + (dir < 0 ? 1.5 : 0), 9, 3);
+    ctx.fillRect(hx + 2, hy - 8 + (dir > 0 ? 1.5 : 0), 9, 3);
     // Mouth — gritted teeth, or a gaping maw mid-meal
     if(eating) {
         const gape = 4 + Math.abs(Math.sin(t / 90)) * 6;
         ctx.fillStyle = '#3a0808';
         ctx.beginPath();
-        ctx.ellipse(x + dir * 3, hy + 7, 8, gape, 0, 0, Math.PI * 2);
+        ctx.ellipse(hx, hy + 7, 8, gape, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#ddd';
         for(let tt = -2; tt <= 2; tt++) {
-            ctx.fillRect(x + dir * 3 + tt * 3, hy + 7 - gape + 1, 2, 3.5);
-            ctx.fillRect(x + dir * 3 + tt * 3, hy + 7 + gape - 4.5, 2, 3.5);
+            ctx.fillRect(hx + tt * 3, hy + 7 - gape + 1, 2, 3.5);
+            ctx.fillRect(hx + tt * 3, hy + 7 + gape - 4.5, 2, 3.5);
         }
     } else {
         ctx.fillStyle = '#ddd';
-        ctx.fillRect(x + dir * 3 - 6, hy + 5, 12, 4);
+        ctx.fillRect(hx - 6, hy + 5, 12, 4);
         ctx.fillStyle = '#333';
         for(let tooth = 0; tooth < 4; tooth++) {
-            ctx.fillRect(x + dir * 3 - 5 + tooth * 3, hy + 5, 1, 4);
+            ctx.fillRect(hx - 5 + tooth * 3, hy + 5, 1, 4);
         }
     }
     }
-    // Pulsing temple vein
+    // Pulsing temple vein, on the leading side of the skull
     ctx.strokeStyle = `rgba(180,0,0,${0.4 + Math.sin(t / 400) * 0.2})`;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(x + dir * 3 - 14, hy - 8);
-    ctx.lineTo(x + dir * 3 - 18, hy - 4);
-    ctx.lineTo(x + dir * 3 - 16, hy + 2);
+    ctx.moveTo(hx + dir * 12, hy - 8);
+    ctx.lineTo(hx + dir * 16, hy - 4);
+    ctx.lineTo(hx + dir * 14, hy + 2);
     ctx.stroke();
 }
 
@@ -19799,11 +19875,19 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = cgG;
     ctx.beginPath();
     ctx.moveTo(mx - 20, my + 20 + breathe);
-    ctx.quadraticCurveTo(mx - 24, my - 14 + breathe, mx - 19, my - 30 + breathe);
-    ctx.lineTo(mx + 19, my - 30 + breathe);
-    ctx.quadraticCurveTo(mx + 24, my - 14 + breathe, mx + 20, my + 20 + breathe);
+    ctx.quadraticCurveTo(mx - 25, my - 14 + breathe, mx - 20, my - 31 + breathe);
+    // Shoulders rounded up around the neck, matching the hunch the playable
+    // sprite carries — squared off, the caged one read as a box with a box on
+    // top of it and the two stopped looking like the same creature.
+    ctx.quadraticCurveTo(mx - 17, my - 37 + breathe, mx - 9, my - 36 + breathe);
+    ctx.lineTo(mx + 9, my - 36 + breathe);
+    ctx.quadraticCurveTo(mx + 17, my - 37 + breathe, mx + 20, my - 31 + breathe);
+    ctx.quadraticCurveTo(mx + 25, my - 14 + breathe, mx + 20, my + 20 + breathe);
     ctx.closePath();
     ctx.fill();
+    // Deltoid caps proud of the outline, so the arms have a joint to hang from
+    charDeltoid(mx - 19, my - 30 + breathe, 7.4, charMix('#cc2222', '#000', 0.2));
+    charDeltoid(mx + 19, my - 30 + breathe, 7.4, charMix('#cc2222', '#fff', 0.12));
     ctx.fillStyle = 'rgba(255,255,255,0.07)';        // chest highlight, key light
     ctx.beginPath();
     ctx.ellipse(mx - 7, my - 12 + breathe, 8, 12, 0, 0, Math.PI * 2);
@@ -19812,9 +19896,23 @@ function drawLevel6Underbelly() {
     ctx.fillStyle = '#991a1a';
     ctx.fillRect(mx - 10, my - 28 + breathe, 3, 46);
     ctx.fillRect(mx + 8, my - 28 + breathe, 3, 46);
-    // Jumpsuit collar
+    // Neck — short and thick, sunk between the shoulders. He had none: the
+    // skull sat flat on the collar.
+    ctx.strokeStyle = charMix('#c4a882', '#000', 0.24);
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(mx, my - 32 + breathe);
+    ctx.lineTo(mx, my - 40 + breathe);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    // Jumpsuit collar, slung across the shoulders under it
     ctx.fillStyle = '#e63333';
-    ctx.fillRect(mx - 14, my - 32 + breathe, 28, 5);
+    ctx.beginPath();
+    ctx.moveTo(mx - 15, my - 33 + breathe);
+    ctx.quadraticCurveTo(mx, my - 38 + breathe, mx + 15, my - 33 + breathe);
+    ctx.quadraticCurveTo(mx, my - 30 + breathe, mx - 15, my - 33 + breathe);
+    ctx.closePath(); ctx.fill();
     // PipeTech patch on chest
     ctx.fillStyle = '#ddd';
     ctx.fillRect(mx + 10, my - 20 + breathe, 8, 6);
@@ -19825,26 +19923,26 @@ function drawLevel6Underbelly() {
 
     // Head — oversized, angry
     ctx.fillStyle = '#c4a882';
-    ctx.fillRect(mx - 14, my - 55 + breathe, 28, 26);
+    ctx.fillRect(mx - 14, my - 53 + breathe, 28, 26);
     // Bulging forehead
     ctx.fillStyle = '#b89a72';
-    ctx.fillRect(mx - 16, my - 58 + breathe, 32, 10);
+    ctx.fillRect(mx - 16, my - 56 + breathe, 32, 10);
     // Angry eyes — red-rimmed
     ctx.fillStyle = '#600';
-    ctx.fillRect(mx - 10, my - 48 + breathe, 7, 6);
-    ctx.fillRect(mx + 3, my - 48 + breathe, 7, 6);
+    ctx.fillRect(mx - 10, my - 46 + breathe, 7, 6);
+    ctx.fillRect(mx + 3, my - 46 + breathe, 7, 6);
     ctx.fillStyle = '#ff3300';
-    ctx.fillRect(mx - 8, my - 46 + breathe, 4, 3);
-    ctx.fillRect(mx + 5, my - 46 + breathe, 4, 3);
+    ctx.fillRect(mx - 8, my - 44 + breathe, 4, 3);
+    ctx.fillRect(mx + 5, my - 44 + breathe, 4, 3);
     // Pupils — darting
     const pupilOffset = Math.sin(t / 1200) * 2;
     ctx.fillStyle = '#000';
-    ctx.fillRect(mx - 7 + pupilOffset, my - 45 + breathe, 2, 2);
-    ctx.fillRect(mx + 6 + pupilOffset, my - 45 + breathe, 2, 2);
+    ctx.fillRect(mx - 7 + pupilOffset, my - 43 + breathe, 2, 2);
+    ctx.fillRect(mx + 6 + pupilOffset, my - 43 + breathe, 2, 2);
     // Angry thick eyebrows
     ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(mx - 11, my - 52 + breathe, 9, 3);
-    ctx.fillRect(mx + 2, my - 52 + breathe, 9, 3);
+    ctx.fillRect(mx - 11, my - 50 + breathe, 9, 3);
+    ctx.fillRect(mx + 2, my - 50 + breathe, 9, 3);
     // Gritted teeth / snarl
     ctx.fillStyle = '#ddd';
     ctx.fillRect(mx - 6, my - 36 + breathe, 12, 4);
