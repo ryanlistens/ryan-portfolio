@@ -10997,6 +10997,314 @@ function _drawRecliningBoss(fx, fy) {
 }
 
 // === PLAYABLE MUTANT ========================================================
+// The mutant's head, in ONE place, drawn for the caged creature and for the
+// playable one, so the two can never drift apart.
+//
+// It used to be two copies of the same stack of rectangles — a box for the
+// skull, a box for the brow, four boxes per eye, a box of teeth — while the
+// rest of the cast had been rebuilt out of curved volume, so he was the last
+// pixel blockhead on screen. Same face: heavy overhanging brow, sunken sockets
+// lit orange from the inside, darting pupils, filed teeth, a pulsing temple
+// vein. It is modelled now instead of stacked — a brow ridge that casts a
+// shadow into the sockets, a jaw that has mass, eyes through the house eye
+// routine every other character uses, and teeth with points on them.
+function drawMutantHead(cx, cy, opts) {
+    const o = opts || {};
+    const t = o.t || Date.now();
+    const dir = (o.dir === undefined) ? 1 : o.dir;
+    const back = !!o.back;
+    const eating = !!o.eating;
+    const W = 14, H = 13;                      // skull half-extents
+    const skin = '#c4a882';
+    const skinDark = charMix(skin, '#000', 0.30);
+    const skinLit  = charMix(skin, '#fff', 0.14);
+
+    // ── Cranium. Flat and wide across the top, widest at the brow corners,
+    // pinched under the cheekbone into a heavy squared jaw. An egg here is the
+    // whole difference between a brute and a bald man.
+    const skG = ctx.createLinearGradient(cx - W, cy - H, cx + W, cy + H);
+    skG.addColorStop(0,    skinLit);
+    skG.addColorStop(0.45, skin);
+    skG.addColorStop(1,    skinDark);
+    ctx.fillStyle = skG;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - H * 0.98);
+    ctx.bezierCurveTo(cx + W * 0.62, cy - H * 1.00, cx + W * 1.04, cy - H * 0.74, cx + W * 1.00, cy - H * 0.24);
+    ctx.bezierCurveTo(cx + W * 0.98, cy + H * 0.10, cx + W * 0.88, cy + H * 0.46, cx + W * 0.68, cy + H * 0.74);
+    ctx.bezierCurveTo(cx + W * 0.54, cy + H * 0.96, cx + W * 0.30, cy + H * 1.04, cx, cy + H * 1.04);
+    ctx.bezierCurveTo(cx - W * 0.30, cy + H * 1.04, cx - W * 0.54, cy + H * 0.96, cx - W * 0.68, cy + H * 0.74);
+    ctx.bezierCurveTo(cx - W * 0.88, cy + H * 0.46, cx - W * 0.98, cy + H * 0.10, cx - W * 1.00, cy - H * 0.24);
+    ctx.bezierCurveTo(cx - W * 1.04, cy - H * 0.74, cx - W * 0.62, cy - H * 1.00, cx, cy - H * 0.98);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ears — set low and back, both of them from behind
+    for(const sx of (back ? [-1, 1] : [-dir])) {
+        ctx.fillStyle = charMix(skin, '#000', 0.24);
+        ctx.beginPath();
+        ctx.ellipse(cx + sx * W * 0.98, cy + H * 0.18, 2.2, 3.6, sx * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(58,32,14,0.45)';
+        ctx.beginPath();
+        ctx.ellipse(cx + sx * W * 1.00, cy + H * 0.20, 0.9, 1.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Jaw mass and the hollow under the cheekbone
+    ctx.fillStyle = 'rgba(112,68,32,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + H * 0.66, W * 0.72, H * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(96,58,26,0.16)';
+    for(const sx of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(cx + sx * W * 0.74, cy + H * 0.34, W * 0.22, H * 0.24, sx * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    if(back) {
+        // ── Back of the head: heavy occiput, matted crown, nothing looking out
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + H * 0.34, W * 0.88, H * 0.56, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Matted hair as a PATCH with a ragged hairline, not a comb of strokes
+        // across the whole skull — evenly spaced lines read as a striped helmet.
+        ctx.fillStyle = charMix(skin, '#000', 0.36);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - H * 0.96);
+        ctx.bezierCurveTo(cx + W * 0.60, cy - H * 0.98, cx + W * 1.00, cy - H * 0.72, cx + W * 0.96, cy - H * 0.26);
+        ctx.quadraticCurveTo(cx + W * 0.74, cy - H * 0.02, cx + W * 0.46, cy - H * 0.22);
+        ctx.quadraticCurveTo(cx + W * 0.20, cy + H * 0.02, cx - W * 0.04, cy - H * 0.20);
+        ctx.quadraticCurveTo(cx - W * 0.30, cy + H * 0.04, cx - W * 0.56, cy - H * 0.18);
+        ctx.quadraticCurveTo(cx - W * 0.78, cy + H * 0.02, cx - W * 0.96, cy - H * 0.26);
+        ctx.bezierCurveTo(cx - W * 1.00, cy - H * 0.72, cx - W * 0.60, cy - H * 0.98, cx, cy - H * 0.96);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(24,14,6,0.35)';        // a few matted clumps in it
+        ctx.lineCap = 'round';
+        for(let i = 0; i < 5; i++) {
+            const f = -0.70 + i * 0.35;
+            ctx.lineWidth = 1.0 + (i % 2) * 0.5;
+            ctx.beginPath();
+            ctx.moveTo(cx + f * W * 0.50, cy - H * 0.82);
+            ctx.quadraticCurveTo(cx + f * W * 0.96, cy - H * 0.52,
+                                 cx + f * W * 1.02, cy - H * 0.28 + (i % 2) * H * 0.10);
+            ctx.stroke();
+        }
+        ctx.lineCap = 'butt';
+    } else {
+        // ── Brow ridge: a real shelf with two lobes hanging over the eyes, a
+        // lit top plane and a hard edge under it. Without the edge the whole
+        // head reads as smooth and the face loses its overhang.
+        const rgG = ctx.createLinearGradient(0, cy - H * 0.90, 0, cy - H * 0.10);
+        rgG.addColorStop(0, 'rgba(255,255,255,0)');
+        rgG.addColorStop(1, 'rgba(255,248,232,0.30)');
+        ctx.fillStyle = rgG;
+        ctx.beginPath();
+        ctx.moveTo(cx - W * 0.99, cy - H * 0.30);
+        ctx.quadraticCurveTo(cx - W * 0.58, cy - H * 0.01, cx - W * 0.08, cy - H * 0.16);
+        ctx.quadraticCurveTo(cx, cy - H * 0.22, cx + W * 0.08, cy - H * 0.16);
+        ctx.quadraticCurveTo(cx + W * 0.58, cy - H * 0.01, cx + W * 0.99, cy - H * 0.30);
+        ctx.quadraticCurveTo(cx + W * 0.66, cy - H * 0.88, cx, cy - H * 0.90);
+        ctx.quadraticCurveTo(cx - W * 0.66, cy - H * 0.88, cx - W * 0.99, cy - H * 0.30);
+        ctx.closePath();
+        ctx.fill();
+        // The underside of the shelf, and the shadow it throws into the sockets
+        ctx.strokeStyle = 'rgba(74,44,18,0.55)';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(cx - W * 0.99, cy - H * 0.30);
+        ctx.quadraticCurveTo(cx - W * 0.58, cy - H * 0.01, cx - W * 0.08, cy - H * 0.16);
+        ctx.quadraticCurveTo(cx, cy - H * 0.22, cx + W * 0.08, cy - H * 0.16);
+        ctx.quadraticCurveTo(cx + W * 0.58, cy - H * 0.01, cx + W * 0.99, cy - H * 0.30);
+        ctx.stroke();
+        const bs = ctx.createLinearGradient(0, cy - H * 0.20, 0, cy + H * 0.34);
+        bs.addColorStop(0, 'rgba(40,20,6,0.46)');
+        bs.addColorStop(1, 'rgba(40,20,6,0)');
+        ctx.fillStyle = bs;
+        ctx.beginPath();
+        ctx.moveTo(cx - W * 0.96, cy - H * 0.28);
+        ctx.quadraticCurveTo(cx, cy - H * 0.04, cx + W * 0.96, cy - H * 0.28);
+        ctx.lineTo(cx + W * 0.88, cy + H * 0.34);
+        ctx.quadraticCurveTo(cx, cy + H * 0.42, cx - W * 0.88, cy + H * 0.34);
+        ctx.closePath();
+        ctx.fill();
+
+        // ── Eyes: narrow, deep, and lit from inside the skull
+        const eyeY = cy + H * 0.12;
+        const EW = 5.2, EH = 3.4, GAP = 7.6;
+        const ex0 = GAP / 2 + EW / 2;                 // matches drawCharEyes
+        const look = Math.sin(t / 1200) * 0.75;
+        const blink = ((t % 5400) < 130) ? 0.10 : 1;
+        for(const sx of [-1, 1]) {                    // socket cavity
+            ctx.fillStyle = 'rgba(34,14,6,0.72)';
+            ctx.beginPath();
+            ctx.ellipse(cx + sx * ex0, eyeY + 0.3, EW * 0.76, EH * 0.88, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        if(blink > 0.5) {
+            for(const sx of [-1, 1]) {                // ember bleeding out of it
+                const ex = cx + sx * ex0;
+                const gl = ctx.createRadialGradient(ex, eyeY, 0.3, ex, eyeY, 5.4);
+                gl.addColorStop(0, `rgba(255,92,0,${0.34 + Math.sin(t / 300) * 0.08})`);
+                gl.addColorStop(1, 'rgba(255,60,0,0)');
+                ctx.fillStyle = gl;
+                ctx.beginPath(); ctx.arc(ex, eyeY, 5.4, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+        drawCharEyes(cx, eyeY, EW, EH, GAP, { iris: '#ff4a0c', look, open: blink });
+        if(blink > 0.5) {                             // darting pupils
+            ctx.fillStyle = '#170500';
+            for(const sx of [-1, 1]) {
+                ctx.beginPath();
+                ctx.ellipse(cx + sx * ex0 + look * 1.5, eyeY + 0.1, 1.25, 1.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        // Lids — the shelf cuts the top off each eye, so they sit UNDER it
+        ctx.fillStyle = 'rgba(52,28,10,0.55)';
+        for(const sx of [-1, 1]) {
+            const ex = cx + sx * ex0;
+            ctx.beginPath();
+            ctx.moveTo(ex - EW * 0.92, eyeY - EH * 0.30);
+            ctx.quadraticCurveTo(ex, eyeY - EH * 1.10, ex + EW * 0.92, eyeY - EH * 0.30);
+            ctx.lineTo(ex + EW * 0.92, eyeY - EH * 1.30);
+            ctx.lineTo(ex - EW * 0.92, eyeY - EH * 1.30);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // ── Brows: thick wedges of hair lying ON the ridge, driven down toward
+        // the bridge. Thin strokes floating above the eyes read as pencil marks.
+        for(const sx of [-1, 1]) {
+            const ox = cx + sx * W * 0.80, oy = cy - H * 0.42;   // outer, high
+            const ix = cx + sx * W * 0.10, iy = cy - H * 0.20;   // inner, low
+            ctx.fillStyle = '#33240f';
+            ctx.beginPath();
+            ctx.moveTo(ox, oy - 0.8);
+            ctx.quadraticCurveTo(cx + sx * W * 0.50, oy - 1.4, ix, iy - 2.7);
+            ctx.lineTo(ix, iy + 0.7);
+            ctx.quadraticCurveTo(cx + sx * W * 0.50, oy + 1.5, ox, oy + 1.2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(20,12,4,0.5)';               // stray hairs
+            ctx.lineWidth = 0.7;
+            for(let i = 1; i <= 3; i++) {
+                const f = i / 4;
+                const bx = ox + (ix - ox) * f, by = oy + (iy - oy) * f;
+                ctx.beginPath();
+                ctx.moveTo(bx, by - 1.6); ctx.lineTo(bx - sx * 1.4, by - 3.4);
+                ctx.stroke();
+            }
+        }
+
+        // ── Mouth
+        const my = cy + H * 0.56;
+        if(eating) {
+            // A maw, working. Teeth around the rim, throat behind them.
+            const gape = 4 + Math.abs(Math.sin(t / 90)) * 6;
+            const thG = ctx.createRadialGradient(cx, my, 1, cx, my, gape + 4);
+            thG.addColorStop(0, '#170303');
+            thG.addColorStop(1, '#48100f');
+            ctx.fillStyle = thG;
+            ctx.beginPath();
+            ctx.ellipse(cx, my, 8.0, gape, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.save();
+            ctx.beginPath();
+            ctx.ellipse(cx, my, 8.0, gape, 0, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.fillStyle = '#c9bfa8';
+            for(let i = -2; i <= 2; i++) {
+                const tx = cx + i * 3.1;
+                const fang = (Math.abs(i) === 2) ? 1.8 : 0;
+                ctx.beginPath();
+                ctx.moveTo(tx - 1.3, my - gape - 1);
+                ctx.lineTo(tx + 1.3, my - gape - 1);
+                ctx.lineTo(tx, my - gape + 3.0 + fang);
+                ctx.closePath(); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(tx - 1.2, my + gape + 1);
+                ctx.lineTo(tx + 1.2, my + gape + 1);
+                ctx.lineTo(tx, my + gape - 2.6 - fang * 0.7);
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle = 'rgba(146,44,50,0.8)';               // tongue
+            ctx.beginPath();
+            ctx.ellipse(cx, my + gape * 0.44, 4.2, gape * 0.32, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        } else {
+            // A gritted snarl — narrow, uneven, with the lip broken upward on
+            // the leading side. Not a full row of white dentures.
+            const lift = 1.5;
+            const lipL = my - 0.9 + (dir < 0 ? -lift : 0);
+            const lipR = my - 0.9 + (dir > 0 ? -lift : 0);
+            ctx.fillStyle = '#25090a';
+            ctx.beginPath();
+            ctx.moveTo(cx - 7.0, lipL);
+            ctx.quadraticCurveTo(cx, my - 2.7, cx + 7.0, lipR);
+            ctx.quadraticCurveTo(cx + 4.6, my + 2.7, cx, my + 2.9);
+            ctx.quadraticCurveTo(cx - 4.6, my + 2.7, cx - 7.0, lipL);
+            ctx.closePath();
+            ctx.save();
+            ctx.clip();
+            for(let i = -3; i <= 3; i++) {                       // filed, uneven
+                const tx = cx + i * 2.15;
+                const fang = (Math.abs(i) === 2) ? 1.1 : 0;
+                const drop = ((i + 3) % 3) * 0.28;
+                ctx.fillStyle = (i % 2) ? '#c2b79f' : '#cfc5ad';
+                ctx.beginPath();
+                ctx.moveTo(tx - 0.92, my - 3.4);
+                ctx.lineTo(tx + 0.92, my - 3.4);
+                ctx.lineTo(tx + 0.58, my - 0.1 + fang + drop);
+                ctx.lineTo(tx - 0.58, my - 0.1 + fang + drop);
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';                   // behind the lower lip
+            ctx.fillRect(cx - 9, my + 0.9, 18, 4);
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(255,240,220,0.14)';          // lip highlight
+            ctx.lineWidth = 0.9;
+            ctx.beginPath();
+            ctx.moveTo(cx - 6.6, lipL - 0.3);
+            ctx.quadraticCurveTo(cx, my - 3.0, cx + 6.6, lipR - 0.3);
+            ctx.stroke();
+        }
+        // Broad flat nose, in the shadow of the ridge
+        ctx.fillStyle = 'rgba(96,56,24,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(cx + dir * 0.6, cy + H * 0.32, 2.6, 1.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(40,20,8,0.5)';
+        for(const sx of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(cx + dir * 0.6 + sx * 1.4, cy + H * 0.36, 0.75, 0.6, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // ── Pulsing temple vein — short, dark, and ON the temple. Run long and
+    // pale it just smears pink across the forehead.
+    if(!back) {
+        const pulse = 0.34 + Math.sin(t / 400) * 0.16;
+        ctx.strokeStyle = `rgba(124,18,22,${pulse})`;
+        ctx.lineWidth = 0.9;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(cx + dir * W * 0.66, cy - H * 0.62);
+        ctx.quadraticCurveTo(cx + dir * W * 0.90, cy - H * 0.50, cx + dir * W * 0.84, cy - H * 0.30);
+        ctx.stroke();
+        ctx.lineWidth = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(cx + dir * W * 0.86, cy - H * 0.44);
+        ctx.lineTo(cx + dir * W * 0.96, cy - H * 0.34);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+    }
+}
+
 // The player sprite while MUTANT ESCAPE mode is running: a hulking, hunched
 // PM in a torn red jumpsuit. Knuckle-walking gait, heaving breath, and a
 // wide-open maw while mid-bite.
@@ -11049,9 +11357,13 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
         const sw = Math.sin(t / 110 + (sgn < 0 ? Math.PI : 0)) * (walking ? 7 : 0);
         const sx = sgn < 0 ? shL : shR;
         // knuckles ahead of him, and further ahead on the near side
-        const handX = sx + dir * (9 + depth * 3) + sgn * 5 + sw;
+        // The far arm has to clear the torso silhouette or it is simply not
+        // there: hung at the same distance as the near one it sat inside the
+        // jumpsuit and he read as having one arm.
+        const out = depth < 0 ? 6 : 0;
+        const handX = sx + dir * (9 + depth * 3) + sgn * (5 + out) + sw;
         const handY = y + 15 + Math.abs(sw) * 0.25;
-        const elbowX = sx + sgn * 8 + dir * 3;
+        const elbowX = sx + sgn * (8 + out) + dir * 3;
         const elbowY = y - 3 + bob;
         ctx.strokeStyle = depth < 0 ? sleeveDark : sleeveLit;
         ctx.lineWidth = depth < 0 ? 10 : 11;
@@ -11064,9 +11376,21 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
         ctx.moveTo(elbowX, elbowY);
         ctx.quadraticCurveTo(elbowX + (handX - elbowX) * 0.5, elbowY + 7, handX, handY - 4);
         ctx.stroke();
-        // Deltoid cap sitting PROUD of the torso, so the joint is visible
-        charDeltoid(sx, shY, 7.2, depth < 0 ? charMix('#cc2222', '#000', 0.24)
-                                            : charMix('#cc2222', '#fff', 0.14));
+        // Shoulder cap — the TOP of the joint, domed over the sleeve. A full
+        // disc a shade lighter than everything else read as a balloon tied on.
+        ctx.fillStyle = depth < 0 ? charMix('#cc2222', '#000', 0.26)
+                                  : charMix('#cc2222', '#000', 0.04);
+        ctx.beginPath();
+        ctx.ellipse(sx, shY + 1.4, 6.4, 5.6, 0, Math.PI * 1.06, Math.PI * 1.94);
+        ctx.closePath();
+        ctx.fill();
+        if(depth > 0) {                                 // key light along its top
+            ctx.strokeStyle = 'rgba(255,235,225,0.22)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.ellipse(sx, shY + 1.4, 5.4, 4.8, 0, Math.PI * 1.16, Math.PI * 1.72);
+            ctx.stroke();
+        }
         // Cuff — the sleeve ends somewhere instead of becoming a wrist by magic
         ctx.strokeStyle = depth < 0 ? charMix('#991a1a', '#000', 0.2) : '#991a1a';
         ctx.lineWidth = depth < 0 ? 9.4 : 10.2;
@@ -11121,31 +11445,48 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     mtG.addColorStop(0.40, '#cc2222');
     mtG.addColorStop(1,    charMix('#cc2222', '#000', 0.28));
     ctx.fillStyle = mtG;
+    // One path, filled and then contoured. Without an edge the jumpsuit, the
+    // sleeves and the legs are all the same red and merge into one boulder.
+    const mtPath = () => {
+        ctx.beginPath();
+        ctx.moveTo(x - dir * 15, hipY + 4);
+        ctx.quadraticCurveTo(x - dir * 21, y - 12 + bob, x - dir * 17 + lean, y - 24 + bob);
+        ctx.quadraticCurveTo(x + lean, y - 30 + bob, x + dir * 14 + lean, y - 21 + bob);
+        ctx.quadraticCurveTo(x + dir * 17, y - 8 + bob, x + dir * 15, hipY + 4);
+        ctx.closePath();
+    };
     // The hunch is IN the outline: the trailing side swells up and back into a
     // rounded spine, the leading side tucks under the chest. Pasting a darker
     // panel on top of a symmetric torso instead put a hard step down his back
     // that read as a drawing mistake rather than a shoulder blade.
-    ctx.beginPath();
-    ctx.moveTo(x - dir * 16, hipY + 8);
-    ctx.quadraticCurveTo(x - dir * 25, y - 12 + bob, x - dir * 19 + lean, y - 24 + bob);
-    ctx.quadraticCurveTo(x + lean, y - 30 + bob, x + dir * 15 + lean, y - 21 + bob);
-    ctx.quadraticCurveTo(x + dir * 20, y - 8 + bob, x + dir * 16, hipY + 8);
-    ctx.closePath();
+    mtPath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(56,8,8,0.45)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
     // Shading down the rounded back, feathered along that same edge
     const backG = ctx.createLinearGradient(x - dir * 24, 0, x - dir * 4, 0);
     backG.addColorStop(0, 'rgba(0,0,0,0.30)');
     backG.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = backG;
     ctx.beginPath();
-    ctx.moveTo(x - dir * 16, hipY + 8);
-    ctx.quadraticCurveTo(x - dir * 25, y - 12 + bob, x - dir * 19 + lean, y - 24 + bob);
+    ctx.moveTo(x - dir * 15, hipY + 4);
+    ctx.quadraticCurveTo(x - dir * 21, y - 12 + bob, x - dir * 17 + lean, y - 24 + bob);
     ctx.lineTo(x - dir * 4 + lean, y - 27 + bob);
-    ctx.lineTo(x - dir * 4, hipY + 8);
+    ctx.lineTo(x - dir * 4, hipY + 4);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#991a1a';                      // fold seams, as in the cage
-    ctx.fillRect(x - 8 + lean * 0.4, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
-    ctx.fillRect(x + 6 + lean * 0.4, y - 18 + bob, 3, hipY + 6 - (y - 18 + bob));
+    ctx.fillRect(x - 8 + lean * 0.4, y - 18 + bob, 3, hipY + 2 - (y - 18 + bob));
+    ctx.fillRect(x + 6 + lean * 0.4, y - 18 + bob, 3, hipY + 2 - (y - 18 + bob));
+    // Belt at the hem, so the jumpsuit ends and the legs begin
+    ctx.fillStyle = charMix('#cc2222', '#000', 0.46);
+    ctx.beginPath();
+    ctx.moveTo(x - dir * 15, hipY - 0.5);
+    ctx.quadraticCurveTo(x, hipY + 3, x + dir * 15, hipY - 0.5);
+    ctx.lineTo(x + dir * 15, hipY + 3.5);
+    ctx.quadraticCurveTo(x, hipY + 7, x - dir * 15, hipY + 3.5);
+    ctx.closePath();
+    ctx.fill();
 
     // ── Neck — short, thick, and forward. He had none: the skull sat straight
     // on the collar, which is most of why he read as a stack of boxes.
@@ -11156,7 +11497,7 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     ctx.moveTo(x + lean * 0.7, y - 20 + bob);
     ctx.lineTo(neckX, y - 28 + bob);
     ctx.stroke();
-    ctx.fillStyle = '#e63333';                      // collar, riding the hunch
+    ctx.fillStyle = charMix('#cc2222', '#000', 0.10);   // collar, riding the hunch
     ctx.beginPath();
     ctx.moveTo(x + lean - 14, y - 20 + bob);
     ctx.quadraticCurveTo(x + lean, y - 25 + bob, x + lean + 14, y - 20 + bob);
@@ -11170,99 +11511,24 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
         ctx.moveTo(x - 13, y - 16 + bob); ctx.lineTo(x + 13, y - 16 + bob);
         ctx.stroke();
     } else {
+        // Kept inboard of the torso edge — hung further out it overflowed the
+        // chest and printed itself across the arm passing in front of it.
+        const patchX = x + dir * 2 + lean * 0.5;
         ctx.fillStyle = '#ddd';
-        ctx.fillRect(x + dir * 7 + lean * 0.5, y - 15 + bob, 9, 7);
+        pathRoundRect(patchX, y - 15 + bob, 8.5, 6.5, 1);
+        ctx.fill();
         ctx.fillStyle = '#333';
         ctx.font = scaledFont(5, 'bold', 'Arial', true);
         ctx.textAlign = 'center';
-        ctx.fillText('PT', x + dir * 11.5 + lean * 0.5, y - 9.5 + bob);
+        ctx.fillText('PT', patchX + 4.25, y - 10 + bob);
     }
 
     // ── NEAR ARM, in front of the torso
     if(!isBack) mutantArm(dir, 1);
     else { mutantArm(-1, -1); mutantArm(1, -1); }
 
-    // ── Head — oversized and squared, with the bulging forehead, carried out
-    // ahead of the shoulders on that neck
-    const hx = x + lean * 2.1;
-    const hy = y - 37 + bob;
-    ctx.fillStyle = '#c4a882';
-    pathRoundRect(hx - 14, hy - 11, 28, 24, 4);
-    ctx.fill();
-    ctx.fillStyle = '#b89a72';                      // brow ridge
-    pathRoundRect(hx - 16, hy - 14, 32, 9, 3);
-    ctx.fill();
-    // jaw shadow under the skull, so it sits ON the neck instead of over it
-    ctx.fillStyle = 'rgba(70,44,22,0.3)';
-    ctx.beginPath(); ctx.ellipse(hx - lean * 0.4, hy + 12, 11, 3.4, 0, 0, Math.PI * 2); ctx.fill();
-    // Sunken sockets with orange irises and darting pupils — none of which
-    // exist on the back of a head. Charging away from the camera he used to
-    // keep his glowing eyes and bared teeth pointed straight at it.
-    const pupilOffset = Math.sin(t / 1200) * 2;
-    if(isBack) {
-        ctx.fillStyle = 'rgba(0,0,0,0.20)';             // occipital shading
-        ctx.beginPath();
-        ctx.ellipse(hx, hy + 8, 12, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#b89a72';                      // matted crown hair
-        pathRoundRect(hx - 12, hy - 6, 24, 9, 3);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(70,44,22,0.45)'; ctx.lineWidth = 1;
-        for(const sx of [-6, 0, 6]) {
-            ctx.beginPath();
-            ctx.moveTo(hx + sx, hy - 5);
-            ctx.lineTo(hx + sx * 1.15, hy + 3);
-            ctx.stroke();
-        }
-        ctx.fillStyle = '#a98d68';                      // ears
-        ctx.beginPath(); ctx.ellipse(hx - 14, hy + 1, 2.2, 4.0, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(hx + 14, hy + 1, 2.2, 4.0, 0, 0, Math.PI*2); ctx.fill();
-    } else {
-    // Trailing ear, so the skull has a far side to it
-    ctx.fillStyle = '#a98d68';
-    ctx.beginPath(); ctx.ellipse(hx - dir * 14, hy + 1, 2.4, 4.2, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#600';
-    ctx.fillRect(hx - 10, hy - 4, 8, 7);
-    ctx.fillRect(hx + 3, hy - 4, 8, 7);
-    ctx.fillStyle = '#ff3300';
-    ctx.fillRect(hx - 8, hy - 2, 5, 4);
-    ctx.fillRect(hx + 5, hy - 2, 5, 4);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(hx - 7 + pupilOffset, hy - 1, 2, 2);
-    ctx.fillRect(hx + 6 + pupilOffset, hy - 1, 2, 2);
-    // Thick angry eyebrows, the leading one dropped lower
-    ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(hx - 11, hy - 8 + (dir < 0 ? 1.5 : 0), 9, 3);
-    ctx.fillRect(hx + 2, hy - 8 + (dir > 0 ? 1.5 : 0), 9, 3);
-    // Mouth — gritted teeth, or a gaping maw mid-meal
-    if(eating) {
-        const gape = 4 + Math.abs(Math.sin(t / 90)) * 6;
-        ctx.fillStyle = '#3a0808';
-        ctx.beginPath();
-        ctx.ellipse(hx, hy + 7, 8, gape, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ddd';
-        for(let tt = -2; tt <= 2; tt++) {
-            ctx.fillRect(hx + tt * 3, hy + 7 - gape + 1, 2, 3.5);
-            ctx.fillRect(hx + tt * 3, hy + 7 + gape - 4.5, 2, 3.5);
-        }
-    } else {
-        ctx.fillStyle = '#ddd';
-        ctx.fillRect(hx - 6, hy + 5, 12, 4);
-        ctx.fillStyle = '#333';
-        for(let tooth = 0; tooth < 4; tooth++) {
-            ctx.fillRect(hx - 5 + tooth * 3, hy + 5, 1, 4);
-        }
-    }
-    }
-    // Pulsing temple vein, on the leading side of the skull
-    ctx.strokeStyle = `rgba(180,0,0,${0.4 + Math.sin(t / 400) * 0.2})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(hx + dir * 12, hy - 8);
-    ctx.lineTo(hx + dir * 16, hy - 4);
-    ctx.lineTo(hx + dir * 14, hy + 2);
-    ctx.stroke();
+    // ── Head — carried out ahead of the shoulders on that neck
+    drawMutantHead(x + lean * 2.1, y - 39 + bob, { t, dir, back: isBack, eating });
 }
 
 // Level-6 player draw — swaps in the mutant sprite during MUTANT ESCAPE.
@@ -19921,43 +20187,8 @@ function drawLevel6Underbelly() {
     ctx.textAlign = 'center';
     ctx.fillText('PT', mx + 14, my - 15 + breathe);
 
-    // Head — oversized, angry
-    ctx.fillStyle = '#c4a882';
-    ctx.fillRect(mx - 14, my - 53 + breathe, 28, 26);
-    // Bulging forehead
-    ctx.fillStyle = '#b89a72';
-    ctx.fillRect(mx - 16, my - 56 + breathe, 32, 10);
-    // Angry eyes — red-rimmed
-    ctx.fillStyle = '#600';
-    ctx.fillRect(mx - 10, my - 46 + breathe, 7, 6);
-    ctx.fillRect(mx + 3, my - 46 + breathe, 7, 6);
-    ctx.fillStyle = '#ff3300';
-    ctx.fillRect(mx - 8, my - 44 + breathe, 4, 3);
-    ctx.fillRect(mx + 5, my - 44 + breathe, 4, 3);
-    // Pupils — darting
-    const pupilOffset = Math.sin(t / 1200) * 2;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(mx - 7 + pupilOffset, my - 43 + breathe, 2, 2);
-    ctx.fillRect(mx + 6 + pupilOffset, my - 43 + breathe, 2, 2);
-    // Angry thick eyebrows
-    ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(mx - 11, my - 50 + breathe, 9, 3);
-    ctx.fillRect(mx + 2, my - 50 + breathe, 9, 3);
-    // Gritted teeth / snarl
-    ctx.fillStyle = '#ddd';
-    ctx.fillRect(mx - 6, my - 36 + breathe, 12, 4);
-    ctx.fillStyle = '#333';
-    for(let tooth = 0; tooth < 4; tooth++) {
-        ctx.fillRect(mx - 5 + tooth * 3, my - 36 + breathe, 1, 4);
-    }
-    // Veins on temple
-    ctx.strokeStyle = `rgba(180,0,0,${0.4 + Math.sin(t / 400) * 0.2})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(mx - 14, my - 52 + breathe);
-    ctx.lineTo(mx - 18, my - 48 + breathe);
-    ctx.lineTo(mx - 16, my - 42 + breathe);
-    ctx.stroke();
+    // Head — the same head the escaped creature wears
+    drawMutantHead(mx, my - 46 + breathe, { t, dir: 1, back: false, eating: false });
 
     // Oversized arms gripping the cage bars — sleeves taper from a deltoid cap
     // down to the fists, matching the playable mutant's arm construction
