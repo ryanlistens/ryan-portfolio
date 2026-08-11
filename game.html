@@ -479,9 +479,11 @@ const levelMusic = {
     hellmode: new Audio('music/hellmode.mp3'), // hell mode loop after devil throne
     // Office radios — YELLOW's boombox plays this over the level track
     yellow: new Audio('music/yellow.mp3'),
+    level4:  new Audio('music/level4.mp3'),
+    level6:  new Audio('music/level6.mp3'),
     // Remaining tracks silenced for now (original sound design pass in progress)
-    level1: null, level2: null, level3: null, level4: null,
-    level6: null, blewit: null,
+    level1: null, level2: null, level3: null,
+    blewit: null,
     blue: null, green: null, red: null
 };
 
@@ -491,14 +493,15 @@ const levelMusic = {
 // 'yellow' = yellow.mp3 (YELLOW's boombox, overrides for the rest of the level)
 // 'off'    = silence
 let officeRadio = { source: 'level' };
-function setOfficeRadio(source) {
+function setOfficeRadio(source, restart = false) {
     officeRadio.source = source;
-    if(source === 'yellow')     playMusic('yellow');
-    else if(source === 'level') playMusic('level5');
+    if(source === 'yellow')     playMusic('yellow', restart);
+    else if(source === 'level') playMusic('level5', restart);
     else                        playMusic(null);
 }
-// Restore whatever the radios are currently set to (used when leaving an
-// office / changing rooms mid-level, so a radio choice sticks for the level)
+// Restore whatever the radios are currently set to. Nothing calls this any
+// more — rooms no longer touch the music — but it is the one-liner to reach for
+// if a transition ever needs to re-assert the floor's radio.
 function resumeLevelRadio() { setOfficeRadio(officeRadio.source); }
 
 // Set all music to loop and preload (skip null entries)
@@ -517,22 +520,35 @@ let audioUnlocked = false;
 // Music control functions
 let pendingMusicKey = null; // Track music that should play after user interaction
 
-function playMusic(musicKey) {
+// `restart` rewinds to the top; without it a track PAUSES where it is and picks
+// up from there next time. Everything used to rewind unconditionally, so the
+// level 5 stereo started again from bar one every time you stepped into an
+// office and back out — and you cannot walk around a floor listening to the
+// first eight bars of the same song over and over.
+function playMusic(musicKey, restart = false) {
     const track = levelMusic[musicKey] || null;
     // Null track — stop whatever is playing and go silent
     if(!track) {
-        if(currentMusic) { currentMusic.pause(); currentMusic.currentTime = 0; currentMusic = null; }
+        if(currentMusic) {
+            currentMusic.pause();
+            if(restart) currentMusic.currentTime = 0;
+            currentMusic = null;
+        }
         pendingMusicKey = null;
         return;
     }
-    // Already playing this track — don't restart
-    if(currentMusic === track && !currentMusic.paused) return;
+    // Already playing this track — don't interrupt it
+    if(currentMusic === track && !currentMusic.paused) {
+        if(restart) currentMusic.currentTime = 0;
+        return;
+    }
 
-    // Stop current music
+    // Park the outgoing track where it is
     if(currentMusic) {
         currentMusic.pause();
-        currentMusic.currentTime = 0;
+        if(restart) currentMusic.currentTime = 0;
     }
+    if(restart) track.currentTime = 0;
 
     // Play new music if not muted
     if(!musicMuted && track) {
@@ -1513,6 +1529,8 @@ function initLevel(lv) {
     level5.furnaceRoom.furnace.glowPhase = 0;
     level5.hallway.trafficTimer = 0;
     level5.crackTimer = 0;
+    // A fresh shift starts with RED's stereo on and YELLOW's boombox off.
+    officeRadio.source = 'level';
     level5.docsCollected = 0;
     level5.npcPipes = [
         {x: 280, y: 368, color: COLORS[0], state: 'happy', needsDoc: false, crackStartTime: null},
@@ -1837,7 +1855,7 @@ function startGame() {
     updateLives();
 
     // Stop menu music and play level 1 music when showing level card
-    playMusic('level1');
+    playMusic('level1', true);
 }
 
 
@@ -31822,8 +31840,15 @@ function update() {
                     player.y = 400;
                     keys[' '] = false;
                     keys['action'] = false;
-                    // Play office-specific soundtrack (RED's office keeps current music)
-                    if(office.name !== 'RED') playMusic(office.name.toLowerCase());
+                    // Walking into an office does not touch the music. The floor
+                    // has exactly two sources — RED's stereo and YELLOW's
+                    // boombox — and whichever is on stays on and stays where it
+                    // is. Entering used to call playMusic(<office colour>), and
+                    // since blue/green/red have no track that STOPPED the music
+                    // dead on every door, then the exit below started it again
+                    // from the top; and in YELLOW's case it started the boombox
+                    // for you, so the thing you were meant to switch on was
+                    // already playing before you reached it.
                     break;
                 }
             }
@@ -31849,13 +31874,11 @@ function update() {
                 const office = level5.hallway.offices.find(o => o.name === level5.currentOffice);
                 player.x = office.x;
                 player.y = 380;
-                const exitingOffice = level5.currentOffice;
                 level5.currentOffice = null;
                 keys[' '] = false;
                 keys['action'] = false;
-                // Return to whatever the office radios are set to. RED's
-                // office keeps whatever is playing (its stereo IS the source).
-                if(exitingOffice !== 'RED') resumeLevelRadio();
+                // Nothing to resume: leaving does not touch the music either,
+                // for the same reason entering does not.
             }
     
             // === OFFICE RADIOS — RED's stereo is the level soundtrack;
@@ -36203,7 +36226,7 @@ if (keys[' '] || keys['action']) {
                     initLevel(6);
                     state = 'levelCard';
                     cardTimer = 0;
-                    playMusic('level6');
+                    playMusic('level6', true);
                     return;
                 }
             } else if(greenPM && Math.abs(player.x - greenPM.x) < 50) {
@@ -36217,7 +36240,7 @@ if (keys[' '] || keys['action']) {
                     initLevel(5);
                     state = 'levelCard';
                     cardTimer = 0;
-                    playMusic('level5');
+                    playMusic('level5', true);
                     return;
                 }
             } else if(redPM && Math.abs(player.x - redPM.x) < 50) {
@@ -36231,7 +36254,7 @@ if (keys[' '] || keys['action']) {
                     initLevel(4);
                     state = 'levelCard';
                     cardTimer = 0;
-                    playMusic('level4');
+                    playMusic('level4', true);
                     return;
                 }
             } else {
@@ -36482,8 +36505,8 @@ function nextLevel() {
         cardTimer = 0;
         initLevel(level);
 
-        // Play music for new level
-        playMusic('level' + level);
+        // Play music for new level, from the top
+        playMusic('level' + level, true);
     } else {
         winGame();
     }
