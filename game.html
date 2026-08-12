@@ -19611,6 +19611,32 @@ function _drawCloneFollower(x, y, facing) {
     ctx.fillText(armed ? 'ARMED' : 'CLONE', x, y - 61);
 }
 
+// Everything in the room the armed clone will shoot at. He knew exactly three
+// bosses by name — the CEO, and the cloning bosses in the cloning room and the
+// employee hallway — so a horde of skeletons could walk straight past a man
+// standing there with a gun, and the boss on the nuclear bridge was no
+// business of his either. His bullets already killed all of it; he was just
+// never told to aim.
+function cloneFollowerTargets() {
+    const R = level6.room;
+    const out = [];
+    if(R === 'ceoOffice' && ceo.state !== 'dead' && !level6.ceoPursuing) {
+        out.push({ x: ceo.x, y: ceo.y });
+    }
+    const boss = R === 'cloningRoom'     ? level6.cloningBoss
+               : R === 'employeeHallway' ? level6.hallwayCloningBoss
+               : R === 'nuclearBridge'   ? level6.bridgeCloningBoss : null;
+    if(boss && boss.alive) out.push({ x: boss.x, y: boss.y });
+    const horde = R === 'pipeRoom'           ? level6.skeletonHorde
+                : R === 'underbellyHallway'  ? level6.skeletonHorde2 : null;
+    if(horde && horde.triggered) {
+        for(const sk of horde.skeletons) {
+            if(sk.alive && sk.spawnDelay <= 0) out.push({ x: sk.x, y: sk.y - 25 });
+        }
+    }
+    return out;
+}
+
 // RED's own station in the employee pipe room, wherever the pipe list puts it.
 function redPipeStation() {
     return level5.npcPipes.find(n => n && n.color && n.color.name === 'RED') || null;
@@ -19626,51 +19652,6 @@ function updateCloneFollower() {
     const allRooms = ['employeeLobby', 'cloningRoom', 'l6Furnace', 'employeeHallway', 'employeePipeRoom', 'pipeRoom', 'megacomputer', 'nuclearBridge', 'entryway', 'ceoOffice', 'underbellyHallway', 'underbelly', 'marbleRoom'];
     const validRooms = cf.armed ? allRooms : employeeRooms;
     if(!validRooms.includes(level6.room)) return;
-
-    // Armed clone shoots at CEO when in same room
-    if(cf.armed && level6.room === 'ceoOffice' && ceo.state !== 'dead' && !level6.ceoPursuing) {
-        cf.shootTimer++;
-        if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
-            const angle = Math.atan2(ceo.y - cf.y, ceo.x - cf.x);
-            const gunRight = cf.facing !== 'left';
-            const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
-            SFX.play('shoot');
-            bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
-            cf.lastShot = Date.now();
-            cf.shootTimer = 0;
-            muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
-        }
-    }
-    // Armed clone shoots at cloning boss in cloningRoom
-    if(cf.armed && level6.room === 'cloningRoom' && level6.cloningBoss && level6.cloningBoss.alive) {
-        const cb = level6.cloningBoss;
-        cf.shootTimer++;
-        if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
-            const angle = Math.atan2(cb.y - cf.y, cb.x - cf.x);
-            const gunRight = cf.facing !== 'left';
-            const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
-            SFX.play('shoot');
-            bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
-            cf.lastShot = Date.now();
-            cf.shootTimer = 0;
-            muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
-        }
-    }
-    // Armed clone shoots at hallway cloning boss
-    if(cf.armed && level6.room === 'employeeHallway' && level6.hallwayCloningBoss && level6.hallwayCloningBoss.alive) {
-        const hcb = level6.hallwayCloningBoss;
-        cf.shootTimer++;
-        if(cf.shootTimer > 60 && Date.now() - cf.lastShot > 2500) {
-            const angle = Math.atan2(hcb.y - cf.y, hcb.x - cf.x);
-            const gunRight = cf.facing !== 'left';
-            const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
-            SFX.play('shoot');
-            bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
-            cf.lastShot = Date.now();
-            cf.shootTimer = 0;
-            muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
-        }
-    }
 
     // Armed clone returns to work after CEO is killed
     if(cf.armed && level6.ceoDefeated) {
@@ -19737,6 +19718,35 @@ function updateCloneFollower() {
     }
 
     cf.y = (level6.room === 'nuclearBridge') ? 140 : 380;
+
+    // Shoot the nearest thing worth shooting, and turn to face it — the aim is
+    // applied after the follow step so he squares up rather than firing over
+    // his shoulder at whatever he happens to be trailing past.
+    if(cf.armed) {
+        const targets = cloneFollowerTargets();
+        cf.shootTimer++;
+        if(targets.length) {
+            let best = targets[0], bestD = Math.abs(best.x - cf.x);
+            for(const t of targets) {
+                const d = Math.abs(t.x - cf.x);
+                if(d < bestD) { bestD = d; best = t; }
+            }
+            // A crowd gets a faster cadence: one shot every 2.5s never thinned
+            // six skeletons walking at you abreast.
+            const cadence = targets.length > 2 ? 750 : targets.length > 1 ? 1200 : 2500;
+            if(cf.shootTimer > 40 && Date.now() - cf.lastShot > cadence && bestD < 540) {
+                cf.facing = best.x >= cf.x ? 'right' : 'left';
+                const gunRight = cf.facing !== 'left';
+                const bx = cf.x + (gunRight ? 38 : -36), by = cf.y - 4;
+                const angle = Math.atan2(best.y - by, best.x - bx);
+                SFX.play('shoot');
+                bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, fromCEO: false });
+                muzzleFlashes.push({ x: bx, y: by, life: 6, facing: gunRight ? 'right' : 'left' });
+                cf.lastShot = Date.now();
+                cf.shootTimer = 0;
+            }
+        }
+    }
 }
 
 // === Level 6 Furnace Room — dark industrial furnace with evidence of CEO's escape ===
