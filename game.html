@@ -3473,16 +3473,517 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 
 // Unified cloning boss renderer with side-view support
 // facing: 'left' | 'right' | 'forward'; paused stops the walk cycle; hasGun draws a revolver in the lead hand.
+// The cloning ROOM has a lab technician supervising it. Everywhere else — the
+// employee hallway, the nuclear bridge — the patrolling boss is still the
+// PipeTech foreman he always was; the lab coat belongs to the lab.
 function drawCloningBoss(bx, by, facing, paused, hasGun) {
     const gy = by + FOOT_FIX.cloningBoss;
     shadeSprite(bx + 0, gy + -16, 44, 64, () => _drawCloningBoss(bx, gy, facing, paused, hasGun));
+}
+
+function drawLabTech(bx, by, facing, paused, hasGun) {
+    const gy = by + FOOT_FIX.cloningBoss;
+    shadeSprite(bx + 0, gy + -16, 44, 64, () => _drawLabTech(bx, gy, facing, paused, hasGun));
+}
+
+function _drawCloningBoss(bx, by, facing, paused, hasGun) {
+    const walkCycle = paused ? 0 : Math.sin(Date.now() / 150) * 5;
+    const bob = paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
+    const sideView = (facing === 'left' || facing === 'right');
+    const dir = facing === 'left' ? -1 : 1;
+    const isBack = (facing === 'back' || facing === 'up');
+
+    // Shadow — at foot level
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(bx, by + 32, 12, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if(sideView) {
+        // === SIDE-VIEW POSE — articulated profile with a real gait ===
+        const lean = paused ? 0 : 1.5 * dir;      // slight forward lean while marching
+        const stride = walkCycle;                  // ±5 leg swing
+        const armSwing = walkCycle * 0.7;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // --- Back arm (behind torso, swings opposite the lead leg). It runs
+        // down the BACK edge and its hand clears the shirt hem — previously it
+        // stopped mid-torso, so the hand read as a disc stuck on the chest. ---
+        // Seen from the side, the far arm hangs BEHIND the body and is mostly
+        // hidden by it — it should only clear the back edge at the top of its
+        // swing. Parked out at -7*dir it mirrored the near arm, and two hands
+        // at the hips at the same height is a front view, not a profile.
+        ctx.strokeStyle = '#8f1414';
+        ctx.lineWidth = 4.6;
+        ctx.beginPath();
+        ctx.moveTo(bx - 3.0 * dir + lean, by - 24 - bob);
+        ctx.quadraticCurveTo(bx + (-5.4 - armSwing * 0.5) * dir, by - 10 - bob,
+                             bx + (-6.0 - armSwing) * dir, by + 7 - bob);
+        ctx.stroke();
+        ctx.fillStyle = '#c9a074';
+        ctx.beginPath(); ctx.arc(bx + (-6.0 - armSwing) * dir, by + 10 - bob, 2.4, 0, Math.PI * 2); ctx.fill();
+
+        // --- Legs (stroke-based, knees bend into the stride) ---
+        const hipY = by + 4 - bob;
+        const footY = by + 28;
+        const drawBoot = (fx2, fy2, dark) => {
+            ctx.fillStyle = dark ? '#0c0c0c' : '#161616';
+            ctx.beginPath();
+            ctx.moveTo(fx2 - 3.5 * dir, fy2 - 4);
+            ctx.lineTo(fx2 + 5.5 * dir, fy2 - 4);
+            ctx.quadraticCurveTo(fx2 + 9.5 * dir, fy2 - 3.5, fx2 + 9.5 * dir, fy2 - 0.5);
+            ctx.lineTo(fx2 + 9.5 * dir, fy2 + 2);
+            ctx.lineTo(fx2 - 3.5 * dir, fy2 + 2);
+            ctx.closePath(); ctx.fill();
+            // Steel toe cap on the leading edge
+            ctx.fillStyle = '#5a5a5a';
+            pathRoundRect(dir > 0 ? fx2 + 6.2 : fx2 - 9.8, fy2 - 2.8, 3.6, 4.6, 1.6);
+            ctx.fill();
+        };
+        // Trailing leg (darker, behind)
+        ctx.strokeStyle = '#1c1c1c';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(bx - 2 * dir, hipY);
+        ctx.quadraticCurveTo(bx + (-stride * 0.4 + 1) * dir, by + 17 - bob,
+                             bx + (-stride - 1) * dir, footY - 2);
+        ctx.stroke();
+        drawBoot(bx + (-stride - 1) * dir, footY, true);
+        // Leading leg
+        ctx.strokeStyle = '#2e2e2e';
+        ctx.beginPath();
+        ctx.moveTo(bx + 2 * dir, hipY);
+        ctx.quadraticCurveTo(bx + (stride * 0.4 + 3) * dir, by + 17 - bob,
+                             bx + (stride + 1) * dir, footY - 2);
+        ctx.stroke();
+        drawBoot(bx + (stride + 1) * dir, footY, false);
+
+        // --- Torso — rounded work shirt, side-lit toward the facing side ---
+        // Asymmetric: the chest carries forward and the back runs straighter,
+        // with the shoulder blade rounding it off. Written face-relative so the
+        // two directions cannot disagree.
+        const tfx = (u) => bx + dir * u;
+        const shGrad = ctx.createLinearGradient(bx - 11, 0, bx + 11, 0);
+        shGrad.addColorStop(0, charMix('#c02525', '#ffffff', 0.11));
+        shGrad.addColorStop(0.55, '#c02525');
+        shGrad.addColorStop(1, charMix('#c02525', '#000000', 0.18));
+        ctx.fillStyle = shGrad;
+        ctx.beginPath();
+        ctx.moveTo(tfx(-9.0) + lean, by - 26.5 - bob);
+        ctx.quadraticCurveTo(tfx(-9.8) + lean * 0.5, by - 12 - bob, tfx(-9.2), by + 7 - bob);
+        ctx.lineTo(tfx(10.4), by + 7 - bob);
+        ctx.quadraticCurveTo(tfx(11.6) + lean * 0.5, by - 12 - bob, tfx(10.2) + lean, by - 26.5 - bob);
+        ctx.quadraticCurveTo(tfx(0.6) + lean, by - 30.5 - bob, tfx(-9.0) + lean, by - 26.5 - bob);
+        ctx.closePath();
+        ctx.fill();
+        // Belt line
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(Math.min(tfx(-9.2), tfx(10.4)), by + 4 - bob, 19.6, 2.5);
+
+        // --- Tie on the front of the shirt, swaying with the gait ---
+        ctx.fillStyle = '#141010';
+        ctx.beginPath();
+        ctx.moveTo(bx + 6.2 * dir + lean, by - 25.6 - bob);
+        ctx.lineTo(bx + 9.4 * dir + lean, by - 25.2 - bob);
+        ctx.quadraticCurveTo(bx + (9.2 + walkCycle * 0.12) * dir, by - 14 - bob,
+                             bx + (8.4 + walkCycle * 0.22) * dir, by - 4 - bob);
+        ctx.lineTo(bx + (6.6 + walkCycle * 0.22) * dir, by - 6 - bob);
+        ctx.closePath();
+        ctx.fill();
+
+        // --- Head in profile — curved skull, brow ridge, nose, chin, ear ---
+        ctx.fillStyle = '#f5d5a8';
+        ctx.beginPath();
+        ctx.moveTo(bx - 8 * dir, by - 28 - bob);                                          // nape
+        ctx.quadraticCurveTo(bx - 11 * dir, by - 40 - bob, bx - 8 * dir, by - 49 - bob);  // back of skull
+        ctx.quadraticCurveTo(bx - 2 * dir, by - 53 - bob, bx + 5 * dir, by - 51 - bob);   // crown
+        ctx.quadraticCurveTo(bx + 10 * dir, by - 49 - bob, bx + 10 * dir, by - 44 - bob); // forehead
+        ctx.lineTo(bx + 10 * dir, by - 42 - bob);
+        ctx.lineTo(bx + 12.5 * dir, by - 40 - bob);                                       // nose tip
+        ctx.quadraticCurveTo(bx + 12.5 * dir, by - 37.5 - bob, bx + 9.8 * dir, by - 37 - bob);
+        ctx.lineTo(bx + 9.4 * dir, by - 33 - bob);
+        ctx.quadraticCurveTo(bx + 10 * dir, by - 29.5 - bob, bx + 6 * dir, by - 28.5 - bob); // chin
+        ctx.closePath();
+        ctx.fill();
+        // Ear on the visible side
+        ctx.fillStyle = '#e8c090';
+        ctx.beginPath(); ctx.ellipse(bx - 3 * dir, by - 39 - bob, 2.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#c89a68'; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.arc(bx - 3 * dir, by - 39 - bob, 1.2, 0, Math.PI * 1.4); ctx.stroke();
+        // Eye in profile. A full white sphere with an iris floating in it read
+        // as a goldfish stuck on the side of the skull — in profile you see the
+        // eye edge-on, so it is a narrow dark wedge tucked under the brow with
+        // a single glint, plus a sliver of white at the tear duct only.
+        const eX = bx + 7.2 * dir, eY = by - 43.2 - bob;
+        ctx.fillStyle = 'rgba(120,80,52,0.26)';                       // socket
+        ctx.beginPath(); ctx.ellipse(eX - 0.4 * dir, eY + 0.3, 2.4, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f0ebe2';                                     // tear-duct sliver
+        ctx.beginPath();
+        ctx.moveTo(eX - 1.9 * dir, eY + 0.5);
+        ctx.lineTo(eX + 0.4 * dir, eY - 0.9);
+        ctx.lineTo(eX + 0.4 * dir, eY + 0.9);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#241c17';                                     // the eye itself
+        ctx.beginPath();
+        ctx.moveTo(eX + 1.9 * dir, eY - 1.1);
+        ctx.quadraticCurveTo(eX + 2.6 * dir, eY, eX + 1.9 * dir, eY + 1.1);
+        ctx.lineTo(eX - 0.2 * dir, eY + 0.8);
+        ctx.quadraticCurveTo(eX - 0.6 * dir, eY, eX - 0.2 * dir, eY - 0.8);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.beginPath(); ctx.arc(eX + 1.1 * dir, eY - 0.5, 0.5, 0, Math.PI * 2); ctx.fill();
+        // Upper lid line, so the eye sits under the brow rather than on the face
+        ctx.strokeStyle = 'rgba(90,60,38,0.55)'; ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(eX - 1.8 * dir, eY - 1.0); ctx.lineTo(eX + 2.3 * dir, eY - 1.3);
+        ctx.stroke();
+        // Angry brow above it
+        ctx.strokeStyle = '#4a3520'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(bx + 3.6 * dir, by - 47.2 - bob);
+        ctx.lineTo(bx + 9.4 * dir, by - 45.2 - bob);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        // Downturned mouth set into the jaw
+        ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.arc(bx + 7.5 * dir, by - 30 - bob, 2, Math.PI + 0.35, Math.PI * 2 - 0.35);
+        ctx.stroke();
+
+        // --- Hard hat — dome tilted with the lean, crown ridge, front brim ---
+        ctx.fillStyle = '#f0f0f0';
+        ctx.beginPath();
+        ctx.moveTo(bx - 12 * dir, by - 49 - bob);
+        ctx.quadraticCurveTo(bx - 12 * dir, by - 64 - bob, bx + lean, by - 65 - bob);
+        ctx.quadraticCurveTo(bx + 12 * dir, by - 64 - bob, bx + 11 * dir, by - 50 - bob);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#d8d8d8'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx - 6 * dir, by - 63 - bob);
+        ctx.quadraticCurveTo(bx, by - 66.5 - bob, bx + 5 * dir, by - 63.5 - bob);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.ellipse(bx + 4 * dir, by - 59 - bob, 3.4, 5, 0.3 * dir, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#dcdcdc';
+        ctx.beginPath(); ctx.ellipse(bx + 2 * dir, by - 49.5 - bob, 15, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.beginPath(); ctx.ellipse(bx + 2 * dir, by - 48.8 - bob, 15, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+
+        // --- Front arm — swings, or holds the revolver level when armed ---
+        if(hasGun) {
+            ctx.strokeStyle = '#d83030';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(bx + 1.0 * dir + lean, by - 24 - bob);
+            ctx.quadraticCurveTo(bx + 10 * dir, by - 20 - bob, bx + 16 * dir, by - 12 - bob);
+            ctx.stroke();
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(bx + 17 * dir, by - 12 - bob, 2.8, 0, Math.PI * 2); ctx.fill();
+            // Revolver — barrel, cylinder, grip
+            ctx.fillStyle = '#3a3a3a';
+            pathRoundRect(dir > 0 ? bx + 19 : bx - 33, by - 13.5 - bob, 14, 3.6, 1.5);
+            ctx.fill();
+            ctx.fillStyle = '#5a5a5a';
+            ctx.beginPath(); ctx.arc(bx + 19 * dir, by - 11.5 - bob, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#222';
+            pathRoundRect(dir > 0 ? bx + 15.5 : bx - 18.5, by - 9 - bob, 3, 5.5, 1);
+            ctx.fill();
+        } else {
+            // Runs down the front edge of the shirt with the hand clearing the
+            // hem at hip level, rather than terminating on top of the chest
+            ctx.strokeStyle = '#d83030';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(bx + 1.0 * dir + lean, by - 24 - bob);
+            ctx.quadraticCurveTo(bx + (1.8 + armSwing * 0.5) * dir, by - 10 - bob,
+                                 bx + (2.0 + armSwing) * dir, by + 6 - bob);
+            ctx.stroke();
+            ctx.fillStyle = '#f5d5a8';
+            ctx.beginPath(); ctx.arc(bx + (2.0 + armSwing) * dir, by + 9 - bob, 2.6, 0, Math.PI * 2); ctx.fill();
+            // Seam down the back edge of the near arm, so it reads as a limb in
+            // front of the chest rather than more of the same red column
+            ctx.strokeStyle = 'rgba(88,12,12,0.45)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(bx + 4.0 * dir + lean, by - 22 - bob);
+            ctx.quadraticCurveTo(bx + (4.6 + armSwing * 0.5) * dir, by - 10 - bob,
+                                 bx + (4.8 + armSwing) * dir, by + 5 - bob);
+            ctx.stroke();
+        }
+        // Deltoid cap over the near shoulder, matching the forward view
+        ctx.fillStyle = '#d02c2c';
+        ctx.beginPath();
+        ctx.ellipse(bx + 0.8 * dir + lean, by - 25.2 - bob, 4.6, 3.0, 0, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+    }
+
+    // === FRONT-FACING POSE (default when paused without a target) ===
+    // Helmet dome
+    ctx.fillStyle = '#f0f0f0';
+    ctx.beginPath();
+    ctx.moveTo(bx - 14, by - 50 - bob);
+    ctx.quadraticCurveTo(bx - 14, by - 66 - bob, bx, by - 66 - bob);
+    ctx.quadraticCurveTo(bx + 14, by - 66 - bob, bx + 14, by - 50 - bob);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fafafa';
+    ctx.beginPath();
+    ctx.moveTo(bx - 6, by - 52 - bob);
+    ctx.quadraticCurveTo(bx - 6, by - 63 - bob, bx + 2, by - 63 - bob);
+    ctx.quadraticCurveTo(bx + 6, by - 63 - bob, bx + 6, by - 56 - bob);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(bx - 16, by - 52 - bob, 32, 3);
+    ctx.fillStyle = '#ccc';
+    ctx.fillRect(bx - 15, by - 49 - bob, 30, 1);
+
+    // --- Head — wide at the temples, squaring off into a heavy jaw. A plain
+    // ellipse gave him the round skull of a cartoon baby.
+    const hCY = by - 39 - bob;
+    ctx.fillStyle = '#f5d5a8';
+    ctx.beginPath();
+    ctx.moveTo(bx - 11, hCY - 3);
+    ctx.quadraticCurveTo(bx - 11, hCY - 11.5, bx, hCY - 11.5);
+    ctx.quadraticCurveTo(bx + 11, hCY - 11.5, bx + 11, hCY - 3);
+    ctx.lineTo(bx + 10.4, hCY + 5);
+    ctx.quadraticCurveTo(bx + 9.6, hCY + 10.5, bx + 5, hCY + 11.5);
+    ctx.lineTo(bx - 5, hCY + 11.5);
+    ctx.quadraticCurveTo(bx - 9.6, hCY + 10.5, bx - 10.4, hCY + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,242,220,0.16)';        // temple light
+    ctx.beginPath(); ctx.ellipse(bx - 4.6, hCY - 3.6, 3.6, 3.0, 0, 0, Math.PI * 2); ctx.fill();
+    { const jg = ctx.createRadialGradient(bx, hCY + 6, 1, bx, hCY + 6, 8.4);
+      jg.addColorStop(0, 'rgba(150,100,60,0.16)');
+      jg.addColorStop(1, 'rgba(150,100,60,0)');
+      ctx.fillStyle = jg;                            // jaw shading, no hard rim
+      ctx.beginPath(); ctx.ellipse(bx, hCY + 6, 8.4, 4.4, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = 'rgba(120,74,44,0.18)';          // cheekbones
+    ctx.beginPath(); ctx.ellipse(bx - 7.4, hCY + 2.4, 3.0, 2.0, 0.35, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 7.4, hCY + 2.4, 3.0, 2.0, -0.35, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#e8c090';                       // ears
+    ctx.beginPath(); ctx.ellipse(bx - 10.8, hCY + 0.5, 1.5, 2.8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 10.8, hCY + 0.5, 1.5, 2.8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f5d5a8';                       // neck into the collar
+    ctx.fillRect(bx - 4, by - 32 - bob, 8, 6);
+
+    // Eyes: narrowed and level, matching the profile's, under brows driven
+    // DOWN toward the bridge. Skipped entirely when he has his back to us —
+    // walking away from the camera he used to keep looking straight at it.
+    const cbEyY = by - 42 - bob;
+    // Expression driven by the situation: armed is a harder face than patrol.
+    const cbBrow = hasGun ? 1.5 : 0;
+    const cbLid  = hasGun ? 0.7 : 0;
+    if(isBack) {
+        // Back of the head: clipped hair round the occiput, nape in shadow
+        ctx.fillStyle = '#4a3520';
+        ctx.beginPath();
+        ctx.moveTo(bx - 10.6, hCY - 4);
+        ctx.quadraticCurveTo(bx - 11, hCY + 4, bx - 7.8, hCY + 8.4);
+        ctx.quadraticCurveTo(bx, hCY + 11.4, bx + 7.8, hCY + 8.4);
+        ctx.quadraticCurveTo(bx + 11, hCY + 4, bx + 10.6, hCY - 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath(); ctx.ellipse(bx, hCY + 8.6, 5.6, 1.8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.beginPath(); ctx.ellipse(bx - 3.4, hCY + 1.2, 3.8, 3.0, -0.2, 0, Math.PI*2); ctx.fill();
+    } else {
+    for(const es of [-1, 1]) {
+        const ex = bx + es * 4.4;
+        ctx.fillStyle = 'rgba(120,80,52,0.24)';
+        ctx.beginPath(); ctx.ellipse(ex, cbEyY, 3.6, 2.7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f0ebe2';
+        ctx.beginPath();
+        ctx.moveTo(ex - 2.7, cbEyY + 0.3);
+        ctx.quadraticCurveTo(ex, cbEyY - 1.7, ex + 2.7, cbEyY + 0.2);
+        ctx.quadraticCurveTo(ex, cbEyY + 1.6, ex - 2.7, cbEyY + 0.3);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#241c17';
+        ctx.beginPath(); ctx.ellipse(ex, cbEyY + 0.1, 1.35, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(245,213,168,0.86)';     // lid held low
+        ctx.beginPath();
+        ctx.moveTo(ex - 3.4, cbEyY - 1.1 + cbLid);
+        ctx.quadraticCurveTo(ex, cbEyY - 0.2 + cbLid, ex + 3.4, cbEyY - 1.0 + cbLid);
+        ctx.lineTo(ex + 3.4, cbEyY - 3.6);
+        ctx.lineTo(ex - 3.4, cbEyY - 3.6);
+        ctx.closePath(); ctx.fill();
+    }
+    // Brows drive further down and in once the revolver is out — he wore the
+    // same face patrolling as he did levelling it at you.
+    ctx.fillStyle = '#4a3520';
+    for(const es of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(bx + es * 1.7, cbEyY - 2.0 + cbBrow);
+        ctx.lineTo(bx + es * 7.8, cbEyY - 3.2 - cbBrow * 0.5);
+        ctx.lineTo(bx + es * 7.8, cbEyY - 1.6 - cbBrow * 0.5);
+        ctx.lineTo(bx + es * 1.7, cbEyY - 0.6 + cbBrow);
+        ctx.closePath(); ctx.fill();
+    }
+    if(hasGun) {
+        // Glabellar furrow — the crease a hard scowl leaves
+        ctx.strokeStyle = 'rgba(96,58,32,0.55)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx - 0.8, cbEyY - 3.4); ctx.lineTo(bx - 1.1, cbEyY - 1.4);
+        ctx.moveTo(bx + 0.8, cbEyY - 3.4); ctx.lineTo(bx + 1.1, cbEyY - 1.4);
+        ctx.stroke();
+    }
+    ctx.strokeStyle = '#c08a5a'; ctx.lineWidth = 1.2;   // nose
+    ctx.beginPath();
+    ctx.moveTo(bx + 0.6, by - 40 - bob); ctx.lineTo(bx - 1.4, by - 36.4 - bob);
+    ctx.lineTo(bx + 1.4, by - 36.4 - bob);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(150,100,60,0.22)';
+    ctx.beginPath(); ctx.ellipse(bx, by - 35.6 - bob, 2.2, 1.0, 0, 0, Math.PI*2); ctx.fill();
+    // Mouth — a set, faintly downturned line. It was the bottom half of a
+    // circle, which is a grin, on a man who is pointing a revolver at you.
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = hasGun ? 1.9 : 1.5;              // clamped shut when armed
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx - 3.4, by - 32.6 - bob);
+    ctx.quadraticCurveTo(bx, by - 31.6 - bob + (hasGun ? 0.9 : 0),
+                         bx + 3.4, by - 32.6 - bob);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    }
+
+    // --- Torso — shoulders slope out from the neck and the waist tucks in, so
+    // the body reads as a chest seen front-on instead of a flat slab ---
+    const shY = by - 28 - bob;                        // shoulder line
+    const waistY = by + 8 - bob;
+    const shHalf = 15, waistHalf = 11.5;
+    const shirtGrad = ctx.createLinearGradient(bx - shHalf, 0, bx + shHalf, 0);
+    shirtGrad.addColorStop(0,    '#a81b1b');
+    shirtGrad.addColorStop(0.34, '#cc2222');
+    shirtGrad.addColorStop(1,    '#8f1717');
+    ctx.fillStyle = shirtGrad;
+    ctx.beginPath();
+    ctx.moveTo(bx - shHalf + 3, shY);
+    ctx.quadraticCurveTo(bx - shHalf, shY + 1.5, bx - shHalf, shY + 6);
+    ctx.lineTo(bx - waistHalf, waistY);
+    ctx.lineTo(bx + waistHalf, waistY);
+    ctx.lineTo(bx + shHalf, shY + 6);
+    ctx.quadraticCurveTo(bx + shHalf, shY + 1.5, bx + shHalf - 3, shY);
+    ctx.closePath();
+    ctx.fill();
+    if(isBack) {
+        // Shirt back: collar band right round, yoke seam, centre pleat. The
+        // open collar and the tie are chest details.
+        ctx.fillStyle = '#b01e1e';
+        ctx.fillRect(bx - 7, shY - 1, 14, 3);
+        ctx.strokeStyle = 'rgba(90,12,12,0.55)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx - 13, shY + 5.5); ctx.lineTo(bx + 13, shY + 5.5);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.07)';
+        ctx.fillRect(bx - 2, shY + 5.5, 4, waistY - shY - 5.5);
+    } else {
+        // Collar opening
+        ctx.fillStyle = '#b01e1e';
+        ctx.beginPath();
+        ctx.moveTo(bx - 8, shY); ctx.lineTo(bx, shY + 6); ctx.lineTo(bx + 8, shY);
+        ctx.closePath(); ctx.fill();
+        // Tie
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.moveTo(bx - 4, shY); ctx.lineTo(bx + 4, shY);
+        ctx.lineTo(bx + 3, by - 6 - bob); ctx.lineTo(bx, by - 1 - bob);
+        ctx.lineTo(bx - 3, by - 6 - bob); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#222'; ctx.fillRect(bx - 3, shY, 6, 4);
+    }
+
+    // --- Arms — hung from deltoid caps that sit ON TOP of the shoulder, with a
+    // seam separating limb from chest. Previously they were bare planks butted
+    // against the torso's outer edge in the same flat red, which flattened the
+    // silhouette into one slab with no readable front or side.
+    const armSwing = walkCycle * 0.6;
+    const drawArm = (side, swing) => {
+        const ax = bx + side * (shHalf - 1.5);        // arm hangs just outside the chest
+        const capY = shY + 3;
+        ctx.strokeStyle = '#bb1f1f';
+        ctx.lineWidth = 6.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(ax, capY + 1);
+        ctx.quadraticCurveTo(ax + side * 1.6, capY + 11 + swing * 0.4,
+                             ax + side * 1.2, capY + 19 + swing);
+        ctx.stroke();
+        // Deltoid cap over the shoulder joint — flattened and close in value
+        ctx.fillStyle = side < 0 ? '#c62525' : '#a81b1b';
+        ctx.beginPath();
+        ctx.ellipse(ax - side * 0.8, capY - 0.4, 5.0, 3.0, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Seam where the arm passes in front of the chest
+        ctx.strokeStyle = 'rgba(90,12,12,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ax - side * 3.4, capY + 1);
+        ctx.lineTo(ax - side * 3.0, capY + 17 + swing * 0.7);
+        ctx.stroke();
+        // Hand
+        ctx.fillStyle = '#f5d5a8';
+        ctx.beginPath();
+        ctx.arc(ax + side * 1.2, capY + 22.5 + swing, 3.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineCap = 'butt';
+    };
+    drawArm(-1, armSwing);
+    if(hasGun) {
+        // Right arm raised from the shoulder and levelled across the body, so
+        // the elbow reads as a joint rather than a corner in a rectangle
+        const ax = bx + shHalf - 1.5, capY = shY + 3;
+        ctx.strokeStyle = '#bb1f1f';
+        ctx.lineWidth = 6.4;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(ax, capY + 1);
+        ctx.quadraticCurveTo(ax + 2.5, capY + 8, ax + 3, capY + 11);   // upper arm
+        ctx.lineTo(ax + 14, capY + 11);                                 // forearm out
+        ctx.stroke();
+        ctx.fillStyle = '#a81b1b';
+        ctx.beginPath(); ctx.ellipse(ax - 0.8, capY - 0.4, 5.0, 3.0, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f5d5a8';
+        ctx.beginPath(); ctx.arc(ax + 16.5, capY + 11, 3.1, 0, Math.PI * 2); ctx.fill();
+        // Revolver — barrel level with the forearm
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(ax + 18, capY + 9, 14, 4);
+        ctx.fillStyle = '#5a5a5a';
+        ctx.beginPath(); ctx.arc(ax + 18, capY + 11, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#222';
+        ctx.fillRect(ax + 15, capY + 13, 3, 5);
+        ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    } else {
+        drawArm(1, -armSwing);
+    }
+
+    // --- Dark pants. The walk drives each foot UP off a fixed contact line and
+    // never down through it; the previous cycle added the stride offset in both
+    // directions, so on alternate steps a boot sank ~5px below the ground plane
+    // and the character's footing slid as it walked. ---
+    const hipY = by + 8 - bob;
+    const bootTop = by + 26;                       // fixed ground contact
+    const liftL = Math.max(0, -walkCycle) * 0.8;
+    const liftR = Math.max(0,  walkCycle) * 0.8;
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(bx - 10, hipY, 9, Math.max(2, (bootTop - liftL) - hipY));
+    ctx.fillRect(bx + 1,  hipY, 9, Math.max(2, (bootTop - liftR) - hipY));
+    ctx.fillStyle = '#111';
+    ctx.fillRect(bx - 12, bootTop - liftL, 12, 5);
+    ctx.fillRect(bx,      bootTop - liftR, 12, 5);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(bx - 12, bootTop - liftL, 4, 3);
+    ctx.fillRect(bx + 8,  bootTop - liftR, 4, 3);
 }
 
 // The cloning lab's floor supervisor: a lab technician in a coat, safety
 // goggles and nitrile gloves. She was a man in a hard hat, a red work shirt and
 // a tie — a foreman borrowed from the pipe floors, standing in a room full of
 // vats and growth tanks where nobody would be dressed like that.
-function _drawCloningBoss(bx, by, facing, paused, hasGun) {
+function _drawLabTech(bx, by, facing, paused, hasGun) {
     const walkCycle = paused ? 0 : Math.sin(Date.now() / 150) * 5;
     const bob = paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
     const sideView = (facing === 'left' || facing === 'right');
@@ -4630,70 +5131,94 @@ function _drawNPC(npc) {
     } else {
         // === NORMAL FRONT-FACING SPRITE ===
 
+        // Which way he is looking. A pipe manager stands at his pipe and only
+        // ever faced front, so this is 0 for all of them and nothing about them
+        // changes — but RED'S ENDING makes one of them the player, and a player
+        // who walks left while staring straight out of the screen reads as
+        // sliding rather than walking. A three-quarter turn: the hood leans, the
+        // face swings across it, a nose breaks the leading edge, and the arms
+        // shift so the near one comes forward.
+        const turn = (npc.facing === 'left') ? -1 : (npc.facing === 'right') ? 1 : 0;
+        const tf = turn * 3.0*s;               // how far the face swings
+        const fx = x + tf;                     // centre of the face
+
         // Hood (wraps around head, connects to torso)
         ctx.fillStyle = npc.color.hex;
         ctx.beginPath();
-        ctx.moveTo(x - 6*s, y - 5*s);          // left where torso starts
-        ctx.lineTo(x - 6*s, y - 12*s);          // up left side
-        ctx.lineTo(x - 5*s, y - 14*s);          // angle inward
-        ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s); // rounded top
-        ctx.lineTo(x + 6*s, y - 12*s);          // down right side
-        ctx.lineTo(x + 6*s, y - 5*s);           // right where torso starts
+        ctx.moveTo(x - 6*s + turn*0.7*s, y - 5*s);   // left where torso starts
+        ctx.lineTo(x - 6*s + turn*1.1*s, y - 12*s);  // up left side
+        ctx.lineTo(x - 5*s + turn*1.4*s, y - 14*s);  // angle inward
+        ctx.quadraticCurveTo(x + turn*0.9*s, y - 17*s, x + 5*s + turn*1.4*s, y - 14*s);
+        ctx.lineTo(x + 6*s + turn*1.1*s, y - 12*s);  // down right side
+        ctx.lineTo(x + 6*s + turn*0.7*s, y - 5*s);   // right where torso starts
         ctx.closePath();
         ctx.fill();
         // Hood fabric shading — crown highlight + shaded left rim for form
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.beginPath();
-        ctx.ellipse(x, y - 14.3*s, 3.4*s, 1.0*s, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + turn*1.4*s, y - 14.3*s, 3.4*s, 1.0*s, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = 'rgba(0,0,0,0.12)';
-        ctx.fillRect(x - 6*s, y - 12*s, 1.2*s, 7*s);
+        ctx.fillRect(x - 6*s + turn*1.1*s, y - 12*s, 1.2*s, 7*s);
 
-        // Face opening (skin-colored inset) — soft cheek shading below eyes
+        // Face opening (skin-colored inset) — swung across the hood and
+        // narrowed by the turn, with the far cheek gone into shadow
+        const faceW = 8*s - Math.abs(turn) * 2.8*s;
         ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
+        ctx.fillRect(fx - faceW/2, y - 13*s, faceW, 8*s);
+        if(turn !== 0) {
+            // Nose breaking the leading edge of the face
+            ctx.beginPath();
+            ctx.moveTo(fx + turn * faceW/2, y - 10.8*s);
+            ctx.lineTo(fx + turn * (faceW/2 + 2.0*s), y - 9.2*s);
+            ctx.lineTo(fx + turn * faceW/2, y - 7.9*s);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(120,70,40,0.16)';   // far cheek turning away
+            ctx.fillRect(turn > 0 ? fx - faceW/2 : fx + faceW/2 - 1.1*s,
+                         y - 13*s, 1.1*s, 8*s);
+        }
         ctx.fillStyle = 'rgba(120,70,40,0.14)';
-        ctx.fillRect(x - 4*s, y - 7*s, 8*s, 2*s);
+        ctx.fillRect(fx - faceW/2, y - 7*s, faceW, 2*s);
 
         // Face
         ctx.fillStyle = '#000';
         if(isScreaming) {
             // Edvard Munch SCREAM face — wide horror eyes + gaping O mouth
             ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.ellipse(x - 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(x + 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(fx - 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(fx + 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
             // Pinprick pupils high in socket (frozen upward stare)
             ctx.fillStyle = '#000';
-            ctx.beginPath(); ctx.arc(x - 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(x + 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(fx - 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(fx + 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
             // Gaping O mouth — tall dark oval
             ctx.fillStyle = 'rgba(15,0,0,0.95)';
-            ctx.beginPath(); ctx.ellipse(x, y - 6*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(fx, y - 6*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
         } else if(npc.state === 'stressed' && !isPacing && !isJumping) {
             // Worried: brows pinched up in the middle, eyes darting
-            drawCharEyes(x, y - 9*s, 2.1*s, 2.3*s, 2.1*s,
-                { brow: '#5a4632', browAngle: 0.9*s, look: Math.sin(Date.now()/380) * 0.7 });
+            drawCharEyes(fx, y - 9*s, 2.1*s, 2.3*s, 2.1*s - Math.abs(turn)*0.7*s,
+                { brow: '#5a4632', browAngle: 0.9*s, look: turn ? turn * 0.85 : Math.sin(Date.now()/380) * 0.7 });
             ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = Math.max(1, 0.6*s);
             ctx.beginPath();
-            ctx.arc(x, y - 5.2*s, 1.5*s, Math.PI + 0.5, Math.PI*2 - 0.5);   // frown
+            ctx.arc(fx, y - 5.2*s, 1.5*s, Math.PI + 0.5, Math.PI*2 - 0.5);   // frown
             ctx.stroke();
         } else if(isPacing || isJumping) {
-            drawCharEyes(x, y - 9*s, 2.1*s, 2.3*s, 2.1*s,
-                { brow: '#5a4632', browAngle: 0.9*s, look: Math.sin(Date.now()/260) * 0.8 });
+            drawCharEyes(fx, y - 9*s, 2.1*s, 2.3*s, 2.1*s - Math.abs(turn)*0.7*s,
+                { brow: '#5a4632', browAngle: 0.9*s, look: turn ? turn * 0.85 : Math.sin(Date.now()/260) * 0.8 });
             ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = Math.max(1, 0.6*s);
             ctx.beginPath();
-            ctx.arc(x, y - 5.2*s, 1.5*s, Math.PI + 0.5, Math.PI*2 - 0.5);
+            ctx.arc(fx, y - 5.2*s, 1.5*s, Math.PI + 0.5, Math.PI*2 - 0.5);
             ctx.stroke();
         } else {
             // Idle: slow blink and a drifting gaze so they read as alive
             const t = Date.now() + (npc.animOffset || 0) * 700;
             const blink = (t % 4200 < 130) ? 0.12 : 1;
-            drawCharEyes(x, y - 9*s, 2.1*s, 2.2*s, 2.1*s,
-                { brow: '#5a4632', open: blink, look: Math.sin(t / 1500) * 0.55 });
+            drawCharEyes(fx, y - 9*s, 2.1*s, 2.2*s, 2.1*s - Math.abs(turn)*0.7*s,
+                { brow: '#5a4632', open: blink, look: turn ? turn * 0.85 : Math.sin(t / 1500) * 0.55 });
             ctx.strokeStyle = '#8a5a46'; ctx.lineWidth = Math.max(1, 0.55*s);
             ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(x - 1.5*s, y - 5.4*s); ctx.lineTo(x + 1.5*s, y - 5.4*s);
+            ctx.moveTo(fx - 1.5*s, y - 5.4*s); ctx.lineTo(fx + 1.5*s, y - 5.4*s);
             ctx.stroke();
             ctx.lineCap = 'butt';
         }
@@ -4774,8 +5299,12 @@ function _drawNPC(npc) {
             // never needed a gait — until RED'S ENDING made one of them the
             // player and he slid around the floor in a standing pose.
             const npcStride = npc.walking ? Math.sin(Date.now() / 125) * 3 : 0;
+            // The shoulders turn with the head — the leading arm swings forward
+            // of the chest and the trailing one tucks in behind it.
+            const npcTurn = (npc.facing === 'left') ? -1 : (npc.facing === 'right') ? 1 : 0;
+            const tArm = npcTurn * 3.0;
             if(!npc.skipArms) {
-                const capY = y - 3.8*s, shX = 5.6*s;
+                const capY = y - 3.8*s, shX = 5.6*s - Math.abs(npcTurn) * 0.5*s;
                 const stressedL = (npc.state === 'stressed');
                 // Arms hang just outside the chest and taper to the wrist. The
                 // deltoid is a soft cap tucked INSIDE the shoulder line — big
@@ -4787,15 +5316,15 @@ function _drawNPC(npc) {
                              2.3*s, npcRamp.dark, x - 8.6*s, y - 3.0*s);
                     charHand(x - 4.8*s, y - 7.8*s, 1.5*s, '#f5c89a');
                 } else {
-                    charLimb(x - shX, capY, x - 7.0*s + npcStride, y + 4.6*s,
-                             2.3*s, npcRamp.dark, x - 7.4*s + npcStride, y - 0.2*s);
+                    charLimb(x - shX + tArm, capY, x - 7.0*s + npcStride + tArm, y + 4.6*s,
+                             2.3*s, npcRamp.dark, x - 7.4*s + npcStride + tArm, y - 0.2*s);
                 }
-                charLimb(x + shX, capY, x + 7.0*s - npcStride, y + 4.6*s,
-                         2.3*s, charMix(npc.color.hex, '#000', 0.10), x + 7.4*s - npcStride, y - 0.2*s);
-                charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
-                charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
-                if(!stressedL) charHand(x - 7.0*s + npcStride, y + 5.4*s, 1.4*s, '#f5c89a');
-                charHand(x + 7.0*s - npcStride, y + 5.4*s, 1.4*s, '#f5c89a');
+                charLimb(x + shX + tArm, capY, x + 7.0*s - npcStride + tArm, y + 4.6*s,
+                         2.3*s, charMix(npc.color.hex, '#000', 0.10), x + 7.4*s - npcStride + tArm, y - 0.2*s);
+                charDeltoid(x - shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+                charDeltoid(x + shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+                if(!stressedL) charHand(x - 7.0*s + npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
+                charHand(x + 7.0*s - npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
             }
             // Legs — knees hinted, boots on a fixed contact line, alternating
             // when he is walking
@@ -18734,10 +19263,10 @@ function drawLevel6CloningRoom() {
     // === CLONING BOSS — Lab Supervisor patrolling in front of centrifuge ===
     const cb = level6.cloningBoss;
     if (cb.alive) {
-        drawCloningBoss(cb.x, cb.y, cb.facing || 'forward', cb.paused, false);
+        drawLabTech(cb.x, cb.y, cb.facing || 'forward', cb.paused, false);
     } else if (cb.deathTime > 0) {
-        // Dead cloning boss — proper horizontal body lying on ground
-        drawDeadCloningBoss(cb.x, 392);
+        // Dead lab tech — proper horizontal body lying on ground
+        drawDeadLabTech(cb.x, 392);
     }
 
     // === DROPPED KEYCARD ===
@@ -18983,7 +19512,7 @@ function _drawCloneFollower(x, y, facing) {
     _drawNPC({
         x, y, color: COLORS[0], state: 'happy',
         needsDoc: false, crackStartTime: null, animOffset: 3,
-        walking: isWalking && !armed,
+        walking: isWalking,
         facing: backTurned ? 'back' : facing,
         skipArms: armed || backTurned,
     });
@@ -25105,6 +25634,128 @@ function _drawDeadCloningBoss(x, y) {
     // Brim
     ctx.fillStyle = '#e0e0e0';
     ctx.fillRect(x - 46, y + 2, 20, 2);
+}
+
+// Her body, not his. The lab tech was dying into the foreman's corpse — red
+// work shirt, black tie and a hard hat knocked off beside her.
+function drawDeadLabTech(x, y) {
+    shadeSprite(x + 0, y + -1, 50, 16, () => _drawDeadLabTech(x, y), { ground: 0.12 });
+}
+function _drawDeadLabTech(x, y) {
+    const COAT = '#e8ebee', COAT_D = '#bfc5cc';
+    const SKIN = '#f2cfa6', HAIR = '#5c3a22', HAIR_D = '#3f2716';
+    const GLOVE = '#3f9ad6', TROUSE = '#333a44';
+
+    // Shadow pool
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, 34, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Blood pool under the torso
+    ctx.fillStyle = '#6b0000';
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.ellipse(x - 2, y + 2, 28, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Back leg (behind the body) — dark trousers into a white shoe
+    ctx.fillStyle = '#232932';
+    ctx.fillRect(x + 8, y - 4, 20, 6);
+    ctx.fillRect(x + 26, y - 5, 15, 6);
+    ctx.fillStyle = '#cfd2d6';
+    pathRoundRect(x + 39, y - 6, 9, 6, 2); ctx.fill();
+
+    // Torso lying flat — lab coat over the red top
+    ctx.fillStyle = '#c02525';
+    ctx.fillRect(x - 12, y - 8, 22, 10);
+    ctx.fillStyle = COAT;
+    ctx.fillRect(x - 14, y - 11, 26, 14);
+    ctx.fillStyle = COAT_D;                       // the coat has fallen open
+    ctx.fillRect(x - 14, y - 11, 26, 4);
+    ctx.fillStyle = '#c02525';
+    ctx.fillRect(x - 8, y - 6, 16, 5);
+    ctx.strokeStyle = 'rgba(120,132,146,0.6)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x - 8, y - 6.5); ctx.lineTo(x + 8, y - 6.5);
+    ctx.moveTo(x - 8, y - 0.5); ctx.lineTo(x + 8, y - 0.5); ctx.stroke();
+    // ID badge, thrown clear on its lanyard
+    ctx.strokeStyle = '#2f6f9c'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 2, y + 4); ctx.stroke();
+    ctx.fillStyle = '#f2f4f6';
+    pathRoundRect(x + 1, y + 3, 6, 4.5, 0.8); ctx.fill();
+    ctx.fillStyle = '#5aa8d8';
+    ctx.fillRect(x + 1, y + 3, 6, 1.6);
+
+    // Near arm along the body — coat sleeve into a gloved hand
+    ctx.fillStyle = COAT;
+    ctx.fillRect(x - 8, y - 13, 15, 4);
+    ctx.fillStyle = GLOVE;
+    pathRoundRect(x + 6, y - 14, 6, 4.5, 1.6); ctx.fill();
+    // Far arm underneath, barely clearing the coat
+    ctx.fillStyle = COAT_D;
+    ctx.fillRect(x - 6, y + 2, 13, 3);
+    ctx.fillStyle = '#2b76ab';
+    pathRoundRect(x + 6, y + 1.6, 5, 4, 1.4); ctx.fill();
+
+    // Neck and head lying flat
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(x - 16, y - 6, 5, 6);
+    ctx.beginPath();
+    ctx.ellipse(x - 21, y - 5, 8, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Hair fanned out behind her, bun come loose
+    ctx.fillStyle = HAIR;
+    ctx.beginPath();
+    ctx.ellipse(x - 25, y - 5.5, 6.5, 7.5, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = HAIR_D;
+    ctx.beginPath();
+    ctx.ellipse(x - 31, y - 3, 4.4, 4.0, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = HAIR; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+    for(const dy of [-6, -2, 2]) {
+        ctx.beginPath();
+        ctx.moveTo(x - 27, y + dy * 0.5 - 3);
+        ctx.quadraticCurveTo(x - 33, y + dy - 4, x - 38, y + dy - 2);
+        ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+
+    // X eyes (dead)
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x - 23, y - 8); ctx.lineTo(x - 19.5, y - 4.5);
+    ctx.moveTo(x - 19.5, y - 8); ctx.lineTo(x - 23, y - 4.5);
+    ctx.moveTo(x - 18, y - 8); ctx.lineTo(x - 14.5, y - 4.5);
+    ctx.moveTo(x - 14.5, y - 8); ctx.lineTo(x - 18, y - 4.5);
+    ctx.stroke();
+    // Mouth — slack
+    ctx.strokeStyle = '#a8563a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x - 18, y + 0.5, 2.6, 0.3, Math.PI - 0.3);
+    ctx.stroke();
+
+    // Front leg (on top)
+    ctx.fillStyle = TROUSE;
+    ctx.fillRect(x + 8, y - 2, 20, 6);
+    ctx.fillRect(x + 26, y - 3, 15, 6);
+    ctx.fillStyle = '#e6e9ec';
+    pathRoundRect(x + 39, y - 3, 9, 6, 2); ctx.fill();
+
+    // Goggles knocked off, lying beside her head
+    ctx.strokeStyle = '#3a3f46'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - 40, y + 5); ctx.quadraticCurveTo(x - 44, y + 2, x - 47, y + 5);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.fillStyle = 'rgba(176,220,240,0.5)';
+    ctx.beginPath(); ctx.ellipse(x - 38, y + 4, 3.6, 2.8, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x - 45, y + 3, 3.6, 2.8, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#cfd6dc'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(x - 38, y + 4, 3.6, 2.8, 0.25, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x - 45, y + 3, 3.6, 2.8, 0.25, 0, Math.PI * 2); ctx.stroke();
 }
 
 function drawMuteIndicator() {
