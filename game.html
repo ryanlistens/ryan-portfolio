@@ -4540,7 +4540,9 @@ function _drawNPC(npc) {
         ctx.fillStyle = npcRamp.dark;
         ctx.fillRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s);
 
-        if(isBackTurn) {
+        // skipArms: the RED clone follower borrows this hooded back for walking
+        // away from you, and a man walking away is not reaching for a sack.
+        if(isBackTurn && !npc.skipArms) {
             // REACHING UP for the sack Mullet Pro is handing down. With his arms
             // at his sides the sack simply landed on his head and nobody took it.
             //
@@ -7200,7 +7202,7 @@ const FOOT_FIX = {
     mutant:          6,   // measured +30
     cloningBoss:     6,   // measured +30
     ceo:           -19,   // measured +55
-    cloneFollower:   5,   // measured +31
+    cloneFollower:   4,   // clone is drawn by the pipe manager sprite now
     skeleton:      -13,   // measured +49
     pipeManagerBack: -8,  // measured +44
 };
@@ -18957,117 +18959,81 @@ function drawCloneFollower(x, y, ...rest) {
 
 function _drawCloneFollower(x, y, facing) {
     const s = 2;
-    const clt = Date.now();
-    const isWalking = Math.abs(level6.cloneFollower.x - level6.cloneFollower.targetX) > 3;
-    const stride = isWalking ? Math.sin(clt / 125) * 3 : 0;
+    const cf = level6.cloneFollower;
+    const isWalking = Math.abs(cf.x - cf.targetX) > 3;
+    const stride = isWalking ? Math.sin(Date.now() / 125) * 3 : 0;
+    const armed = cf.armed;
+    const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
 
-    ctx.save();
+    // The faint red bloom that marks him as vat-grown
     ctx.fillStyle = 'rgba(255,50,50,0.06)';
     ctx.beginPath(); ctx.arc(x, y - 12, 24, 0, Math.PI * 2); ctx.fill();
 
-    // HEAD — changes based on facing/movement; body drawn once below
-    if(facing === 'up') {
-        // Back of hood — no face visible
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
-        ctx.fillRect(x - 8*s, y - 12*s, 16*s, 10*s);
-        ctx.fillStyle = '#3a2a1a';
-        ctx.fillRect(x - 4*s, y - 12*s, 8*s, 7*s);
-        ctx.strokeStyle = '#aa1a1a'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x, y - 15*s); ctx.lineTo(x, y - 2*s); ctx.stroke();
-    } else {
-        // Front face — stopped or facing down
-        ctx.fillStyle = '#cc2222';
-        ctx.beginPath();
-        ctx.moveTo(x - 6*s, y - 5*s);
-        ctx.lineTo(x - 6*s, y - 12*s);
-        ctx.lineTo(x - 5*s, y - 14*s);
-        ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
-        ctx.lineTo(x + 6*s, y - 12*s);
-        ctx.lineTo(x + 6*s, y - 5*s);
-        ctx.closePath();
+    // He is a clone of the RED pipe manager, so he is DRAWN by the pipe manager
+    // sprite: hood, face, torso, legs and gait all come from there, and the two
+    // cannot look like different characters again. He was a stack of fillRects
+    // — a box hood, a box torso, bar arms, bar legs — while the manager he was
+    // grown from had been rebuilt out of modelled volume.
+    // The arms are his own only when he is armed, because then one of them is
+    // levelling a ghost gun rather than swinging at his side.
+    // The manager's back-turned pose is him reaching for the rungs of his
+    // ladder, which is not what a man walking away from you is doing — so from
+    // behind he gets the hood and no arms, and the arms are hung on after.
+    const backTurned = (facing === 'up' || facing === 'back');
+    _drawNPC({
+        x, y, color: COLORS[0], state: 'happy',
+        needsDoc: false, crackStartTime: null, animOffset: 3,
+        walking: isWalking && !armed,
+        facing: backTurned ? 'back' : facing,
+        skipArms: armed || backTurned,
+    });
+
+    if(backTurned && !armed) {
+        // Arms hanging at his sides, swinging with the walk
+        const capY = y - 3.8 * s, shX = 5.6 * s;
+        for(const side of [-1, 1]) {
+            const sw = stride * side;
+            charLimb(x + side * shX, capY, x + side * 7.0 * s + sw, y + 4.6 * s,
+                     2.3 * s, side < 0 ? ramp.dark : charMix(COLORS[0].hex, '#000', 0.10),
+                     x + side * 7.4 * s + sw, y - 0.2 * s);
+            charDeltoid(x + side * shX, capY, 1.35 * s,
+                        charMix(COLORS[0].hex, '#000', side < 0 ? 0.16 : 0.06));
+            charHand(x + side * 7.0 * s + sw, y + 5.4 * s, 1.4 * s, '#f5c89a');
+        }
+    }
+
+    if(armed) {
+        // Gun arm levelled on the side he faces; the other hangs at his hip.
+        const side = (facing === 'left') ? -1 : 1;
+        const capY = y - 3.8 * s, shX = 5.6 * s;
+        const gunY = capY + 1.0;
+        charLimb(x + side * shX, capY, x + side * 25, gunY,
+                 2.3 * s, side < 0 ? ramp.dark : charMix(COLORS[0].hex, '#000', 0.10),
+                 x + side * 17, capY - 1.2);
+        charLimb(x - side * shX, capY, x - side * 7.0 * s, y + 4.6 * s,
+                 2.3 * s, side < 0 ? charMix(COLORS[0].hex, '#000', 0.10) : ramp.dark,
+                 x - side * 7.4 * s, y - 0.2 * s);
+        charDeltoid(x - side * shX, capY, 1.35 * s, charMix(COLORS[0].hex, '#000', 0.16));
+        charDeltoid(x + side * shX, capY, 1.35 * s, charMix(COLORS[0].hex, '#fff', 0.10));
+        charHand(x - side * 7.0 * s, y + 5.4 * s, 1.4 * s, '#f5c89a');
+        charHand(x + side * 26.5, gunY, 1.4 * s, '#f5c89a');
+
+        // Ghost gun in that hand — the printed pistol, barrel level with the arm
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#4af';
+        pathRoundRect(side > 0 ? x + 28 : x - 39, gunY - 2, 11, 3.6, 1.4);
         ctx.fill();
-        ctx.strokeStyle = '#aa1a1a'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x, y - 16*s); ctx.lineTo(x, y - 5*s); ctx.stroke();
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 4*s, y - 13*s, 8*s, 8*s);
-        // Same eye construction as the pipe managers it was cloned from
-        drawCharEyes(x, y - 9*s, 2.1*s, 2.2*s, 2.1*s,
-            { brow: '#5a4632', look: Math.sin(Date.now() / 1300) * 0.5 });
-        ctx.strokeStyle = '#8a5a46'; ctx.lineWidth = Math.max(1, 0.55*s);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(x - 1.5*s, y - 5.4*s); ctx.lineTo(x + 1.5*s, y - 5.4*s);
-        ctx.stroke();
-        ctx.lineCap = 'butt';
-    }
-
-    // BODY — same for all views; static legs, arms swing or extend when armed
-    ctx.fillStyle = '#cc2222';
-    ctx.fillRect(x - 6*s, y - 5*s, 12*s, 11*s);        // torso
-    if(level6.cloneFollower.armed) {
-        const gunRight = facing !== 'left';
-        // Arm on gun side: extended horizontally at shoulder height
-        // Other arm: hanging at side
-        ctx.fillStyle = '#cc2222';
-        if(gunRight) {
-            ctx.fillRect(x + 6*s, y - 2*s, 8*s, 2*s);      // right arm extended →
-            ctx.fillRect(x - 8*s, y - 3*s, 2*s, 7*s);      // left arm hanging
-        } else {
-            ctx.fillRect(x - 14*s, y - 2*s, 8*s, 2*s);     // left arm extended ←
-            ctx.fillRect(x + 6*s, y - 3*s, 2*s, 7*s);      // right arm hanging
-        }
-        ctx.fillStyle = '#f5c89a';
-        if(gunRight) {
-            ctx.fillRect(x + 14*s - 2, y - 2*s, 2*s, 2*s); // right hand
-            ctx.fillRect(x - 8*s, y + 4*s, 2*s, 2*s);      // left hand
-        } else {
-            ctx.fillRect(x - 16*s, y - 2*s, 2*s, 2*s);     // left hand
-            ctx.fillRect(x + 6*s, y + 4*s, 2*s, 2*s);      // right hand
-        }
-    } else {
-        ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s); // left arm swings
-        ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s); // right arm swings
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 8*s + stride, y + 4*s, 2*s, 2*s);
-        ctx.fillRect(x + 6*s - stride, y + 4*s, 2*s, 2*s);
-    }
-    // Legs lift off a fixed contact line and never push through it — the old
-    // cycle offset each foot in both directions, so a shoe dipped below the
-    // floor on alternate steps
-    const legBob = stride * 0.67;
-    const liftL = Math.max(0, -legBob), liftR = Math.max(0, legBob);
-    const hipY = y + 6*s, shoeTop = y + 13*s;
-    ctx.fillStyle = '#cc2222';
-    ctx.fillRect(x - 5*s, hipY, 4*s, Math.max(2, (shoeTop - liftL) - hipY));  // left leg
-    ctx.fillRect(x + s,   hipY, 4*s, Math.max(2, (shoeTop - liftR) - hipY));  // right leg
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(x - 5*s, shoeTop - liftL, 4*s, 3*s);   // left shoe
-    ctx.fillRect(x + s,   shoeTop - liftR, 4*s, 3*s);   // right shoe
-
-    ctx.restore();
-
-    // Ghost gun extended at arm tip when armed
-    if(level6.cloneFollower.armed) {
-        const gunRight = facing !== 'left';
-        ctx.fillStyle = '#4af'; ctx.globalAlpha = 0.85;
-        if(gunRight) {
-            ctx.fillRect(x + 14*s, y - 2*s - 2, 10, 4);    // barrel pointing right
-            ctx.fillStyle = '#2af';
-            ctx.fillRect(x + 14*s, y - 2*s + 1, 4, 5);     // clip/grip
-        } else {
-            ctx.fillRect(x - 14*s - 8, y - 2*s - 2, 10, 4); // barrel pointing left
-            ctx.fillStyle = '#2af';
-            ctx.fillRect(x - 14*s - 4, y - 2*s + 1, 4, 5);  // clip/grip
-        }
+        ctx.fillStyle = '#2af';
+        pathRoundRect(side > 0 ? x + 28.5 : x - 31.5, gunY + 1, 3, 5, 1);
+        ctx.fill();
         ctx.globalAlpha = 1;
     }
 
     // "CLONE" tag (or "ARMED" when armed)
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 18, y - 70, 36, 12);
-    ctx.fillStyle = level6.cloneFollower.armed ? '#4af' : '#ff6666';
+    ctx.fillStyle = armed ? '#4af' : '#ff6666';
     ctx.font = scaledFont(7, 'bold', 'Arial', true); ctx.textAlign = 'center';
-    ctx.fillText(level6.cloneFollower.armed ? 'ARMED' : 'CLONE', x, y - 61);
+    ctx.fillText(armed ? 'ARMED' : 'CLONE', x, y - 61);
 }
 
 // RED's own station in the employee pipe room, wherever the pipe list puts it.
