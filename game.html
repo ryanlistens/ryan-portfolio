@@ -1824,6 +1824,22 @@ function stepScale() {
     return Math.max(0.25, Math.min(3, _frameDelta / (1000 / 60)));
 }
 
+// One walk cycle for the whole cast.
+//
+// A foot that only bobs up and down slides along the floor in whichever
+// direction the body happens to be travelling — which is exactly what
+// moonwalking is, and it is what every sprite in here was doing: the legs
+// alternated vertically and nothing ever moved fore or aft. So: the planted
+// foot travels BACKWARD under the body while the airborne one swings forward.
+//   phase  radians; give the two legs phases pi apart
+//   dir    +1 walking right, -1 walking left, 0 face-on (no travel to match,
+//          so the legs only lift)
+// Returns the foot's fore/aft carry and its height off the floor.
+function gaitLeg(phase, dir, amp, lift) {
+    return { swing: -Math.cos(phase) * amp * dir,
+             lift:  Math.max(0, Math.sin(phase)) * lift };
+}
+
 function startGame() {
     state = 'levelCard';
     level = 1;
@@ -2554,7 +2570,9 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     const isBack = (facing === 'back' || facing === 'up');
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
     const mpStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
-    const mpLegBob = mpStride * 0.67; // Y-alternation: ±2px, no horizontal spread
+    const mpPh = frame * 0.25;
+    const mpAmp = isWalking ? 3.2 : 0, mpLift = isWalking ? 2.6 : 0;
+    const mpDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
 
     // Shadow — at foot level (y+36 = shoe bottom)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -2836,18 +2854,24 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
         }
 
         // --- Jeans: each foot lifts off a fixed contact line, never through it ---
-        const mpLiftL = Math.max(0, -mpLegBob), mpLiftR = Math.max(0, mpLegBob);
+        // Legs hinged from a fixed hip, feet carried fore and aft
         const mpHip = y + 8*s, mpSole = y + 16*s;
-        ctx.fillStyle = '#8fb0cc';
-        ctx.fillRect(x - 5*s, mpHip, 4*s, Math.max(2, (mpSole - mpLiftL) - mpHip));
-        ctx.fillStyle = '#a4c2db';
-        ctx.fillRect(x + s,   mpHip, 4*s, Math.max(2, (mpSole - mpLiftR) - mpHip));
-        ctx.fillStyle = 'rgba(0,0,0,0.10)';           // knee break
-        ctx.fillRect(x - 5*s, mpHip + 4.2*s, 4*s, 0.9*s);
-        ctx.fillRect(x + s,   mpHip + 4.2*s, 4*s, 0.9*s);
-        ctx.fillStyle = '#654321';
-        pathRoundRect(x - 5.2*s, mpSole - mpLiftL, 4.4*s, 2.4*s, 1*s); ctx.fill();
-        pathRoundRect(x + 0.8*s, mpSole - mpLiftR, 4.4*s, 2.4*s, 1*s); ctx.fill();
+        for(const [lx0, col, ph] of [[-5*s, '#8fb0cc', mpPh],
+                                     [ s,   '#a4c2db', mpPh + Math.PI]]) {
+            const g = gaitLeg(ph, mpDir, mpAmp, mpLift);
+            const bot = mpSole - g.lift;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(x + lx0, mpHip);
+            ctx.lineTo(x + lx0 + 4*s, mpHip);
+            ctx.lineTo(x + lx0 + 4*s + g.swing, bot);
+            ctx.lineTo(x + lx0 + g.swing, bot);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.10)';          // knee break
+            ctx.fillRect(x + lx0 + g.swing * 0.5, mpHip + 4.2*s, 4*s, 0.9*s);
+            ctx.fillStyle = '#654321';
+            pathRoundRect(x + lx0 - 0.2*s + g.swing, bot, 4.4*s, 2.4*s, 1*s); ctx.fill();
+        }
     }
 }
 
@@ -3091,7 +3115,31 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 
     // Arm swing for walking (only when not holding doc or weapon)
     const bmStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
-    const bmLegBob = bmStride * 0.67; // Y-alternation for legs
+    const bmPh = frame * 0.25;
+    const bmAmp = isWalking ? 3.4 : 0, bmLift = isWalking ? 2.8 : 0;
+    // Which way he is travelling, so the planted foot goes the right way
+    const bmDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
+    // Legs hinged from a fixed hip: top edge stays on the hips, the foot swings
+    const bmLegs = (hipY, soleY, w, colL, colR, shoeCol, shoeH, creaseCol) => {
+        for(const [lx0, col, ph] of [[-5*s, colL, bmPh], [s, colR, bmPh + Math.PI]]) {
+            const g = gaitLeg(ph, bmDir, bmAmp, bmLift);
+            const bot = soleY - g.lift;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(x + lx0, hipY);
+            ctx.lineTo(x + lx0 + w, hipY);
+            ctx.lineTo(x + lx0 + w + g.swing, bot);
+            ctx.lineTo(x + lx0 + g.swing, bot);
+            ctx.closePath(); ctx.fill();
+            if(creaseCol) {
+                ctx.fillStyle = creaseCol;
+                ctx.fillRect(x + lx0 + w * 0.4 + g.swing * 0.5, hipY + (bot - hipY) * 0.5,
+                             0.7*s, (bot - hipY) * 0.5);
+            }
+            ctx.fillStyle = shoeCol;
+            pathRoundRect(x + lx0 - 0.2*s + g.swing, bot, w + 0.4*s, shoeH, 0.9*s); ctx.fill();
+        }
+    };
 
     if(facing === 'left') {
         ctx.fillStyle = skinColor;
@@ -3135,11 +3183,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
+        bmLegs(y + 15*s, y + 23*s, 4*s, '#141414', '#1f1f1f', '#000', 2*s, null);
 
     } else if(facing === 'right') {
         ctx.fillStyle = skinColor;
@@ -3183,11 +3227,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
 
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(x - 7*s, y + 11*s, 14*s, 4*s);
-        ctx.fillRect(x - 5*s, y + 15*s + bmLegBob, 4*s, 8*s);
-        ctx.fillRect(x + s, y + 15*s - bmLegBob, 4*s, 8*s);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x - 5*s, y + 23*s + bmLegBob, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 23*s - bmLegBob, 4*s, 2*s);
+        bmLegs(y + 15*s, y + 23*s, 4*s, '#141414', '#1f1f1f', '#000', 2*s, null);
 
     } else {
         ctx.fillStyle = skinColor;
@@ -3294,18 +3334,8 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
             ctx.fillStyle = '#c9a227';                   // buckle
             ctx.fillRect(x - 1.1*s, y + 12*s, 2.2*s, 1.8*s);
         }
-        const bmLiftL = Math.max(0, -bmLegBob), bmLiftR = Math.max(0, bmLegBob);
-        const bmHip = y + 15*s, bmSole = y + 23*s;
-        ctx.fillStyle = '#141414';
-        ctx.fillRect(x - 5*s, bmHip, 4*s, Math.max(2, (bmSole - bmLiftL) - bmHip));
-        ctx.fillStyle = '#1f1f1f';
-        ctx.fillRect(x + s,   bmHip, 4*s, Math.max(2, (bmSole - bmLiftR) - bmHip));
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';        // trouser crease
-        ctx.fillRect(x - 3.4*s, bmHip, 0.7*s, Math.max(2, (bmSole - bmLiftL) - bmHip));
-        ctx.fillRect(x + 2.6*s, bmHip, 0.7*s, Math.max(2, (bmSole - bmLiftR) - bmHip));
-        ctx.fillStyle = '#000';
-        pathRoundRect(x - 5.2*s, bmSole - bmLiftL, 4.4*s, 2.2*s, 0.9*s); ctx.fill();
-        pathRoundRect(x + 0.8*s, bmSole - bmLiftR, 4.4*s, 2.2*s, 0.9*s); ctx.fill();
+        bmLegs(y + 15*s, y + 23*s, 4*s, '#141414', '#1f1f1f', '#000', 2.2*s,
+               'rgba(255,255,255,0.05)');
     }
 
     // === POLISH OVERLAYS — applied to all facings to soften the rectangular sprite ===
@@ -4641,6 +4671,26 @@ function drawBoss(x, y, ...rest) {
 
 function _drawBoss(x, y, facing) {
     const s = 2;
+    // His legs stretched and shrank in place with nothing carried fore or aft —
+    // the same slide every sprite in here had.
+    const bsPh = frame * 0.25;
+    const bsDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
+    const bsAmp = boss.walking ? 4 : 0, bsLift = boss.walking ? 4.5 : 0;
+    const bossLegs = () => {
+        for(const [lx0, ph] of [[-5*s, bsPh], [s, bsPh + Math.PI]]) {
+            const g = gaitLeg(ph, bsDir, bsAmp, bsLift);
+            const hip = y + 16*s, bot = y + 24*s - g.lift;
+            ctx.fillStyle = '#2b2b2b';
+            ctx.beginPath();
+            ctx.moveTo(x + lx0, hip);
+            ctx.lineTo(x + lx0 + 4*s, hip);
+            ctx.lineTo(x + lx0 + 4*s + g.swing, bot);
+            ctx.lineTo(x + lx0 + g.swing, bot);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(x + lx0 + g.swing, bot, 4*s, 2*s);
+        }
+    };
 
     // Shadow — at foot level (y+50 ≈ shoe bottom)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -4681,13 +4731,7 @@ function _drawBoss(x, y, facing) {
         
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
-        const legL = boss.walking ? Math.sin(frame * 0.25) * 5 : 0;
-        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s + legL);
-        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s - legL);
-
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 5*s, y + 24*s + legL, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 24*s - legL, 4*s, 2*s);
+        bossLegs();
 
     } else if(facing === 'right') {
         ctx.fillStyle = skinColor;
@@ -4720,13 +4764,7 @@ function _drawBoss(x, y, facing) {
         
         ctx.fillStyle = '#2b2b2b';
         ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
-        const legR = boss.walking ? Math.sin(frame * 0.25) * 5 : 0;
-        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 8*s + Math.max(0, legR));
-        ctx.fillRect(x + s, y + 16*s, 4*s, 8*s + Math.max(0, -legR));
-
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 5*s, y + 24*s + legR, 4*s, 2*s);
-        ctx.fillRect(x + s, y + 24*s - legR, 4*s, 2*s);
+        bossLegs();
     }
 
     // === POLISH OVERLAYS — mirrors drawBaldManager so the main boss has the same sprite refinement ===
@@ -5326,22 +5364,30 @@ function _drawNPC(npc) {
                 if(!stressedL) charHand(x - 7.0*s + npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
                 charHand(x + 7.0*s - npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
             }
-            // Legs — knees hinted, boots on a fixed contact line, alternating
-            // when he is walking
-            const npcLB = npcStride * 0.72;
-            ctx.fillStyle = npcRamp.dark;
-            ctx.fillRect(x - 5*s, y + 6*s + npcLB, 4*s, 7*s);
-            ctx.fillStyle = npcRamp.base;
-            ctx.fillRect(x + s, y + 6*s - npcLB, 4*s, 7*s);
-            ctx.fillStyle = 'rgba(0,0,0,0.13)';
-            ctx.fillRect(x - 5*s, y + 9.4*s + npcLB, 4*s, 0.8*s);
-            ctx.fillRect(x + s,   y + 9.4*s - npcLB, 4*s, 0.8*s);
-            ctx.fillStyle = '#fff';
-            pathRoundRect(x - 5*s, y + 13*s + npcLB, 4*s, 3.2*s, 1.4*s); ctx.fill();
-            pathRoundRect(x + s, y + 13*s - npcLB, 4*s, 3.2*s, 1.4*s); ctx.fill();
-            ctx.fillStyle = 'rgba(0,0,0,0.18)';
-            ctx.fillRect(x - 5*s, y + 15.4*s + npcLB, 4*s, 0.8*s);
-            ctx.fillRect(x + s,   y + 15.4*s - npcLB, 4*s, 0.8*s);
+            // Legs. Each hinges from a fixed hip and carries its foot fore and
+            // aft, so a walking manager's planted foot goes backward under him
+            // instead of hovering in place while he slides along.
+            const npcPh = Date.now() / 125;
+            const npcAmp = npc.walking ? 3.2 : 0, npcLift = npc.walking ? 2.6 : 0;
+            const npcHip = y + 6*s, npcSole = y + 13*s;
+            for(const [lx0, col, ph] of [[-5*s, npcRamp.dark, npcPh],
+                                         [ s,   npcRamp.base, npcPh + Math.PI]]) {
+                const g = gaitLeg(ph, npcTurn, npcAmp, npcLift);
+                const bot = npcSole - g.lift;
+                ctx.fillStyle = col;
+                ctx.beginPath();
+                ctx.moveTo(x + lx0, npcHip);
+                ctx.lineTo(x + lx0 + 4*s, npcHip);
+                ctx.lineTo(x + lx0 + 4*s + g.swing, bot);
+                ctx.lineTo(x + lx0 + g.swing, bot);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.13)';          // knee
+                ctx.fillRect(x + lx0 + g.swing * 0.5, npcHip + 3.4*s, 4*s, 0.8*s);
+                ctx.fillStyle = '#fff';                      // shoe
+                pathRoundRect(x + lx0 + g.swing, bot, 4*s, 3.2*s, 1.4*s); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.18)';
+                ctx.fillRect(x + lx0 + g.swing, bot + 2.4*s, 4*s, 0.8*s);
+            }
         }
     }
 
@@ -19653,7 +19699,7 @@ function updateCloneFollower() {
             cf.targetX = st.x;
             const d = cf.targetX - cf.x;
             if(Math.abs(d) > 4) {
-                cf.x += Math.sign(d) * Math.min(Math.abs(d) * 0.10, 2.5);
+                cf.x += Math.sign(d) * Math.min(Math.abs(d) * 0.12, 3.4) * stepScale();
                 cf.facing = d > 0 ? 'right' : 'left';
             } else {
                 cf.x = st.x;
@@ -19681,10 +19727,12 @@ function updateCloneFollower() {
     // Clamp target within room bounds
     cf.targetX = Math.max(25, Math.min(660, cf.targetX));
 
-    // Smoothly walk toward target
+    // Walk toward the target. He used to cap at 2.5px a frame while the player
+    // covers 5 * stepScale(), and his own step was not frame-rate scaled either
+    // — so he fell behind on every corridor and never made it up.
     const dx = cf.targetX - cf.x;
-    if(Math.abs(dx) > 3) {
-        cf.x += Math.sign(dx) * Math.min(Math.abs(dx) * 0.08, 2.5);
+    if(Math.abs(dx) > 2) {
+        cf.x += Math.sign(dx) * Math.min(Math.abs(dx) * 0.22, 5.6) * stepScale();
         cf.facing = dx > 0 ? 'right' : 'left';
     }
 
@@ -24834,8 +24882,21 @@ function ceoAxeHand(x, y, facing) {
     return { x: x + dd * 3.6, y: gy + 30.8, dd };
 }
 
+// He only ever animated his legs while `ceo.state === 'hunting'`. During RED'S
+// ENDING he is the executioner, carrying a state left over from level 6, so he
+// walked the length of the furnace room to kill a man without taking a step.
+// Measured off his own position instead: if he moved, he is walking.
+let _ceoLastX = null, _ceoWalkTimer = 0;
+
 function _drawCEO(x, y, facing) {
     const s = 2;
+    if(_ceoLastX !== null && Math.abs(x - _ceoLastX) > 0.4) _ceoWalkTimer = 8;
+    else if(_ceoWalkTimer > 0) _ceoWalkTimer--;
+    _ceoLastX = x;
+    const ceoWalking = _ceoWalkTimer > 0 || (ceo.state === 'hunting' && ceo.moveTimer > 0);
+    const ceoPh = frame * 0.2;
+    const ceoAmp = ceoWalking ? 3.4 : 0, ceoLiftAmt = ceoWalking ? 3.0 : 0;
+    const ceoDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
 
     // Contact shadow, ON the soles. It was at y+36 while his shoes reach y+52,
     // so it floated at knee height and read as being cast behind him.
@@ -24848,13 +24909,13 @@ function _drawCEO(x, y, facing) {
     const weatheredSkin = '#c49872';
 
     if(facing === 'left') {
-        const legL = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        const legL = ceoWalking ? Math.sin(ceoPh) * 3 : 0;
         ceoProfileBody(x, y, s, -1, legL, ceo.state === 'hunting');
         if(ceo.state === 'hunting' && !ceoIsExecutioner()) ceoGunArm(x, y, 'left');
         ceoProfileHead(x, y, s, -1, skinColor, weatheredSkin);
 
     } else if(facing === 'right') {
-        const legR = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
+        const legR = ceoWalking ? Math.sin(ceoPh) * 3 : 0;
         ceoProfileBody(x, y, s, 1, legR, ceo.state === 'hunting');
         if(ceo.state === 'hunting' && !ceoIsExecutioner()) ceoGunArm(x, y, 'right');
         ceoProfileHead(x, y, s, 1, skinColor, weatheredSkin);
@@ -24947,14 +25008,15 @@ function _drawCEO(x, y, facing) {
         ctx.fillRect(x - 7*s, y + 11.4*s, 14*s, 0.4*s);
         ctx.fillStyle = '#c8a63e';
         ctx.fillRect(x - 0.9*s, y + 11.4*s, 1.8*s, 1.4*s);
-        const leg = (ceo.state === 'hunting' && ceo.moveTimer > 0) ? Math.sin(frame * 0.2) * 3 : 0;
-        if(leg !== 0) {                                   // stride: lift each leg
-            ctx.fillStyle = trG;
-            ctx.fillRect(x - 6.0*s, y + 24*s, 4.5*s, Math.max(0, leg));
-            ctx.fillRect(x + 1.5*s, y + 24*s, 4.5*s, Math.max(0, -leg));
+        {
+            const gL = gaitLeg(ceoPh, ceoDir, ceoAmp, ceoLiftAmt);
+            const gR = gaitLeg(ceoPh + Math.PI, ceoDir, ceoAmp, ceoLiftAmt);
+            ctx.fillStyle = trG;                          // shin fills the lift
+            ctx.fillRect(x - 6.0*s + gL.swing, y + 24*s, 4.5*s, Math.max(0, gL.lift));
+            ctx.fillRect(x + 1.5*s + gR.swing, y + 24*s, 4.5*s, Math.max(0, gR.lift));
+            ceoShoe(x - 6.0*s + gL.swing, y + 26*s - gL.lift, 4.5*s, s);
+            ceoShoe(x + 1.5*s + gR.swing, y + 26*s - gR.lift, 4.5*s, s);
         }
-        ceoShoe(x - 6.0*s, y + 26*s + leg, 4.5*s, s);
-        ceoShoe(x + 1.5*s, y + 26*s - leg, 4.5*s, s);
 
         if(ceo.state === 'hunting' && !ceoIsExecutioner()) ceoGunArm(x, y, 'down');
 
