@@ -136,7 +136,7 @@
 <body>
     <div id="game-frame">
         <div id="hud">
-            <span>LEVEL <span id="level">1</span></span>
+            <span id="level">PRESSURE RISING</span>
             <span>SCORE <span id="score">0</span></span>
             <span><span id="timer">60</span>s</span>
             <span id="lives"></span>
@@ -481,8 +481,10 @@ const levelMusic = {
     yellow: new Audio('music/yellow.mp3'),
     level4:  new Audio('music/level4.mp3'),
     level6:  new Audio('music/level6.mp3'),
-    // Remaining tracks silenced for now (original sound design pass in progress)
-    level1: null, level2: null, level3: null,
+    level3:  new Audio('music/level3.mp3'),
+    // level1 and level2 are unused: level 1 is cut, and the level the game now
+    // opens on is carried by the menu track running on from the title screen.
+    level1: null, level2: null,
     blewit: null,
     blue: null, green: null, red: null
 };
@@ -1840,9 +1842,23 @@ function gaitLeg(phase, dir, amp, lift) {
              lift:  Math.max(0, Math.sin(phase)) * lift };
 }
 
+// The levels are named, not numbered. Level 1 is cut — the game opens on what
+// was level 2 — and since nothing shows a number any more, the internal ids
+// stay as they were rather than renumbering six levels' worth of branches.
+const FIRST_LEVEL = 2;
+const LEVEL_TITLES = {
+    1: 'TRAINING DAY',
+    2: 'PRESSURE RISING',
+    3: 'MAXIMUM CHAOS',
+    4: '3D PRINTER UNLOCKED',
+    5: 'MANAGEMENT',
+    6: 'THE CEO WANTS TO MEET YOU',
+};
+function levelTitle(n) { return LEVEL_TITLES[n] || ''; }
+
 function startGame() {
     state = 'levelCard';
-    level = 1;
+    level = FIRST_LEVEL;
     score = 0;
     livesRuined = 0;
     timer = 60;
@@ -1872,11 +1888,13 @@ function startGame() {
     // field they own; initLevel has no side effects beyond state.
     initLevel(6);
     initLevel(5);
-    initLevel(1);
+    initLevel(FIRST_LEVEL);
     updateLives();
 
     // Stop menu music and play level 1 music when showing level card
-    playMusic('level1', true);
+    // No music call here on purpose: the menu track carries straight on into
+    // the first level. It used to ask for 'level1', which was a null entry, and
+    // a null entry stops whatever is playing — so the game opened in silence.
 }
 
 
@@ -1884,7 +1902,7 @@ function startGame() {
 function spawnCracks() {
     if(state !== 'playing' || resetting || level === 5 || level === 6) return;
     
-    const delay = level === 1 ? 5000 : level === 4 ? 3000 : 4000;
+    const delay = level === FIRST_LEVEL ? 5000 : level === 4 ? 3000 : 4000;
     
     setTimeout(() => {
         if(state === 'playing' && !resetting && level !== 5 && level !== 6) {
@@ -3757,18 +3775,34 @@ function _drawCloningBoss(bx, by, facing, paused, hasGun) {
         ctx.closePath();
         ctx.fill();
 
+        // --- Neck. He had none: the head's jaw met the shirt collar directly,
+        // which is what made his face read as long. Drawn before the head so
+        // the jaw overhangs it.
+        ctx.fillStyle = charMix('#f5d5a8', '#000', 0.16);
+        ctx.beginPath();
+        ctx.moveTo(bx - 3.4 * dir, by - 36 - bob);
+        ctx.lineTo(bx + 3.2 * dir, by - 36 - bob);
+        ctx.quadraticCurveTo(bx + 4.0 * dir, by - 30 - bob, bx + 3.6 * dir, by - 25 - bob);
+        ctx.lineTo(bx - 2.8 * dir, by - 25 - bob);
+        ctx.quadraticCurveTo(bx - 3.8 * dir, by - 30 - bob, bx - 3.4 * dir, by - 36 - bob);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(140,88,52,0.22)';                                           // nape
+        ctx.fillRect(Math.min(bx - 3.4 * dir, bx - 1.8 * dir), by - 36 - bob, 1.6, 11);
+
         // --- Head in profile — curved skull, brow ridge, nose, chin, ear ---
         ctx.fillStyle = '#f5d5a8';
         ctx.beginPath();
-        ctx.moveTo(bx - 8 * dir, by - 28 - bob);                                          // nape
-        ctx.quadraticCurveTo(bx - 11 * dir, by - 40 - bob, bx - 8 * dir, by - 49 - bob);  // back of skull
+        // The jaw used to run down to by-28, a whisker off the collar, so the
+        // head swallowed the whole neck and the face read a head-and-a-half long.
+        ctx.moveTo(bx - 7.6 * dir, by - 34 - bob);                                        // nape
+        ctx.quadraticCurveTo(bx - 11 * dir, by - 42 - bob, bx - 8 * dir, by - 49 - bob);  // back of skull
         ctx.quadraticCurveTo(bx - 2 * dir, by - 53 - bob, bx + 5 * dir, by - 51 - bob);   // crown
         ctx.quadraticCurveTo(bx + 10 * dir, by - 49 - bob, bx + 10 * dir, by - 44 - bob); // forehead
         ctx.lineTo(bx + 10 * dir, by - 42 - bob);
         ctx.lineTo(bx + 12.5 * dir, by - 40 - bob);                                       // nose tip
-        ctx.quadraticCurveTo(bx + 12.5 * dir, by - 37.5 - bob, bx + 9.8 * dir, by - 37 - bob);
-        ctx.lineTo(bx + 9.4 * dir, by - 33 - bob);
-        ctx.quadraticCurveTo(bx + 10 * dir, by - 29.5 - bob, bx + 6 * dir, by - 28.5 - bob); // chin
+        ctx.quadraticCurveTo(bx + 12.5 * dir, by - 37.8 - bob, bx + 9.8 * dir, by - 37.4 - bob);
+        ctx.lineTo(bx + 9.4 * dir, by - 35.6 - bob);
+        ctx.quadraticCurveTo(bx + 9.8 * dir, by - 33.4 - bob, bx + 5.4 * dir, by - 33 - bob); // chin
         ctx.closePath();
         ctx.fill();
         // Ear on the visible side
@@ -3813,7 +3847,7 @@ function _drawCloningBoss(bx, by, facing, paused, hasGun) {
         // Downturned mouth set into the jaw
         ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1.3;
         ctx.beginPath();
-        ctx.arc(bx + 7.5 * dir, by - 30 - bob, 2, Math.PI + 0.35, Math.PI * 2 - 0.35);
+        ctx.arc(bx + 7.6 * dir, by - 35.2 - bob, 1.8, Math.PI + 0.35, Math.PI * 2 - 0.35);
         ctx.stroke();
 
         // --- Hard hat — dome tilted with the lean, crown ridge, front brim ---
@@ -4265,18 +4299,31 @@ function _drawLabTech(bx, by, facing, paused, hasGun) {
         ctx.fillStyle = '#5aa8d8';
         ctx.fillRect(Math.min(tfx(-1.2), tfx(2.2)), by - 16 - bob, 3.4, 1.6);
 
+        // --- Neck, before the head, so the jaw overhangs it
+        ctx.fillStyle = charMix(SKIN, '#000', 0.16);
+        ctx.beginPath();
+        ctx.moveTo(bx - 3.0 * dir, by - 36 - bob);
+        ctx.lineTo(bx + 2.8 * dir, by - 36 - bob);
+        ctx.quadraticCurveTo(bx + 3.6 * dir, by - 30 - bob, bx + 3.2 * dir, by - 25.5 - bob);
+        ctx.lineTo(bx - 2.4 * dir, by - 25.5 - bob);
+        ctx.quadraticCurveTo(bx - 3.4 * dir, by - 30 - bob, bx - 3.0 * dir, by - 36 - bob);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(140,88,52,0.20)';
+        ctx.fillRect(Math.min(bx - 3.0 * dir, bx - 1.4 * dir), by - 36 - bob, 1.6, 10.5);
+
         // --- Head in profile — curved skull, brow, nose, chin, hair, goggles ---
         ctx.fillStyle = SKIN;
         ctx.beginPath();
-        ctx.moveTo(bx - 8 * dir, by - 28 - bob);                                          // nape
-        ctx.quadraticCurveTo(bx - 11 * dir, by - 40 - bob, bx - 8 * dir, by - 49 - bob);  // back of skull
+        // Jaw raised off the collar, as on the foreman, so her neck can show
+        ctx.moveTo(bx - 7.6 * dir, by - 34 - bob);                                        // nape
+        ctx.quadraticCurveTo(bx - 11 * dir, by - 42 - bob, bx - 8 * dir, by - 49 - bob);  // back of skull
         ctx.quadraticCurveTo(bx - 2 * dir, by - 53 - bob, bx + 5 * dir, by - 51 - bob);   // crown
         ctx.quadraticCurveTo(bx + 10 * dir, by - 49 - bob, bx + 10 * dir, by - 44 - bob); // forehead
         ctx.lineTo(bx + 10 * dir, by - 42 - bob);
         ctx.lineTo(bx + 12.2 * dir, by - 40 - bob);                                       // nose tip
-        ctx.quadraticCurveTo(bx + 12.2 * dir, by - 37.5 - bob, bx + 9.6 * dir, by - 37 - bob);
-        ctx.lineTo(bx + 9.0 * dir, by - 33.4 - bob);
-        ctx.quadraticCurveTo(bx + 9.2 * dir, by - 30 - bob, bx + 5.4 * dir, by - 29 - bob); // chin
+        ctx.quadraticCurveTo(bx + 12.2 * dir, by - 37.8 - bob, bx + 9.6 * dir, by - 37.4 - bob);
+        ctx.lineTo(bx + 9.0 * dir, by - 35.6 - bob);
+        ctx.quadraticCurveTo(bx + 9.2 * dir, by - 33.4 - bob, bx + 5.2 * dir, by - 33 - bob); // chin
         ctx.closePath();
         ctx.fill();
         // Hair: swept back off the forehead into a bun at the nape — tied up is
@@ -4302,8 +4349,8 @@ function _drawLabTech(bx, by, facing, paused, hasGun) {
         // Mouth, set
         ctx.strokeStyle = '#a8563a'; ctx.lineWidth = 1.1; ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(bx + 5.6 * dir, by - 32.4 - bob);
-        ctx.quadraticCurveTo(bx + 7.6 * dir, by - 32.0 - bob, bx + 8.8 * dir, by - 32.9 - bob);
+        ctx.moveTo(bx + 5.8 * dir, by - 35.4 - bob);
+        ctx.quadraticCurveTo(bx + 7.6 * dir, by - 35.0 - bob, bx + 8.8 * dir, by - 35.9 - bob);
         ctx.stroke();
         ctx.lineCap = 'butt';
 
@@ -4772,6 +4819,9 @@ function drawBoss(x, y, ...rest) {
 
 function _drawBoss(x, y, facing) {
     const s = 2;
+    // He is only ever drawn in profile — but he has no other pose at all, so any
+    // other facing used to render a floating scalp and a collar over nothing.
+    if(facing !== 'left' && facing !== 'right') facing = 'right';
     // His legs stretched and shrank in place with nothing carried fore or aft —
     // the same slide every sprite in here had.
     const bsPh = frame * 0.25;
@@ -29032,18 +29082,22 @@ function drawScene() {
             lvlGrad.addColorStop(0, '#ff6b35');
             lvlGrad.addColorStop(1, '#ffd700');
 
-            ctx.font = 'bold 80px Arial';
+            // The title IS the card. Sized to fit rather than fixed, because
+            // the names run from 'MANAGEMENT' to 'THE CEO WANTS TO MEET YOU'
+            // and one font size cannot hold both.
+            const title = levelTitle(level);
             ctx.textAlign = 'center';
+            let tSize = 76;
+            do {
+                ctx.font = 'bold ' + tSize + 'px Arial';
+                if(ctx.measureText(title).width <= 600) break;
+                tSize -= 2;
+            } while(tSize > 26);
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 8;
-            ctx.strokeText('LEVEL ' + level, 350, 200);
+            ctx.lineWidth = Math.max(4, tSize * 0.10);
+            ctx.strokeText(title, 350, 235);
             ctx.fillStyle = lvlGrad;
-            ctx.fillText('LEVEL ' + level, 350, 200);
-
-            ctx.fillStyle = '#f5f2ec';
-            ctx.font = 'bold 32px Arial';
-            const msgs = ['', 'TRAINING DAY', 'PRESSURE RISING!', 'MAXIMUM CHAOS!', '3D PRINTER UNLOCKED!', 'MANAGEMENT', 'THE CEO WANTS TO MEET YOU'];
-            ctx.fillText(msgs[level], 350, 270);
+            ctx.fillText(title, 350, 235);
 
             if(cardTimer > 60) {
                 if(Math.floor(frame / 30) % 2 === 0) {
@@ -31587,7 +31641,7 @@ function drawScene() {
     // L1-4 interactions (printer, computer, pipe manager) are intentionally undiscovered — no action labels
 
     // Level skip cheat hints — only reveal counter after 5 presses (keep secret during normal play)
-    if(level === 1 && skipPressCount > 5) {
+    if(level === FIRST_LEVEL && skipPressCount > 5) {
         const bluePM = npcs.find(n => n.color.name === 'BLUE');
         if(bluePM && Math.abs(player.x - bluePM.x) < 50) {
             ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
@@ -31599,7 +31653,7 @@ function drawScene() {
             ctx.fillText(hint, player.x, player.y - 67);
         }
     }
-    if(level === 1 && skipGreenPressCount > 5) {
+    if(level === FIRST_LEVEL && skipGreenPressCount > 5) {
         const greenPM = npcs.find(n => n.color.name === 'GREEN');
         if(greenPM && Math.abs(player.x - greenPM.x) < 50) {
             ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
@@ -31611,7 +31665,7 @@ function drawScene() {
             ctx.fillText(hint, player.x, player.y - 67);
         }
     }
-    if(level === 1 && skipRedPressCount > 5) {
+    if(level === FIRST_LEVEL && skipRedPressCount > 5) {
         const redPM = npcs.find(n => n.color.name === 'RED');
         if(redPM && Math.abs(player.x - redPM.x) < 50) {
             ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
@@ -32478,7 +32532,7 @@ function update() {
                     playMusic('hellmode');
                     hellMode = true;
                     hellModeStartTime = Date.now();
-                    level = 1;
+                    level = FIRST_LEVEL;
                     state = 'levelCard';
                     cardTimer = 0;
                     timer = 180;
@@ -32486,7 +32540,7 @@ function update() {
                         level5.mulletPro.deathDone = false;
                         level5.mulletPro.deathStartTime = 0;
                     }
-                    initLevel(1);
+                    initLevel(FIRST_LEVEL);
                     sds.coffinConsumeTimer = 0;
                     return;
                 }
@@ -37448,8 +37502,9 @@ if (keys[' '] || keys['action']) {
         keys[' '] = false;
         keys['action'] = false;
 
-        // Level 1 skip cheats — secret: no indicator for first 5 consecutive presses
-        if(level === 1 && !ui.show && !ui.gunUI) {
+        // Skip cheats — secret: no indicator for first 5 consecutive presses.
+        // They live on whichever level the game opens on.
+        if(level === FIRST_LEVEL && !ui.show && !ui.gunUI) {
             const bluePM = npcs.find(n => n.color.name === 'BLUE');
             const greenPM = npcs.find(n => n.color.name === 'GREEN');
             const redPM = npcs.find(n => n.color.name === 'RED');
@@ -37813,7 +37868,7 @@ function gameLoop() {
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
     }
-    document.getElementById('level').textContent = level;
+    document.getElementById('level').textContent = hellMode ? 'HELL' : levelTitle(level);
     document.getElementById('score').textContent = score;
     requestAnimationFrame(gameLoop);
 }
