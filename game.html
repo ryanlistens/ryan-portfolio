@@ -1796,9 +1796,12 @@ function initLevel(lv) {
     }
     
     if(level === 1) {
+        // Three of the four, standing where they will still be standing after
+        // YELLOW joins them — a shuffle mid-shift would read as a glitch.
         npcs.push({x:280, y:368, color:COLORS[0], state:'happy', needsDoc:false, fixAnim:0});
-        npcs.push({x:390, y:368, color:COLORS[1], state:'happy', needsDoc:false, fixAnim:0});
-        npcs.push({x:500, y:368, color:COLORS[2], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:380, y:368, color:COLORS[1], state:'happy', needsDoc:false, fixAnim:0});
+        npcs.push({x:480, y:368, color:COLORS[2], state:'happy', needsDoc:false, fixAnim:0});
+        shift = { yellow: null, yellowArrived: false, managerStarted: false };
     } else {
         npcs.push({x:280, y:368, color:COLORS[0], state:'happy', needsDoc:false, fixAnim:0});
         npcs.push({x:380, y:368, color:COLORS[1], state:'happy', needsDoc:false, fixAnim:0});
@@ -1842,26 +1845,39 @@ function gaitLeg(phase, dir, amp, lift) {
              lift:  Math.max(0, Math.sin(phase)) * lift };
 }
 
-// The levels are named, not numbered. Level 1 is cut — the game opens on what
-// was level 2 — and since nothing shows a number any more, the internal ids
-// stay as they were rather than renumbering six levels' worth of branches.
-const FIRST_LEVEL = 2;
+// The levels are named, not numbered.
+//
+// The first three used to be the same room three times — three pipes for a
+// minute, then four pipes for a minute, then four pipes and a manager for a
+// minute, with a title card between each. Three restarts of one idea, which is
+// a reason to put the game down rather than a reason to keep playing. They are
+// ONE shift now, and the escalations happen in front of you while you work:
+// YELLOW carries his ladder in partway through, and later the manager starts
+// coming. No cards for either — the arrival IS the announcement.
+//
+// So the first title card the player ever sees is the 3D printer.
+const FIRST_LEVEL = 1;
+const LEVEL_AFTER = { 1: 4 };          // 2 and 3 are folded into the first shift
+const SHIFT_SECONDS = 150;             // the merged opener, near the three it replaces
+const YELLOW_ARRIVES_AT = 100;         // seconds left when he walks in
+const MANAGER_STARTS_AT = 58;          // seconds left when the door first opens
 const LEVEL_TITLES = {
     1: 'TRAINING DAY',
-    2: 'PRESSURE RISING',
-    3: 'MAXIMUM CHAOS',
     4: '3D PRINTER UNLOCKED',
     5: 'MANAGEMENT',
     6: 'THE CEO WANTS TO MEET YOU',
 };
 function levelTitle(n) { return LEVEL_TITLES[n] || ''; }
 
+// The first shift's own state: who has arrived, and how far through arriving.
+let shift = { yellow: null, yellowArrived: false, managerStarted: false };
+
 function startGame() {
-    state = 'levelCard';
+    state = 'playing';                 // no card on the first shift
     level = FIRST_LEVEL;
     score = 0;
     livesRuined = 0;
-    timer = 60;
+    timer = SHIFT_SECONDS;
     lives = 3;
     fountainLastCycle = -1;
     cardTimer = 0;
@@ -1890,6 +1906,7 @@ function startGame() {
     initLevel(5);
     initLevel(FIRST_LEVEL);
     updateLives();
+    spawnCracks();                     // normally kicked off by the level card
 
     // Stop menu music and play level 1 music when showing level card
     // No music call here on purpose: the menu track carries straight on into
@@ -1902,7 +1919,8 @@ function startGame() {
 function spawnCracks() {
     if(state !== 'playing' || resetting || level === 5 || level === 6) return;
     
-    const delay = level === FIRST_LEVEL ? 5000 : level === 4 ? 3000 : 4000;
+    const delay = level === 1 ? (shift.managerStarted ? 3400 : shift.yellowArrived ? 4200 : 5200)
+                : level === 4 ? 3000 : 4000;
     
     setTimeout(() => {
         if(state === 'playing' && !resetting && level !== 5 && level !== 6) {
@@ -1920,7 +1938,8 @@ function spawnCracks() {
 }
 
 function spawnBoss() {
-    if((level !== 3 && level !== 4) || state !== 'playing' || resetting) return;
+    const onShift = level === 1 && shift.managerStarted;
+    if((level !== 3 && level !== 4 && !onShift) || state !== 'playing' || resetting) return;
     if(!boss.active) {
         boss.active = true;
         boss.x = 690;
@@ -1933,7 +1952,7 @@ function spawnBoss() {
         bossDoor = { state: 'opening', openPct: 0 };
         SFX.play('bossGreet');
         
-        const nextSpawn = level === 4 ? 12000 : 18000;
+        const nextSpawn = level === 4 ? 12000 : level === 1 ? 15000 : 18000;
         setTimeout(() => spawnBoss(), nextSpawn);
     }
 }
@@ -1960,6 +1979,70 @@ function createMuzzleFlash(x, y, facing) {
     muzzleFlashes.push({x: flashX, y, life: 10});
 }
 
+// The first shift escalates in front of you instead of between title cards.
+// Called every frame while levels 1-4 are playing; only level 1 has anything
+// to do. Nothing is announced in text — a man walking in with a ladder and a
+// door opening at the end of the room say it themselves.
+function updateShiftAugmentation() {
+    if(level !== 1 || hellMode || state !== 'playing' || resetting) return;
+
+    // ── YELLOW arrives, carrying his step ladder in from the right
+    if(!shift.yellowArrived && !shift.yellow && timer <= YELLOW_ARRIVES_AT) {
+        shift.yellow = { x: 726, phase: 'walking', plant: 0 };
+        SFX.play('doorOpen');
+    }
+    if(shift.yellow) {
+        const y = shift.yellow;
+        if(y.phase === 'walking') {
+            y.x -= 1.35 * stepScale();
+            if(y.x <= 580) { y.x = 580; y.phase = 'planting'; }
+        } else if(y.phase === 'planting') {
+            // He sets it down, squares it up, and steps onto his station
+            y.plant += 1 * stepScale();
+            if(y.plant >= 46) {
+                npcs.push({ x: 580, y: 368, color: COLORS[3], state: 'happy',
+                            needsDoc: false, fixAnim: 0 });
+                shift.yellow = null;
+                shift.yellowArrived = true;
+                SFX.play('pipeFixed');
+            }
+        }
+    }
+
+    // ── ...and later the manager starts coming. The door at the end of the
+    // room opening is the whole announcement.
+    if(shift.yellowArrived && !shift.managerStarted && timer <= MANAGER_STARTS_AT) {
+        shift.managerStarted = true;
+        // The shift changes key when he does — the one cue that is not visual
+        playMusic('level3', true);
+        setTimeout(() => spawnBoss(), 900);
+    }
+}
+
+// YELLOW on his way in, drawn with the pipe managers so he passes in front of
+// the benches and behind nothing. The ladder is carried tilted under one arm
+// until he plants it, and then stands where his station is.
+function drawArrivingYellow() {
+    const y = shift.yellow;
+    if(!y) return;
+    const planted = y.phase === 'planting';
+    // drawStepLadder always stands its feet on the floor at 406, so it has to be
+    // rotated ABOUT its feet — translating it just dragged the whole thing off
+    // the bottom of the room.
+    const lx = planted ? 580 : y.x + 16;
+    const tilt = planted ? -0.34 * (1 - Math.min(1, y.plant / 32)) : -0.34;
+    const carrySway = planted ? 0 : Math.sin(Date.now() / 125) * 0.03;
+    ctx.save();
+    ctx.translate(lx, 402);
+    ctx.rotate(tilt + carrySway);
+    ctx.translate(-lx, -402);
+    drawStepLadder(lx, planted ? 368 : 352, COLORS[3]);
+    ctx.restore();
+
+    drawNPC({ x: y.x, y: 368, color: COLORS[3], state: 'happy',
+              needsDoc: false, crackStartTime: null, animOffset: 3,
+              walking: !planted, facing: planted ? 'down' : 'left' });
+}
 function checkPromotion() {
     if(boss.bossKills >= 6) {
         state = 'promotion';
@@ -31560,6 +31643,9 @@ function drawScene() {
         }
     }
 
+    // YELLOW walking his ladder in, mid-shift
+    drawArrivingYellow();
+
     // Acid burst dissolve effects (pipe burst → PM melted before reset)
     for(let ab of acidBursts) { drawAcidBurst(ab); }
 
@@ -32818,6 +32904,10 @@ function update() {
         return;
     }
     
+    // The first shift escalates itself while you work — YELLOW arrives with his
+    // ladder, then the manager starts coming.
+    updateShiftAugmentation();
+
     // LEVEL 5 LOGIC
     if(level === 5) {
         // RED'S ENDING title card holds the level still while it plays.
@@ -37817,9 +37907,10 @@ function nextLevel() {
         // Just stay in level 1, don't advance.
         return;
     }
-    if(level < 4) {
-        level++;
-        timer = level === 4 ? 120 : 60; // Level 4 gets 120 seconds
+    const next = LEVEL_AFTER[level];
+    if(next) {
+        level = next;
+        timer = level === 4 ? 120 : 60;
         state = 'levelCard';
         cardTimer = 0;
         initLevel(level);
