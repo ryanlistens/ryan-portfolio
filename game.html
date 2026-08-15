@@ -526,6 +526,16 @@ let musicMuted = false;
 let boomboxOn = false;
 function musicOn() { return boomboxOn; }
 function boomboxHere() { return level === 1 && !shift.cabinetGone; }
+// The CEO keeps one on the credenza in his office — same object, same idea:
+// the music on this floor is a thing somebody switched on, not a setting.
+const CEO_BOOMBOX_X = 176;
+let ceoBoomboxOn = true;              // his floor arrives with it already playing
+function toggleCeoBoombox() {
+    ceoBoomboxOn = !ceoBoomboxOn;
+    if(ceoBoomboxOn) { musicMuted = false; playMusic('level6', true); }
+    else             { playMusic(null); }
+    SFX.play('menuTick');
+}
 function toggleBoombox() {
     boomboxOn = !boomboxOn;
     if(boomboxOn) { musicMuted = false; playMusic('level1', true); }
@@ -1927,10 +1937,15 @@ let shift = { yellow: null, yellowArrived: false, managerStarted: false,
 // which is why none of it needs a title card. Italics, because it is a voice
 // coming out of a horn on the wall rather than the game talking to you.
 let tannoy = { line: '', at: 0, on: false };
-const TANNOY_HOLD = 5200;              // ms a line stays up
+// The line runs across the top of the screen on a ticker, so the hold is
+// however long it takes to scroll past — not a fixed number.
+const TICKER_SPEED = 105;             // px per second
+let TANNOY_HOLD = 6000;               // recomputed per line by announce()
 function announce(line) {
     tannoy.line = line;
     tannoy.at = Date.now();
+    tannoy.w = 0;                     // measured on the first draw, in the right font
+    TANNOY_HOLD = 6000;
     SFX.play('tannoyBlip');
 }
 // Is the 3D printer on this floor yet? Level 4 has always had one; the opening
@@ -1961,6 +1976,7 @@ function startGame() {
               cabinetGone: false, welcomed: false };
     tannoy = { line: '', at: 0, on: false };
     boomboxOn = false;
+    ceoBoomboxOn = true;
     level = FIRST_LEVEL;
     score = 0;
     livesRuined = 0;
@@ -2223,38 +2239,57 @@ function drawTannoyHorn(hx, hy) {
 }
 // The line it is saying, under the horn. Italic, and it fades out on its own.
 function drawTannoyLine() {
+    if(!tannoy.line) return;
     const age = Date.now() - tannoy.at;
-    if(!tannoy.line || age > TANNOY_HOLD) return;
-    const a = age < 220 ? age / 220 : Math.min(1, (TANNOY_HOLD - age) / 700);
-    // Anchored under the horn's mouth and reading away from it, so the words
-    // and the thing saying them are one object. Centred at the top of the
-    // screen they were a caption, which is what the cards were.
-    const mx = TANNOY_X + 27, my = TANNOY_Y;       // the face of the speaker
     ctx.save();
-    ctx.globalAlpha = Math.max(0, a);
-    ctx.font = 'italic bold 14px Georgia, serif';
-    ctx.textAlign = 'left';
-    const w = ctx.measureText(tannoy.line).width;
-    let bx = mx + 18;                            // it reads the way the horn points
-    const by = my + 24;
-    if(bx + w + 10 > 690) bx = Math.max(8, 690 - w - 10);
-    ctx.fillStyle = 'rgba(18,20,24,0.82)';
-    pathRoundRect(bx - 9, by - 15, w + 18, 22, 4); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,214,120,0.45)'; ctx.lineWidth = 1;
-    pathRoundRect(bx - 9, by - 15, w + 18, 22, 4); ctx.stroke();
-    // A stalk back up to the mouth of the horn
+    ctx.font = 'bold 20px "Courier New", monospace';
+    if(!tannoy.w) {
+        tannoy.w = ctx.measureText(tannoy.line).width;
+        // scroll the whole line across the room, plus a beat either side
+        TANNOY_HOLD = ((GAME_W + tannoy.w + 80) / TICKER_SPEED) * 1000;
+    }
+    if(age > TANNOY_HOLD) { ctx.restore(); return; }
+
+    // A ticker across the top of the room — the PA's readout. The line was set
+    // in 14px italics on a plate beside the speaker and could not be read at
+    // that size; this is the same voice at a size that can.
+    const BH = 26, BY = 6;
+    const BL = -GX, BR = -GX + CANVAS_W - 96;      // stop clear of the mute button
+    const BW = BR - BL;
+    const fade = age < 200 ? age / 200 : Math.min(1, (TANNOY_HOLD - age) / 400);
+    ctx.globalAlpha = Math.max(0, fade);
+    const bg = ctx.createLinearGradient(0, BY, 0, BY + BH);
+    bg.addColorStop(0, 'rgba(14,16,20,0.92)');
+    bg.addColorStop(1, 'rgba(26,30,36,0.92)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(BL, BY, BW, BH);
+    ctx.strokeStyle = 'rgba(255,196,80,0.35)'; ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(bx - 9, by - 8);
-    ctx.lineTo(mx + 2, my + 6);
+    ctx.moveTo(BL, BY + BH + 0.5); ctx.lineTo(BR, BY + BH + 0.5);
+    ctx.moveTo(BL, BY - 0.5);      ctx.lineTo(BR, BY - 0.5);
+    ctx.moveTo(BR + 0.5, BY);      ctx.lineTo(BR + 0.5, BY + BH);
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255,232,168,0.96)';
-    ctx.fillText(tannoy.line, bx, by);
+
+    // The text, running right to left
+    const x = BR - (age / 1000) * TICKER_SPEED;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(BL, BY, BW, BH); ctx.clip();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(tannoy.line, x + 1.5, BY + 19.5);
+    ctx.fillStyle = '#ffc84a';
+    ctx.fillText(tannoy.line, x, BY + 18);
+    ctx.restore();
+
+    // A lit pip at the left end, so the band reads as a running display
+    ctx.fillStyle = (Math.floor(age / 380) % 2) ? '#ffc84a' : '#5a4a20';
+    ctx.beginPath(); ctx.arc(BL + 10, BY + BH / 2, 3, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 }
 // Somebody's radio, on top of the tool bench. Two speakers, a handle, a cassette
 // door — and it bounces when it is playing.
-function drawBoombox(bx, by) {
-    const on = boomboxOn;
+function drawBoombox(bx, by, isOn) {
+    const on = (isOn === undefined) ? boomboxOn : isOn;
     const bounce = on ? Math.abs(Math.sin(Date.now() / 190)) * 1.4 : 0;
     const y = by - bounce;
     ctx.save();
@@ -22935,6 +22970,24 @@ function drawLevel6CEOOffice() {
     }
     } // end if(!craterActive) — desk, safe, brandy, monitor, phone hidden after missile blast
 
+    // The CEO's radio, on a low credenza against the left wall. Same object as
+    // the one on the pipe floor's tool bench — music on this floor is his
+    // choice, made in the room.
+    if(!level6.craterActive) {
+        ctx.fillStyle = '#3a3129';                       // credenza
+        pathRoundRect(CEO_BOOMBOX_X - 30, 352, 60, 44, 3); ctx.fill();
+        ctx.fillStyle = '#4a4036';
+        pathRoundRect(CEO_BOOMBOX_X - 30, 352, 60, 6, 3); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillRect(CEO_BOOMBOX_X - 26, 366, 52, 1.5);
+        ctx.fillRect(CEO_BOOMBOX_X - 26, 382, 52, 1.5);
+        drawBoombox(CEO_BOOMBOX_X, 352, ceoBoomboxOn);
+        if(Math.abs(player.x - CEO_BOOMBOX_X) < 46 && !level6.ceoDialogue) {
+            drawActionLabel(ceoBoomboxOn ? '[ ACTION ] - STOP' : '[ ACTION ] - PLAY',
+                            CEO_BOOMBOX_X, 322, {fontSize: 12});
+        }
+    }
+
     // Golden trophy cabinet (right side of room — fully visible within game area)
     const cabinetX = 550;
     const cabinetY = 80;
@@ -24128,7 +24181,20 @@ function drawEmailUI(officeName) {
     const lines = email.body.split('\n');
     let yPos = 185 - level5.emailScrollOffset;
     for(let line of lines) {
-        ctx.fillText(line, 20, yPos);
+        // The keypad code is the one thing in here the player has to carry out
+        // of the room with them, so it is set in bold rather than buried in the
+        // middle of a sentence at the same weight as everything else.
+        const m = line.match(/(\d{4})/);
+        if(m) {
+            const pre = line.slice(0, m.index);
+            const post = line.slice(m.index + m[1].length);
+            let x = 20;
+            ctx.font = '22px Arial';       ctx.fillText(pre, x, yPos);  x += ctx.measureText(pre).width;
+            ctx.font = 'bold 22px Arial';  ctx.fillText(m[1], x, yPos); x += ctx.measureText(m[1]).width;
+            ctx.font = '22px Arial';       ctx.fillText(post, x, yPos);
+        } else {
+            ctx.fillText(line, 20, yPos);
+        }
         yPos += 32;
     }
     ctx.restore();
@@ -36234,6 +36300,13 @@ function update() {
         
             else if(level6.room === 'ceoOffice') {
                 if(level6.cloneFollower.active && level6.cloneFollower.armed) updateCloneFollower();
+                // The radio on the credenza — level 6's music, on and off
+                if(!level6.ceoDialogue && !level6.craterActive
+                   && Math.abs(player.x - CEO_BOOMBOX_X) < 46
+                   && (keys[' '] || keys['action'])) {
+                    keys[' '] = false; keys['action'] = false;
+                    toggleCeoBoombox();
+                }
                 // CEO entry dialogue — block all other input until dismissed
                 if(level6.ceoDialogue) {
                     const dlgLines = ceoDialogueFor(level6.ceoDialogueType);
