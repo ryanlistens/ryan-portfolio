@@ -481,10 +481,8 @@ const levelMusic = {
     yellow: new Audio('music/yellow.mp3'),
     level4:  new Audio('music/level4.mp3'),
     level6:  new Audio('music/level6.mp3'),
-    // Nothing on the pipe floor plays automatically. level1.mp3 is what the
-    // tannoy puts on if the player switches it on, and level2/3 are cut.
-    level1:  new Audio('music/level1.mp3'),
-    level2: null, level3: null,
+    // The pipe floor has no score at all. Tracks 1-3 are cut.
+    level1: null, level2: null, level3: null,
     blewit: null,
     blue: null, green: null, red: null
 };
@@ -520,14 +518,11 @@ let musicMuted = false;
 // From the end of the title screen to level 5 the floor is silent unless the
 // player switches the tannoy on. Music is a choice made in the room — which is
 // also why there is no mute button in the corner any more: the horn IS it.
+// The pipe floor is silent — no score, and no switch on the wall either. The
+// speaker announces and nothing else; making it a jukebox gave it a job that
+// had nothing to do with the one thing it is there for.
 let tannoyMusic = false;
-function musicOn() { return tannoyMusic; }
-function toggleTannoyMusic(trackKey) {
-    tannoyMusic = !tannoyMusic;
-    if(tannoyMusic) { musicMuted = false; playMusic(trackKey, true); }
-    else            { playMusic(null); }
-    SFX.play('tannoyBlip');
-}
+function musicOn() { return false; }
 let audioUnlocked = false;
 
 // Music control functions
@@ -1904,7 +1899,8 @@ const SHIFT_SECONDS = 210;             // the whole pipe floor, in one continuou
 const YELLOW_ARRIVES_AT = 150;         // seconds left when he walks in
 const MANAGER_STARTS_AT = 100;         // seconds left when the door first opens
 const PRINTER_ARRIVES_AT = 60;        // seconds left when the delivery arrives
-const TANNOY_X = 232;                 // clear of the doc printer at 180 and RED at 280
+const TANNOY_X = 112;                 // the wall the marker board used to have
+const TANNOY_Y = 208;
 const LEVEL_TITLES = {
     1: 'TRAINING DAY',
     4: '3D PRINTER UNLOCKED',
@@ -2141,54 +2137,109 @@ function updateShiftAugmentation() {
 function drawTannoyHorn(hx, hy) {
     const live = Date.now() - tannoy.at < TANNOY_HOLD;
     ctx.save();
-    // Bracket into the wall
-    ctx.fillStyle = '#4a4a4a';
-    ctx.fillRect(hx - 2, hy - 14, 4, 12);
-    ctx.fillStyle = '#3a3a3a';
-    ctx.beginPath(); ctx.arc(hx, hy - 15, 3.4, 0, Math.PI * 2); ctx.fill();
-    // Horn — a cone opening downward and out over the floor
-    const g = ctx.createLinearGradient(hx - 16, 0, hx + 16, 0);
-    g.addColorStop(0, '#7a7f85'); g.addColorStop(0.45, '#9aa0a6'); g.addColorStop(1, '#5e6368');
+    // Bolted to the left-hand wall with its mouth facing right, across the
+    // floor — the only stretch of wall with nothing else on it, now the marker
+    // board has gone. Drawn mirrored so the geometry below reads left-to-right.
+    ctx.translate(hx * 2, 0);
+    ctx.scale(-1, 1);
+    // Wired to something — but sideways along the wall to the edge of the room,
+    // not straight up through the PIPETECH sign.
+    ctx.fillStyle = '#5a5f64';
+    ctx.fillRect(hx + 26, hy - 4, 200, 5);
+    ctx.fillStyle = '#6e747a';
+    for(let cx = hx + 40; cx < hx + 210; cx += 26) ctx.fillRect(cx, hy - 6, 3, 9);
+    ctx.fillStyle = '#4a4f54';                                 // junction box
+    pathRoundRect(hx + 16, hy - 11, 15, 19, 2); ctx.fill();
+    ctx.fillStyle = '#6a7076';
+    ctx.fillRect(hx + 19, hy - 8, 9, 3);
+    ctx.fillStyle = '#4a4f54';
+    ctx.fillRect(hx + 8, hy - 2, 12, 5);                       // bracket arm
+
+    // The horn: a squared re-entrant flare, mouth wide and facing down the room.
+    // A round bell on a stick is a school bell; this is four straight panels
+    // opening out of a throat.
+    const g = ctx.createLinearGradient(hx - 26, 0, hx + 14, 0);
+    g.addColorStop(0, '#8d949b'); g.addColorStop(0.42, '#aeb5bc'); g.addColorStop(1, '#666c72');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(hx - 5, hy - 2);
-    ctx.lineTo(hx + 5, hy - 2);
-    ctx.lineTo(hx + 16, hy + 17);
-    ctx.lineTo(hx - 16, hy + 17);
+    ctx.moveTo(hx + 9,  hy - 5);                                // throat, at the bracket
+    ctx.lineTo(hx + 9,  hy + 7);
+    ctx.lineTo(hx - 26, hy + 20);                               // mouth, lower lip
+    ctx.lineTo(hx - 26, hy - 14);                               // mouth, upper lip
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';                    // the mouth of it
-    ctx.beginPath(); ctx.ellipse(hx, hy + 17, 16, 3.6, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(hx - 11, hy + 8); ctx.lineTo(hx + 11, hy + 8); ctx.stroke();
-    // A lamp on the throat: lit while it is talking, dim green while it is
-    // only playing music, dark when it is off
-    const lamp = live ? '#ffcf4a' : (musicOn() ? '#3ad07a' : '#40464c');
-    ctx.fillStyle = lamp;
-    ctx.beginPath(); ctx.arc(hx + 7, hy + 1, 1.8, 0, Math.PI * 2); ctx.fill();
-    if(live || musicOn()) {
-        ctx.fillStyle = live ? 'rgba(255,207,74,0.20)' : 'rgba(58,208,122,0.14)';
-        ctx.beginPath(); ctx.arc(hx + 7, hy + 1, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,34,38,0.55)'; ctx.lineWidth = 1.2;
+    ctx.stroke();
+    // Panel fold down the middle, so it reads as a flare and not a flat wedge
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.beginPath(); ctx.moveTo(hx + 9, hy + 1); ctx.lineTo(hx - 26, hy + 3); ctx.stroke();
+    // The mouth itself: a dark grille of slats, which is the tell
+    ctx.fillStyle = '#33373b';
+    ctx.beginPath();
+    ctx.moveTo(hx - 26, hy - 14); ctx.lineTo(hx - 26, hy + 20);
+    ctx.lineTo(hx - 31, hy + 17); ctx.lineTo(hx - 31, hy - 11);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(150,158,166,0.55)'; ctx.lineWidth = 1;
+    for(let k = 1; k <= 4; k++) {
+        const t = k / 5;
+        ctx.beginPath();
+        ctx.moveTo(hx - 30.5, hy - 11 + 28 * t);
+        ctx.lineTo(hx - 26.5, hy - 14 + 34 * t);
+        ctx.stroke();
+    }
+    // Bolts on the throat collar
+    ctx.fillStyle = '#4a4f54';
+    ctx.fillRect(hx + 6, hy - 6, 4, 14);
+    ctx.fillStyle = '#7c838a';
+    ctx.beginPath(); ctx.arc(hx + 8, hy - 3.5, 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx + 8, hy + 5.5, 1.1, 0, Math.PI * 2); ctx.fill();
+
+    // Sound coming OUT of it — arcs off the mouth while it is talking, so the
+    // words below are visibly leaving the horn rather than floating on their own
+    if(live) {
+        const age = Date.now() - tannoy.at;
+        ctx.strokeStyle = 'rgba(255,214,120,0.75)';
+        ctx.lineWidth = 2;
+        for(let a = 0; a < 3; a++) {
+            const ph = ((age / 420) + a * 0.34) % 1;
+            ctx.globalAlpha = 0.85 * (1 - ph);
+            ctx.beginPath();
+            ctx.arc(hx - 30, hy + 3, 8 + ph * 26, Math.PI * 0.62, Math.PI * 1.38);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
     }
     ctx.restore();
 }
-
 // The line it is saying, under the horn. Italic, and it fades out on its own.
 function drawTannoyLine() {
     const age = Date.now() - tannoy.at;
     if(!tannoy.line || age > TANNOY_HOLD) return;
     const a = age < 220 ? age / 220 : Math.min(1, (TANNOY_HOLD - age) / 700);
+    // Anchored under the horn's mouth and reading away from it, so the words
+    // and the thing saying them are one object. Centred at the top of the
+    // screen they were a caption, which is what the cards were.
+    const mx = TANNOY_X + 31, my = TANNOY_Y + 3;   // the mouth of the horn
     ctx.save();
     ctx.globalAlpha = Math.max(0, a);
-    ctx.font = 'italic bold 15px Georgia, serif';
-    ctx.textAlign = 'center';
+    ctx.font = 'italic bold 14px Georgia, serif';
+    ctx.textAlign = 'left';
     const w = ctx.measureText(tannoy.line).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    pathRoundRect(350 - w / 2 - 12, 30, w + 24, 24, 5); ctx.fill();
-    ctx.fillStyle = 'rgba(255,232,168,0.95)';
-    ctx.fillText(tannoy.line, 350, 47);
+    let bx = mx + 18;                            // it reads the way the horn points
+    const by = my + 24;
+    if(bx + w + 10 > 690) bx = Math.max(8, 690 - w - 10);
+    ctx.fillStyle = 'rgba(18,20,24,0.82)';
+    pathRoundRect(bx - 9, by - 15, w + 18, 22, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.45)'; ctx.lineWidth = 1;
+    pathRoundRect(bx - 9, by - 15, w + 18, 22, 4); ctx.stroke();
+    // A stalk back up to the mouth of the horn
+    ctx.beginPath();
+    ctx.moveTo(bx - 9, by - 8);
+    ctx.lineTo(mx + 2, my + 6);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,232,168,0.96)';
+    ctx.fillText(tannoy.line, bx, by);
     ctx.restore();
 }
-
 // The delivery man and his dolly. He wheels the tool cabinet out and the 3D
 // printer in — the printer arriving is a thing that HAPPENS on the floor, not
 // a title card between two identical rooms.
@@ -10331,7 +10382,7 @@ function drawLevel5PipeRoom() {
     drawToolCabinet(65, 400);
 
     // Marker board — below PipeTech sign on wall (sign bottom y=160, board at y=240)
-    drawMarkerBoard(150, 240, 5);
+    // (no marker board)
 
     // Right wall gasket BEFORE pipes so gasket renders behind
     // pipeY=210, horizontal pipe runs at pipeY+25=235 — gasket centered on pipe
@@ -10605,7 +10656,7 @@ function drawLevel6EmployeePipeRoom() {
     drawWaterCooler(110, 400);
 
     // Marker board — Level 6 schematic
-    drawMarkerBoard(150, 240, 6);
+    // (no marker board)
 
     // Right wall gasket BEFORE pipes
     drawPipeRoomRightWall(235);
@@ -26278,11 +26329,7 @@ function _drawDeadLabTech(x, y) {
     ctx.beginPath(); ctx.ellipse(x - 45, y + 3, 3.6, 2.8, 0.25, 0, Math.PI * 2); ctx.stroke();
 }
 
-// The corner mute button is retired — music is switched on and off at the
-// tannoy in the room. Kept as a no-op so the ten call sites do not all need
-// touching, and so nothing draws a control that no longer does anything.
-function drawMuteIndicator() { return; }
-function _drawMuteIndicatorRetired() {
+function drawMuteIndicator() {
     // Position at top-right of canvas, just below HUD — outside game area in landscape
     const btnX = -GX + CANVAS_W - 90;
     const btnY = -GY + 5;
@@ -31776,7 +31823,7 @@ function drawScene() {
     if(level !== 4 && !shift.cabinetGone) drawToolCabinet(65, 400);
 
     // Marker board — below PipeTech sign on wall (sign bottom y=160, board at y=240)
-    drawMarkerBoard(150, 240, hellMode ? 'hell' : level);
+    // (no marker board on the pipe floor)
 
     // Right wall gasket + boss door BEFORE pipes so gasket renders behind
     // pipeY=210, horizontal pipe runs at pipeY+25=235 — gasket centered on pipe
@@ -31874,7 +31921,7 @@ function drawScene() {
     // YELLOW walking his ladder in, and the delivery, mid-shift
     drawArrivingYellow();
     drawDelivery();
-    drawTannoyHorn(TANNOY_X, 150);
+    drawTannoyHorn(TANNOY_X, TANNOY_Y);
     drawTannoyLine();
 
     // Acid burst dissolve effects (pipe burst → PM melted before reset)
@@ -37848,16 +37895,6 @@ if (keys[' '] || keys['action']) {
     if(keys[' '] || keys['action']) {
         keys[' '] = false;
         keys['action'] = false;
-
-        // The tannoy: stand under the horn and switch the music on or off. It
-        // is the only music control in the game now — there is no button in the
-        // corner, because the speaker is in the room. Tested first because it
-        // stands clear of everything else on the floor, so it cannot steal a
-        // press meant for a manager or a printer.
-        if(Math.abs(player.x - TANNOY_X) < 34 && !player.holding && !ui.show && !ui.gunUI) {
-            toggleTannoyMusic('level1');
-            return;
-        }
 
         // Skip cheats — secret: no indicator for first 5 consecutive presses.
         // They live on whichever level the game opens on.
