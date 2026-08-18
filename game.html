@@ -1946,6 +1946,14 @@ function announce(line) {
     TANNOY_HOLD = 6000;
     SFX.play('tannoyBlip');
 }
+// While the tannoy is mid-sentence the pipes hold. No new bulge starts and the
+// ones already up stop advancing — you can still run documents, you just are
+// not also being buried while you read. It gives the announcement somewhere to
+// land instead of competing with the thing it is announcing.
+function tickerLive() {
+    return !!tannoy.line && (Date.now() - tannoy.at) < TANNOY_HOLD;
+}
+
 // Is the 3D printer on this floor yet? Level 4 has always had one; the opening
 // shift gets one delivered partway through.
 function printerHere() {
@@ -2025,7 +2033,7 @@ function spawnCracks() {
                 : level === 4 ? 3000 : 4000;
     
     setTimeout(() => {
-        if(state === 'playing' && !resetting && level !== 5 && level !== 6) {
+        if(state === 'playing' && !resetting && level !== 5 && level !== 6 && !tickerLive()) {
             const available = npcs.filter(n => n.state === 'happy');
             if(available.length > 0) {
                 const npc = available[Math.floor(Math.random() * available.length)];
@@ -2089,7 +2097,7 @@ function updateShiftAugmentation() {
     if(level !== 1 || hellMode || state !== 'playing' || resetting) return;
 
     // The tannoy says good morning
-    if(!shift.welcomed) { shift.welcomed = true; announce('Welcome, Mullet Pro!'); }
+    if(!shift.welcomed) { shift.welcomed = true; announce('Welcome, Mullet Pro! Hurry up and deliver docs before disaster ensues!'); }
 
     // ── YELLOW arrives, carrying his step ladder in from the right. The
     //    announcement goes out FIRST and he comes through the door on the back
@@ -31976,7 +31984,7 @@ function drawScene() {
     // YELLOW walking his ladder in, and the delivery, mid-shift
     drawArrivingYellow();
     drawDelivery();
-    drawTannoyLine();
+
 
     // Acid burst dissolve effects (pipe burst → PM melted before reset)
     for(let ab of acidBursts) { drawAcidBurst(ab); }
@@ -32265,6 +32273,10 @@ function drawScene() {
     if(state === 'playing') {
         drawMuteIndicator();
     }
+    // The announcement ticker, last of all. Drawn inside the room it was behind
+    // the ceiling fan and in front of the ceiling lights at the same time —
+    // tangled into the scene instead of laid over it.
+    if(state === 'playing') drawTannoyLine();
     // Equip toggle button — visible during the self-destruct sequence next to mute
     if(state === 'selfDestructSeq') {
         drawMuteIndicator();
@@ -33239,6 +33251,12 @@ function update() {
     // The first shift escalates itself while you work — YELLOW arrives with his
     // ladder, then the manager starts coming.
     updateShiftAugmentation();
+    // ...and everything already swelling stops swelling while it is being read
+    // out. Each crack's clock is a timestamp, so holding it is a matter of
+    // carrying it forward with the frame.
+    if(tickerLive() && level < 5) {
+        for(const c of cracks) c.time += _frameDelta;
+    }
 
     // LEVEL 5 LOGIC
     if(level === 5) {
