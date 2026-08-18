@@ -2298,16 +2298,34 @@ function drawDelivery() {
                    : d.phase === 'return' ? 'printer' : null;
     const tilt = carrying ? -0.30 : -0.12;
 
+    // The man leads and the load TRAILS him. The dolly used to be planted at
+    // d.x + dir*17 with the load offset back onto d.x + 2 — dead on top of the
+    // man pulling it. A cabinet the height of his whole body was drawn across
+    // him, and on the way back in the printer arrived on screen before he did.
+    // He is drawn first and the dolly behind him, so the load never crosses his
+    // body and he enters a room ahead of the thing he is wheeling into it.
+    drawNPC({ x: d.x, y: 368, color: { name: 'DELIVERY', hex: '#7a5a34', shadow: '#4a3418' },
+              state: 'happy', needsDoc: false, crackStartTime: null, animOffset: 5,
+              walking, facing: walking ? (dir < 0 ? 'left' : 'right') : 'down' });
+
     // Dolly: two wheels, an L of steel, a toe plate. Tilted back when loaded.
     ctx.save();
-    const px = d.x + dir * 17;
+    const px = d.x - dir * 20;
     ctx.translate(px, 398);
     ctx.rotate(tilt * -dir);
     ctx.fillStyle = '#41474d';
     ctx.fillRect(-2.5, -46, 5, 46);                       // upright
-    ctx.fillRect(-2.5, -46, 13 * -dir, 4);                // handle
+    ctx.fillRect(-2.5, -46, 13 * dir, 4);                 // top handle
+    // ...and a lower grip bar at hip height. With only the top handle the man
+    // walked along beside a dolly he was not touching: his hand hangs at his
+    // hip and the handle was 25px above it, so nothing connected him to the
+    // load he was supposed to be pulling.
+    ctx.fillRect(-2.5, -22, 15 * dir, 3.5);
+    ctx.fillStyle = '#2b3035';                            // rubber grip on it
+    ctx.fillRect(-2.5 + 9 * dir, -22.5, 6 * dir, 4.5);
+    ctx.fillStyle = '#41474d';
     ctx.fillStyle = '#33383d';
-    ctx.fillRect(-2.5, -4, 17 * -dir, 4);                 // toe plate
+    ctx.fillRect(-2.5, -4, 17 * -dir, 4);                 // toe plate, under the load
     if(carrying === 'cabinet') {
         ctx.save(); ctx.translate(-dir * 15, -20); ctx.scale(0.9, 0.9);
         drawToolCabinet(0, 22);
@@ -2322,11 +2340,6 @@ function drawDelivery() {
     ctx.fillStyle = '#585f66';
     ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-
-    // The man himself — a pipe manager sprite in delivery brown
-    drawNPC({ x: d.x, y: 368, color: { name: 'DELIVERY', hex: '#7a5a34', shadow: '#4a3418' },
-              state: 'happy', needsDoc: false, crackStartTime: null, animOffset: 5,
-              walking, facing: walking ? (dir < 0 ? 'left' : 'right') : 'down' });
 }
 
 // YELLOW on his way in, drawn with the pipe managers so he passes in front of
@@ -2512,11 +2525,22 @@ function _drawHeldDoc(x, y, colorName) {
     ctx.lineWidth = 0.5;
     ctx.strokeRect(folderX + 4, folderY + 4, folderWidth - 8, 6);
 
-    // Document label text on folder
-    ctx.fillStyle = '#666';
-    ctx.font = 'bold 9px Arial';
+    // Document label, printed on the manila below the stripe. It was set at a
+    // fixed bold 9px and centred on the folder — but "YELLOW" measures wider
+    // than the 28px folder does, so the ends of the longest names hung off both
+    // edges onto the wall behind, and the middle of the word sat on top of the
+    // colour stripe. Fit it to the folder and give it its own clear band.
     ctx.textAlign = 'center';
-    ctx.fillText(col.name, x, y - 50);
+    const labelMax = folderWidth - 7;
+    let labelPx = 8;
+    ctx.font = 'bold ' + labelPx + 'px Arial';
+    const labelW = ctx.measureText(col.name).width;
+    if(labelW > labelMax) {
+        labelPx = Math.max(5, labelPx * labelMax / labelW);
+        ctx.font = 'bold ' + labelPx.toFixed(2) + 'px Arial';
+    }
+    ctx.fillStyle = '#6b6257';
+    ctx.fillText(col.name, x, folderY + 18);
 }
 
 function drawMulletPro(x, y, ...rest) {
@@ -3442,7 +3466,10 @@ function _drawMulletProAsPM(npc) {
         // on the rungs, which is what the hand-built pair here was doing)
     } else if(isScreaming) {
         // === MUNCH SCREAM POSE — forward-facing mullet pro, hands at cheeks ===
-        const s = 2;
+        // s = 2.4 to match the shared sprite. It was 2, left behind when that
+        // sprite was rescaled, so in hell he shrank by a fifth the moment his
+        // pipe went critical and stood a head shorter than the man beside him.
+        const s = 2.4;
 
         // Shadow at foot level
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -3450,50 +3477,102 @@ function _drawMulletProAsPM(npc) {
         ctx.ellipse(x, y + 36, 10, 3, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Hair (brown mullet) — top + sides + neck cascade
-        ctx.fillStyle = '#3a2a1a';
-        ctx.fillRect(x - 7*s, y - 16*s, 14*s, 4*s);
-        ctx.fillRect(x - 7*s, y - 12*s, 14*s, 10*s);
+        // This pose never went through the remaster. It was a hand-built stack
+        // of flat fillRects — two brown boxes for the mullet, a square of skin
+        // for the face, a maroon box for the torso, four bars for the limbs —
+        // while the very same character standing next to him in the very same
+        // room was drawn from charTorso, charLimb and a modelled skull. Rebuilt
+        // on the shared vocabulary and on Mullet Pro's own palette.
+        const SC_SKIN = '#f5c89a', SC_HAIR = '#3a2a1a';
+        const SC_SUIT = '#800020';
+        const scRamp = charRamp(SC_SUIT);
+        const scJeanN = '#a4c2db', scJeanF = '#8fadc8';
 
-        // Face skin (covers most of head)
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
+        // Legs first, so the jacket hem covers the waist join
+        for(const [lx0, jc] of [[-5*s, scJeanF], [s, scJeanN]]) {
+            ctx.fillStyle = jc;
+            pathRoundRect(x + lx0, y + 7*s, 4*s, 9.4*s, 0.8*s); ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.12)';                    // knee
+            ctx.fillRect(x + lx0, y + 11.4*s, 4*s, 0.8*s);
+            ctx.fillStyle = '#654321';                             // shoe
+            pathRoundRect(x + lx0 - 0.4*s, y + 15.4*s, 4.8*s, 2.6*s, 1.1*s); ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.22)';
+            ctx.fillRect(x + lx0 - 0.4*s, y + 17.2*s, 4.8*s, 0.8*s);
+        }
 
-        // === SCREAM FACE — wide horror eyes + gaping O mouth ===
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.ellipse(x - 2*s, y - 8*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(x + 2*s, y - 8*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#000';
-        ctx.beginPath(); ctx.arc(x - 2*s, y - 9*s, 0.55*s, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(x + 2*s, y - 9*s, 0.55*s, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = 'rgba(15,0,0,0.95)';
-        ctx.beginPath(); ctx.ellipse(x, y - 4*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+        // Torso — shoulders out, waist in, lit from the same key as everyone
+        charTorso(x, y - 2.4*s, y + 7.6*s, 7.0*s, 5.6*s, scRamp);
+        ctx.fillStyle = '#1a1a1a';                                 // belt
+        pathRoundRect(x - 5.4*s, y + 5.4*s, 10.8*s, 2.2*s, 0.6*s); ctx.fill();
+        ctx.fillStyle = charMix('#1a1a1a', '#fff', 0.35);
+        ctx.fillRect(x - 1.1*s, y + 5.8*s, 2.2*s, 1.4*s);          // buckle
 
-        // Hell-red jumpsuit torso
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 7*s, y - 2*s, 14*s, 10*s);
-        ctx.fillStyle = '#600018';
-        ctx.fillRect(x - 7*s, y - 2*s, 2*s, 10*s);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 3*s, y - 2*s, 6*s, 4*s);
+        // Head. Skull, mullet over it, and the neck into the collar.
+        const scHy = y - 8.6*s, scRx = 5.2*s, scRy = 5.6*s;
+        ctx.fillStyle = charMix(SC_SKIN, '#000', 0.16);            // neck
+        pathRoundRect(x - 1.7*s, scHy + scRy * 0.55, 3.4*s, 3.4*s, 1.1*s); ctx.fill();
+        ctx.fillStyle = SC_HAIR;                                   // mullet mass behind
+        ctx.beginPath();
+        ctx.ellipse(x, scHy + 0.4*s, scRx * 1.16, scRy * 1.14, 0, 0, Math.PI * 2); ctx.fill();
+        // ...and the cascade down the nape. He is the one character in this
+        // game named for his hair; a compact cap is not it.
+        for(const hs of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(x + hs * scRx * 0.86, scHy - scRy * 0.30);
+            ctx.quadraticCurveTo(x + hs * scRx * 1.20, scHy + scRy * 0.40,
+                                 x + hs * scRx * 1.08, scHy + scRy * 1.52);
+            ctx.quadraticCurveTo(x + hs * scRx * 0.94, scHy + scRy * 1.80,
+                                 x + hs * scRx * 0.74, scHy + scRy * 1.46);
+            ctx.quadraticCurveTo(x + hs * scRx * 0.84, scHy + scRy * 0.44,
+                                 x + hs * scRx * 0.60, scHy - scRy * 0.26);
+            ctx.closePath(); ctx.fill();
+        }
+        charHead(x, scHy, scRx, scRy, SC_SKIN);
+        ctx.fillStyle = SC_HAIR;                                   // fringe on the brow
+        ctx.beginPath();
+        ctx.moveTo(x - scRx * 1.02, scHy - scRy * 0.24);
+        ctx.quadraticCurveTo(x - scRx * 0.30, scHy - scRy * 0.92, x + scRx * 0.52, scHy - scRy * 0.50);
+        ctx.quadraticCurveTo(x + scRx * 0.96, scHy - scRy * 0.30, x + scRx * 1.02, scHy - scRy * 0.60);
+        ctx.quadraticCurveTo(x + scRx * 0.60, scHy - scRy * 1.22, x - scRx * 0.20, scHy - scRy * 1.18);
+        ctx.quadraticCurveTo(x - scRx * 0.94, scHy - scRy * 1.06, x - scRx * 1.02, scHy - scRy * 0.24);
+        ctx.closePath(); ctx.fill();
 
-        // Arms bent up — forearms vertical alongside head
-        ctx.fillStyle = '#800020';
-        ctx.fillRect(x - 9*s, y - 11*s, 2*s, 9*s); // left forearm rising
-        ctx.fillRect(x + 7*s, y - 11*s, 2*s, 9*s); // right forearm rising
-        // Hands cupping cheeks (skin)
-        ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(x - 7*s, y - 12*s, 2*s, 3*s);
-        ctx.fillRect(x + 5*s, y - 12*s, 2*s, 3*s);
+        // === SCREAM FACE — the whites show, but built rather than stamped ===
+        for(const sx of [-1, 1]) {
+            const ex = x + sx * 2*s;
+            ctx.fillStyle = 'rgba(120,80,52,0.28)';
+            ctx.beginPath(); ctx.ellipse(ex, scHy - 0.4*s, 1.9*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#f2efe9';
+            ctx.beginPath(); ctx.ellipse(ex, scHy - 0.5*s, 1.55*s, 1.85*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(120,70,40,0.22)';
+            ctx.beginPath(); ctx.ellipse(ex, scHy - 2.0*s, 1.55*s, 0.85*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#241c17';
+            ctx.beginPath(); ctx.arc(ex, scHy - 1.5*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.75)';
+            ctx.beginPath(); ctx.arc(ex - 0.30*s, scHy - 1.8*s, 0.22*s, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(120,70,40,0.30)';
+        ctx.beginPath(); ctx.ellipse(x, scHy + 3.0*s, 1.9*s, 2.6*s, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2a1010';
+        ctx.beginPath(); ctx.ellipse(x, scHy + 3.0*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath(); ctx.ellipse(x, scHy + 3.6*s, 0.95*s, 1.4*s, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8d4a4a';
+        ctx.beginPath(); ctx.ellipse(x, scHy + 4.4*s, 0.75*s, 0.55*s, 0, 0, Math.PI*2); ctx.fill();
 
-        // Legs (blue jeans) planted, no stride
-        ctx.fillStyle = '#a4c2db';
-        ctx.fillRect(x - 5*s, y + 8*s, 4*s, 8*s);
-        ctx.fillRect(x + s,   y + 8*s, 4*s, 8*s);
-        // Brown shoes
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(x - 5*s, y + 16*s, 4*s, 2*s);
-        ctx.fillRect(x + s,   y + 16*s, 4*s, 2*s);
+        // Arms up alongside the head, hands to the cheeks
+        // The hands land on the CHEEKS. Set at ear height and 1.5*s across they
+        // sat either side of the skull at exactly the size and place a pair of
+        // ears would, and that is what they read as.
+        const scCapY = y - 1.2*s, scShX = 5.9*s;
+        charLimb(x - scShX, scCapY, x - 5.8*s, y - 7.4*s, 2.4*s,
+                 scRamp.dark, x - 9.8*s, y - 2.6*s);
+        charLimb(x + scShX, scCapY, x + 5.8*s, y - 7.4*s, 2.4*s,
+                 charMix(SC_SUIT, '#fff', 0.12), x + 9.8*s, y - 2.6*s);
+        charDeltoid(x - scShX, scCapY, 1.4*s, charMix(SC_SUIT, '#000', 0.18));
+        charDeltoid(x + scShX, scCapY, 1.4*s, charMix(SC_SUIT, '#fff', 0.16));
+        charHand(x - 5.9*s, y - 7.9*s, 1.25*s, SC_SKIN);
+        charHand(x + 5.9*s, y - 7.9*s, 1.25*s, SC_SKIN);
     } else {
         // Idle / pacing / jumping — forward-facing mullet pro sprite.
         // Pacing forces a walking arm/leg swing; jumping just bobs y in-place.
@@ -5637,9 +5716,10 @@ function _drawNPC(npc) {
         // Torso — same build as the front, so the silhouette and the tone match
         // from either side instead of a flat rectangle standing in for a body
         charTorso(x, y - 5*s, y + 6*s, 6.6*s, 5.2*s, npcRamp);
-        // Collar band across the shoulders
+        // Collar band across the shoulders, ends rounded off — square corners on
+        // a band this exposed read as a printed stripe rather than a seam.
         ctx.fillStyle = npcRamp.dark;
-        ctx.fillRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s);
+        pathRoundRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s, 0.55*s); ctx.fill();
 
         // skipArms: the RED clone follower borrows this hooded back for walking
         // away from you, and a man walking away is not reaching for a sack.
@@ -5663,10 +5743,14 @@ function _drawNPC(npc) {
             const capY = y - 3.8*s, shX = 5.6*s;
             const reachY = y - 18.5*s;    // hands on the sack, clear above his head
             const reachX = 4.5*s;         // at its lower corners
+            // The elbows bow WIDE, out past the hood. Bent at 6.6*s the whole
+            // upper arm ran up behind the head and only the hands came out the
+            // top, so he read as a torso with two stubs above it rather than a
+            // man reaching up.
             charLimb(x - shX, capY, x - reachX, reachY,
-                     2.3*s, npcRamp.dark, x - 6.6*s, y - 11*s);
+                     2.3*s, npcRamp.dark, x - 8.8*s, y - 11*s);
             charLimb(x + shX, capY, x + reachX, reachY,
-                     2.3*s, armLit,       x + 6.6*s, y - 11*s);
+                     2.3*s, armLit,       x + 8.8*s, y - 11*s);
             // No deltoid caps. They work on the hanging pose because the arm
             // drops straight out of them and swallows them; an arm that leaves
             // UPWARD leaves the cap sitting there as a bare ball joint on the
@@ -5677,12 +5761,17 @@ function _drawNPC(npc) {
         }
 
         // Hood (same colour as the jumpsuit, covers the head)
+        // The bottom edge arcs UP through the middle: a hood drapes lower over
+        // the shoulders than it does at the nape. Cut flat, it laid a straight
+        // horizontal line across the full width of the figure and — stacked
+        // with the collar band under it — sawed him in half at the chest.
         const hoodPath = () => {
             ctx.beginPath();
-            ctx.moveTo(x - 6*s, y - 5*s);
+            ctx.moveTo(x - 6*s, y - 4.2*s);
             ctx.lineTo(x - 5*s, y - 14*s);
             ctx.quadraticCurveTo(x, y - 17*s, x + 5*s, y - 14*s);
-            ctx.lineTo(x + 6*s, y - 5*s);
+            ctx.lineTo(x + 6*s, y - 4.2*s);
+            ctx.quadraticCurveTo(x, y - 6.8*s, x - 6*s, y - 4.2*s);
             ctx.closePath();
         };
         ctx.fillStyle = npcRamp.base;
@@ -5704,29 +5793,40 @@ function _drawNPC(npc) {
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, y - 16*s);
-        ctx.lineTo(x, y - 5*s);
+        ctx.lineTo(x, y - 6.6*s);
         ctx.stroke();
+        // Nape shadow where the hood sits down onto the collar. Without it the
+        // head and the shoulders are one continuous slab of jumpsuit and the
+        // back view reads as a bollard rather than as a man facing away.
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.beginPath();
+        ctx.ellipse(x, y - 6.2*s, 3.0*s, 0.9*s, 0, 0, Math.PI * 2);
+        ctx.fill();
 
+        // Arms, on the same construction as every other pose. These two were
+        // the last flat bars left in the sprite: 2x7 fillRects for the limbs
+        // and, on the climb, a 2x3 rectangle of bare skin standing in for a
+        // hand — which is the pale block that showed up floating beside him.
+        const bCapY = y - 3.8*s, bShX = 5.6*s;
         if(isFix) {
-            // Arms reaching forward toward pipe, rocking with torque
-            ctx.fillStyle = npcRamp.dark;
-            ctx.fillRect(x - 7*s + torque, y - 4*s, 2*s, 7*s); // left arm
-            ctx.fillStyle = armLit;
-            ctx.fillRect(x + 5*s + torque, y - 4*s, 2*s, 7*s); // right arm
-            // Hands disappear behind body (reaching into pipe)
+            // Hands are inside the pipe, so the arms run out and stop — no hand
+            // caps. They rock with the torque coming off the wrench.
+            charLimb(x - bShX, bCapY, x - 6.0*s + torque, y + 2.6*s,
+                     2.3*s, npcRamp.dark, x - 7.4*s + torque, y - 0.6*s);
+            charLimb(x + bShX, bCapY, x + 6.0*s + torque, y + 2.6*s,
+                     2.3*s, armLit,      x + 7.4*s + torque, y - 0.6*s);
+            charDeltoid(x - bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+            charDeltoid(x + bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
         } else if(!isBackTurn) {
-            // Climbing: arms alternate up/down on ladder. Pulled in from +/-8s
-            // to +/-7.8s: the torso used to be a straight-sided rectangle that
-            // the arms butted against at every height, but charTorso tucks the
-            // waist in, so at the bottom of the stroke the old position left the
-            // arm floating a hair clear of the body.
-            ctx.fillStyle = npcRamp.dark;
-            ctx.fillRect(x - 7.8*s, y - 5*s - climbCycle, 2*s, 8*s);
-            ctx.fillStyle = armLit;
-            ctx.fillRect(x + 5.8*s, y - 5*s + climbCycle, 2*s, 8*s);
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 7.8*s, y - 6*s - climbCycle, 2*s, 3*s);
-            ctx.fillRect(x + 5.8*s, y - 6*s + climbCycle, 2*s, 3*s);
+            // Climbing: each hand takes a rung and they alternate up the rails.
+            const gripL = y - 11.5*s - climbCycle * 1.5;
+            const gripR = y - 11.5*s + climbCycle * 1.5;
+            charLimb(x - bShX, bCapY, x - 7.0*s, gripL,
+                     2.3*s, npcRamp.dark, x - 8.6*s, y - 7.0*s);
+            charLimb(x + bShX, bCapY, x + 7.0*s, gripR,
+                     2.3*s, armLit,      x + 8.6*s, y - 7.0*s);
+            charHand(x - 7.0*s, gripL, 1.4*s, '#f5c89a');
+            charHand(x + 7.0*s, gripR, 1.4*s, '#f5c89a');
         }
     } else {
         // === NORMAL FRONT-FACING SPRITE ===
@@ -5739,7 +5839,12 @@ function _drawNPC(npc) {
         // face swings across it, a nose breaks the leading edge, and the arms
         // shift so the near one comes forward.
         const turn = (npc.facing === 'left') ? -1 : (npc.facing === 'right') ? 1 : 0;
-        const tf = turn * 3.0*s;               // how far the face swings
+        // How far the face swings. It was 3.0*s, which put the leading edge of
+        // the face 4px OUTSIDE the hood: a slab of skin, and a nose beyond
+        // that, hanging on the background clear of the head they belong to.
+        // The hood's own leading edge only travels 1.1*s, so the face has to
+        // stay inside that or it stops being a face in a hood.
+        const tf = turn * 1.6*s;
         const fx = x + tf;                     // centre of the face
 
         // Hood (wraps around head, connects to torso)
@@ -5761,39 +5866,87 @@ function _drawNPC(npc) {
         ctx.fillStyle = 'rgba(0,0,0,0.12)';
         ctx.fillRect(x - 6*s + turn*1.1*s, y - 12*s, 1.2*s, 7*s);
 
-        // Face opening (skin-colored inset) — swung across the hood and
-        // narrowed by the turn, with the far cheek gone into shadow
-        const faceW = 8*s - Math.abs(turn) * 2.8*s;
+        // Face opening — swung across the hood and narrowed by the turn, with
+        // the far cheek gone into shadow.
+        //
+        // This was a plain fillRect: a square slab of skin with four hard
+        // corners, which is the whole "blockhead" read the rest of the cast was
+        // taken away from. It is built as a skull now — brow full width, jaw
+        // drawing in, chin rounded off — with the cheek shadow and temple
+        // highlight charHead gives everybody else, so a manager is made of the
+        // same material as the man standing next to him.
+        // ...and it narrows less, so a turned head is a head at an angle rather
+        // than a tall vertical slot cut in the hood.
+        const faceW = 8*s - Math.abs(turn) * 2.0*s;
+        const faceT = y - 13*s, faceB = y - 5*s, faceHW = faceW / 2;
         ctx.fillStyle = '#f5c89a';
-        ctx.fillRect(fx - faceW/2, y - 13*s, faceW, 8*s);
+        ctx.beginPath();
+        ctx.moveTo(fx - faceHW, faceT);
+        ctx.lineTo(fx + faceHW, faceT);
+        ctx.lineTo(fx + faceHW * 0.94, faceB - 2.8*s);
+        ctx.quadraticCurveTo(fx + faceHW * 0.86, faceB, fx + faceHW * 0.44, faceB);
+        ctx.lineTo(fx - faceHW * 0.44, faceB);
+        ctx.quadraticCurveTo(fx - faceHW * 0.86, faceB, fx - faceHW * 0.94, faceB - 2.8*s);
+        ctx.closePath(); ctx.fill();
         if(turn !== 0) {
             // Nose breaking the leading edge of the face
             ctx.beginPath();
-            ctx.moveTo(fx + turn * faceW/2, y - 10.8*s);
-            ctx.lineTo(fx + turn * (faceW/2 + 2.0*s), y - 9.2*s);
-            ctx.lineTo(fx + turn * faceW/2, y - 7.9*s);
+            ctx.moveTo(fx + turn * faceHW * 0.98, y - 10.8*s);
+            ctx.lineTo(fx + turn * (faceHW + 1.7*s), y - 9.3*s);
+            ctx.lineTo(fx + turn * faceHW * 0.98, y - 8.1*s);
             ctx.closePath(); ctx.fill();
             ctx.fillStyle = 'rgba(120,70,40,0.16)';   // far cheek turning away
-            ctx.fillRect(turn > 0 ? fx - faceW/2 : fx + faceW/2 - 1.1*s,
-                         y - 13*s, 1.1*s, 8*s);
+            ctx.fillRect(turn > 0 ? fx - faceHW : fx + faceHW - 1.1*s,
+                         faceT, 1.1*s, 8*s);
         }
-        ctx.fillStyle = 'rgba(120,70,40,0.14)';
-        ctx.fillRect(fx - faceW/2, y - 7*s, faceW, 2*s);
+        // Cheek and jaw falling away under the cheekbone
+        ctx.fillStyle = 'rgba(140,92,54,0.15)';
+        ctx.beginPath();
+        ctx.ellipse(fx, faceB - 1.9*s, faceHW * 0.80, 1.8*s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Temple catching the same top-left key as the rest of the sprite
+        ctx.fillStyle = 'rgba(255,246,230,0.18)';
+        ctx.beginPath();
+        ctx.ellipse(fx - faceHW * 0.46, faceT + 2.1*s, faceHW * 0.40, 1.5*s, 0, 0, Math.PI * 2);
+        ctx.fill();
 
         // Face
         ctx.fillStyle = '#000';
         if(isScreaming) {
-            // Edvard Munch SCREAM face — wide horror eyes + gaping O mouth
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.ellipse(fx - 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(fx + 2*s, y - 9*s, 1.6*s, 1.9*s, 0, 0, Math.PI*2); ctx.fill();
-            // Pinprick pupils high in socket (frozen upward stare)
-            ctx.fillStyle = '#000';
-            ctx.beginPath(); ctx.arc(fx - 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(fx + 2*s, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
-            // Gaping O mouth — tall dark oval
-            ctx.fillStyle = 'rgba(15,0,0,0.95)';
+            // Edvard Munch SCREAM face. Deliberately off-model — the whites
+            // show — but built rather than stamped: the flat white discs and
+            // the solid black oval read as two stickers and a hole. Each eye
+            // now sits in a socket with a lid shadow over it, and the mouth is
+            // a cavity with a lip line and a tongue in the dark of it.
+            for(const sx of [-1, 1]) {
+                const ex = fx + sx * 2*s;
+                ctx.fillStyle = 'rgba(120,80,52,0.28)';         // socket
+                ctx.beginPath(); ctx.ellipse(ex, y - 8.9*s, 1.9*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#f2efe9';
+                ctx.beginPath(); ctx.ellipse(ex, y - 9*s, 1.55*s, 1.85*s, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(120,70,40,0.22)';         // lid shadow across the top
+                ctx.beginPath();
+                ctx.ellipse(ex, y - 10.5*s, 1.55*s, 0.85*s, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#241c17';                      // pinprick, high in the socket
+                ctx.beginPath(); ctx.arc(ex, y - 10*s, 0.55*s, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.75)';
+                ctx.beginPath(); ctx.arc(ex - 0.30*s, y - 10.3*s, 0.22*s, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#7a4a3a';                    // brow shot up
+                ctx.lineWidth = Math.max(1, 0.55*s); ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(ex - 1.5*s, y - 12.0*s + sx * 0.35*s);
+                ctx.lineTo(ex + 1.5*s, y - 12.0*s - sx * 0.35*s);
+                ctx.stroke(); ctx.lineCap = 'butt';
+            }
+            // Gaping mouth — a cavity with depth, not a filled oval
+            ctx.fillStyle = 'rgba(120,70,40,0.30)';             // the skin drawn taut around it
+            ctx.beginPath(); ctx.ellipse(fx, y - 6*s, 1.9*s, 2.6*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#2a1010';
             ctx.beginPath(); ctx.ellipse(fx, y - 6*s, 1.4*s, 2.2*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';                 // back of the throat
+            ctx.beginPath(); ctx.ellipse(fx, y - 5.4*s, 0.95*s, 1.4*s, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#8d4a4a';                          // tongue down in it
+            ctx.beginPath(); ctx.ellipse(fx, y - 4.5*s, 0.75*s, 0.55*s, 0, 0, Math.PI*2); ctx.fill();
         } else if(npc.state === 'stressed' && !isPacing && !isJumping) {
             // Worried: brows pinched up in the middle, eyes darting
             drawCharEyes(fx, y - 9*s, 2.1*s, 2.3*s, 2.1*s - Math.abs(turn)*0.7*s,
@@ -5830,67 +5983,79 @@ function _drawNPC(npc) {
         ctx.strokeStyle = 'rgba(0,0,0,0.20)';
         ctx.lineWidth = Math.max(1, 0.5*s);
         ctx.beginPath(); ctx.moveTo(x, y - 4*s); ctx.lineTo(x, y + 5*s); ctx.stroke();
-        // Collar band across the shoulders
+        // Collar band across the shoulders, ends rounded off — square corners on
+        // a band this exposed read as a printed stripe rather than a seam.
         ctx.fillStyle = npcRamp.dark;
-        ctx.fillRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s);
+        pathRoundRect(x - 4.4*s, y - 5.4*s, 8.8*s, 1.3*s, 0.55*s); ctx.fill();
         ctx.fillStyle = npc.color.hex;
 
-        if(isScreaming) {
-            // Munch's Scream — both arms bent up alongside head, hands pressed to cheeks
-            ctx.fillRect(x - 8*s, y - 11*s, 2*s, 8*s); // left forearm rising along left cheek
-            ctx.fillRect(x + 6*s, y - 11*s, 2*s, 8*s); // right forearm rising along right cheek
-            // Hands cupping the cheeks (skin)
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 6*s, y - 12*s, 2*s, 3*s); // left hand on left cheek
-            ctx.fillRect(x + 4*s, y - 12*s, 2*s, 3*s); // right hand on right cheek
-            // Legs planted underneath (frozen in horror — no stride)
-            ctx.fillStyle = npc.color.hex;
-            ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
-            ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
-            // Shoes
-            ctx.fillStyle = '#fff';
-            pathRoundRect(x - 5*s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
-            pathRoundRect(x + s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
-        } else if(isPacing) {
-            // Pacing: arms and legs use horizontal stride offsets, stay attached to torso
-            const stride = Math.sin(Date.now() / 125) * 3;
-            // Arms — shift horizontally with stride, anchored to torso
-            ctx.fillRect(x - 8*s + stride, y - 3*s, 2*s, 7*s);
-            ctx.fillRect(x + 6*s - stride, y - 3*s, 2*s, 7*s);
-            // Shoulder bridges — fill gap when arms swing outward from torso
-            if(stride < 0) {
-                ctx.fillRect(x - 6*s + stride, y - 3*s, -stride, 3*s);
-                ctx.fillRect(x + 6*s, y - 3*s, -stride, 3*s);
+        // ── ONE BODY FOR EVERY POSE ──────────────────────────────────────────
+        // The idle pose was rebuilt on charLimb/charDeltoid/charHand and a
+        // gaitLeg walk cycle; the three stressed poses were left as the
+        // original flat fillRect bars. So a pipe manager was built out of one
+        // material while his pipe was quiet and a different one the moment it
+        // started to go — which is most of the time you are looking at him.
+        // These two closures give all four poses the same construction, and
+        // only the motion differs.
+        const armSkin = '#f5c89a';
+        const capY = y - 3.8*s, shX = 5.6*s;
+        const armDark = npcRamp.dark, armLitF = charMix(npc.color.hex, '#000', 0.10);
+        // Both arms from one call: each side gets a tapered limb off a deltoid
+        // cap sitting ON the shoulder, ending in a hand at the wrist.
+        // handDY carries the hand past the wrist along the limb — down for an
+        // arm that hangs, up for one that is raised.
+        const npcArms = (wristLX, wristLY, wristRX, wristRY, bendLX, bendLY, bendRX, bendRY, handR, handDY) => {
+            charLimb(x - shX, capY, wristLX, wristLY, 2.3*s, armDark,  bendLX, bendLY);
+            charLimb(x + shX, capY, wristRX, wristRY, 2.3*s, armLitF, bendRX, bendRY);
+            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            const hdy = (handDY === undefined) ? 0.8*s : handDY;
+            charHand(wristLX, wristLY + hdy, handR || 1.4*s, armSkin);
+            charHand(wristRX, wristRY + hdy, handR || 1.4*s, armSkin);
+        };
+        // Legs hinged from a fixed hip, each carrying its foot fore and aft.
+        const npcLegs = (amp, lift, phase, dir) => {
+            const hip = y + 6*s, sole = y + 13*s;
+            for(const [lx0, col, ph] of [[-5*s, npcRamp.dark, phase],
+                                         [ s,   npcRamp.base, phase + Math.PI]]) {
+                const g = gaitLeg(ph, dir || 0, amp, lift);
+                const bot = sole - g.lift;
+                ctx.fillStyle = col;
+                ctx.beginPath();
+                ctx.moveTo(x + lx0, hip);
+                ctx.lineTo(x + lx0 + 4*s, hip);
+                ctx.lineTo(x + lx0 + 4*s + g.swing, bot);
+                ctx.lineTo(x + lx0 + g.swing, bot);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.13)';          // knee
+                ctx.fillRect(x + lx0 + g.swing * 0.5, hip + 3.4*s, 4*s, 0.8*s);
+                ctx.fillStyle = '#fff';                      // shoe
+                pathRoundRect(x + lx0 + g.swing, bot, 4*s, 3.2*s, 1.4*s); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.18)';
+                ctx.fillRect(x + lx0 + g.swing, bot + 2.4*s, 4*s, 0.8*s);
             }
-            // Hands at cuffs
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 8*s + stride, y + 4*s, 2*s, 2*s);
-            ctx.fillRect(x + 6*s - stride, y + 4*s, 2*s, 2*s);
-            // Legs — Y-alternation for step animation (no horizontal spread)
-            const npcLegBob = stride * 0.67;
-            ctx.fillStyle = npc.color.hex;
-            ctx.fillRect(x - 5*s, y + 6*s + npcLegBob, 4*s, 7*s);
-            ctx.fillRect(x + s, y + 6*s - npcLegBob, 4*s, 7*s);
-            // Shoes
-            ctx.fillStyle = '#fff';
-            pathRoundRect(x - 5*s, y + 13*s + npcLegBob, 4*s, 3.2*s, 1.4*s); ctx.fill();
-            pathRoundRect(x + s, y + 13*s - npcLegBob, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        };
+
+        if(isScreaming) {
+            // Munch's Scream — both forearms up alongside the head, hands
+            // pressed to the cheeks, feet rooted to the spot.
+            npcArms(x - 5.2*s, y - 10.4*s, x + 5.2*s, y - 10.4*s,
+                    x - 9.2*s, y - 5.2*s, x + 9.2*s, y - 5.2*s, 1.5*s, -0.7*s);
+            npcLegs(0, 0, 0, 0);
+        } else if(isPacing) {
+            // Pacing: a real walk cycle, swinging the way he is currently
+            // travelling, since the sprite's own x is oscillating underneath.
+            const pacePh = Date.now() / 125;
+            const paceDir = Math.cos(Date.now() / 250) >= 0 ? 1 : -1;
+            const swing = Math.sin(pacePh) * 3;
+            npcArms(x - 7.0*s + swing, y + 4.6*s, x + 7.0*s - swing, y + 4.6*s,
+                    x - 7.4*s + swing, y - 0.2*s, x + 7.4*s - swing, y - 0.2*s);
+            npcLegs(3.2, 2.6, pacePh, paceDir);
         } else if(isJumping) {
-            // Jumping: arms raised up, flush with torso edge
-            ctx.fillRect(x - 8*s, y - 6*s, 2*s, 6*s);
-            ctx.fillRect(x + 6*s, y - 6*s, 2*s, 6*s);
-            // Hands reaching up above raised arms
-            ctx.fillStyle = '#f5c89a';
-            ctx.fillRect(x - 8*s, y - 7*s, 2*s, 2*s);
-            ctx.fillRect(x + 6*s, y - 7*s, 2*s, 2*s);
-            // Legs together underneath
-            ctx.fillStyle = npc.color.hex;
-            ctx.fillRect(x - 5*s, y + 6*s, 4*s, 7*s);
-            ctx.fillRect(x + s, y + 6*s, 4*s, 7*s);
-            // Shoes
-            ctx.fillStyle = '#fff';
-            pathRoundRect(x - 5*s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
-            pathRoundRect(x + s, y + 13*s, 4*s, 3.2*s, 1.4*s); ctx.fill();
+            // Jumping: both arms thrown up, legs together under him.
+            npcArms(x - 7.4*s, y - 8.6*s, x + 7.4*s, y - 8.6*s,
+                    x - 9.4*s, y - 4.0*s, x + 9.4*s, y - 4.0*s, 1.4*s, -0.8*s);
+            npcLegs(0, 0, 0, 0);
         } else {
             // Static pose — arms hang from deltoid caps set on top of the
             // shoulders, tapering to the wrist, instead of bars stuck on the
@@ -6974,7 +7139,12 @@ function drawParkingLotWindow(wx, wy, ww, wh) {
     }
 
     // === PIPETECH ENTRANCE SIGN — on this side of the street, at parking lot entrance ===
-    const signPostX = wx + 22;
+    // wx + 22 put the pole 22px inside the window, but the sign panel hung on
+    // it is 90px wide and centred — so its left 23px fell outside the window's
+    // clip and the wordmark was sawn off mid-letter. Every pipe room in the
+    // game showed a company sign reading "PETECH". Half the panel width plus a
+    // margin, so the whole thing is inside the glass.
+    const signPostX = wx + 51;
     const signPostBot = lotTop + (lotBot - lotTop) * 0.6; // base planted in parking lot
     const signPostTop = streetTop - 2; // extends above street level
     const ibeamH = signPostBot - signPostTop;
@@ -21454,14 +21624,33 @@ function drawLevel6Underbelly() {
         ctx.fill();
     }
 
-    // Legs — thick, hunched posture
-    ctx.fillStyle = '#cc2222';
-    ctx.fillRect(mx - 16, my + 20 + breathe, 14, 24);
-    ctx.fillRect(mx + 2, my + 20 + breathe, 14, 24);
-    // Heavy boots
-    ctx.fillStyle = '#333';
-    ctx.fillRect(mx - 18, my + 42 + breathe, 16, 6);
-    ctx.fillRect(mx + 2, my + 42 + breathe, 16, 6);
+    // Legs — thick and hunched. They were two flat rectangles under a torso
+    // and a pair of arms that had both been rebuilt with a light ramp and a
+    // taper, so the bottom third of the creature was made of different stuff
+    // from the rest of him. Same ramp, and a boot with a sole on it.
+    for(const lg of [-1, 1]) {
+        const legCol = lg < 0 ? charMix('#cc2222', '#000', 0.20) : '#cc2222';
+        ctx.strokeStyle = legCol;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 15;
+        ctx.beginPath();
+        ctx.moveTo(mx + lg * 9, my + 20 + breathe);
+        ctx.lineTo(mx + lg * 10, my + 33 + breathe);
+        ctx.stroke();
+        ctx.lineWidth = 13;
+        ctx.beginPath();
+        ctx.moveTo(mx + lg * 10, my + 33 + breathe);
+        ctx.lineTo(mx + lg * 10, my + 42 + breathe);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        // Heavy boot — toe forward, with a sole edge under it
+        ctx.fillStyle = '#3a3a3a';
+        pathRoundRect(mx + lg * 10 - 8, my + 40 + breathe, 17, 9, 2.6); ctx.fill();
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(mx + lg * 10 - 8, my + 46.4 + breathe, 17, 2.6);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillRect(mx + lg * 10 - 7, my + 41.4 + breathe, 15, 1.8);
+    }
     } // end if(!pm.escaped && !pm.eating)
 
     // Cage bars (front, drawn over PM) — animate dropping when lock shot
@@ -22206,17 +22395,29 @@ function drawLevel6CEOOffice() {
         ctx.stroke();
     }
     
-    // Earth
-    ctx.fillStyle = '#4a9eff';
+    // Earth, woven into the rug. It was drawn with ctx.arc — a true circle,
+    // 80px across, sitting on top of rings that are laid flat in perspective at
+    // 0.3. So the middle of the rug stood up off the floor as a beach ball and
+    // covered the pattern it was supposed to be the centre of. Same foreshorten
+    // as the rings it sits inside now, continents included.
+    const RUG_SQUASH = 0.3;
+    ctx.fillStyle = '#3f86db';
     ctx.beginPath();
-    ctx.arc(earthX, earthY, 40, 0, Math.PI * 2);
+    ctx.ellipse(earthX, earthY, 40, 40 * RUG_SQUASH, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#27ae60';
+    ctx.fillStyle = '#2f9455';
     ctx.beginPath();
-    ctx.arc(earthX - 10, earthY - 5, 15, 0, Math.PI * 2);
+    ctx.ellipse(earthX - 11, earthY - 1.5, 15, 15 * RUG_SQUASH, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(earthX + 12, earthY + 8, 12, 0, Math.PI * 2);
+    ctx.ellipse(earthX + 13, earthY + 2.4, 12, 12 * RUG_SQUASH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Pile shading — the far half of any rug in this room falls away from the
+    // key light, and it keeps the motif from reading as flat vinyl
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(earthX, earthY - 40 * RUG_SQUASH * 0.42, 40, 40 * RUG_SQUASH * 0.55,
+                0, 0, Math.PI * 2);
     ctx.fill();
     
     // Saturn-Pipe-Earth portrait on back wall (pushed against back wall)
@@ -26399,56 +26600,76 @@ function _drawDeadLabTech(x, y) {
     ctx.beginPath(); ctx.ellipse(x - 45, y + 3, 3.6, 2.8, 0.25, 0, Math.PI * 2); ctx.stroke();
 }
 
+// ── HUD CHIPS ────────────────────────────────────────────────────────────────
+// The mute / holster / equip buttons are the only interface drawn into the
+// room, and they were 80x50 hard-edged rectangles with a 2px stroke and a
+// primary-green glyph — the flattest objects on screen, and big enough to
+// swallow whatever they landed on: the ceiling rack in the pipe room, the gold
+// trophy cabinet in the CEO's office, the overhead pipe run in the underbelly,
+// the tank at the end of the nuclear bridge. They are compact rounded chips
+// now, translucent and shadowed so they read as something laid over the world
+// rather than something built into it.
+//
+// The geometry lives here, in one place, because the drawing and the tap
+// target had already drifted apart: the buttons were drawn at -GY + 40 and hit
+// tested at -GY + 5, so tapping the mute button did nothing and tapping the
+// empty wall 35px above it muted the game.
+const HUD_CHIP = { h: 32, gap: 6, top: 40, muteW: 44, equipW: 68, holsterW: 62 };
+function hudChipRects(gx, gy) {
+    const gxv = (gx === undefined) ? GX : gx;
+    const gyv = (gy === undefined) ? GY : gy;
+    const right = -gxv + CANVAS_W - 10;
+    const y = -gyv + HUD_CHIP.top;
+    const mute = { x: right - HUD_CHIP.muteW, y, w: HUD_CHIP.muteW, h: HUD_CHIP.h };
+    const equip = { x: mute.x - HUD_CHIP.gap - HUD_CHIP.equipW, y,
+                    w: HUD_CHIP.equipW, h: HUD_CHIP.h };
+    const anchor = (state === 'selfDestructSeq') ? equip : mute;
+    const holster = { x: anchor.x - HUD_CHIP.gap - HUD_CHIP.holsterW, y,
+                      w: HUD_CHIP.holsterW, h: HUD_CHIP.h };
+    return { mute, equip, holster };
+}
+function hudChip(r, fill, stroke) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 7; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = fill || 'rgba(16,18,22,0.70)';
+    pathRoundRect(r.x, r.y, r.w, r.h, 7); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = stroke || 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 1;
+    pathRoundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 6.5); ctx.stroke();
+}
+
 function drawMuteIndicator() {
-    // Position at top-right of canvas, just below HUD — outside game area in landscape
-    const btnX = -GX + CANVAS_W - 90;
-    const btnY = -GY + 40;   // clear of the announcement ticker along the top
-    const btnW = 80;
-    const btnH = 50;
-    const cx = btnX + btnW / 2;
-    const cy = btnY + btnH / 2;
+    const r = hudChipRects().mute;
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    hudChip(r, musicMuted ? 'rgba(38,14,14,0.78)' : 'rgba(16,18,22,0.70)',
+               musicMuted ? 'rgba(255,110,110,0.45)' : 'rgba(255,255,255,0.16)');
 
-    // Background
-    ctx.fillStyle = musicMuted ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = musicMuted ? '#ff4444' : '#4a4a4a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
-
-    // Draw speaker body (works on all platforms, no emoji)
-    const color = musicMuted ? '#ff4444' : '#27ae60';
-    ctx.fillStyle = color;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
+    // Speaker glyph, drawn as one filled body so it has no seam between the
+    // box and the cone
+    const col = musicMuted ? '#ff8a8a' : '#cfe6d4';
+    ctx.fillStyle = col; ctx.strokeStyle = col;
     ctx.beginPath();
-    ctx.rect(cx - 16, cy - 6, 10, 12);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(cx - 6, cy - 6);
-    ctx.lineTo(cx + 4, cy - 14);
-    ctx.lineTo(cx + 4, cy + 14);
-    ctx.lineTo(cx - 6, cy + 6);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(cx - 10, cy - 3);
+    ctx.lineTo(cx - 5.5, cy - 3);
+    ctx.lineTo(cx - 0.5, cy - 8);
+    ctx.lineTo(cx - 0.5, cy + 8);
+    ctx.lineTo(cx - 5.5, cy + 3);
+    ctx.lineTo(cx - 10, cy + 3);
+    ctx.closePath(); ctx.fill();
 
+    ctx.lineWidth = 1.6; ctx.lineCap = 'round';
     if(musicMuted) {
-        // Draw X over speaker
         ctx.beginPath();
-        ctx.moveTo(cx + 10, cy - 8);
-        ctx.lineTo(cx + 24, cy + 8);
-        ctx.moveTo(cx + 24, cy - 8);
-        ctx.lineTo(cx + 10, cy + 8);
+        ctx.moveTo(cx + 3.5, cy - 4.5); ctx.lineTo(cx + 10, cy + 4.5);
+        ctx.moveTo(cx + 10, cy - 4.5);  ctx.lineTo(cx + 3.5, cy + 4.5);
         ctx.stroke();
     } else {
-        // Draw sound waves
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx + 8, cy, 8, -Math.PI / 4, Math.PI / 4);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(cx + 8, cy, 15, -Math.PI / 4, Math.PI / 4);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx + 1, cy, 4.5, -Math.PI/3.2, Math.PI/3.2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx + 1, cy, 8.0, -Math.PI/3.2, Math.PI/3.2); ctx.stroke();
     }
+    ctx.lineCap = 'butt';
 }
 
 // ── LEATHER HOLSTER BUTTON — tappable next to mute button ──────────────────────
@@ -26464,24 +26685,19 @@ function drawEquipToggleButton() {
     // Show whenever player carries any usable weapon — revolver or ghost gun
     if(!level6.hasRevolver && !level6.hasGhostGun) return;
 
-    const btnW = 78, btnH = 50;
-    const btnX = -GX + CANVAS_W - 90 - btnW - 8;
-    const btnY = -GY + 40;   // clear of the announcement ticker along the top
-    const cx = btnX + btnW / 2, cy = btnY + btnH / 2;
+    const r = hudChipRects().equip;
+    const btnX = r.x, btnY = r.y, btnW = r.w, btnH = r.h;
+    const cx = btnX + btnW / 2, cy = btnY + btnH / 2 + 4;
 
     const armed = !level6.pistolHolstered;
 
-    // Background
-    ctx.fillStyle = armed ? 'rgba(70,10,10,0.92)' : 'rgba(0,0,0,0.55)';
-    ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = armed ? '#ff5050' : '#666';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    hudChip(r, armed ? 'rgba(52,12,12,0.80)' : 'rgba(16,18,22,0.70)',
+               armed ? 'rgba(255,110,110,0.45)' : 'rgba(255,255,255,0.16)');
 
     // Status label
-    ctx.fillStyle = armed ? '#ff8080' : '#aaaaaa';
+    ctx.fillStyle = armed ? '#ff9c9c' : '#a7adb5';
     ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
-    ctx.fillText(armed ? 'ARMED' : 'UNARMED', cx, btnY + 12);
+    ctx.fillText(armed ? 'ARMED' : 'UNARMED', cx, btnY + 11);
 
     // Icon
     if(armed) {
@@ -26498,9 +26714,6 @@ function drawEquipToggleButton() {
         ctx.beginPath(); ctx.arc(cx, cy + 1, 7, 0, Math.PI*2); ctx.stroke();
     }
 
-    // Tap hint
-    ctx.fillStyle = '#888'; ctx.font = 'bold 8px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('tap to swap', cx, btnY + btnH - 4);
 }
 
 function drawHolsterButton() {
@@ -26510,13 +26723,11 @@ function drawHolsterButton() {
     if(typeof level6 === 'undefined' || level !== 6) return;
     if(!level6.hasWrenchGun || !level6Sidearm()) return;
 
-    const btnW = 70, btnH = 50;
-    // During the self-destruct sequence, the equip toggle button (78px) sits next
-    // to mute, so push the holster button further left to avoid overlap.
-    const equipOffset = (state === 'selfDestructSeq') ? (78 + 8) : 0;
-    const btnX = -GX + CANVAS_W - 90 - btnW - 8 - equipOffset;
-    const btnY = -GY + 40;   // clear of the announcement ticker along the top
-    const cx = btnX + btnW / 2, cy = btnY + btnH / 2;
+    // hudChipRects already steps the holster past the equip toggle when the
+    // self-destruct sequence puts that one on screen.
+    const r = hudChipRects().holster;
+    const btnX = r.x, btnY = r.y, btnW = r.w, btnH = r.h;
+    const cx = btnX + btnW / 2, cy = btnY + btnH / 2 + 4;
 
     // Same source of truth as the sprite and the trigger, so the button cannot
     // claim the wrench is up while a pistol is in his fist.
@@ -26524,14 +26735,11 @@ function drawHolsterButton() {
     const wrenchActive = !!act && act.kind === 'wrenchGun';
 
     // Background — highlight when wrench is active
-    ctx.fillStyle = wrenchActive ? 'rgba(80,50,10,0.92)' : 'rgba(0,0,0,0.5)';
-    ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = wrenchActive ? '#e8a020' : '#888';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    hudChip(r, wrenchActive ? 'rgba(58,38,8,0.80)' : 'rgba(16,18,22,0.70)',
+               wrenchActive ? 'rgba(232,160,32,0.50)' : 'rgba(255,255,255,0.16)');
 
     // Active weapon label at top of button
-    ctx.fillStyle = wrenchActive ? '#e8a020' : '#aaaaaa';
+    ctx.fillStyle = wrenchActive ? '#f0b840' : '#a7adb5';
     ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
     ctx.fillText(wrenchActive ? 'WRENCH' : 'GUN', cx, btnY + 11);
 
@@ -26550,9 +26758,6 @@ function drawHolsterButton() {
         ctx.fillStyle = '#999'; ctx.beginPath(); ctx.arc(cx, cy - 1, 4, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Swap arrow hint at bottom
-    ctx.fillStyle = '#888'; ctx.font = scaledFont(8, '', 'Arial', true); ctx.textAlign = 'center';
-    ctx.fillText('\u21c4 swap', cx, btnY + btnH - 4);
 }
 
 // Render the acid-burst + PM-dissolve animation — Raiders of the Lost Ark / Wicked Witch style
@@ -38488,40 +38693,41 @@ function handleMuteClick(e) {
     const x = (clientX - rect.left) * scaleX - freshGX;
     const y = (clientY - rect.top) * scaleY - freshGY;
 
-    // Mute button position matches drawMuteIndicator: top-right of canvas
-    const muteBtnX = -freshGX + CANVAS_W - 90;
-    const muteBtnY = -freshGY + 5;
-    if(x >= muteBtnX && x <= muteBtnX + 80 && y >= muteBtnY && y <= muteBtnY + 50) {
+    // Every one of these hit boxes comes from the same place the buttons are
+    // drawn from. They used to be written out a second time here, and had
+    // drifted: the mute button was drawn at -GY + 40 and tested at -GY + 5, so
+    // tapping the button itself did nothing while tapping the blank wall above
+    // it muted the game. The holster and equip boxes inherited the same y.
+    //
+    // Tap targets are padded outward — the chips are small enough now that a
+    // thumb needs more room than the artwork occupies.
+    const chips = hudChipRects(freshGX, freshGY);
+    const PAD = 8;
+    const inChip = r => x >= r.x - PAD && x <= r.x + r.w + PAD
+                     && y >= r.y - PAD && y <= r.y + r.h + PAD;
+
+    if(inChip(chips.mute)) {
         toggleMute();
         if(e.cancelable) e.preventDefault();
         return;
     }
 
-    // Holster button — left of mute button, only when 2+ weapons
-    const holsterBtnW = 70, holsterBtnH = 50;
-    const equipOffset = (state === 'selfDestructSeq') ? (78 + 8) : 0;
-    const holsterBtnX = muteBtnX - holsterBtnW - 8 - equipOffset;
-    const holsterBtnY = muteBtnY;
     // Holster button — direct A/B toggle between wrench and gun (no inventory
     // UI). The hit box has to match drawHolsterButton's own visibility test, or
-    // there is a dead 70x50 tap target where the button is not drawn.
+    // there is a dead tap target where the button is not drawn.
     if(typeof level6 !== 'undefined' && level === 6 && level6.hasWrenchGun && level6Sidearm() &&
-       x >= holsterBtnX && x <= holsterBtnX + holsterBtnW && y >= holsterBtnY && y <= holsterBtnY + holsterBtnH) {
+       inChip(chips.holster)) {
         level6.pistolHolstered = !level6.pistolHolstered;
         if(e.cancelable) e.preventDefault();
         return;
     }
 
     // Equip toggle button — visible during self-destruct sequence next to mute
-    if(state === 'selfDestructSeq' && typeof level6 !== 'undefined' && level6.hasRevolver) {
-        const equipBtnW = 78, equipBtnH = 50;
-        const equipBtnX = muteBtnX - equipBtnW - 8;
-        const equipBtnY = muteBtnY;
-        if(x >= equipBtnX && x <= equipBtnX + equipBtnW && y >= equipBtnY && y <= equipBtnY + equipBtnH) {
-            level6.pistolHolstered = !level6.pistolHolstered;
-            if(e.cancelable) e.preventDefault();
-            return;
-        }
+    if(state === 'selfDestructSeq' && typeof level6 !== 'undefined' && level6.hasRevolver
+       && inChip(chips.equip)) {
+        level6.pistolHolstered = !level6.pistolHolstered;
+        if(e.cancelable) e.preventDefault();
+        return;
     }
 
     // End/result screen menu option taps — large hit areas for thumb use
