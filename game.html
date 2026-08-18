@@ -3595,9 +3595,15 @@ function drawBaldManager(x, y, ...rest) {
 
 
 
-function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
+function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
     const s = 2;
-    const isWalking = Date.now() - player.lastMove < 150;
+    // opts.walking / opts.skin let a NON-player character borrow this body. The
+    // Pipe Boss is the same man in the same shirt and tie and he had a sprite
+    // entirely of his own — see drawBoss — so this one had to stop reading the
+    // player's own movement clock before he could use it.
+    const isWalking = (opts && opts.walking !== undefined)
+        ? opts.walking
+        : (Date.now() - player.lastMove < 150);
     // Walking AWAY from the camera used to draw the front sprite unchanged, so
     // the player's face, tie and belt buckle all faced the wrong way whenever he
     // went up the screen. The body is the same from behind; the face, collar,
@@ -3610,7 +3616,8 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
     ctx.ellipse(x, y + 50, 10, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const skinColor = '#f5c89a';
+    const skinColor = (opts && opts.skin) || '#f5c89a';
+    const skinShade = charMix(skinColor, '#000000', 0.09);
 
     // Arm swing for walking (only when not holding doc or weapon)
     const bmStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
@@ -3819,7 +3826,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillStyle = 'rgba(180,120,80,0.26)';            // shadow under the jaw
         ctx.beginPath();
         ctx.ellipse(u(3.0), y - 2.2*s, 2.2*s, 0.8*s, d * 0.12, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#e8b890';                          // ear, set back
+        ctx.fillStyle = skinShade;                          // ear, set back
         ctx.beginPath(); ctx.ellipse(u(-1.6), y - 6.4*s, 0.9*s, 1.4*s, 0, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(140,80,50,0.4)';
         ctx.beginPath(); ctx.ellipse(u(-1.6), y - 6.4*s, 0.4*s, 0.7*s, 0, 0, Math.PI*2); ctx.fill();
@@ -4004,7 +4011,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false) {
         ctx.fillRect(headCx - 4*s, headBot - 1, 8*s, 1);
         // Ears — small skin-tone bumps on the sides (front view only — facing 'forward'/undefined or hat)
         if(facing !== 'left' && facing !== 'right') {
-            ctx.fillStyle = '#e8b890';
+            ctx.fillStyle = skinShade;
             ctx.beginPath(); ctx.arc(headCx - 5*s, y - 7*s, 1.4*s, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(headCx + 5*s, y - 7*s, 1.4*s, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = 'rgba(140,80,50,0.4)';
@@ -5304,200 +5311,24 @@ function _drawPipeManagerBack(x, y, color, animOffset) {
 
 // SECTION 7: Boss and NPC Drawing Functions
 function drawBoss(x, y, ...rest) {
-    shadeSprite(x + 0, y + -16, 46, 62, () => _drawBoss(x, y, ...rest));
+    // The Pipe Boss IS the bald manager — same man, same white shirt, same red
+    // tie — and he had a whole separate sprite of his own that had never been
+    // through the remaster: a hard-cornered rectangle for a head with a single
+    // eye and no ears, two bare rectangles stuck on for arms, and the identical
+    // drawing returned for every facing, so he walked left and right and turned
+    // his back to you looking exactly the same each time. He borrows the
+    // player's body now, which already has a front, both profiles, a back and a
+    // gait, and only his rage stays his own.
+    //
+    // +12 keeps his feet exactly where they were: his old sprite stood on
+    // y + 48 while drawBaldManager plants on the shared y + SPRITE_FOOT.
+    const facing = rest[0];
+    const f = (facing === 'left' || facing === 'right' || facing === 'back'
+               || facing === 'front') ? facing : 'right';
+    drawBaldManager(x, y + 12, f, false, false,
+                    { walking: !!boss.walking,
+                      skin: boss.angry ? '#e2705c' : undefined });
 }
-
-function _drawBoss(x, y, facing) {
-    const s = 2;
-    // He is only ever drawn in profile — but he has no other pose at all, so any
-    // other facing used to render a floating scalp and a collar over nothing.
-    if(facing !== 'left' && facing !== 'right') facing = 'right';
-    // His legs stretched and shrank in place with nothing carried fore or aft —
-    // the same slide every sprite in here had.
-    const bsPh = frame * 0.25;
-    const bsDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
-    const bsAmp = boss.walking ? 4 : 0, bsLift = boss.walking ? 4.5 : 0;
-    const bossLegs = () => {
-        for(const [lx0, ph] of [[-5*s, bsPh], [s, bsPh + Math.PI]]) {
-            const g = gaitLeg(ph, bsDir, bsAmp, bsLift);
-            const hip = y + 16*s, bot = y + 24*s - g.lift;
-            ctx.fillStyle = '#2b2b2b';
-            ctx.beginPath();
-            ctx.moveTo(x + lx0, hip);
-            ctx.lineTo(x + lx0 + 4*s, hip);
-            ctx.lineTo(x + lx0 + 4*s + g.swing, bot);
-            ctx.lineTo(x + lx0 + g.swing, bot);
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(x + lx0 + g.swing, bot, 4*s, 2*s);
-        }
-    };
-
-    // Shadow — at foot level (y+50 ≈ shoe bottom)
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + 50, 12, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    const skinColor = boss.angry ? '#cc0000' : '#f5c89a';
-    
-    if(facing === 'left') {
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        
-        ctx.fillStyle = '#000';
-        if(boss.angry) {
-            ctx.fillRect(x - 2*s, y - 10*s, 3*s, s);
-            drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-            ctx.fillRect(x - 2*s, y - 6*s, 2*s, s);
-        } else {
-            drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-            ctx.fillRect(x - 3*s, y - 6*s, 3*s, s);
-        }
-        
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
-        
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x + 5*s, y + s, 2*s, 11*s);
-        
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
-        
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
-        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
-        
-        ctx.fillStyle = '#2b2b2b';
-        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
-        bossLegs();
-
-    } else if(facing === 'right') {
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 5*s, y - 12*s, 10*s, 10*s);
-        
-        ctx.fillStyle = '#000';
-        if(boss.angry) {
-            ctx.fillRect(x - s, y - 10*s, 3*s, s);
-            drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-            ctx.fillRect(x, y - 6*s, 2*s, s);
-        } else {
-            drawCharEyes(x, y - 8*s, 2*s, 2.1*s, 0, { one: true, brow: '#4a3a2c' });
-            ctx.fillRect(x, y - 6*s, 3*s, s);
-        }
-        
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 2*s, y - 2*s, 4*s, 3*s);
-        
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 7*s, y + s, 14*s, 11*s);
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(x - 7*s, y + s, 2*s, 11*s);
-        
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(x - 2*s, y + s, 4*s, 11*s);
-        
-        ctx.fillStyle = skinColor;
-        ctx.fillRect(x - 9*s, y + 2*s, 2*s, 7*s);
-        ctx.fillRect(x + 7*s, y + 2*s, 2*s, 7*s);
-        
-        ctx.fillStyle = '#2b2b2b';
-        ctx.fillRect(x - 7*s, y + 12*s, 14*s, 4*s);
-        bossLegs();
-    }
-
-    // === POLISH OVERLAYS — mirrors drawBaldManager so the main boss has the same sprite refinement ===
-    {
-        const headTop = y - 12*s;
-        const headBot = y - 2*s;
-        const headCx = x;
-        // Rounded skull cap — softens the top corners
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(headCx - 5*s, headTop + 1);
-        ctx.quadraticCurveTo(headCx - 5*s, headTop - 4, headCx, headTop - 4);
-        ctx.quadraticCurveTo(headCx + 5*s, headTop - 4, headCx + 5*s, headTop + 1);
-        ctx.lineTo(headCx + 5*s, headTop + 4);
-        ctx.lineTo(headCx - 5*s, headTop + 4);
-        ctx.closePath();
-        ctx.fillStyle = skinColor; ctx.fill();
-        // Bald shine highlight (on the lead side of the head)
-        ctx.fillStyle = 'rgba(255,240,210,0.55)';
-        ctx.beginPath();
-        ctx.ellipse(headCx - s, headTop - 1, 2.5, 1.5, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
-        // Soft chin shadow
-        ctx.fillStyle = 'rgba(180,120,80,0.35)';
-        ctx.fillRect(headCx - 4*s, headBot - 1, 8*s, 1);
-        // Tie knot — small red triangle at the top of the tie
-        ctx.fillStyle = '#5a0010';
-        ctx.beginPath();
-        ctx.moveTo(headCx - 2*s, y);
-        ctx.lineTo(headCx + 2*s, y);
-        ctx.lineTo(headCx, y + 2*s);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,180,180,0.25)';
-        ctx.fillRect(headCx - s, y + 1, 2, 1);
-        // Collar wings (white shirt) framing tie
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(headCx - 4*s, y);
-        ctx.lineTo(headCx - 1*s, y);
-        ctx.lineTo(headCx - 2*s, y + 2*s);
-        ctx.closePath(); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(headCx + 4*s, y);
-        ctx.lineTo(headCx + 1*s, y);
-        ctx.lineTo(headCx + 2*s, y + 2*s);
-        ctx.closePath(); ctx.fill();
-    }
-
-    if(boss.needsColor) {
-        const col = COLORS.find(c => c.name === boss.needsColor);
-        ctx.font = 'bold 13px Arial';
-        const textW = ctx.measureText(col.name).width;
-        const bPad = 10, bH = 22, bR = 6;
-        const bW = Math.max(40, textW + bPad * 2);
-        const bX = x - bW / 2;
-        const bY = y - 58; // above head
-
-        // Bubble body + tail as one path for clean stroke
-        ctx.fillStyle = '#fff';
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.roundRect(bX, bY, bW, bH, bR);
-        ctx.fill();
-        ctx.stroke();
-        // Tail — small downward-pointing triangle from bubble bottom-center
-        const tMid = x, tTop = bY + bH, tBot = bY + bH + 8;
-        ctx.beginPath();
-        ctx.moveTo(tMid - 5, tTop);
-        ctx.lineTo(tMid + 5, tTop);
-        ctx.lineTo(tMid, tBot);
-        ctx.closePath();
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        // Cover the tail-bubble seam with white (no border line inside)
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(tMid - 4, tTop - 1, 8, 3);
-
-        ctx.fillStyle = '#000';
-        ctx.textAlign = 'center';
-        ctx.fillText(col.name, x, bY + bH / 2 + 5);
-    }
-}
-
-// Advance PM pipe-state machine: climbing_up → fixing → climbing_down → happy.
-// Extracted so hell mode can render mullet pros while the state still advances.
 function updateNPCPipeAnimation(npc) {
     const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
     if(isClimbing && npc.climbStartTime) {
@@ -5947,6 +5778,23 @@ function _drawNPC(npc) {
             ctx.beginPath(); ctx.ellipse(fx, y - 5.4*s, 0.95*s, 1.4*s, 0, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = '#8d4a4a';                          // tongue down in it
             ctx.beginPath(); ctx.ellipse(fx, y - 4.5*s, 0.75*s, 0.55*s, 0, 0, Math.PI*2); ctx.fill();
+        } else if(npc.dazed) {
+            // Just out of the vat and not all there yet — spiral eyes and a
+            // slack mouth. This is the freshly printed clone in the cloning
+            // room, who used to be an entire second copy of this sprite built
+            // by hand out of flat rectangles: a square face, bar arms, bar
+            // legs. He is the same character as the clone who later follows
+            // you, so he is now the same drawing, with the daze on top.
+            ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = Math.max(1, 0.7*s);
+            for(const dx2 of [-2.1*s, 2.1*s]) {
+                const dex = fx + dx2;
+                ctx.beginPath(); ctx.arc(dex, y - 9*s, 1.5*s, 0, Math.PI * 2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(dex, y - 9*s, 0.6*s, 0, Math.PI * 2); ctx.stroke();
+            }
+            ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = Math.max(1, 0.55*s);
+            ctx.beginPath();
+            ctx.arc(fx, y - 6.1*s, 1.5*s, 0.4, Math.PI - 0.4);
+            ctx.stroke();
         } else if(npc.state === 'stressed' && !isPacing && !isJumping) {
             // Worried: brows pinched up in the middle, eyes darting
             drawCharEyes(fx, y - 9*s, 2.1*s, 2.3*s, 2.1*s - Math.abs(turn)*0.7*s,
@@ -19244,7 +19092,12 @@ function drawLevel6CloningRoom() {
             { x: 285, goo: 'rgba(20,80,200,', outline: '#1144cc', label: 'BLU-01' },
             { x: 375, goo: 'rgba(200,180,10,', outline: '#ccaa00', label: 'YLW-01' }
         ];
-        const sW = 48, sH = 65, sY = 10;
+        // sY = 10 put the tanks' rim bands at y 8 and their status lights at
+        // y 4 — right on the top edge of the game area, so on any viewport a
+        // shade shorter than this one the tops of all four were sawn off. A
+        // clear band of wall above them instead; the feed pipes below shorten
+        // to suit and still reach the substrate tank.
+        const sW = 48, sH = 65, sY = 22;
 
         for(const tank of slurpTanks) {
             const tx = tank.x, ty = sY;
@@ -19315,15 +19168,22 @@ function drawLevel6CloningRoom() {
             ctx.fillStyle = 'rgba(255,255,255,0.03)';
             ctx.fillRect(tx + sW - 3, ty, 3, sH);
 
-            // Status light on top
+            // Status light, moved off the tank's centreline to its corner so the
+            // name can take the space above it
             const pulse = 0.5 + Math.sin(inkT * 0.004 + slurpTanks.indexOf(tank)) * 0.4;
             ctx.fillStyle = tank.outline; ctx.globalAlpha = pulse;
-            ctx.beginPath(); ctx.arc(tx + sW/2, ty - 6, 3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(tx + sW - 5, ty - 6, 3, 0, Math.PI*2); ctx.fill();
             ctx.globalAlpha = 1;
 
-            // Label
-            ctx.fillStyle = '#666'; ctx.font = scaledFont(6, '', 'monospace', true); ctx.textAlign = 'center';
-            ctx.fillText(tank.label, tx + sW/2, ty + sH + 14);
+            // Name plate. It used to sit BELOW the tank at ty + sH + 14 — which
+            // is exactly where the feed pipe runs out of the bracket, so the
+            // pipe was painted straight down the middle of every one of them
+            // and all four read "RED 01", "GRN 01", "BLU 01", "YLW 01" with a
+            // coloured bar where the hyphen should be. Above the tank instead,
+            // in the clear band, and light enough to read off a dark wall.
+            ctx.fillStyle = '#93a393';
+            ctx.font = scaledFont(6, '', 'monospace', true); ctx.textAlign = 'center';
+            ctx.fillText(tank.label, tx + sW/2 - 4, ty - 5);
         }
 
         // === 2. FEED PIPES — from each slurpee tank down to fertilizer tank ===
@@ -19419,9 +19279,12 @@ function drawLevel6CloningRoom() {
         // Glass sheen
         ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(fertX + 15, fertY + 8, fertW - 30, 4);
 
-        // FERTILIZER label
-        ctx.fillStyle = '#555'; ctx.font = scaledFont(8, 'bold', 'monospace', true); ctx.textAlign = 'center';
-        ctx.fillText('NUTRIENT SUBSTRATE', fertX + fertW/2, fertY - 5);
+        // FERTILIZER label. Above the tank it lay across the four feed pipes
+        // coming down into it; there is no clear span up there wide enough for
+        // it. Printed on the tank itself, on the substrate.
+        ctx.fillStyle = 'rgba(90,84,70,0.75)';
+        ctx.font = scaledFont(8, 'bold', 'monospace', true); ctx.textAlign = 'center';
+        ctx.fillText('NUTRIENT SUBSTRATE', fertX + fertW/2, fertY + fertH/2 + 3);
     }
 
     // === 4. CONVERGENCE PIPES — from fertilizer tank down to contact manifold ===
@@ -19807,7 +19670,11 @@ function drawLevel6CloningRoom() {
         ctx.fillStyle = '#e8e8e8'; ctx.font = `bold ${Math.round(lh * 0.55)}px Arial`; ctx.textAlign = 'center';
         ctx.fillText(label, lx + lw / 2, ly + lh * 0.74);
     };
-    drawMachinePlaque(248, -10, 90, 18, 'PM PRINTER');
+    // y = -10 put the machine's own nameplate above the top of the game area,
+    // so it was sawn in half by the canvas edge in every playthrough. On the
+    // wall beside the tank bank instead, where there is clear space and it is
+    // legible.
+    drawMachinePlaque(440, 20, 90, 18, 'PM PRINTER');
 
     // === CONCEALED DOOR — left wall sliding brick panel ===
     const cdX = 0, cdY = 280, cdW = 60, cdH = 120;
@@ -19976,89 +19843,17 @@ function drawLevel6CloningRoom() {
         }
 
         const cx = cloneX, cy = cloneY;
-        const s2 = 2;
 
-        // Red hooded jumpsuit hood — slightly askew when dazed, straight when awakened
-        ctx.save();
-        ctx.translate(cx + cloneWobble * 0.5, 0);
-        ctx.fillStyle = '#cc2222';
-        ctx.beginPath();
-        ctx.moveTo(cx - 6*s2, cy - 5*s2);
-        ctx.lineTo(cx - 6*s2, cy - 12*s2);
-        ctx.lineTo(cx - 5*s2, cy - 14*s2);
-        ctx.quadraticCurveTo(cx, cy - 17*s2, cx + 5*s2, cy - 14*s2);
-        ctx.lineTo(cx + 6*s2, cy - 12*s2);
-        ctx.lineTo(cx + 6*s2, cy - 5*s2);
-        ctx.closePath();
-        ctx.fill();
-        // Hood seam
-        ctx.strokeStyle = '#aa1a1a'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(cx, cy - 16*s2); ctx.lineTo(cx, cy - 5*s2); ctx.stroke();
-        ctx.restore();
-
-        // Face opening (skin-colored inset inside hood)
-        ctx.fillStyle = '#f5d5a8';
-        ctx.fillRect(cx - 4*s2, cy - 13*s2, 8*s2, 8*s2);
-
-        if(awakened) {
-            // Eyes — alert, natural (small solid dots, looking toward player)
-            ctx.fillStyle = '#333';
-            const lookDir = player.x < cx ? -1 : 1;
-            ctx.fillRect(cx - 3*s2 + lookDir, cy - 11*s2, 3, 3);
-            ctx.fillRect(cx + 2*s2 + lookDir, cy - 11*s2, 3, 3);
-            // Eyebrows — slightly raised (surprised/curious)
-            ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(cx - 4*s2, cy - 12*s2 - 1); ctx.lineTo(cx - 1*s2, cy - 12*s2 - 2);
-            ctx.moveTo(cx + 4*s2, cy - 12*s2 - 1); ctx.lineTo(cx + 1*s2, cy - 12*s2 - 2);
-            ctx.stroke();
-            // Mouth — slightly open, alert expression
-            ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(cx, cy - 7*s2, 2, 0.3, Math.PI - 0.3); ctx.stroke();
-        } else {
-            // Eyes — dazed (spiral/dizzy)
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
-            for(const [ex2, ey2] of [[-3*s2, cy - 11*s2],[2*s2, cy - 11*s2]]) {
-                ctx.beginPath(); ctx.arc(cx + ex2, ey2, 3, 0, Math.PI * 2); ctx.stroke();
-                ctx.beginPath(); ctx.arc(cx + ex2, ey2, 1, 0, Math.PI * 2); ctx.stroke();
-            }
-            // Mouth — slack, dazed
-            ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(cx, cy - 7*s2, 3, 0.4, Math.PI - 0.4); ctx.stroke();
-        }
-
-        // Red jumpsuit torso — slightly wet/glistening when dazed
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 11*s2);
-        if(!awakened) {
-            ctx.fillStyle = 'rgba(255,120,120,0.18)'; // wet sheen highlight
-            ctx.fillRect(cx - 6*s2, cy - 5*s2, 12*s2, 5);
-        }
-
-        // Arms — raised when dazed, at sides when awakened
-        ctx.fillStyle = '#cc2222';
-        if(awakened) {
-            ctx.fillRect(cx - 8*s2, cy - 3*s2, 2*s2, 8*s2);
-            ctx.fillRect(cx + 6*s2, cy - 3*s2, 2*s2, 8*s2);
-            ctx.fillStyle = '#f5d5a8'; // hands
-            ctx.fillRect(cx - 8*s2, cy + 5*s2, 2*s2, 2*s2);
-            ctx.fillRect(cx + 6*s2, cy + 5*s2, 2*s2, 2*s2);
-        } else {
-            ctx.fillRect(cx - 8*s2, cy - 3*s2 + cloneWobble, 2*s2, 7*s2);
-            ctx.fillRect(cx + 6*s2, cy - 3*s2 - cloneWobble, 2*s2, 7*s2);
-            ctx.fillStyle = '#f5d5a8'; // hands
-            ctx.fillRect(cx - 8*s2, cy + 3*s2 + cloneWobble, 2*s2, 2*s2);
-            ctx.fillRect(cx + 6*s2, cy + 3*s2 - cloneWobble, 2*s2, 2*s2);
-        }
-
-        // Legs — red jumpsuit color
-        ctx.fillStyle = '#cc2222';
-        ctx.fillRect(cx - 5*s2, cy + 6*s2, 4*s2, 7*s2);
-        ctx.fillRect(cx + s2, cy + 6*s2, 4*s2, 7*s2);
-        // White boots — matching standard PM
-        ctx.fillStyle = '#f0f0f0';
-        ctx.fillRect(cx - 5*s2, cy + 13*s2, 4*s2, 3*s2);
-        ctx.fillRect(cx + s2, cy + 13*s2, 4*s2, 3*s2);
+        // The clone, drawn by the same sprite that draws every other pipe
+        // manager — and the same one that draws THIS character once he starts
+        // following you. It used to be an independent hand-built copy of an
+        // older version of that sprite: a rectangle for the face, four bars for
+        // the limbs, none of the remaster. So the clone you met in the lab and
+        // the clone who walked out behind you were visibly two people.
+        drawNPC({ x: cx + cloneWobble * 0.5, y: cy, color: COLORS[0],
+                  state: 'happy', needsDoc: false, crackStartTime: null,
+                  animOffset: 1, walking: false, dazed: !awakened,
+                  facing: awakened ? (player.x < cx ? 'left' : 'right') : 'front' });
 
         // "CLONE" badge label
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(cx - 22, cy - 72, 44, 14);
