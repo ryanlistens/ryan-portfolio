@@ -481,10 +481,14 @@ const levelMusic = {
     yellow: new Audio('music/yellow.mp3'),
     level4:  new Audio('music/level4.mp3'),
     level6:  new Audio('music/level6.mp3'),
-    // Nothing on the pipe floor plays by itself. level1.mp3 is what the radio
-    // on the tool bench plays if somebody switches it on. 2 and 3 are cut.
+    // Nothing on the pipe floor plays by itself. These are what the radio on
+    // the tool bench plays if somebody switches it on, and they are the dial:
+    // 2 and 3 stopped being LEVEL music when the shift was merged into one
+    // level, but the recordings are still here and a radio is the right place
+    // for them.
     level1:  new Audio('music/level1.mp3'),
-    level2: null, level3: null,
+    level2:  new Audio('music/level2.mp3'),
+    level3:  new Audio('music/level3.mp3'),
     blewit: null,
     blue: null, green: null, red: null
 };
@@ -506,12 +510,18 @@ function setOfficeRadio(source, restart = false) {
 // if a transition ever needs to re-assert the floor's radio.
 function resumeLevelRadio() { setOfficeRadio(officeRadio.source); }
 
-// Set all music to loop and preload (skip null entries)
-Object.values(levelMusic).forEach(audio => {
+// Set all music to loop and preload (skip null entries).
+//
+// level2 and level3 are the exception: they exist only as stations on the
+// radio, nothing plays them unless somebody walks up to it and steps the dial
+// that far, and they are 9.5MB between them against the ~48MB this already
+// pulls down at boot. Metadata only — they stream when they are chosen.
+const RADIO_ONLY = new Set(['level2', 'level3']);
+Object.entries(levelMusic).forEach(([key, audio]) => {
     if(!audio) return;
     audio.loop = true;
     audio.volume = 0.5;
-    audio.preload = 'auto';
+    audio.preload = RADIO_ONLY.has(key) ? 'metadata' : 'auto';
     audio.load();
 });
 
@@ -523,24 +533,44 @@ let musicMuted = false;
 // Music on the pipe floor is somebody's radio on the tool bench — not a
 // setting, and not something the PA does. It rides out on the dolly with the
 // cabinet when the 3D printer is delivered, and the floor is silent after that.
-let boomboxOn = false;
-function musicOn() { return boomboxOn; }
+// The dial. One radio, five stations — the four shift tracks and the CEO's.
+// It used to be a power switch with exactly one record behind it.
+const RADIO_TRACKS = [
+    { key: 'level1', name: '1' },
+    { key: 'level2', name: '2' },
+    { key: 'level3', name: '3' },
+    { key: 'level4', name: '4' },
+    { key: 'level6', name: 'CEO' }
+];
+let radio = { on: false, track: 0 };
+function radioKey()  { return RADIO_TRACKS[radio.track].key; }
+function radioName() { return RADIO_TRACKS[radio.track].name; }
+function musicOn()   { return radio.on; }
 function boomboxHere() { return level === 1 && !shift.cabinetGone; }
-// The CEO keeps one on the credenza in his office — same object, same idea:
+// The CEO keeps one on the credenza in his office — same object, same dial:
 // the music on this floor is a thing somebody switched on, not a setting.
 const CEO_BOOMBOX_X = 578;   // on the trophy cabinet's middle shelf
-let ceoBoomboxOn = true;              // his floor arrives with it already playing
-function toggleCeoBoombox() {
-    ceoBoomboxOn = !ceoBoomboxOn;
-    if(ceoBoomboxOn) { musicMuted = false; playMusic('level6', true); }
-    else             { playMusic(null); }
+
+// One button, one loop: off -> 1 -> 2 -> 3 -> 4 -> CEO -> off. The game has a
+// single ACTION and a radio's skip button is the same gesture, so stepping the
+// station and switching it off are the same press; the readout on the front
+// says which one you are on.
+function cycleRadio() {
+    if(!radio.on)                                  { radio.on = true; radio.track = 0; }
+    else if(radio.track < RADIO_TRACKS.length - 1) { radio.track++; }
+    else                                           { radio.on = false; radio.track = 0; }
+    if(radio.on) { musicMuted = false; playMusic(radioKey(), true); }
+    else         { playMusic(null); }
     SFX.play('menuTick');
 }
-function toggleBoombox() {
-    boomboxOn = !boomboxOn;
-    if(boomboxOn) { musicMuted = false; playMusic('level1', true); }
-    else          { playMusic(null); }
-    SFX.play('menuTick');
+// Tuning it to a named station without walking the whole dial — used when the
+// CEO's floor arrives with his own track already going.
+function setRadio(key, on) {
+    const i = RADIO_TRACKS.findIndex(t => t.key === key);
+    if(i >= 0) radio.track = i;
+    radio.on = !!on;
+    if(radio.on) { musicMuted = false; playMusic(radioKey(), true); }
+    else         { playMusic(null); }
 }
 let audioUnlocked = false;
 
@@ -1195,6 +1225,7 @@ let level6 = {
     exitingNPCs: [],
     npcPipes: [],
     radiationTimer: 0,
+    radioSeeded: false,   // his station is tuned in once, from the update
     viewingDetectiveNote: false,
     noteScrollOffset: 0,
     // Destructible items in CEO office
@@ -1594,6 +1625,12 @@ function initLevel(lv) {
 
     
     if(level === 6) {
+        // His floor arrives with his own station already going, but the seed
+        // cannot happen here: startGame resets levels 6 and 5 before level 1,
+        // so seeding in initLevel switched the radio on during a NEW GAME and
+        // the pipe floor opened tuned to CEO. It is done once, from the level
+        // 6 update, off this flag.
+        level6.radioSeeded = false;
         player.x = 620;
         player.y = 380;
         level6.room = 'pipeRoom';
@@ -1992,8 +2029,7 @@ function startGame() {
               delivery: null, printerCalled: false, printerDelivered: false,
               cabinetGone: false, welcomed: false };
     tannoy = { line: '', at: 0, on: false };
-    boomboxOn = false;
-    ceoBoomboxOn = true;
+    radio = { on: false, track: 0 };
     level = FIRST_LEVEL;
     score = 0;
     livesRuined = 0;
@@ -2160,7 +2196,7 @@ function updateShiftAugmentation() {
             d.t += sc;
             if(d.t >= 40) {
                 shift.cabinetGone = true; d.phase = 'out'; d.t = 0;
-                if(boomboxOn) { boomboxOn = false; playMusic(null); }
+                if(radio.on) { radio.on = false; playMusic(null); }
             }
         } else if(d.phase === 'out') {              // wheels it away
             d.x += 2.9 * sc;
@@ -2257,7 +2293,7 @@ function drawTannoyLine() {
 // Somebody's radio, on top of the tool bench. Two speakers, a handle, a cassette
 // door — and it bounces when it is playing.
 function drawBoombox(bx, by, isOn) {
-    const on = (isOn === undefined) ? boomboxOn : isOn;
+    const on = (isOn === undefined) ? radio.on : isOn;
     const bounce = on ? Math.abs(Math.sin(Date.now() / 190)) * 1.4 : 0;
     const y = by - bounce;
     ctx.save();
@@ -2278,10 +2314,20 @@ function drawBoombox(bx, by, isOn) {
         ctx.beginPath(); ctx.arc(bx + sx, y - 3.5, 2.1, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#22262a';
     }
-    ctx.fillStyle = '#1b1f23';                                  // cassette door
-    pathRoundRect(bx - 4.5, y - 7.5, 9, 8, 1); ctx.fill();
+    ctx.fillStyle = '#1b1f23';                                  // station readout
+    pathRoundRect(bx - 5.5, y - 8, 11, 6.4, 1); ctx.fill();
+    if(on) {
+        // Which of the five it is on. The dial is a single ACTION press, so
+        // without this you would be cycling blind.
+        ctx.fillStyle = '#3ad07a';
+        ctx.font = 'bold 5px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(radioName(), bx, y - 3.2);
+        ctx.fillStyle = 'rgba(58,208,122,0.18)';                // glass glow
+        pathRoundRect(bx - 5.5, y - 8, 11, 6.4, 1); ctx.fill();
+    }
     ctx.fillStyle = on ? '#3ad07a' : '#3a4046';                 // power lamp
-    ctx.fillRect(bx - 1, y - 1.2, 2, 2);
+    ctx.fillRect(bx - 1, y - 0.8, 2, 2);
     if(on) {                                                    // notes coming off it
         const t = Date.now();
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -23053,9 +23099,9 @@ function drawLevel6CEOOffice() {
     // The CEO's radio, on the middle shelf next to the crystal — his floor's
     // music lives among his trophies rather than on a lump of furniture in the
     // middle of the room.
-    drawBoombox(CEO_BOOMBOX_X, cabinetY + 77, ceoBoomboxOn);
+    drawBoombox(CEO_BOOMBOX_X, cabinetY + 77);
     if(Math.abs(player.x - CEO_BOOMBOX_X) < 44 && !level6.ceoDialogue) {
-        drawActionLabel(ceoBoomboxOn ? '[ ACTION ] - STOP' : '[ ACTION ] - PLAY',
+        drawActionLabel(radio.on ? '[ ACTION ] - NEXT TRACK' : '[ ACTION ] - RADIO ON',
                         CEO_BOOMBOX_X, cabinetY - 10, {fontSize: 12});
     }
 
@@ -31957,7 +32003,15 @@ function drawScene() {
     // Tool cabinet — under PipeTech sign, left side (skip in level 4 where 3D printer occupies x=20-80)
     if(level !== 4 && !shift.cabinetGone) {
         drawToolCabinet(65, 400);
-        if(level === 1) drawBoombox(65, 334);
+        if(level === 1) {
+            drawBoombox(65, 334);
+            // The pipe floor's radio had no prompt at all — you had to already
+            // know it was there and that ACTION did anything to it.
+            if(Math.abs(player.x - 65) < 40 && !player.holding && !ui.show && !ui.gunUI) {
+                drawActionLabel(radio.on ? '[ ACTION ] - NEXT TRACK' : '[ ACTION ] - RADIO ON',
+                                65, 296, {fontSize: 11});
+            }
+        }
     }
 
     // Marker board — below PipeTech sign on wall (sign bottom y=160, board at y=240)
@@ -34037,6 +34091,12 @@ function update() {
 
     // LEVEL 6 LOGIC
     if(level === 6) {
+            // Tune the radio to his own station, once, the first time this
+            // floor actually runs. See initLevel for why it is not seeded there.
+            if(!level6.radioSeeded) {
+                level6.radioSeeded = true;
+                setRadio('level6', true);
+            }
             // RED'S ENDING's close-up. The world is frozen for it — no input, no
             // AI, nothing but the clock — and at the end it hands over to the card.
             if(redsEnding.active && redsEnding.outro > 0) {
@@ -36335,7 +36395,7 @@ function update() {
                    && Math.abs(player.x - CEO_BOOMBOX_X) < 44
                    && (keys[' '] || keys['action'])) {
                     keys[' '] = false; keys['action'] = false;
-                    toggleCeoBoombox();
+                    cycleRadio();
                 }
                 // CEO entry dialogue — block all other input until dismissed
                 if(level6.ceoDialogue) {
@@ -38062,7 +38122,7 @@ if (keys[' '] || keys['action']) {
         // and it stands well clear of everything else that takes a press.
         if(boomboxHere() && Math.abs(player.x - 65) < 40 && !player.holding
            && !ui.show && !ui.gunUI) {
-            toggleBoombox();
+            cycleRadio();
             return;
         }
 
