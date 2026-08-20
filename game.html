@@ -480,10 +480,9 @@ const levelMusic = {
     // Office radios — YELLOW's boombox plays this over the level track
     yellow: new Audio('music/yellow.mp3'),
     level4:  new Audio('music/level4.mp3'),
-    // The CEO's own theme. It used to be level6.mp3 — the floor's track — but
-    // CEO.mp3 was added for him, and his station, his floor and RED'S ENDING
-    // are all meant to be him. level6.mp3 is still in music/ and unreferenced;
-    // it goes back to being a station with one line here.
+    // The CEO's own theme — his floor and RED'S ENDING, both scored with it.
+    // It used to be level6.mp3, the floor's old track; level6.mp3 and
+    // level3.mp3 are both still in music/ and unreferenced now.
     ceo:     new Audio('music/CEO.mp3'),
     // Nothing on the pipe floor plays by itself. These are what the radio on
     // the tool bench plays if somebody switches it on, and they are the dial:
@@ -492,7 +491,6 @@ const levelMusic = {
     // for them.
     level1:  new Audio('music/level1.mp3'),
     level2:  new Audio('music/level2.mp3'),
-    level3:  new Audio('music/level3.mp3'),
     blewit: null,
     blue: null, green: null, red: null
 };
@@ -524,11 +522,10 @@ function resumeLevelRadio() { setOfficeRadio(officeRadio.source); }
 
 // Set all music to loop and preload (skip null entries).
 //
-// level2 and level3 are the exception: they exist only as stations on the
-// radio, nothing plays them unless somebody walks up to it and steps the dial
-// that far, and they are 9.5MB between them against the ~48MB this already
-// pulls down at boot. Metadata only — they stream when they are chosen.
-const RADIO_ONLY = new Set(['level2', 'level3']);
+// level2 is the exception: nothing plays it unless somebody walks up to the
+// radio and steps the dial onto it, and it is 5.6MB against the ~48MB this
+// already pulls down at boot. Metadata only — it streams when it is chosen.
+const RADIO_ONLY = new Set(['level2']);
 Object.entries(levelMusic).forEach(([key, audio]) => {
     if(!audio) return;
     audio.loop = true;
@@ -545,14 +542,14 @@ let musicMuted = false;
 // Music on the pipe floor is somebody's radio on the tool bench — not a
 // setting, and not something the PA does. It rides out on the dolly with the
 // cabinet when the 3D printer is delivered, and the floor is silent after that.
-// The dial. One radio, five stations — the four shift tracks and the CEO's.
-// It used to be a power switch with exactly one record behind it.
+// The dial: three songs to shuffle between. The CEO's theme is deliberately
+// NOT on it — that is the music of his floor and of RED'S ENDING, not a record
+// somebody put on, and floorScoreKey below is what gives it back when the
+// radio goes off.
 const RADIO_TRACKS = [
     { key: 'level1', name: '1' },
     { key: 'level2', name: '2' },
-    { key: 'level3', name: '3' },
-    { key: 'level4', name: '4' },
-    { key: 'ceo', name: 'CEO' }
+    { key: 'level4', name: '4' }
 ];
 let radio = { on: false, track: 0 };
 function radioKey()  { return RADIO_TRACKS[radio.track].key; }
@@ -563,26 +560,34 @@ function boomboxHere() { return level === 1 && !shift.cabinetGone; }
 // the music on this floor is a thing somebody switched on, not a setting.
 const CEO_BOOMBOX_X = 578;   // on the trophy cabinet's middle shelf
 
-// One button, one loop: off -> 1 -> 2 -> 3 -> 4 -> CEO -> off. The game has a
-// single ACTION and a radio's skip button is the same gesture, so stepping the
-// station and switching it off are the same press; the readout on the front
-// says which one you are on.
+// What the room is scored with when the radio is NOT on. The pipe floor has
+// nothing — silence is the point of it. The CEO's floor, and RED'S ENDING
+// inside level 5's rooms, have his theme, and that is not a station on the
+// dial: it is the music of the place. So switching the radio off there gives
+// it back instead of leaving the room silent.
+function floorScoreKey() {
+    if(typeof redsEnding !== 'undefined' && redsEnding.active) return 'ceo';
+    return level === 6 ? 'ceo' : null;
+}
+// One button, one loop: off -> 1 -> 2 -> 4 -> off. The game has a single
+// ACTION and a radio's skip button is the same gesture, so stepping the song
+// and switching it off are the same press; the readout on the front says which
+// one you are on.
 function cycleRadio() {
     if(!radio.on)                                  { radio.on = true; radio.track = 0; }
     else if(radio.track < RADIO_TRACKS.length - 1) { radio.track++; }
     else                                           { radio.on = false; radio.track = 0; }
     if(radio.on) { musicMuted = false; playMusic(radioKey(), true); }
-    else         { playMusic(null); }
+    else         { playMusic(floorScoreKey()); }
     SFX.play('menuTick');
 }
-// Tuning it to a named station without walking the whole dial — used when the
-// CEO's floor arrives with his own track already going.
+// Tuning it to a named song without walking the whole dial.
 function setRadio(key, on) {
     const i = RADIO_TRACKS.findIndex(t => t.key === key);
     if(i >= 0) radio.track = i;
     radio.on = !!on;
     if(radio.on) { musicMuted = false; playMusic(radioKey(), true); }
-    else         { playMusic(null); }
+    else         { playMusic(floorScoreKey()); }
 }
 let audioUnlocked = false;
 
@@ -34114,7 +34119,8 @@ function update() {
             // floor actually runs. See initLevel for why it is not seeded there.
             if(!level6.radioSeeded) {
                 level6.radioSeeded = true;
-                setRadio('ceo', true);
+                radio.on = false; radio.track = 0;
+                playMusic('ceo');
             }
             // RED'S ENDING's close-up. The world is frozen for it — no input, no
             // AI, nothing but the clock — and at the end it hands over to the card.
