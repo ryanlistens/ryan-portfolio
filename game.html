@@ -6040,7 +6040,13 @@ function _drawNPC(npc) {
             // Walking. The pipe managers stand at their stations, so this pose
             // never needed a gait — until RED'S ENDING made one of them the
             // player and he slid around the floor in a standing pose.
-            const npcStride = npc.walking ? Math.sin(Date.now() / 125) * 3 : 0;
+            // The arm swing carries the facing. Without it the arms drove one
+            // way and the legs the other whenever he walked left, which is
+            // half of what made the turned walk read as a stumble.
+            const _npcFace = (npc.facing === 'left') ? -1 : (npc.facing === 'right') ? 1 : 0;
+            const npcStride = npc.walking
+                ? -Math.cos(Date.now() / 125) * (_npcFace ? 3.4 * _npcFace : 3)
+                : 0;
             // The shoulders turn with the head — the leading arm swings forward
             // of the chest and the trailing one tucks in behind it.
             const npcTurn = (npc.facing === 'left') ? -1 : (npc.facing === 'right') ? 1 : 0;
@@ -6072,25 +6078,48 @@ function _drawNPC(npc) {
             // aft, so a walking manager's planted foot goes backward under him
             // instead of hovering in place while he slides along.
             const npcPh = Date.now() / 125;
-            const npcAmp = npc.walking ? 3.2 : 0, npcLift = npc.walking ? 2.6 : 0;
             const npcHip = y + 6*s, npcSole = y + 13*s;
-            for(const [lx0, col, ph] of [[-5*s, npcRamp.dark, npcPh],
-                                         [ s,   npcRamp.base, npcPh + Math.PI]]) {
+            // FACING FRONT the legs stand side by side, hip-width apart, and a
+            // fore/aft swing has nowhere to go — so it stays small.
+            //
+            // TURNED, they stop being side by side. This is a three-quarter
+            // view: one leg is NEARER the camera than the other and they pass
+            // each OTHER, not the space between them. Left as two legs 4px
+            // apart with a 3.2px swing on each, the two feet met in the middle
+            // of every stride and crossed — which is what the stumble was. The
+            // pair moves onto the centreline instead, the far one drawn first
+            // and set back and up a little, the near one over the top of it,
+            // and the swing opens right up because overlapping is now the
+            // point rather than the fault.
+            const turned = npcTurn !== 0;
+            const npcAmp  = npc.walking ? (turned ? 5.0 : 2.0) : 0;
+            const npcLift = npc.walking ? (turned ? 3.0 : 2.2) : 0;
+            const legs = turned
+                // [x offset, colour, phase, hip lift, width scale]
+                ? [[-2.4*s - npcTurn * 1.0*s, npcRamp.dark, npcPh + Math.PI, 1.1*s, 1.05],
+                   [-2.4*s + npcTurn * 1.0*s, npcRamp.base, npcPh,           0,     1.15]]
+                : [[-5*s, npcRamp.dark, npcPh,           0, 1],
+                   [ s,   npcRamp.base, npcPh + Math.PI, 0, 1]];
+            for(const [lx0, col, ph, hipUp, wScale] of legs) {
                 const g = gaitLeg(ph, npcTurn, npcAmp, npcLift);
-                const bot = npcSole - g.lift;
+                const lw = 4*s * wScale;
+                const hipY2 = npcHip + hipUp;
+                const bot = npcSole - g.lift - hipUp * 0.5;
                 ctx.fillStyle = col;
                 ctx.beginPath();
-                ctx.moveTo(x + lx0, npcHip);
-                ctx.lineTo(x + lx0 + 4*s, npcHip);
-                ctx.lineTo(x + lx0 + 4*s + g.swing, bot);
+                ctx.moveTo(x + lx0, hipY2);
+                ctx.lineTo(x + lx0 + lw, hipY2);
+                ctx.lineTo(x + lx0 + lw + g.swing, bot);
                 ctx.lineTo(x + lx0 + g.swing, bot);
                 ctx.closePath(); ctx.fill();
                 ctx.fillStyle = 'rgba(0,0,0,0.13)';          // knee
-                ctx.fillRect(x + lx0 + g.swing * 0.5, npcHip + 3.4*s, 4*s, 0.8*s);
+                ctx.fillRect(x + lx0 + g.swing * 0.5, hipY2 + 3.4*s, lw, 0.8*s);
                 ctx.fillStyle = '#fff';                      // shoe
-                pathRoundRect(x + lx0 + g.swing, bot, 4*s, 3.2*s, 1.4*s); ctx.fill();
+                pathRoundRect(x + lx0 + g.swing + (turned ? npcTurn * 0.5*s : 0), bot,
+                              lw, 3.2*s, 1.4*s); ctx.fill();
                 ctx.fillStyle = 'rgba(0,0,0,0.18)';
-                ctx.fillRect(x + lx0 + g.swing, bot + 2.4*s, 4*s, 0.8*s);
+                ctx.fillRect(x + lx0 + g.swing + (turned ? npcTurn * 0.5*s : 0), bot + 2.4*s,
+                             lw, 0.8*s);
             }
         }
     }

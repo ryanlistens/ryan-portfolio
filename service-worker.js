@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mullet-pro-v84';
+const CACHE_NAME = 'mullet-pro-v85';
 const ASSETS = [
   '/game.html',
   '/assets/mullet_icon_black_bg.png',
