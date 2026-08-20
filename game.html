@@ -12695,20 +12695,28 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
 
     // ── Legs — thick jumpsuit legs into heavy boots (cage palette). Bent, with
     // his weight forward over them.
+    // He RUNS. This was a +/-6px shuffle with no lift at all: on an 18px boot
+    // set 9px either side of centre, the two feet overlapped through most of
+    // the cycle and read as one black plank under him. Same gaitLeg every other
+    // character in the game uses — the planted foot travels back under him
+    // while the airborne one swings through and clears the ground.
     for(const [sgn, ph] of [[-1, 0], [1, Math.PI]]) {
-        const sw = Math.sin(t / 110 + ph) * (walking ? 6 : 0);
+        const g = walking ? gaitLeg(t / 95 + ph, dir, 13, 8) : { swing: 0, lift: 0 };
+        const footX = x + sgn * 9 + g.swing;
+        const footY = y + 25 - g.lift;
         ctx.strokeStyle = sgn * dir < 0 ? charMix('#cc2222', '#000', 0.12) : '#cc2222';
         ctx.lineWidth = 12;
         ctx.beginPath();
         ctx.moveTo(x + sgn * 8, hipY + 6);
-        ctx.quadraticCurveTo(x + sgn * 10 + dir * 2 + sw * 0.4, y + 18, x + sgn * 9 + sw, y + 25);
+        ctx.quadraticCurveTo(x + sgn * 10 + dir * 2 + g.swing * 0.35, y + 18 - g.lift * 0.4,
+                             footX, footY);
         ctx.stroke();
-        // Heavy boot
+        // Heavy boot, toed in the direction he is going
         ctx.fillStyle = '#333';
-        pathRoundRect(x + sgn * 9 + sw - 9 + dir * 2, y + 25, 18, 6, 2);
+        pathRoundRect(footX - 9 + dir * 2, footY, 18, 6, 2);
         ctx.fill();
         ctx.fillStyle = '#1e1e1e';
-        pathRoundRect(x + sgn * 9 + sw - 9 + dir * 2, y + 29, 18, 2, 1);
+        pathRoundRect(footX - 9 + dir * 2, footY + 4, 18, 2, 1);
         ctx.fill();
     }
 
@@ -13042,73 +13050,227 @@ function drawMutantFreeCard() {
     // game-space line, not a fraction of the canvas: the canvas is letterboxed
     // and much taller than the play area on a phone, so a proportional horizon
     // drifted far below the mutant and left him running on the sky.
+    //
+    // He RUNS FOREVER here. He used to cross from x 120 to x 500 over 150
+    // frames and then stand on the spot jogging while the card waited to be
+    // dismissed — the one thing this ending is about, over in two and a half
+    // seconds. He holds his ground now and the world moves instead: six bands
+    // at their own speeds, wrapping on their own tile widths, so it never runs
+    // out. The tower he came out of is the exception — it rides the mid band
+    // and goes off the left edge for good, which is the whole point of it.
     const cTop = -GY, cBot = -GY + CANVAS_H;
+    const HZ = MUTANT_FREE_HORIZON;
+    const L = -GX, R = -GX + CANVAS_W, W = CANVAS_W;
+    // One clock for every band, so nothing can drift out of step with anything
+    // else. It keeps counting past the point the card can be dismissed.
+    const t = el;
+    // Wrapped tile origin: where the first copy of a tile of width `tw` sits
+    // when the band has travelled `t * speed` to the left.
+    const band = (speed, tw) => L - (((t * speed) % tw) + tw) % tw;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(L, cTop, W, CANVAS_H); ctx.clip();
+
+    // ── SKY ──────────────────────────────────────────────────────────────────
     ctx.fillStyle = `rgba(255,255,255,${0.85 * fade})`;
-    ctx.fillRect(-GX, cTop, CANVAS_W, CANVAS_H);
-    const skyG = ctx.createLinearGradient(0, cTop, 0, MUTANT_FREE_HORIZON);
-    skyG.addColorStop(0, `rgba(120,190,240,${fade})`);
-    skyG.addColorStop(1, `rgba(200,230,250,${fade})`);
+    ctx.fillRect(L, cTop, W, CANVAS_H);
+    const skyG = ctx.createLinearGradient(0, cTop, 0, HZ);
+    skyG.addColorStop(0,    `rgba(84,164,226,${fade})`);
+    skyG.addColorStop(0.55, `rgba(139,199,238,${fade})`);
+    skyG.addColorStop(1,    `rgba(214,236,248,${fade})`);
     ctx.fillStyle = skyG;
-    ctx.fillRect(-GX, cTop, CANVAS_W, MUTANT_FREE_HORIZON - cTop);
-    const gndG = ctx.createLinearGradient(0, MUTANT_FREE_HORIZON, 0, cBot);
-    gndG.addColorStop(0, `rgba(96,150,72,${fade})`);
-    gndG.addColorStop(1, `rgba(58,104,48,${fade})`);
-    ctx.fillStyle = gndG;
-    ctx.fillRect(-GX, MUTANT_FREE_HORIZON, CANVAS_W, cBot - MUTANT_FREE_HORIZON);
-    // Sun
-    ctx.fillStyle = `rgba(255,240,170,${0.9 * fade})`;
-    ctx.beginPath(); ctx.arc(560, 90, 34, 0, Math.PI * 2); ctx.fill();
-    // The PipeTech tower he just came out of, receding behind him — the
-    // smashed window is still there, so the card reads as the far side of the
-    // leap rather than an unrelated field
-    const bH = 150, bW = 74, bX = 44, bY = MUTANT_FREE_HORIZON - bH;
-    ctx.fillStyle = `rgba(120,126,136,${fade})`;
-    ctx.fillRect(bX, bY, bW, bH);
-    ctx.fillStyle = `rgba(96,102,112,${fade})`;
-    ctx.fillRect(bX + bW - 16, bY, 16, bH);           // shaded return face
-    ctx.fillStyle = `rgba(150,156,164,${fade})`;
-    ctx.fillRect(bX, bY, bW, 6);                       // parapet
-    for(let wy = 0; wy < 6; wy++) {
-        for(let wx = 0; wx < 3; wx++) {
-            const isHole = (wy === 2 && wx === 1);
-            ctx.fillStyle = isHole ? `rgba(24,22,26,${fade})`
-                                   : `rgba(178,206,226,${0.75 * fade})`;
-            ctx.fillRect(bX + 9 + wx * 18, bY + 16 + wy * 21, 12, 13);
+    ctx.fillRect(L, cTop, W, HZ - cTop);
+
+    // Sun, with a soft corona rather than a flat disc
+    const sunX = 560, sunY = 92;
+    const sunG = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 96);
+    sunG.addColorStop(0,   `rgba(255,246,196,${0.95 * fade})`);
+    sunG.addColorStop(0.28,`rgba(255,238,166,${0.42 * fade})`);
+    sunG.addColorStop(1,   `rgba(255,238,166,0)`);
+    ctx.fillStyle = sunG;
+    ctx.beginPath(); ctx.arc(sunX, sunY, 96, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(255,250,214,${0.95 * fade})`;
+    ctx.beginPath(); ctx.arc(sunX, sunY, 30, 0, Math.PI * 2); ctx.fill();
+
+    // ── CLOUDS — slowest band ────────────────────────────────────────────────
+    const CLOUD_TILE = 520;
+    const cloudX0 = band(0.16, CLOUD_TILE);
+    const puff = (cx, cy, r, a) => {
+        ctx.fillStyle = `rgba(255,255,255,${a * fade})`;
+        ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    };
+    for(let c = -1; c <= Math.ceil(W / CLOUD_TILE) + 1; c++) {
+        const ox = cloudX0 + c * CLOUD_TILE;
+        for(const [dx, dy, r, a] of [[40, 74, 30, 0.92], [76, 66, 38, 0.92],
+                                     [116, 78, 26, 0.92], [78, 88, 44, 0.72],
+                                     [300, 128, 22, 0.7], [330, 122, 30, 0.7],
+                                     [362, 132, 19, 0.7]]) {
+            puff(ox + dx, dy, r, a);
         }
     }
-    // Distant treeline along the horizon, echoing the view out the window
-    for(let tr = 0; tr < 26; tr++) {
-        const tx = -GX + 14 + tr * ((CANVAS_W - 28) / 25);
-        const th = 15 + ((tr * 37) % 13);
-        ctx.fillStyle = `rgba(58,102,56,${0.85 * fade})`;
-        ctx.beginPath();
-        ctx.ellipse(tx, MUTANT_FREE_HORIZON - th * 0.5, th * 0.62, th * 0.7, 0, 0, Math.PI * 2);
-        ctx.fill();
+
+    // ── FAR HILLS ────────────────────────────────────────────────────────────
+    const HILL_TILE = 430;
+    const hillX0 = band(0.34, HILL_TILE);
+    for(let h = -1; h <= Math.ceil(W / HILL_TILE) + 1; h++) {
+        const ox = hillX0 + h * HILL_TILE;
+        ctx.fillStyle = `rgba(126,166,178,${0.85 * fade})`;
+        for(const [dx, w2, hh] of [[30, 150, 72], [200, 118, 52], [330, 160, 84]]) {
+            ctx.beginPath();
+            ctx.moveTo(ox + dx - w2 / 2, HZ);
+            ctx.quadraticCurveTo(ox + dx, HZ - hh * 2.1, ox + dx + w2 / 2, HZ);
+            ctx.closePath(); ctx.fill();
+        }
     }
+
+    // ── TREELINE — mid band, and the tower rides with it ─────────────────────
+    const TREE_TILE = 96;
+    const treeX0 = band(1.05, TREE_TILE);
+    // The tower recedes and does not come back. It starts where it always sat
+    // and keeps going left forever.
+    const towX = 44 - t * 1.05;
+    if(towX > L - 120) {
+        const bH = 150, bW = 74, bX = towX, bY = HZ - bH;
+        const wallG = ctx.createLinearGradient(bX, 0, bX + bW, 0);
+        wallG.addColorStop(0,    `rgba(146,152,162,${fade})`);
+        wallG.addColorStop(0.72, `rgba(120,126,136,${fade})`);
+        wallG.addColorStop(1,    `rgba(88,94,104,${fade})`);
+        ctx.fillStyle = wallG;
+        ctx.fillRect(bX, bY, bW, bH);
+        ctx.fillStyle = `rgba(164,170,178,${fade})`;
+        ctx.fillRect(bX - 3, bY - 7, bW + 6, 8);            // parapet cap
+        ctx.fillStyle = `rgba(104,110,120,${fade})`;
+        ctx.fillRect(bX - 3, bY + 1, bW + 6, 2);
+        for(let wy = 0; wy < 6; wy++) {
+            for(let wx = 0; wx < 3; wx++) {
+                const isHole = (wy === 2 && wx === 1);
+                const gx = bX + 9 + wx * 18, gy = bY + 16 + wy * 21;
+                if(isHole) {
+                    ctx.fillStyle = `rgba(18,16,20,${fade})`;
+                    ctx.fillRect(gx - 2, gy - 2, 16, 17);   // blown-out frame
+                    ctx.strokeStyle = `rgba(196,222,238,${0.8 * fade})`;
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(gx - 2, gy + 3); ctx.lineTo(gx + 5, gy - 1);
+                    ctx.lineTo(gx + 14, gy + 5);
+                    ctx.stroke();
+                } else {
+                    const gG = ctx.createLinearGradient(gx, gy, gx + 12, gy + 13);
+                    gG.addColorStop(0, `rgba(206,230,246,${0.9 * fade})`);
+                    gG.addColorStop(1, `rgba(150,186,212,${0.9 * fade})`);
+                    ctx.fillStyle = gG;
+                    ctx.fillRect(gx, gy, 12, 13);
+                }
+            }
+        }
+    }
+    // Trees: three shapes off the tile index so the line does not read as one
+    // shape repeated, which is what 26 identical ellipses in a row did.
+    for(let tr = -1; tr <= Math.ceil(W / TREE_TILE) + 1; tr++) {
+        const ox = treeX0 + tr * TREE_TILE;
+        const idx = Math.round((ox - L) / TREE_TILE) + Math.floor(t * 1.05 / TREE_TILE);
+        for(let k = 0; k < 3; k++) {
+            const seed = ((idx * 3 + k) * 2654435761) % 97;
+            const tx = ox + k * 32 + (seed % 11);
+            const th = 26 + (seed % 17);
+            const dark = (seed % 3) === 0;
+            ctx.fillStyle = dark ? `rgba(44,86,48,${0.92 * fade})`
+                                 : `rgba(62,110,58,${0.92 * fade})`;
+            ctx.beginPath();
+            ctx.moveTo(tx - 2.5, HZ);
+            ctx.lineTo(tx + 2.5, HZ);
+            ctx.lineTo(tx + 1.5, HZ - th * 0.45);
+            ctx.lineTo(tx - 1.5, HZ - th * 0.45);
+            ctx.closePath(); ctx.fill();                     // trunk
+            ctx.beginPath();
+            ctx.ellipse(tx, HZ - th * 0.78, th * 0.52, th * 0.62, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = `rgba(255,255,255,${0.07 * fade})`;   // sun on the crown
+            ctx.beginPath();
+            ctx.ellipse(tx + th * 0.16, HZ - th * 0.96, th * 0.26, th * 0.24, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // ── GROUND ───────────────────────────────────────────────────────────────
+    const gndG = ctx.createLinearGradient(0, HZ, 0, cBot);
+    gndG.addColorStop(0,   `rgba(104,158,74,${fade})`);
+    gndG.addColorStop(0.4, `rgba(86,140,64,${fade})`);
+    gndG.addColorStop(1,   `rgba(54,98,46,${fade})`);
+    ctx.fillStyle = gndG;
+    ctx.fillRect(L, HZ, W, cBot - HZ);
     ctx.fillStyle = `rgba(74,120,64,${fade})`;
-    ctx.fillRect(-GX, MUTANT_FREE_HORIZON, CANVAS_W, 5);   // grass meets the trees
-    // The mutant running free into the distance, shrinking as he goes — his
-    // feet are planted on the horizon at whatever scale he's currently at
-    const runP = Math.min(1, el / 150);
-    const rx = 120 + runP * 380;
-    const rs = 1 - runP * 0.45;
-    // He runs on the open grass in front of the treeline, not level with it,
-    // so the field reads as having depth
-    const runY = MUTANT_FREE_HORIZON + 30;
+    ctx.fillRect(L, HZ, W, 5);                               // grass meets the trees
+
+    // Mid-field grass, moving slower than the foreground
+    const MID_TILE = 74;
+    const midX0 = band(1.9, MID_TILE);
+    for(let g = -1; g <= Math.ceil(W / MID_TILE) + 1; g++) {
+        const ox = midX0 + g * MID_TILE;
+        ctx.strokeStyle = `rgba(66,116,56,${0.8 * fade})`;
+        ctx.lineWidth = 2;
+        for(let k = 0; k < 3; k++) {
+            const bx2 = ox + k * 24, by2 = HZ + 16 + (k % 2) * 7;
+            ctx.beginPath();
+            ctx.moveTo(bx2, by2);
+            ctx.quadraticCurveTo(bx2 + 3, by2 - 8, bx2 + 7, by2 - 11);
+            ctx.stroke();
+        }
+    }
+
+    // ── THE RUNNER — planted, with the world going past ──────────────────────
+    const RUN_X = 208, RUN_FOOT = HZ + 78;
+    ctx.fillStyle = `rgba(30,60,30,${0.22 * fade})`;          // contact shadow
+    ctx.beginPath();
+    ctx.ellipse(RUN_X, RUN_FOOT + 2, 26, 6, 0, 0, Math.PI * 2); ctx.fill();
     ctx.save();
-    ctx.translate(rx, runY - MUTANT_FOOT_OFS * rs);
-    ctx.scale(rs, rs);
+    ctx.translate(RUN_X, RUN_FOOT - MUTANT_FOOT_OFS);
     drawMutantPlayer(0, 0, 'right', true, false);
     ctx.restore();
-    // Dust puffs kicked up off the grass behind him
-    for(let d = 0; d < 4; d++) {
-        const dp = ((el / 26 + d * 0.25) % 1);
-        ctx.fillStyle = `rgba(180,165,130,${(1 - dp) * 0.45 * fade})`;
+    // Dust off his heels, trailing back the way the ground is moving
+    for(let d = 0; d < 5; d++) {
+        const dp = ((t / 22 + d * 0.2) % 1);
+        ctx.fillStyle = `rgba(186,172,138,${(1 - dp) * 0.5 * fade})`;
         ctx.beginPath();
-        ctx.arc(rx - (26 + dp * 42) * rs, runY - (dp * 5) * rs,
-                (4 + dp * 8) * rs, 0, Math.PI * 2);
+        ctx.arc(RUN_X - 24 - dp * 96, RUN_FOOT - 2 - dp * 10, 4 + dp * 11, 0, Math.PI * 2);
         ctx.fill();
     }
+
+    // ── FOREGROUND — fastest band, in front of him ───────────────────────────
+    const FG_TILE = 112;
+    const fgX0 = band(3.4, FG_TILE);
+    const fgBase = cBot + 6;                       // rooted off the bottom edge
+    // A soft verge rather than a hard dark bar across the bottom of the frame
+    const fgG = ctx.createLinearGradient(0, fgBase - 30, 0, cBot);
+    fgG.addColorStop(0, `rgba(70,124,58,0)`);
+    fgG.addColorStop(1, `rgba(56,104,48,${0.9 * fade})`);
+    ctx.fillStyle = fgG;
+    ctx.fillRect(L, fgBase - 30, W, cBot - fgBase + 30);
+    for(let f = -1; f <= Math.ceil(W / FG_TILE) + 1; f++) {
+        const ox = fgX0 + f * FG_TILE;
+        ctx.strokeStyle = `rgba(46,88,42,${0.95 * fade})`;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        for(let k = 0; k < 12; k++) {
+            const seed = ((f * 12 + k) * 2246822519) % 53;
+            const bx2 = ox + k * 9 + (seed % 5);
+            const bh2 = 22 + (seed % 18);
+            const lean = ((seed % 2) ? 1 : -1) * (3 + seed % 5);
+            ctx.beginPath();
+            ctx.moveTo(bx2, fgBase);
+            ctx.quadraticCurveTo(bx2 + lean * 0.4, fgBase - bh2 * 0.6,
+                                 bx2 + lean, fgBase - bh2);
+            ctx.stroke();
+        }
+        ctx.lineCap = 'butt';
+        // a wildflower, every other tile
+        if(f % 2 === 0) {
+            ctx.fillStyle = `rgba(238,214,96,${0.9 * fade})`;
+            ctx.beginPath(); ctx.arc(ox + 64, fgBase - 30, 4.5, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+    ctx.restore();
+
     // Title
     ctx.textAlign = 'center';
     const titleA = Math.min(1, Math.max(0, (el - 30) / 40));
