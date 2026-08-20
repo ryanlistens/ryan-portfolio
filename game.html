@@ -13064,9 +13064,32 @@ function drawMutantFreeCard() {
     // One clock for every band, so nothing can drift out of step with anything
     // else. It keeps counting past the point the card can be dismissed.
     const t = el;
-    // Wrapped tile origin: where the first copy of a tile of width `tw` sits
-    // when the band has travelled `t * speed` to the left.
-    const band = (speed, tw) => L - (((t * speed) % tw) + tw) % tw;
+    // Walk the tiles of a scrolling band. `idx` is a genuine tile IDENTITY —
+    // it steps by exactly one when a tile wraps off the edge and never changes
+    // otherwise — and `ox` is where that tile currently sits, moving smoothly.
+    //
+    // The trees and the flowers used to derive their identity by rounding the
+    // tile's screen position, which flips by one halfway across every tile. So
+    // every tree re-rolled its height, its colour and its jitter twice per
+    // tile of travel: the treeline twitched and flip-flopped while the clouds
+    // and hills, whose tiles carry no per-tile variation, slid past smoothly.
+    const tiles = (speed, tw, fn) => {
+        const scroll = t * speed;
+        const first = Math.floor(scroll / tw) - 1;
+        const cols = Math.ceil(W / tw) + 2;
+        for(let i = 0; i <= cols; i++) {
+            const idx = first + i;
+            fn(idx, L + idx * tw - scroll);
+        }
+    };
+    // Stable per-tile randomness. Unsigned, so a negative tile index (which
+    // happens for the first second, before the band has travelled a whole
+    // tile) hashes the same way as any other.
+    const tileHash = (n) => {
+        let h = Math.imul(n | 0, 2654435761) >>> 0;
+        h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13;
+        return h >>> 0;
+    };
 
     ctx.save();
     ctx.beginPath(); ctx.rect(L, cTop, W, CANVAS_H); ctx.clip();
@@ -13094,26 +13117,22 @@ function drawMutantFreeCard() {
 
     // ── CLOUDS — slowest band ────────────────────────────────────────────────
     const CLOUD_TILE = 520;
-    const cloudX0 = band(0.16, CLOUD_TILE);
     const puff = (cx, cy, r, a) => {
         ctx.fillStyle = `rgba(255,255,255,${a * fade})`;
         ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
     };
-    for(let c = -1; c <= Math.ceil(W / CLOUD_TILE) + 1; c++) {
-        const ox = cloudX0 + c * CLOUD_TILE;
+    tiles(0.16, CLOUD_TILE, (idx, ox) => {
         for(const [dx, dy, r, a] of [[40, 74, 30, 0.92], [76, 66, 38, 0.92],
                                      [116, 78, 26, 0.92], [78, 88, 44, 0.72],
                                      [300, 128, 22, 0.7], [330, 122, 30, 0.7],
                                      [362, 132, 19, 0.7]]) {
             puff(ox + dx, dy, r, a);
         }
-    }
+    });
 
     // ── FAR HILLS ────────────────────────────────────────────────────────────
     const HILL_TILE = 430;
-    const hillX0 = band(0.34, HILL_TILE);
-    for(let h = -1; h <= Math.ceil(W / HILL_TILE) + 1; h++) {
-        const ox = hillX0 + h * HILL_TILE;
+    tiles(0.34, HILL_TILE, (idx, ox) => {
         ctx.fillStyle = `rgba(126,166,178,${0.85 * fade})`;
         for(const [dx, w2, hh] of [[30, 150, 72], [200, 118, 52], [330, 160, 84]]) {
             ctx.beginPath();
@@ -13121,11 +13140,10 @@ function drawMutantFreeCard() {
             ctx.quadraticCurveTo(ox + dx, HZ - hh * 2.1, ox + dx + w2 / 2, HZ);
             ctx.closePath(); ctx.fill();
         }
-    }
+    });
 
     // ── TREELINE — mid band, and the tower rides with it ─────────────────────
     const TREE_TILE = 96;
-    const treeX0 = band(1.05, TREE_TILE);
     // The tower recedes and does not come back. It starts where it always sat
     // and keeps going left forever.
     const towX = 44 - t * 1.05;
@@ -13164,13 +13182,11 @@ function drawMutantFreeCard() {
             }
         }
     }
-    // Trees: three shapes off the tile index so the line does not read as one
-    // shape repeated, which is what 26 identical ellipses in a row did.
-    for(let tr = -1; tr <= Math.ceil(W / TREE_TILE) + 1; tr++) {
-        const ox = treeX0 + tr * TREE_TILE;
-        const idx = Math.round((ox - L) / TREE_TILE) + Math.floor(t * 1.05 / TREE_TILE);
+    // Trees: three shapes off the tile identity so the line does not read as
+    // one shape repeated, which is what 26 identical ellipses in a row did.
+    tiles(1.05, TREE_TILE, (idx, ox) => {
         for(let k = 0; k < 3; k++) {
-            const seed = ((idx * 3 + k) * 2654435761) % 97;
+            const seed = tileHash(idx * 3 + k);
             const tx = ox + k * 32 + (seed % 11);
             const th = 26 + (seed % 17);
             const dark = (seed % 3) === 0;
@@ -13190,7 +13206,7 @@ function drawMutantFreeCard() {
             ctx.ellipse(tx + th * 0.16, HZ - th * 0.96, th * 0.26, th * 0.24, 0, 0, Math.PI * 2);
             ctx.fill();
         }
-    }
+    });
 
     // ── GROUND ───────────────────────────────────────────────────────────────
     const gndG = ctx.createLinearGradient(0, HZ, 0, cBot);
@@ -13204,9 +13220,7 @@ function drawMutantFreeCard() {
 
     // Mid-field grass, moving slower than the foreground
     const MID_TILE = 74;
-    const midX0 = band(1.9, MID_TILE);
-    for(let g = -1; g <= Math.ceil(W / MID_TILE) + 1; g++) {
-        const ox = midX0 + g * MID_TILE;
+    tiles(1.9, MID_TILE, (idx, ox) => {
         ctx.strokeStyle = `rgba(66,116,56,${0.8 * fade})`;
         ctx.lineWidth = 2;
         for(let k = 0; k < 3; k++) {
@@ -13216,7 +13230,7 @@ function drawMutantFreeCard() {
             ctx.quadraticCurveTo(bx2 + 3, by2 - 8, bx2 + 7, by2 - 11);
             ctx.stroke();
         }
-    }
+    });
 
     // ── THE RUNNER — planted, with the world going past ──────────────────────
     const RUN_X = 208, RUN_FOOT = HZ + 78;
@@ -13238,7 +13252,6 @@ function drawMutantFreeCard() {
 
     // ── FOREGROUND — fastest band, in front of him ───────────────────────────
     const FG_TILE = 112;
-    const fgX0 = band(3.4, FG_TILE);
     const fgBase = cBot + 6;                       // rooted off the bottom edge
     // A soft verge rather than a hard dark bar across the bottom of the frame
     const fgG = ctx.createLinearGradient(0, fgBase - 30, 0, cBot);
@@ -13246,13 +13259,12 @@ function drawMutantFreeCard() {
     fgG.addColorStop(1, `rgba(56,104,48,${0.9 * fade})`);
     ctx.fillStyle = fgG;
     ctx.fillRect(L, fgBase - 30, W, cBot - fgBase + 30);
-    for(let f = -1; f <= Math.ceil(W / FG_TILE) + 1; f++) {
-        const ox = fgX0 + f * FG_TILE;
+    tiles(3.4, FG_TILE, (idx, ox) => {
         ctx.strokeStyle = `rgba(46,88,42,${0.95 * fade})`;
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
         for(let k = 0; k < 12; k++) {
-            const seed = ((f * 12 + k) * 2246822519) % 53;
+            const seed = tileHash(idx * 12 + k);
             const bx2 = ox + k * 9 + (seed % 5);
             const bh2 = 22 + (seed % 18);
             const lean = ((seed % 2) ? 1 : -1) * (3 + seed % 5);
@@ -13263,12 +13275,14 @@ function drawMutantFreeCard() {
             ctx.stroke();
         }
         ctx.lineCap = 'butt';
-        // a wildflower, every other tile
-        if(f % 2 === 0) {
+        // A wildflower on every other tile. This was keyed off the LOOP
+        // counter, not the tile, so which tiles carried one changed every time
+        // the band wrapped and the flowers blinked in and out.
+        if(((idx % 2) + 2) % 2 === 0) {
             ctx.fillStyle = `rgba(238,214,96,${0.9 * fade})`;
             ctx.beginPath(); ctx.arc(ox + 64, fgBase - 30, 4.5, 0, Math.PI * 2); ctx.fill();
         }
-    }
+    });
     ctx.restore();
 
     // Title
