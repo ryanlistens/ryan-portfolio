@@ -480,9 +480,9 @@ const levelMusic = {
     // Office radios — YELLOW's boombox plays this over the level track
     yellow: new Audio('music/yellow.mp3'),
     level4:  new Audio('music/level4.mp3'),
-    // The CEO's own theme — his floor and RED'S ENDING, both scored with it.
-    // It used to be level6.mp3, the floor's old track; level6.mp3 and
-    // level3.mp3 are both still in music/ and unreferenced now.
+    level6:  new Audio('music/level6.mp3'),   // the floor
+    // CEO.mp3 is RED'S ENDING and nothing else — not level 6's floor, and not
+    // a song on the radio. It is the score of one sequence.
     ceo:     new Audio('music/CEO.mp3'),
     // Nothing on the pipe floor plays by itself. These are what the radio on
     // the tool bench plays if somebody switches it on, and they are the dial:
@@ -522,15 +522,18 @@ function resumeLevelRadio() { setOfficeRadio(officeRadio.source); }
 
 // Set all music to loop and preload (skip null entries).
 //
-// level2 is the exception: nothing plays it unless somebody walks up to the
-// radio and steps the dial onto it, and it is 5.6MB against the ~48MB this
-// already pulls down at boot. Metadata only — it streams when it is chosen.
-const RADIO_ONLY = new Set(['level2']);
+// Two are held back. level2 plays only if somebody walks up to the radio and
+// steps the dial onto it; CEO.mp3 plays only in RED'S ENDING, which is deep in
+// level 6. They are 14MB between them against the ~48MB this already pulls
+// down at boot, so they get metadata only — and the level 6 update calls
+// load() on CEO.mp3 as soon as that floor starts, which is well before the
+// ending can be reached.
+const LAZY_MUSIC = new Set(['level2', 'ceo']);
 Object.entries(levelMusic).forEach(([key, audio]) => {
     if(!audio) return;
     audio.loop = true;
     audio.volume = 0.5;
-    audio.preload = RADIO_ONLY.has(key) ? 'metadata' : 'auto';
+    audio.preload = LAZY_MUSIC.has(key) ? 'metadata' : 'auto';
     audio.load();
 });
 
@@ -561,13 +564,14 @@ function boomboxHere() { return level === 1 && !shift.cabinetGone; }
 const CEO_BOOMBOX_X = 578;   // on the trophy cabinet's middle shelf
 
 // What the room is scored with when the radio is NOT on. The pipe floor has
-// nothing — silence is the point of it. The CEO's floor, and RED'S ENDING
-// inside level 5's rooms, have his theme, and that is not a station on the
-// dial: it is the music of the place. So switching the radio off there gives
-// it back instead of leaving the room silent.
+// nothing — silence is the point of it. Level 6 has its own track, and RED'S
+// ENDING has CEO.mp3, which is checked first because the crater outro plays
+// with the level already back to 6. Neither is a song on the dial, so
+// switching the radio off gives the room's own music back rather than leaving
+// it silent.
 function floorScoreKey() {
     if(typeof redsEnding !== 'undefined' && redsEnding.active) return 'ceo';
-    return level === 6 ? 'ceo' : null;
+    return level === 6 ? 'level6' : null;
 }
 // One button, one loop: off -> 1 -> 2 -> 4 -> off. The game has a single
 // ACTION and a radio's skip button is the same gesture, so stepping the song
@@ -32486,10 +32490,9 @@ function beginRedsFlashback() {
     level5.viewingPortrait = false;
     player.x = 350; player.y = 400; player.facing = 'forward';
     player.holding = null;
-    // The CEO's theme, not this floor's. RED'S ENDING is his story being told
-    // over the top of the man who ended it, and it comes straight out of the
-    // office you were just standing in — where the same track is on the radio,
-    // so it carries across the cut rather than restarting.
+    // CEO.mp3 — RED'S ENDING's own score. Not level 5's track, which is what
+    // these rooms play in the present day, and not level 6's either: this
+    // sequence gets a piece of music that belongs to nothing else.
     playMusic('ceo');
 }
 
@@ -32795,9 +32798,9 @@ function updateRedsExecution() {
             player.facing = redsEnding.returnFacing;
             player.holding = null;
             redsEnding.outro = 1;
-            // Still his theme. The outro is the last beat of the same ending,
-            // and level 6 is where that track belongs anyway, so it runs
-            // unbroken from the flashback into the crater.
+            // Still RED'S ENDING. The crater outro is the last beat of the
+            // same sequence, so its score runs unbroken out of the flashback
+            // even though the level underneath has gone back to 6.
             playMusic('ceo');
         }
     }
@@ -34033,7 +34036,7 @@ function update() {
                 }
 
                 if(level5.docsCollected >= 6) {
-                    playMusic('ceo');
+                    playMusic('level6');
 
                     level = 6;
                     timer = 240;
@@ -34119,8 +34122,19 @@ function update() {
             // floor actually runs. See initLevel for why it is not seeded there.
             if(!level6.radioSeeded) {
                 level6.radioSeeded = true;
-                radio.on = false; radio.track = 0;
-                playMusic('ceo');
+                // ...but NOT while RED'S ENDING is running. Its crater outro
+                // plays out with the level already back to 6, so seeding here
+                // dropped the floor's track straight over the ending's own
+                // score. Flagging it done regardless means it cannot fire
+                // afterwards either; the closing card takes it from there.
+                if(!redsEnding.active) {
+                    radio.on = false; radio.track = 0;
+                    playMusic('level6');
+                    // RED'S ENDING is triggered from this floor and its score
+                    // is held back from the boot download, so start fetching it
+                    // now rather than at the cut.
+                    if(levelMusic.ceo) levelMusic.ceo.load();
+                }
             }
             // RED'S ENDING's close-up. The world is frozen for it — no input, no
             // AI, nothing but the clock — and at the end it hands over to the card.
@@ -35118,7 +35132,7 @@ function update() {
                             // Restart level 6
                             level6.youBlewItCard = false;
                             initLevel(6);
-                            playMusic('ceo');
+                            playMusic('level6');
                         } else {
                             // Visit Speakeasy
                             window.location.href = 'speakeasy.html';
@@ -35153,7 +35167,7 @@ function update() {
                         if(level6.missileCaseClosedChoice === 0) {
                             level6.missileCaseClosedCard = false;
                             initLevel(6);
-                            playMusic('ceo');
+                            playMusic('level6');
                         } else {
                             window.location.href = 'speakeasy.html';
                         }
@@ -35191,7 +35205,7 @@ function update() {
                                 level6.newCEOPhase = 'celebration';
                                 level6.newCEOHoistStarted = false;
                                 initLevel(6);
-                                playMusic('ceo');
+                                playMusic('level6');
                             } else {
                                 window.location.href = 'speakeasy.html';
                             }
@@ -38168,7 +38182,7 @@ if (keys[' '] || keys['action']) {
                     initLevel(6);
                     state = 'levelCard';
                     cardTimer = 0;
-                    playMusic('ceo', true);
+                    playMusic('level6', true);
                     return;
                 }
             } else if(greenPM && Math.abs(player.x - greenPM.x) < 50) {
@@ -38557,7 +38571,7 @@ function tryTriggerMusicOnInput() {
             // We are holding a doc. If we have 5 collected, this current one is the 6th.
             // This is the EXACT moment of transition.
             if (level5.docsCollected >= 5) {
-                playMusic('ceo');
+                playMusic('level6');
                 return;
             }
         }
