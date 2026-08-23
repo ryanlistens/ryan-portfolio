@@ -1970,6 +1970,33 @@ function gaitLeg(phase, dir, amp, lift) {
 // coming. No cards for either — the arrival IS the announcement.
 //
 // So the first title card the player ever sees is the 3D printer.
+// A walk cycle measured in GROUND, not in seconds: the phase advances by one
+// radian per this many pixels travelled, so a sprite moving twice as fast takes
+// its steps twice as often and a planted foot stays where it was put.
+//
+// The number is not free. Over half a cycle the body covers PI * GAIT_PX pixels
+// while the planted foot travels 2 * amp backwards under it, so the foot only
+// grips if 2 * amp >= PI * GAIT_PX. Get it wrong the other way and the foot
+// slides FORWARD through the whole stance phase, which is what reads as walking
+// backwards.
+//
+// Zero slip is not the target — it costs either a 23px stride or a four-frame
+// cycle, and both look worse than the problem. Measured against a body doing
+// 5.00 px/frame: the old time-driven gait dragged the stance foot forward at
+// 4.72 px/frame, 94% of body speed, which is a moonwalk. GAIT_PX 8 with a
+// swing of 9 leaves 0.83 — 17%, an 18px stride and a ten-frame cycle you can
+// actually read.
+const GAIT_PX = 8.0;
+const GAIT_PER_PX = 1 / GAIT_PX;
+// Accumulate a sprite's gait phase from how far it actually moved. `mem` is any
+// object that lives between frames — the phase and the last x are kept on it.
+function gaitAdvance(mem, x, moving) {
+    if(mem._gx === undefined) { mem._gx = x; mem._gp = 0; }
+    if(moving) mem._gp += Math.abs(x - mem._gx) * GAIT_PER_PX;
+    mem._gx = x;
+    return mem._gp;
+}
+
 // Where the player works the pipe room during the shift. The pipe managers
 // are pinned to 368 because their ladders have to reach the pipes, and the
 // player and the boss both used to stand on that same line — so the entire
@@ -2019,8 +2046,16 @@ function announce(line) {
 // ones already up stop advancing — you can still run documents, you just are
 // not also being buried while you read. It gives the announcement somewhere to
 // land instead of competing with the thing it is announcing.
+// How long the pipes actually stop for. This used to be TANNOY_HOLD — the time
+// the ticker takes to SCROLL its whole line across the room, which is 10.5 to
+// 15.4 seconds depending on the line. Four announcements a shift meant nearly a
+// minute of a 210-second shift with every pipe frozen and, since the radio
+// starts off, the room dead quiet. That reads as the sound having been turned
+// off. A brief pause is a brief pause: the ticker still runs its full length,
+// the pipes just hold at the top of it.
+const TANNOY_PIPE_HOLD = 2200;
 function tickerLive() {
-    return !!tannoy.line && (Date.now() - tannoy.at) < TANNOY_HOLD;
+    return !!tannoy.line && (Date.now() - tannoy.at) < TANNOY_PIPE_HOLD;
 }
 
 // Is the 3D printer on this floor yet? Level 4 has always had one; the opening
@@ -2384,7 +2419,8 @@ function drawDelivery() {
     // body and he enters a room ahead of the thing he is wheeling into it.
     drawNPC({ x: d.x, y: 368, color: { name: 'DELIVERY', hex: '#7a5a34', shadow: '#4a3418' },
               state: 'happy', needsDoc: false, crackStartTime: null, animOffset: 5,
-              walking, facing: walking ? (dir < 0 ? 'left' : 'right') : 'down' });
+              walking, gaitPhase: gaitAdvance(d, d.x, walking),
+              facing: walking ? (dir < 0 ? 'left' : 'right') : 'down' });
 
     // Dolly: two wheels, an L of steel, a toe plate. Tilted back when loaded.
     ctx.save();
@@ -2442,7 +2478,8 @@ function drawArrivingYellow() {
 
     drawNPC({ x: y.x, y: 368, color: COLORS[3], state: 'happy',
               needsDoc: false, crackStartTime: null, animOffset: 3,
-              walking: !planted, facing: planted ? 'down' : 'left' });
+              walking: !planted, gaitPhase: gaitAdvance(y, y.x, !planted),
+              facing: planted ? 'down' : 'left' });
 }
 function checkPromotion() {
     if(boss.bossKills >= 6) {
@@ -5658,9 +5695,9 @@ function _drawNPC(npc) {
         // its foot exactly where the animation puts it while the top always
         // reaches past the hem — and drawing legs before the torso means that
         // overlap is hidden by the body rather than painted across it.
-        ctx.fillStyle = npcRamp.dark;
-        ctx.fillRect(x - 4*s, y + 6*s - STRIDE + climbCycle, 4*s, 7*s + STRIDE);
         ctx.fillStyle = npcRamp.base;
+        ctx.fillRect(x - 4*s, y + 6*s - STRIDE + climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillStyle = npcRamp.dark;
         ctx.fillRect(x + s,   y + 6*s - STRIDE - climbCycle, 4*s, 7*s + STRIDE);
         ctx.fillStyle = 'rgba(0,0,0,0.13)';
         ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
@@ -6044,8 +6081,10 @@ function _drawNPC(npc) {
             // way and the legs the other whenever he walked left, which is
             // half of what made the turned walk read as a stumble.
             const _npcFace = (npc.facing === 'left') ? -1 : (npc.facing === 'right') ? 1 : 0;
+            const _npcPhA = (npc.gaitPhase !== undefined && npc.gaitPhase !== null)
+                ? npc.gaitPhase : Date.now() / 125;
             const npcStride = npc.walking
-                ? -Math.cos(Date.now() / 125) * (_npcFace ? 3.4 * _npcFace : 3)
+                ? -Math.cos(_npcPhA) * (_npcFace ? 3.4 * _npcFace : 3)
                 : 0;
             // The shoulders turn with the head — the leading arm swings forward
             // of the chest and the trailing one tucks in behind it.
@@ -6065,19 +6104,30 @@ function _drawNPC(npc) {
                     charHand(x - 4.8*s, y - 7.8*s, 1.5*s, '#f5c89a');
                 } else {
                     charLimb(x - shX + tArm, capY, x - 7.0*s + npcStride + tArm, y + 4.6*s,
-                             2.3*s, npcRamp.dark, x - 7.4*s + npcStride + tArm, y - 0.2*s);
+                             2.3*s, charMix(npc.color.hex, '#fff', 0.06),
+                             x - 7.4*s + npcStride + tArm, y - 0.2*s);
                 }
                 charLimb(x + shX + tArm, capY, x + 7.0*s - npcStride + tArm, y + 4.6*s,
-                         2.3*s, charMix(npc.color.hex, '#000', 0.10), x + 7.4*s - npcStride + tArm, y - 0.2*s);
-                charDeltoid(x - shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
-                charDeltoid(x + shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+                         2.3*s, npcRamp.dark, x + 7.4*s - npcStride + tArm, y - 0.2*s);
+                charDeltoid(x - shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+                charDeltoid(x + shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
                 if(!stressedL) charHand(x - 7.0*s + npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
                 charHand(x + 7.0*s - npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
             }
             // Legs. Each hinges from a fixed hip and carries its foot fore and
             // aft, so a walking manager's planted foot goes backward under him
             // instead of hovering in place while he slides along.
-            const npcPh = Date.now() / 125;
+            // The gait phase comes off DISTANCE TRAVELLED when the caller can
+            // supply it, and only falls back to the wall clock when it cannot.
+            //
+            // On the clock it was a fixed 785ms per cycle whatever the sprite
+            // was doing. Red covers 5px a frame, so his body moved ~118px in
+            // the half-cycle his planted foot spent travelling 10px backwards
+            // under him — the foot slid forward over the ground for the whole
+            // stance phase, which is exactly what reads as walking backwards.
+            // Tied to distance, the foot lands and stays put.
+            const npcPh = (npc.gaitPhase !== undefined && npc.gaitPhase !== null)
+                ? npc.gaitPhase : Date.now() / 125;
             const npcHip = y + 6*s, npcSole = y + 13*s;
             // FACING FRONT the legs stand side by side, hip-width apart, and a
             // fore/aft swing has nowhere to go — so it stays small.
@@ -6092,14 +6142,14 @@ function _drawNPC(npc) {
             // and the swing opens right up because overlapping is now the
             // point rather than the fault.
             const turned = npcTurn !== 0;
-            const npcAmp  = npc.walking ? (turned ? 5.0 : 2.0) : 0;
-            const npcLift = npc.walking ? (turned ? 3.0 : 2.2) : 0;
+            const npcAmp  = npc.walking ? (turned ? 9.0 : 2.4) : 0;
+            const npcLift = npc.walking ? (turned ? 3.4 : 2.2) : 0;
             const legs = turned
                 // [x offset, colour, phase, hip lift, width scale]
                 ? [[-2.4*s - npcTurn * 1.0*s, npcRamp.dark, npcPh + Math.PI, 1.1*s, 1.05],
                    [-2.4*s + npcTurn * 1.0*s, npcRamp.base, npcPh,           0,     1.15]]
-                : [[-5*s, npcRamp.dark, npcPh,           0, 1],
-                   [ s,   npcRamp.base, npcPh + Math.PI, 0, 1]];
+                : [[-5*s, npcRamp.base, npcPh,           0, 1],
+                   [ s,   npcRamp.dark, npcPh + Math.PI, 0, 1]];
             for(const [lx0, col, ph, hipUp, wScale] of legs) {
                 const g = gaitLeg(ph, npcTurn, npcAmp, npcLift);
                 const lw = 4*s * wScale;
@@ -8892,13 +8942,11 @@ function _drawGhostGun(x, y, facing, sleeve) {
     ctx.restore();
 }
 function drawPipeWrench(x, y, facing) {
-    shadeSprite(x + 0, y + -11, 21, 26, () => _drawPipeWrench(x, y, facing), { ground: 0 });
+    shadeSprite(x + 0, y + 4, 26, 30, () => _drawPipeWrench(x, y, facing), { ground: 0 });
 }
 function _drawPipeWrench(x, y, facing) {
     const sleeveColor = '#800020';
     const skinColor = '#f5c89a';
-    const wrenchColor = '#7a7a7a';
-    const wrenchShine = '#aaaaaa';
 
     // Swing animation angle: swings down (0→π/2) in facing direction
     let swingAngle = 0;
@@ -8908,34 +8956,52 @@ function _drawPipeWrench(x, y, facing) {
     }
 
     const dir = (facing === 'left') ? -1 : 1;
-    const armX = x + dir * 9;
 
+    // He CARRIES it, at his side, in his fist. It used to be pivoted at
+    // shoulder height with the handle running up past his ear and the jaws
+    // parked across his eyes — a wrench drawn over the middle of his face, with
+    // his hand nowhere near it: the fist was down at the hip while the shaft
+    // passed straight through his forearm and his chest.
+    //
+    // The origin is the FIST now, so the swing rotates the tool about the hand
+    // holding it rather than about a point in mid-air beside his head.
     ctx.save();
-    ctx.translate(armX, y - 4);
-    ctx.rotate(dir * swingAngle);
+    ctx.translate(x + dir * 9, y + 2);
+    ctx.rotate(dir * (swingAngle - 0.20));      // hangs a little clear of the leg
 
-    // Arm sleeve
-    ctx.fillStyle = sleeveColor;
-    ctx.fillRect(-4, -2, 8, 14);
-    // Hand
+    // A cuff and a fist, no more. The sprite already has arms; this only has to
+    // close a hand around the shaft. Drawn as a full forearm it reached his
+    // chin and put a red blob over his mouth.
+    ctx.strokeStyle = sleeveColor;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 6.4;
+    ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, -3); ctx.stroke();
+    ctx.lineCap = 'butt';
     ctx.fillStyle = skinColor;
-    ctx.fillRect(-3, 10, 7, 6);
+    ctx.beginPath(); ctx.arc(0, 0, 3.6, 0, Math.PI * 2); ctx.fill();
 
-    // Wrench (pointing up-ish, handle down)
-    // Handle
-    ctx.fillStyle = wrenchColor;
-    ctx.fillRect(-3, -18, 6, 28);
-    // Head (open-end jaws)
-    ctx.fillStyle = wrenchColor;
-    ctx.fillRect(-8, -28, 16, 12);
-    // Jaw gap
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(-5, -26, 5, 8);
-    ctx.fillRect(0, -26, 5, 8);
-    // Shine
-    ctx.fillStyle = wrenchShine;
-    ctx.fillRect(-2, -22, 2, 14);
+    // Shaft, hanging down out of the grip
+    const shaftG = ctx.createLinearGradient(-3, 0, 3, 0);
+    shaftG.addColorStop(0,    '#9a9a9a');
+    shaftG.addColorStop(0.45, '#7a7a7a');
+    shaftG.addColorStop(1,    '#565656');
+    ctx.fillStyle = shaftG;
+    pathRoundRect(-2.6, 1, 5.2, 21, 1.4); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.30)';
+    ctx.fillRect(-1.9, 4, 1.4, 14);                       // highlight down the shaft
+    ctx.fillStyle = '#4a4a4a';                            // knurled grip collar
+    ctx.fillRect(-2.6, 3, 5.2, 3);
 
+    // Head, jaws at the bottom where a carried wrench's head sits
+    ctx.fillStyle = '#6e6e6e';
+    pathRoundRect(-6.5, 20, 13, 9, 1.6); ctx.fill();
+    ctx.fillStyle = '#8c8c8c';
+    ctx.fillRect(-6.5, 20.5, 13, 1.6);
+    ctx.fillStyle = '#2a2a2a';                            // the jaw gap
+    ctx.fillRect(-4.2, 22.5, 3.4, 6.5);
+    ctx.fillRect(0.8, 22.5, 3.4, 6.5);
+    ctx.fillStyle = '#4a4a4a';                            // adjuster worm
+    ctx.beginPath(); ctx.arc(0, 19, 2.2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 }
 
@@ -12860,6 +12926,7 @@ let _mutLastX = null, _mutWalkTimer = 0;
 // Same idea for RED in his own ending — he is drawn by the pipe manager sprite,
 // which had no reason to know about walking until he became the player.
 let _redsLastX = null, _redsWalkTimer = 0;
+const _redsGait = {};   // his walk cycle, measured in floor rather than in seconds
 // Draws the level 6 player AND whatever is in his hand. The weapon used to be a
 // second statement repeated verbatim after all 13 calls to this — so adding a
 // room meant remembering both lines, and forgetting the second gave an armed
@@ -30117,10 +30184,12 @@ function drawScene() {
                 if(_redsLastX !== null && Math.abs(player.x - _redsLastX) > 0.4) _redsWalkTimer = 8;
                 else if(_redsWalkTimer > 0) _redsWalkTimer--;
                 _redsLastX = player.x;
+                const _redsWalking = _redsWalkTimer > 0 && !redsEnding.onLadder;
                 drawNPC({ x: player.x, y: player.y, color: COLORS[0],
                           state: redsPmState(), needsDoc: false, crackStartTime: null,
                           fixAnim: redsEnding.fixAnim,
-                          walking: _redsWalkTimer > 0 && !redsEnding.onLadder,
+                          walking: _redsWalking,
+                          gaitPhase: gaitAdvance(_redsGait, player.x, _redsWalking),
                           facing: redsEnding.onLadder ? 'back' : player.facing });
                 if(player.holding && !redsEnding.onLadder) drawHeldDoc(player.x, player.y, player.holding);
             }
