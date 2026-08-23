@@ -5658,6 +5658,24 @@ function _drawNPC(npc) {
     // branch only, which is how the two halves drifted apart in the first place.
     const npcRamp = charRamp(npc.color.hex, null, npc.color.shadow);
 
+    // ── WHICH LIMB IS DARK, ONCE, FOR EVERY POSE ────────────────────────────
+    // There was no rule. Each pose picked its own colours and they disagreed:
+    // standing, the dark leg was on the RIGHT; pacing, the same sprite put it
+    // on the LEFT — because the pacing/jumping/screaming poses were written as
+    // their own closures with their own arguments, and the variable holding
+    // the DARKENED arm colour in them was called `armLit`.
+    //
+    // The rule is the one the rest of the sprite already follows. The key light
+    // is fixed at the top LEFT — charTorso lights its left edge, charHead puts
+    // the temple highlight on the left — so on screen the left limb is lit and
+    // the right limb is shaded, in every pose, whatever the pose is doing.
+    const LIMB_LIT    = charMix(npc.color.hex, '#ffffff', 0.08);
+    const LIMB_SHADE  = npcRamp.dark;
+    const JOINT_LIT   = charMix(npc.color.hex, '#ffffff', 0.12);
+    const JOINT_SHADE = charMix(npc.color.hex, '#000000', 0.16);
+    const LEG_LIT     = npcRamp.base;
+    const LEG_SHADE   = npcRamp.dark;
+
     // A pipe manager can also simply be TURNED AWAY while standing — he turns to
     // take the cash sack from Mullet Pro, who hands it over from upstage. That is
     // the same hooded back, so `facing: 'back'` reuses this pose with the ladder
@@ -5684,7 +5702,6 @@ function _drawNPC(npc) {
         const isFix = npc.state === 'fixing';
         // Torquing motion: arms rock side-to-side when fixing
         const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
-        const armLit = charMix(npc.color.hex, '#000', 0.10);
 
         // LEGS FIRST, and only then the torso over the top of them.
         //
@@ -5695,9 +5712,9 @@ function _drawNPC(npc) {
         // its foot exactly where the animation puts it while the top always
         // reaches past the hem — and drawing legs before the torso means that
         // overlap is hidden by the body rather than painted across it.
-        ctx.fillStyle = npcRamp.base;
+        ctx.fillStyle = LEG_LIT;
         ctx.fillRect(x - 4*s, y + 6*s - STRIDE + climbCycle, 4*s, 7*s + STRIDE);
-        ctx.fillStyle = npcRamp.dark;
+        ctx.fillStyle = LEG_SHADE;
         ctx.fillRect(x + s,   y + 6*s - STRIDE - climbCycle, 4*s, 7*s + STRIDE);
         ctx.fillStyle = 'rgba(0,0,0,0.13)';
         ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
@@ -5745,9 +5762,9 @@ function _drawNPC(npc) {
             // top, so he read as a torso with two stubs above it rather than a
             // man reaching up.
             charLimb(x - shX, capY, x - reachX, reachY,
-                     2.3*s, npcRamp.dark, x - 8.8*s, y - 11*s);
+                     2.3*s, LIMB_LIT,   x - 8.8*s, y - 11*s);
             charLimb(x + shX, capY, x + reachX, reachY,
-                     2.3*s, armLit,       x + 8.8*s, y - 11*s);
+                     2.3*s, LIMB_SHADE, x + 8.8*s, y - 11*s);
             // No deltoid caps. They work on the hanging pose because the arm
             // drops straight out of them and swallows them; an arm that leaves
             // UPWARD leaves the cap sitting there as a bare ball joint on the
@@ -5809,19 +5826,19 @@ function _drawNPC(npc) {
             // Hands are inside the pipe, so the arms run out and stop — no hand
             // caps. They rock with the torque coming off the wrench.
             charLimb(x - bShX, bCapY, x - 6.0*s + torque, y + 2.6*s,
-                     2.3*s, npcRamp.dark, x - 7.4*s + torque, y - 0.6*s);
+                     2.3*s, LIMB_LIT,   x - 7.4*s + torque, y - 0.6*s);
             charLimb(x + bShX, bCapY, x + 6.0*s + torque, y + 2.6*s,
-                     2.3*s, armLit,      x + 7.4*s + torque, y - 0.6*s);
-            charDeltoid(x - bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
-            charDeltoid(x + bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+                     2.3*s, LIMB_SHADE, x + 7.4*s + torque, y - 0.6*s);
+            charDeltoid(x - bShX, bCapY, 1.35*s, JOINT_LIT);
+            charDeltoid(x + bShX, bCapY, 1.35*s, JOINT_SHADE);
         } else if(!isBackTurn) {
             // Climbing: each hand takes a rung and they alternate up the rails.
             const gripL = y - 11.5*s - climbCycle * 1.5;
             const gripR = y - 11.5*s + climbCycle * 1.5;
             charLimb(x - bShX, bCapY, x - 7.0*s, gripL,
-                     2.3*s, npcRamp.dark, x - 8.6*s, y - 7.0*s);
+                     2.3*s, LIMB_LIT,   x - 8.6*s, y - 7.0*s);
             charLimb(x + bShX, bCapY, x + 7.0*s, gripR,
-                     2.3*s, armLit,      x + 8.6*s, y - 7.0*s);
+                     2.3*s, LIMB_SHADE, x + 8.6*s, y - 7.0*s);
             charHand(x - 7.0*s, gripL, 1.4*s, '#f5c89a');
             charHand(x + 7.0*s, gripR, 1.4*s, '#f5c89a');
         }
@@ -6013,16 +6030,16 @@ function _drawNPC(npc) {
         // only the motion differs.
         const armSkin = '#f5c89a';
         const capY = y - 3.8*s, shX = 5.6*s;
-        const armDark = npcRamp.dark, armLitF = charMix(npc.color.hex, '#000', 0.10);
+
         // Both arms from one call: each side gets a tapered limb off a deltoid
         // cap sitting ON the shoulder, ending in a hand at the wrist.
         // handDY carries the hand past the wrist along the limb — down for an
         // arm that hangs, up for one that is raised.
         const npcArms = (wristLX, wristLY, wristRX, wristRY, bendLX, bendLY, bendRX, bendRY, handR, handDY) => {
-            charLimb(x - shX, capY, wristLX, wristLY, 2.3*s, armDark,  bendLX, bendLY);
-            charLimb(x + shX, capY, wristRX, wristRY, 2.3*s, armLitF, bendRX, bendRY);
-            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
-            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            charLimb(x - shX, capY, wristLX, wristLY, 2.3*s, LIMB_LIT,   bendLX, bendLY);
+            charLimb(x + shX, capY, wristRX, wristRY, 2.3*s, LIMB_SHADE, bendRX, bendRY);
+            charDeltoid(x - shX, capY, 1.35*s, JOINT_LIT);
+            charDeltoid(x + shX, capY, 1.35*s, JOINT_SHADE);
             const hdy = (handDY === undefined) ? 0.8*s : handDY;
             charHand(wristLX, wristLY + hdy, handR || 1.4*s, armSkin);
             charHand(wristRX, wristRY + hdy, handR || 1.4*s, armSkin);
@@ -6030,8 +6047,8 @@ function _drawNPC(npc) {
         // Legs hinged from a fixed hip, each carrying its foot fore and aft.
         const npcLegs = (amp, lift, phase, dir) => {
             const hip = y + 6*s, sole = y + 13*s;
-            for(const [lx0, col, ph] of [[-5*s, npcRamp.dark, phase],
-                                         [ s,   npcRamp.base, phase + Math.PI]]) {
+            for(const [lx0, col, ph] of [[-5*s, LEG_LIT,   phase],
+                                         [ s,   LEG_SHADE, phase + Math.PI]]) {
                 const g = gaitLeg(ph, dir || 0, amp, lift);
                 const bot = sole - g.lift;
                 ctx.fillStyle = col;
@@ -6100,17 +6117,16 @@ function _drawNPC(npc) {
                     // Worried: the near arm folds up so the hand reaches the
                     // cheek — elbow out, forearm rising, hand at the end of it
                     charLimb(x - shX, capY, x - 5.0*s, y - 7.2*s,
-                             2.3*s, npcRamp.dark, x - 8.6*s, y - 3.0*s);
+                             2.3*s, LIMB_LIT, x - 8.6*s, y - 3.0*s);
                     charHand(x - 4.8*s, y - 7.8*s, 1.5*s, '#f5c89a');
                 } else {
                     charLimb(x - shX + tArm, capY, x - 7.0*s + npcStride + tArm, y + 4.6*s,
-                             2.3*s, charMix(npc.color.hex, '#fff', 0.06),
-                             x - 7.4*s + npcStride + tArm, y - 0.2*s);
+                             2.3*s, LIMB_LIT, x - 7.4*s + npcStride + tArm, y - 0.2*s);
                 }
                 charLimb(x + shX + tArm, capY, x + 7.0*s - npcStride + tArm, y + 4.6*s,
-                         2.3*s, npcRamp.dark, x + 7.4*s - npcStride + tArm, y - 0.2*s);
-                charDeltoid(x - shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
-                charDeltoid(x + shX + tArm, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
+                         2.3*s, LIMB_SHADE, x + 7.4*s - npcStride + tArm, y - 0.2*s);
+                charDeltoid(x - shX + tArm, capY, 1.35*s, JOINT_LIT);
+                charDeltoid(x + shX + tArm, capY, 1.35*s, JOINT_SHADE);
                 if(!stressedL) charHand(x - 7.0*s + npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
                 charHand(x + 7.0*s - npcStride + tArm, y + 5.4*s, 1.4*s, '#f5c89a');
             }
@@ -6146,10 +6162,14 @@ function _drawNPC(npc) {
             const npcLift = npc.walking ? (turned ? 3.4 : 2.2) : 0;
             const legs = turned
                 // [x offset, colour, phase, hip lift, width scale]
-                ? [[-2.4*s - npcTurn * 1.0*s, npcRamp.dark, npcPh + Math.PI, 1.1*s, 1.05],
-                   [-2.4*s + npcTurn * 1.0*s, npcRamp.base, npcPh,           0,     1.15]]
-                : [[-5*s, npcRamp.base, npcPh,           0, 1],
-                   [ s,   npcRamp.dark, npcPh + Math.PI, 0, 1]];
+                // Turned, the two legs are stacked in DEPTH rather than side by
+                // side, so the far one takes the shade — which is the same
+                // answer the light gives anyway, since it is the one further
+                // from the key.
+                ? [[-2.4*s - npcTurn * 1.0*s, LEG_SHADE, npcPh + Math.PI, 1.1*s, 1.05],
+                   [-2.4*s + npcTurn * 1.0*s, LEG_LIT,   npcPh,           0,     1.15]]
+                : [[-5*s, LEG_LIT,   npcPh,           0, 1],
+                   [ s,   LEG_SHADE, npcPh + Math.PI, 0, 1]];
             for(const [lx0, col, ph, hipUp, wScale] of legs) {
                 const g = gaitLeg(ph, npcTurn, npcAmp, npcLift);
                 const lw = 4*s * wScale;
@@ -8942,67 +8962,85 @@ function _drawGhostGun(x, y, facing, sleeve) {
     ctx.restore();
 }
 function drawPipeWrench(x, y, facing) {
-    shadeSprite(x + 0, y + 4, 26, 30, () => _drawPipeWrench(x, y, facing), { ground: 0 });
+    shadeSprite(x + 0, y + 14, 34, 40, () => _drawPipeWrench(x, y, facing), { ground: 0 });
 }
+// The wrench and the arm holding it, on the SAME rig as the ghost gun — which
+// is the one place in this sprite that already gets a held weapon right.
+//
+// It had two faults and they were the same fault twice. It drew its own cuff
+// and fist ON TOP of a sprite that had already drawn two arms, so he had
+// three; and its pivot was a fixed point beside his hip whichever way he
+// faced, so the swing came off whatever side that landed on rather than off
+// the arm leading the strike. drawMulletPro suppresses its weapon-side arm for
+// this now, exactly as it does for the pistol, and the rig below supplies that
+// arm, per facing.
 function _drawPipeWrench(x, y, facing) {
-    const sleeveColor = '#800020';
-    const skinColor = '#f5c89a';
+    const SLEEVE = '#800020';           // Mullet Pro's jacket
+    const SKIN = '#f5c89a';
 
-    // Swing animation angle: swings down (0→π/2) in facing direction
+    // Swing: the tool comes up and over, about the WRIST, the way he is facing.
     let swingAngle = 0;
     if(pipeWrench.swinging && pipeWrench.swingTimer > 0) {
         const t = 1 - (pipeWrench.swingTimer / 22);
-        swingAngle = Math.sin(t * Math.PI) * (Math.PI * 0.7);
+        swingAngle = Math.sin(t * Math.PI) * (Math.PI * 0.78);
     }
 
-    const dir = (facing === 'left') ? -1 : 1;
+    // The grip has to land on the hand the SPRITE would have put there, and
+    // the sprite has two different arm rigs. In profile (left/right) the arm
+    // hangs near the body's centreline with the hand at y + 8.8*s; face-on it
+    // hangs outside the shoulder at x + 7.8*s, y + 6.8*s. At s = 2.4 those are
+    // 21.1 down the middle, and 18.7 across / 16.3 down. Borrowing the ghost
+    // gun's numbers instead put the whole forearm inside his chest, so the
+    // wrench hung off a hand with no visible arm attached to it.
+    // The rig reads the SAME facing the body was just drawn with, and nothing
+    // else. Keying it off pipeWrench.swingFacing instead — the facing he had
+    // when the swing started — desynced the two: he can stop moving mid-swing,
+    // the body reverts to its front view, and the tool would still be hanging
+    // off a profile arm that is no longer there.
+    const S = 2.4;
+    const prof = (facing === 'left' || facing === 'right');
+    const d = (facing === 'left') ? -1 : 1;
+    const A = prof
+        ? { sx: d * 1.2*S, sy: -6, wx: d * 1.2*S, wy: 8.8*S, d,
+            bend: [d * 2.6*S, 4.0*S] }
+        : { sx: 5.2*S,     sy: -4, wx: 7.8*S,     wy: 6.8*S, d: 1,
+            bend: [7.6*S, 2.0*S] };
 
-    // He CARRIES it, at his side, in his fist. It used to be pivoted at
-    // shoulder height with the handle running up past his ear and the jaws
-    // parked across his eyes — a wrench drawn over the middle of his face, with
-    // his hand nowhere near it: the fist was down at the hip while the shaft
-    // passed straight through his forearm and his chest.
-    //
-    // The origin is the FIST now, so the swing rotates the tool about the hand
-    // holding it rather than about a point in mid-air beside his head.
+    // Arm out to the wrist
+    charLimb(x + A.sx, y + A.sy, x + A.wx, y + A.wy, 5.2, SLEEVE,
+             x + A.bend[0], y + A.bend[1]);
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';                       // cuff shadow
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 2.9, 0, Math.PI * 2); ctx.fill();
+
     ctx.save();
-    ctx.translate(x + dir * 9, y + 2);
-    ctx.rotate(dir * (swingAngle - 0.20));      // hangs a little clear of the leg
+    ctx.translate(x + A.wx, y + A.wy);
+    ctx.rotate(-A.d * (swingAngle + 0.16));       // hangs a shade off the leg
 
-    // A cuff and a fist, no more. The sprite already has arms; this only has to
-    // close a hand around the shaft. Drawn as a full forearm it reached his
-    // chin and put a red blob over his mouth.
-    ctx.strokeStyle = sleeveColor;
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 6.4;
-    ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, -3); ctx.stroke();
-    ctx.lineCap = 'butt';
-    ctx.fillStyle = skinColor;
-    ctx.beginPath(); ctx.arc(0, 0, 3.6, 0, Math.PI * 2); ctx.fill();
-
-    // Shaft, hanging down out of the grip
     const shaftG = ctx.createLinearGradient(-3, 0, 3, 0);
     shaftG.addColorStop(0,    '#9a9a9a');
     shaftG.addColorStop(0.45, '#7a7a7a');
     shaftG.addColorStop(1,    '#565656');
     ctx.fillStyle = shaftG;
-    pathRoundRect(-2.6, 1, 5.2, 21, 1.4); ctx.fill();
+    pathRoundRect(-2.6, 0, 5.2, 21, 1.4); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.30)';
-    ctx.fillRect(-1.9, 4, 1.4, 14);                       // highlight down the shaft
-    ctx.fillStyle = '#4a4a4a';                            // knurled grip collar
-    ctx.fillRect(-2.6, 3, 5.2, 3);
+    ctx.fillRect(-1.9, 3, 1.4, 14);
+    ctx.fillStyle = '#4a4a4a';                                // knurled collar
+    ctx.fillRect(-2.6, 2, 5.2, 3);
 
-    // Head, jaws at the bottom where a carried wrench's head sits
-    ctx.fillStyle = '#6e6e6e';
-    pathRoundRect(-6.5, 20, 13, 9, 1.6); ctx.fill();
+    ctx.fillStyle = '#6e6e6e';                                // head, jaws out
+    pathRoundRect(-6.5, 19, 13, 9, 1.6); ctx.fill();
     ctx.fillStyle = '#8c8c8c';
-    ctx.fillRect(-6.5, 20.5, 13, 1.6);
-    ctx.fillStyle = '#2a2a2a';                            // the jaw gap
-    ctx.fillRect(-4.2, 22.5, 3.4, 6.5);
-    ctx.fillRect(0.8, 22.5, 3.4, 6.5);
-    ctx.fillStyle = '#4a4a4a';                            // adjuster worm
-    ctx.beginPath(); ctx.arc(0, 19, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-6.5, 19.5, 13, 1.6);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-4.2, 21.5, 3.4, 6.5);
+    ctx.fillRect(0.8, 21.5, 3.4, 6.5);
+    ctx.fillStyle = '#4a4a4a';                                // adjuster worm
+    ctx.beginPath(); ctx.arc(0, 18, 2.2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+
+    // The fist, over the shaft so it reads as gripping it
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(x + A.wx, y + A.wy, 3.4, 0, Math.PI * 2); ctx.fill();
 }
 
 // Draw a spinning wrench projectile (boomerang bolt)
@@ -32473,7 +32511,12 @@ function drawScene() {
         const meltT = Math.min(1, meltElapsed / 3000);
         drawHellMeltPlayer(player.x, player.y, meltT);
     } else {
-        drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun);
+        // The wrench supplies its own arm, so the sprite has to leave that arm
+        // out — the pistol has always worked this way. Passing only hasGhostGun
+        // meant the wrench added a THIRD arm to a body already drawing two.
+        const wrenchOut = printerHere() && pipeWrench.hasWrench;
+        drawMulletPro(player.x, player.y, player.facing, player.holding,
+                      hasGhostGun || wrenchOut);
     }
 
     if(player.holding) {

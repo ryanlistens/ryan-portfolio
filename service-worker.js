@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mullet-pro-v87';
+const CACHE_NAME = 'mullet-pro-v88';
 
 // The game itself. Kept out of PRECACHE deliberately — see the fetch handler.
 const PAGE = '/game.html';
