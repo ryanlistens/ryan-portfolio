@@ -4345,9 +4345,13 @@ function drawLabTech(bx, by, facing, paused, hasGun) {
     shadeSprite(bx + 0, gy + -16, 44, 64, () => _drawLabTech(bx, gy, facing, paused, hasGun));
 }
 
-function _drawCloningBoss(bx, by, facing, paused, hasGun) {
-    const walkCycle = paused ? 0 : Math.sin(Date.now() / 150) * 5;
-    const bob = paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
+function _drawCloningBoss(bx, by, facing, paused, hasGun, mem) {
+    // Measured in GROUND, like the rest of the cast. On the clock the cycle ran
+    // at a fixed rate whatever he was doing, so the foot he had put down
+    // travelled forward with him: measured at 99% of body speed.
+    const gp = mem ? gaitAdvance(mem, bx, !paused, by) : Date.now() / 150;
+    const walkCycle = paused ? 0 : Math.sin(gp) * 5;
+    const bob = paused ? 0 : Math.abs(Math.sin(gp)) * 1.5;
     const sideView = (facing === 'left' || facing === 'right');
     const dir = facing === 'left' ? -1 : 1;
     const isBack = (facing === 'back' || facing === 'up');
@@ -4361,7 +4365,14 @@ function _drawCloningBoss(bx, by, facing, paused, hasGun) {
     if(sideView) {
         // === SIDE-VIEW POSE — articulated profile with a real gait ===
         const lean = paused ? 0 : 1.5 * dir;      // slight forward lean while marching
-        const stride = walkCycle;                  // ±5 leg swing
+        // The legs carry their feet fore and aft off the shared cycle. At +/-5
+        // the planted foot could never hold its ground — over half a cycle the
+        // body covers PI * GAIT_PX = 25px — so it is the house 9.0/3.4 the rest
+        // of the cast walks its turned cycle on. dir is applied by the callers
+        // below, so these are in FACING space: gaitLeg with dir 1.
+        const gLead  = paused ? { swing: 0, lift: 0 } : gaitLeg(gp, 1, 9.0, 3.4);
+        const gTrail = paused ? { swing: 0, lift: 0 } : gaitLeg(gp + Math.PI, 1, 9.0, 3.4);
+        const stride = gLead.swing;
         const armSwing = walkCycle * 0.7;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -4405,18 +4416,18 @@ function _drawCloningBoss(bx, by, facing, paused, hasGun) {
         ctx.lineWidth = 6;
         ctx.beginPath();
         ctx.moveTo(bx - 2 * dir, hipY);
-        ctx.quadraticCurveTo(bx + (-stride * 0.4 + 1) * dir, by + 17 - bob,
-                             bx + (-stride - 1) * dir, footY - 2);
+        ctx.quadraticCurveTo(bx + (gTrail.swing * 0.4 + 1) * dir, by + 17 - bob,
+                             bx + (gTrail.swing - 1) * dir, footY - 2 - gTrail.lift);
         ctx.stroke();
-        drawBoot(bx + (-stride - 1) * dir, footY, true);
+        drawBoot(bx + (gTrail.swing - 1) * dir, footY - gTrail.lift, true);
         // Leading leg
         ctx.strokeStyle = '#2e2e2e';
         ctx.beginPath();
         ctx.moveTo(bx + 2 * dir, hipY);
         ctx.quadraticCurveTo(bx + (stride * 0.4 + 3) * dir, by + 17 - bob,
-                             bx + (stride + 1) * dir, footY - 2);
+                             bx + (stride + 1) * dir, footY - 2 - gLead.lift);
         ctx.stroke();
-        drawBoot(bx + (stride + 1) * dir, footY, false);
+        drawBoot(bx + (stride + 1) * dir, footY - gLead.lift, false);
 
         // --- Torso — rounded work shirt, side-lit toward the facing side ---
         // Asymmetric: the chest carries forward and the back runs straighter,
@@ -4841,9 +4852,13 @@ function _drawCloningBoss(bx, by, facing, paused, hasGun) {
 // goggles and nitrile gloves. She was a man in a hard hat, a red work shirt and
 // a tie — a foreman borrowed from the pipe floors, standing in a room full of
 // vats and growth tanks where nobody would be dressed like that.
-function _drawLabTech(bx, by, facing, paused, hasGun) {
-    const walkCycle = paused ? 0 : Math.sin(Date.now() / 150) * 5;
-    const bob = paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
+function _drawLabTech(bx, by, facing, paused, hasGun, mem) {
+    // Measured in GROUND, like the rest of the cast. On the clock the cycle ran
+    // at a fixed rate whatever he was doing, so the foot he had put down
+    // travelled forward with him: measured at 99% of body speed.
+    const gp = mem ? gaitAdvance(mem, bx, !paused, by) : Date.now() / 150;
+    const walkCycle = paused ? 0 : Math.sin(gp) * 5;
+    const bob = paused ? 0 : Math.abs(Math.sin(gp)) * 1.5;
     const sideView = (facing === 'left' || facing === 'right');
     const dir = facing === 'left' ? -1 : 1;
     const isBack = (facing === 'back' || facing === 'up');
@@ -4867,7 +4882,14 @@ function _drawLabTech(bx, by, facing, paused, hasGun) {
     if(sideView) {
         // === SIDE-VIEW POSE — articulated profile with a real gait ===
         const lean = paused ? 0 : 1.5 * dir;      // slight forward lean while marching
-        const stride = walkCycle;                  // ±5 leg swing
+        // The legs carry their feet fore and aft off the shared cycle. At +/-5
+        // the planted foot could never hold its ground — over half a cycle the
+        // body covers PI * GAIT_PX = 25px — so it is the house 9.0/3.4 the rest
+        // of the cast walks its turned cycle on. dir is applied by the callers
+        // below, so these are in FACING space: gaitLeg with dir 1.
+        const gLead  = paused ? { swing: 0, lift: 0 } : gaitLeg(gp, 1, 9.0, 3.4);
+        const gTrail = paused ? { swing: 0, lift: 0 } : gaitLeg(gp + Math.PI, 1, 9.0, 3.4);
+        const stride = gLead.swing;
         const armSwing = walkCycle * 0.7;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -4913,18 +4935,18 @@ function _drawLabTech(bx, by, facing, paused, hasGun) {
         ctx.lineWidth = 5.6;
         ctx.beginPath();
         ctx.moveTo(bx - 2 * dir, hipY);
-        ctx.quadraticCurveTo(bx + (-stride * 0.4 + 1) * dir, by + 17 - bob,
-                             bx + (-stride - 1) * dir, footY - 2);
+        ctx.quadraticCurveTo(bx + (gTrail.swing * 0.4 + 1) * dir, by + 17 - bob,
+                             bx + (gTrail.swing - 1) * dir, footY - 2 - gTrail.lift);
         ctx.stroke();
-        drawShoe(bx + (-stride - 1) * dir, footY, true);
+        drawShoe(bx + (gTrail.swing - 1) * dir, footY - gTrail.lift, true);
         // Leading leg
         ctx.strokeStyle = TROUSE;
         ctx.beginPath();
         ctx.moveTo(bx + 2 * dir, hipY);
         ctx.quadraticCurveTo(bx + (stride * 0.4 + 3) * dir, by + 17 - bob,
-                             bx + (stride + 1) * dir, footY - 2);
+                             bx + (stride + 1) * dir, footY - 2 - gLead.lift);
         ctx.stroke();
-        drawShoe(bx + (stride + 1) * dir, footY, false);
+        drawShoe(bx + (stride + 1) * dir, footY - gLead.lift, false);
 
         // --- Torso. The red top first, then the lab coat open over it, so the
         // coat reads as a layer rather than as the body's own colour. ---
@@ -5622,6 +5644,7 @@ function _drawNPC(npc) {
     let isJumping = false;
     let isPacing = false;
     let isScreaming = false;
+    let poseDY = 0;        // vertical displacement a stressed pose asks for
     if(npc.needsDoc) {
         let pct = 0;
         // Check cracks array (levels 1-4, level 6 employee pipe room)
@@ -5638,11 +5661,11 @@ function _drawNPC(npc) {
             // Final phase — frozen Edvard Munch Scream pose, body trembling in horror
             isScreaming = true;
             x += Math.sin(Date.now() / 40) * 1.4;
-            y += Math.sin(Date.now() / 55) * 0.9;
+            poseDY = Math.sin(Date.now() / 55) * 0.9;
         } else if(pct >= 0.33) {
             // Mid phase — jumping up and down frantically
             isJumping = true;
-            y += (Math.cos(Date.now() / 60) - 1) * 7;
+            poseDY = (Math.cos(Date.now() / 60) - 1) * 7;
         } else if(pct > 0) {
             // Early phase — pacing back and forth
             isPacing = true;
@@ -5652,7 +5675,12 @@ function _drawNPC(npc) {
 
     // Climb/fix state is advanced by updateNPCPipeAnimation() before drawing;
     // read the updated npc.y for rendering.
-    y = npc.y;
+    //
+    // This threw away the vertical displacement the stressed poses had just
+    // applied, and one of those poses is JUMPING UP AND DOWN — so the frantic
+    // jump never left the floor and the Scream's tremble lost its vertical
+    // half. The pose offset is kept and re-applied on top of the authoritative y.
+    y = npc.y + poseDY;
     const isClimbing = npc.state === 'climbing_up' || npc.state === 'climbing_down';
 
     // Shadow at foot level — relative to NPC y position (feet at y + 16*s = y + 32)
@@ -6129,9 +6157,14 @@ function _drawNPC(npc) {
         } else if(isPacing) {
             // Pacing: a real walk cycle, swinging the way he is currently
             // travelling, since the sprite's own x is oscillating underneath.
-            const pacePh = Date.now() / 125;
+            // He paces by oscillating his own x, so the ground he covers is
+            // not constant — he is quickest through the middle of the sweep and
+            // stationary at each end. On the clock his legs kept stepping at a
+            // fixed rate through both, so he marked time at the turnarounds and
+            // under-stepped across the middle. Measured in ground like the rest.
+            const pacePh = gaitAdvance(npc, x, true);
             const paceDir = Math.cos(Date.now() / 250) >= 0 ? 1 : -1;
-            const swing = Math.sin(pacePh) * 3;
+            const swing = -Math.cos(pacePh) * 3;
             npcArms(x - 7.0*s + swing, y + 4.6*s, x + 7.0*s - swing, y + 4.6*s,
                     x - 7.4*s + swing, y - 0.2*s, x + 7.4*s - swing, y - 0.2*s);
             npcLegs(3.2, 2.6, pacePh, paceDir);
@@ -17282,7 +17315,7 @@ function drawNuclearAssemblyBridge() {
             const bx = bcb.x, by = bcb.y;
             const bob = bcb.paused ? 0 : Math.abs(Math.sin(Date.now() / 150)) * 1.5;
 
-            drawCloningBoss(bx, by, bcb.facing || 'forward', bcb.paused, true);
+            drawCloningBoss(bx, by, bcb.facing || 'forward', bcb.paused, true, bcb);
 
             // ARMED & DANGEROUS label
             ctx.fillStyle = 'rgba(120,0,0,0.85)';
@@ -20105,13 +20138,25 @@ function drawLevel6CloningRoom() {
         ctx.save();
         ctx.beginPath(); ctx.rect(beltX0, beltY, beltX1 - beltX0, beltH); ctx.clip();
         // Metallic slat dividers — moving with belt
-        for(let bx = beltX0 - beltSpeed; bx < beltX1 + 22; bx += 22) {
+        // Which slats carry rivets came off the slat's SCREEN POSITION, rounded:
+        //     Math.round((bx - beltX0) / 22) % 4
+        // bx slides with beltSpeed, so that rounding flips by one halfway
+        // through every 22px of travel and the rivets hopped to a different
+        // slat twice per slat of belt — the same fault the treeline had. The
+        // slat index is a genuine IDENTITY now: it steps by exactly one when a
+        // slat wraps and never changes otherwise.
+        // A slat's world identity: its screen position is
+        //     beltX0 - S + 22n   with S the belt's total travel
+        // and the loop visits beltX0 - (S mod 22) + 22k, so n = floor(S/22) + k.
+        // That steps by exactly one when a slat wraps and never changes otherwise.
+        let slatIdx = Math.floor(beltT * 0.07 / 22);
+        for(let bx = beltX0 - beltSpeed; bx < beltX1 + 22; bx += 22, slatIdx++) {
             // Slat gap (dark line)
             ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx, beltY, 2, beltH);
             // Slat highlight (left edge catch light)
             ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(bx + 2, beltY, 1, beltH);
             // Bolt rivets on every 4th slat
-            if(Math.round((bx - beltX0) / 22) % 4 === 0) {
+            if(((slatIdx % 4) + 4) % 4 === 0) {
                 ctx.fillStyle = '#555';
                 ctx.beginPath(); ctx.arc(bx + 11, beltY + 3, 1.5, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(bx + 11, beltY + beltH - 3, 1.5, 0, Math.PI * 2); ctx.fill();
@@ -20285,7 +20330,7 @@ function drawLevel6CloningRoom() {
     // === CLONING BOSS — Lab Supervisor patrolling in front of centrifuge ===
     const cb = level6.cloningBoss;
     if (cb.alive) {
-        drawLabTech(cb.x, cb.y, cb.facing || 'forward', cb.paused, false);
+        drawLabTech(cb.x, cb.y, cb.facing || 'forward', cb.paused, false, cb);
     } else if (cb.deathTime > 0) {
         // Dead lab tech — proper horizontal body lying on ground
         drawDeadLabTech(cb.x, 392);
@@ -28911,6 +28956,7 @@ function drawSkeletonPlayer(x, y, facing) {
     const gy = y + FOOT_FIX.skeleton;
     shadeSprite(x + 0, gy + 13, 21, 44, () => _drawSkeletonPlayer(x, gy, facing));
 }
+const _skeletonGait = {};   // his walk cycle, measured in floor rather than in seconds
 function _drawSkeletonPlayer(x, y, facing) {
     const BONE = '#e8e2c8';
     const BONE_DARK = '#9a9480';
@@ -28936,31 +28982,45 @@ function _drawSkeletonPlayer(x, y, facing) {
         //   shoulder: sy - 50   (y)
         //   skull ctr:sy - 66   (y - 16)
         const f = (facing === 'right') ? 1 : -1;
-        const walkCycle = Math.sin(Date.now() / 110);
-        const legSwing = walkCycle * 7;
-        const armSwing = -walkCycle * 6;
+        // Measured in GROUND, not in seconds, and the swing CARRIES THE FACING.
+        // On the clock his stance foot ran forward at 100% of body speed, and
+        // with no f in the swing his legs drove the same way on screen whichever
+        // way he was going — so walking left he stepped backwards.
+        const skPh = gaitAdvance(_skeletonGait, x, true, y);
+        const walkCycle = Math.sin(skPh);
+        // Each leg gets its own half of the cycle, so one foot is DOWN while the
+        // other swings through and clears the ground. Both feet used to sit on
+        // the baseline for the whole cycle — with nothing ever lifted, neither
+        // foot was ever planted and the pair just slid along under him.
+        const gA = gaitLeg(skPh, f, 9, 5);
+        const gB = gaitLeg(skPh + Math.PI, f, 9, 5);
+        const armSwing = Math.cos(skPh) * 6 * f;
 
         // Legs — hip → knee → foot
-        ctx.strokeStyle = BONE; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.strokeStyle = BONE_DARK;                 // far leg, behind
         ctx.beginPath();
         ctx.moveTo(sx - 3, sy - 28);
-        ctx.lineTo(sx - 5 - legSwing, sy - 14);
-        ctx.lineTo(sx - 4 - legSwing, sy);
+        ctx.lineTo(sx - 5 + gB.swing, sy - 14 - gB.lift * 0.5);
+        ctx.lineTo(sx - 4 + gB.swing, sy - gB.lift);
         ctx.stroke();
+        ctx.strokeStyle = BONE;                      // near leg, in front
         ctx.beginPath();
         ctx.moveTo(sx + 3, sy - 28);
-        ctx.lineTo(sx + 5 + legSwing, sy - 14);
-        ctx.lineTo(sx + 4 + legSwing, sy);
+        ctx.lineTo(sx + 5 + gA.swing, sy - 14 - gA.lift * 0.5);
+        ctx.lineTo(sx + 4 + gA.swing, sy - gA.lift);
         ctx.stroke();
         // Feet — point in the direction of travel
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(sx - 4 - legSwing, sy);
-        ctx.lineTo(sx - 4 - legSwing + f * 6, sy);
+        ctx.strokeStyle = BONE_DARK;
+        ctx.moveTo(sx - 4 + gB.swing, sy - gB.lift);
+        ctx.lineTo(sx - 4 + gB.swing + f * 6, sy - gB.lift);
         ctx.stroke();
+        ctx.strokeStyle = BONE;
         ctx.beginPath();
-        ctx.moveTo(sx + 4 + legSwing, sy);
-        ctx.lineTo(sx + 4 + legSwing + f * 6, sy);
+        ctx.moveTo(sx + 4 + gA.swing, sy - gA.lift);
+        ctx.lineTo(sx + 4 + gA.swing + f * 6, sy - gA.lift);
         ctx.stroke();
 
         // Pelvis
@@ -30671,7 +30731,7 @@ function drawScene() {
             // Draw employee hallway cloning boss if alive
             const hallCB = level6.hallwayCloningBoss;
             if(hallCB && hallCB.alive) {
-                drawCloningBoss(hallCB.x, hallCB.y, hallCB.facing || 'forward', hallCB.paused, !!level6.hasDetectiveHat);
+                drawCloningBoss(hallCB.x, hallCB.y, hallCB.facing || 'forward', hallCB.paused, !!level6.hasDetectiveHat, hallCB);
             } else if(hallCB && hallCB.deathTime > 0) {
                 // Dead hallway boss — proper horizontal body lying on ground
                 drawDeadCloningBoss(hallCB.x, 392);
