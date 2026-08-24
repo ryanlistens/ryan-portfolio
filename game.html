@@ -1988,12 +1988,26 @@ function gaitLeg(phase, dir, amp, lift) {
 // actually read.
 const GAIT_PX = 8.0;
 const GAIT_PER_PX = 1 / GAIT_PX;
+// Anything further than this in a single frame is a CUT, not a stride — a room
+// change, a cutscene, the same body handed to a different character — and buys
+// no steps. Without it a sprite that teleports spins its legs for the jump.
+const GAIT_CUT_PX = 40;
 // Accumulate a sprite's gait phase from how far it actually moved. `mem` is any
-// object that lives between frames — the phase and the last x are kept on it.
-function gaitAdvance(mem, x, moving) {
-    if(mem._gx === undefined) { mem._gx = x; mem._gp = 0; }
-    if(moving) mem._gp += Math.abs(x - mem._gx) * GAIT_PER_PX;
-    mem._gx = x;
+// object that lives between frames — the phase and the last position are kept
+// on it. `y` is optional; pass it for anyone who walks up and down the screen
+// as well as across it, or their legs stop moving the moment they turn.
+function gaitAdvance(mem, x, moving, y) {
+    const gy = (y === undefined) ? 0 : y;
+    if(mem._gx === undefined) { mem._gx = x; mem._gy = gy; mem._gp = 0; }
+    // Idempotent within a frame. These are called from DRAW code, and a sprite
+    // drawn twice in one frame — a reflection, a second pass for its weapon —
+    // must not take two steps for it.
+    if(mem._gf !== frame) {
+        mem._gf = frame;
+        const d = Math.hypot(x - mem._gx, gy - mem._gy);
+        if(moving && d <= GAIT_CUT_PX) mem._gp += d * GAIT_PER_PX;
+        mem._gx = x; mem._gy = gy;
+    }
     return mem._gp;
 }
 
@@ -2956,9 +2970,18 @@ function mulletProfileHead(x, y, s, d, opt) {
 // Two arms at the same height on either side of the body is front-view geometry
 // seen sideways, which is what made him a paper man.
 //   d = -1 facing left, +1 facing right
-function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
+// ph/amp/lift are the walk cycle. The legs used to share ONE scalar stride and
+// move by +/-3px with no lift at all, so both soles stayed on the floor for the
+// whole cycle and travelled with the body: measured, his stance foot ran forward
+// at 89% of body speed. Each leg carries its own gaitLeg now — the planted one
+// travels back under him while the other swings through and clears the ground.
+function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part, ph = 0, amp = 0, lift = 0) {
     const u = (k) => x + d * k * s;
     const fwd = d * stride;
+    // Far leg and near leg, half a cycle apart. gaitLeg returns SCREEN-space
+    // carry, so these are added to x directly rather than through u().
+    const gFar  = gaitLeg(ph + Math.PI, d, amp, lift);
+    const gNear = gaitLeg(ph,           d, amp, lift);
     const JACKET   = '#800020';
     // A sleeve seen against a chest of the same cloth is separated by an EDGE,
     // not by tint — pushing the near sleeve pale enough to see turned it into a
@@ -2979,7 +3002,6 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     };
     const JEAN_N = '#a4c2db', JEAN_F = '#7f9db8';
     const SKIN = '#f5c89a';
-    const fU = stride / s;            // the stride, in the same units as u()
     // Feet point where he is FACING. The shoe was a symmetric rounded rect
     // anchored with Math.min of the leg's two bottom corners, and pathRoundRect
     // always extends to the RIGHT in screen space — so in both facings the
@@ -2987,18 +3009,20 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     // with his feet on backwards. Placed from the TOE now, which is forward of
     // the leg's front edge, with a squared heel block behind so the foot has a
     // direction at all.
-    const mpShoe = (toeU, topY, col) => {
-        const LEN = 4.6, H = 2.4*s;
+    // dx is the leg's screen-space carry, so the shoe rides with the foot it
+    // belongs to rather than with the body.
+    const mpShoe = (toeU, topY, col, dx) => {
+        const LEN = 4.6, H = 2.4*s, ox = dx || 0;
         ctx.fillStyle = col;
-        pathRoundRect(Math.min(u(toeU), u(toeU - LEN)), topY, LEN*s, H, 1*s);
+        pathRoundRect(Math.min(u(toeU), u(toeU - LEN)) + ox, topY, LEN*s, H, 1*s);
         ctx.fill();
         ctx.fillStyle = charMix(col, '#000000', 0.22);
-        ctx.fillRect(Math.min(u(toeU - LEN), u(toeU - LEN + 1.05)),
+        ctx.fillRect(Math.min(u(toeU - LEN), u(toeU - LEN + 1.05)) + ox,
                      topY + H*0.42, 1.05*s, H*0.58);
         // a lighter toe cap, so the front reads as the front
         ctx.fillStyle = charMix(col, '#ffffff', 0.10);
         ctx.beginPath();
-        ctx.ellipse(u(toeU - 0.75), topY + H*0.40, 0.85*s, H*0.30, 0, 0, Math.PI*2);
+        ctx.ellipse(u(toeU - 0.75) + ox, topY + H*0.40, 0.85*s, H*0.30, 0, 0, Math.PI*2);
         ctx.fill();
     };
     const shY = y - 1.0*s;            // shoulder line, low enough to show neck
@@ -3031,12 +3055,15 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
     // 1 — FAR leg, set back and darker, swinging behind. In profile the legs
     // sit one BEHIND the other and overlap; side by side across 10*s is the
     // front view's spread and reads as a man facing you with a profile head.
+    const farSole = y + 16*s - gFar.lift;
     ctx.fillStyle = JEAN_F;
     ctx.beginPath();
-    ctx.moveTo(u(-3.2), y + 7.4*s);       ctx.lineTo(u(0.6), y + 7.4*s);
-    ctx.lineTo(u(0.3) - fwd, y + 16*s);   ctx.lineTo(u(-3.2) - fwd, y + 16*s);
+    ctx.moveTo(u(-3.2), y + 7.4*s);
+    ctx.lineTo(u(0.6), y + 7.4*s);
+    ctx.lineTo(u(0.3) + gFar.swing, farSole);
+    ctx.lineTo(u(-3.2) + gFar.swing, farSole);
     ctx.closePath(); ctx.fill();
-    mpShoe(0.3 - fU + 1.3, y + 16*s, charMix('#654321', '#000000', 0.26));
+    mpShoe(0.3 + 1.3, farSole, charMix('#654321', '#000000', 0.26), gFar.swing);
 
     // 2 — FAR arm, behind the jacket AND behind the near leg, so the body
     // occludes it. Drawn only when he is actually swinging it or carrying with
@@ -3056,16 +3083,20 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
 
     // 3 — NEAR leg, in front, swinging forward. Before the jacket so the hem
     // overlaps both hips rather than the legs hanging off a floating box.
+    const nearSole = y + 16*s - gNear.lift;
     ctx.fillStyle = JEAN_N;
     ctx.beginPath();
-    ctx.moveTo(u(-0.6), y + 7.4*s);       ctx.lineTo(u(3.2), y + 7.4*s);
-    ctx.lineTo(u(2.9) + fwd, y + 16*s);   ctx.lineTo(u(-0.5) + fwd, y + 16*s);
+    ctx.moveTo(u(-0.6), y + 7.4*s);
+    ctx.lineTo(u(3.2), y + 7.4*s);
+    ctx.lineTo(u(2.9) + gNear.swing, nearSole);
+    ctx.lineTo(u(-0.5) + gNear.swing, nearSole);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = 'rgba(0,0,0,0.24)';                   // edge against the far leg
-    ctx.fillRect(Math.min(u(-0.6), u(-0.5) + fwd), y + 8.6*s, 0.6*s, 7.4*s);
+    ctx.fillRect(Math.min(u(-0.6), u(-0.5) + gNear.swing), y + 8.6*s, 0.6*s,
+                 Math.max(0, nearSole - (y + 8.6*s)));
     ctx.fillStyle = 'rgba(0,0,0,0.10)';                   // knee break, as up front
     ctx.fillRect(Math.min(u(-0.6), u(3.2)), y + 11.6*s, 3.8*s, 0.9*s);
-    mpShoe(2.9 + fU + 1.3, y + 16*s, '#654321');
+    mpShoe(2.9 + 1.3, nearSole, '#654321', gNear.swing);
 
     // 4 — JACKET. Depth, not width: shallower than the front view is wide, but
     // never shallower than the skull, or the profile is a plank with a ball on
@@ -3124,13 +3155,30 @@ function mulletProfileBody(x, y, s, d, stride, holding, hasGun, part) {
 // the hell renderer's ladder grip and wrench turn — can reuse this body instead
 // of hand-building a whole second Mullet Pro that never sees any of the work
 // done here.
-function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null, noArms = false) {
+// `mem` is any object that lives between frames — the player, an NPC record —
+// and it is what carries the walk cycle. The phase comes off DISTANCE TRAVELLED
+// when a caller can supply one, exactly as the pipe managers' does, and only
+// falls back to the frame counter when it cannot: on the clock the cycle runs at
+// a fixed rate whatever the body is doing, so the planted foot slides forward
+// over the ground for the whole stance phase. Measured at 4.43 px/frame against
+// a body doing 5.00 — 89% of body speed, which is a moonwalk.
+function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking = null, noArms = false, mem = null) {
     const s = 2.4;   // 2 put him 16% shorter than the rest of the cast
     const isBack = (facing === 'back' || facing === 'up');
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
-    const mpStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
-    const mpPh = frame * 0.25;
+    const mpPh = mem ? gaitAdvance(mem, x, isWalking, y) : frame * 0.25;
+    // The arm swing rides the SAME phase the legs do, on the same cos, so the
+    // two halves of him cannot drift apart — a sin here was 90 degrees out from
+    // the legs, and on the clock the arms and legs kept separate time.
+    const mpStride = isWalking ? -Math.cos(mpPh) * 3 : 0;
+    // FACE-ON the legs stand side by side and a fore/aft swing has nowhere to
+    // go on screen, so only the lift reads. TURNED it is the whole stride, and
+    // the amplitude has to be big enough for the planted foot to hold its
+    // ground: over half a cycle the body covers PI * GAIT_PX = 25px, so a
+    // 3.2px swing left the foot travelling forward for the entire stance. Same
+    // 9.0 / 3.4 the pipe managers walk their turned cycle on.
     const mpAmp = isWalking ? 3.2 : 0, mpLift = isWalking ? 2.6 : 0;
+    const mpTurnAmp = isWalking ? 9.0 : 0, mpTurnLift = isWalking ? 3.4 : 0;
     const mpDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
 
     // Shadow — at foot level (y+36 = shoe bottom)
@@ -3142,9 +3190,9 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     if(facing === 'left' || facing === 'right') {
         const d = facing === 'left' ? -1 : 1;
         // A raised arm belongs BEHIND the head, so it is drawn before it.
-        mulletProfileBody(x, y, s, d, mpStride, holding, hasGun, 'raisedArms');
+        mulletProfileBody(x, y, s, d, mpStride, holding, hasGun, 'raisedArms', mpPh, mpTurnAmp, mpTurnLift);
         mulletProfileHead(x, y, s, d);
-        mulletProfileBody(x, y, s, d, mpStride, holding, hasGun, 'main');
+        mulletProfileBody(x, y, s, d, mpStride, holding, hasGun, 'main', mpPh, mpTurnAmp, mpTurnLift);
         // The torso is painted over the head's hanging length, so the mullet is
         // re-stamped on top, clipped below the collar line.
         mulletProfileHead(x, y, s, d, { overCollar: true });
@@ -3386,11 +3434,17 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
 
         // --- Arms from deltoid caps, tapering to the wrist ---
         const mpCapY = y - 0.8*s, mpShX = 6.9*s;
+        // The key light in this room is fixed TOP-LEFT — charTorso lights the
+        // left edge of the chest, charHead puts the temple highlight on the
+        // left, and shadeSprite composites a top-left key over the finished
+        // sprite. The limbs were shaded the other way round: the DARK limb on
+        // the LIT side, so his left arm and left leg were in shadow against a
+        // chest lit from the left. Left is the lit side for all of them now.
         const mpArm = (side, wristX, wristY, bendX, bendY) => {
             charLimb(x + side * mpShX, mpCapY, wristX, wristY, 2.0*s,
-                     side < 0 ? mpRamp.dark : charMix('#800020', '#000', 0.08), bendX, bendY);
+                     side < 0 ? charMix('#800020', '#000', 0.08) : mpRamp.dark, bendX, bendY);
             charDeltoid(x + side * mpShX, mpCapY, 1.2*s,
-                        side < 0 ? charMix('#800020','#000',0.16) : charMix('#800020','#fff',0.10));
+                        side < 0 ? charMix('#800020','#fff',0.10) : charMix('#800020','#000',0.16));
         };
         if(noArms) {
             // caller draws its own
@@ -3415,8 +3469,9 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
         // --- Jeans: each foot lifts off a fixed contact line, never through it ---
         // Legs hinged from a fixed hip, feet carried fore and aft
         const mpHip = y + 8*s, mpSole = y + 16*s;
-        for(const [lx0, col, ph] of [[-5*s, '#8fb0cc', mpPh],
-                                     [ s,   '#a4c2db', mpPh + Math.PI]]) {
+        // Lit leg on the left, same as the chest above it.
+        for(const [lx0, col, ph] of [[-5*s, '#a4c2db', mpPh],
+                                     [ s,   '#8fb0cc', mpPh + Math.PI]]) {
             const g = gaitLeg(ph, mpDir, mpAmp, mpLift);
             const bot = mpSole - g.lift;
             ctx.fillStyle = col;
@@ -3681,11 +3736,11 @@ function _drawMulletProAsPM(npc) {
         // ears would, and that is what they read as.
         const scCapY = y - 1.2*s, scShX = 5.9*s;
         charLimb(x - scShX, scCapY, x - 5.8*s, y - 7.4*s, 2.4*s,
-                 scRamp.dark, x - 9.8*s, y - 2.6*s);
+                 charMix(SC_SUIT, '#fff', 0.12), x - 9.8*s, y - 2.6*s);
         charLimb(x + scShX, scCapY, x + 5.8*s, y - 7.4*s, 2.4*s,
-                 charMix(SC_SUIT, '#fff', 0.12), x + 9.8*s, y - 2.6*s);
-        charDeltoid(x - scShX, scCapY, 1.4*s, charMix(SC_SUIT, '#000', 0.18));
-        charDeltoid(x + scShX, scCapY, 1.4*s, charMix(SC_SUIT, '#fff', 0.16));
+                 scRamp.dark, x + 9.8*s, y - 2.6*s);
+        charDeltoid(x - scShX, scCapY, 1.4*s, charMix(SC_SUIT, '#fff', 0.16));
+        charDeltoid(x + scShX, scCapY, 1.4*s, charMix(SC_SUIT, '#000', 0.18));
         charHand(x - 5.9*s, y - 7.9*s, 1.25*s, SC_SKIN);
         charHand(x + 5.9*s, y - 7.9*s, 1.25*s, SC_SKIN);
     } else {
@@ -3734,10 +3789,21 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
     const skinColor = (opts && opts.skin) || '#f5c89a';
     const skinShade = charMix(skinColor, '#000000', 0.09);
 
-    // Arm swing for walking (only when not holding doc or weapon)
-    const bmStride = isWalking ? Math.sin(frame * 0.25) * 3 : 0;
-    const bmPh = frame * 0.25;
+    // The walk cycle, measured in GROUND when opts.mem gives it somewhere to
+    // live between frames — the same contract the pipe managers walk on. On the
+    // frame counter it ran at a fixed rate whatever the body was doing, and his
+    // planted foot travelled forward at 82% of body speed for the whole stance.
+    const bmPh = (opts && opts.mem) ? gaitAdvance(opts.mem, x, isWalking, y)
+                                    : frame * 0.25;
+    // Arm swing on the SAME phase and the same cos the legs use, so the two
+    // halves of him keep time with each other.
+    const bmStride = isWalking ? -Math.cos(bmPh) * 3 : 0;
     const bmAmp = isWalking ? 3.4 : 0, bmLift = isWalking ? 2.8 : 0;
+    // Turned, the stride is the whole of what you read, and it has to be big
+    // enough for the planted foot to hold its ground over the 25px of floor the
+    // body covers in half a cycle. Face-on the legs are side by side and only
+    // the lift has anywhere to go.
+    const bmTurnAmp = isWalking ? 9.0 : 0, bmTurnLift = isWalking ? 3.4 : 0;
     // Which way he is travelling, so the planted foot goes the right way
     const bmDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
     // Legs hinged from a fixed hip: top edge stays on the hips, the foot swings
@@ -3798,7 +3864,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
             // hip in profile they merge into a single dark column
             for(const [ph, hx0, col, shoe] of [[bmPh, -0.7, '#101010', '#000'],
                                                [bmPh + Math.PI, 0.9, '#232323', '#151515']]) {
-                const g = gaitLeg(ph, d, bmAmp, bmLift);
+                const g = gaitLeg(ph, d, bmTurnAmp, bmTurnLift);
                 const foot = sole - g.lift;
                 ctx.strokeStyle = col;
                 ctx.lineWidth = 4.0*s;
@@ -4054,9 +4120,10 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
         // round cap they read as pale sausages that swallowed the tie.
         const bmCapY = y + 2.2*s, bmShX = 6.9*s;
         const bmArm = (side, wristX, wristY, bendX, bendY) => {
+            // Lit sleeve on the LEFT, with the key light, not against it.
             charLimb(x + side * bmShX, bmCapY, wristX, wristY, 1.9*s,
-                     side < 0 ? '#d4d4d4' : '#ededed', bendX, bendY);
-            charDeltoid(x + side * bmShX, bmCapY, 1.15*s, side < 0 ? '#dcdcdc' : '#f6f6f6');
+                     side < 0 ? '#ededed' : '#d4d4d4', bendX, bendY);
+            charDeltoid(x + side * bmShX, bmCapY, 1.15*s, side < 0 ? '#f6f6f6' : '#dcdcdc');
             // Seam where the sleeve passes the chest, so arm and shirt separate
             ctx.strokeStyle = 'rgba(120,120,120,0.45)'; ctx.lineWidth = 1;
             ctx.beginPath();
@@ -4092,7 +4159,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
             ctx.fillStyle = '#c9a227';                   // buckle
             ctx.fillRect(x - 1.1*s, y + 12*s, 2.2*s, 1.8*s);
         }
-        bmLegs(y + 15*s, y + 23*s, 4*s, '#141414', '#1f1f1f', '#000', 2.2*s,
+        bmLegs(y + 15*s, y + 23*s, 4*s, '#1f1f1f', '#141414', '#000', 2.2*s,
                'rgba(255,255,255,0.05)');
     }
 
@@ -5446,7 +5513,7 @@ function drawBoss(x, y, ...rest) {
     const f = (facing === 'left' || facing === 'right' || facing === 'back'
                || facing === 'front') ? facing : 'right';
     drawBaldManager(x, y, f, false, false,
-                    { walking: !!boss.walking,
+                    { walking: !!boss.walking, mem: boss,
                       skin: boss.angry ? '#e2705c' : undefined });
 
     // The colour he is asking you for. This lived at the bottom of the old
@@ -5745,9 +5812,9 @@ function _drawNPC(npc) {
             // top, so he read as a torso with two stubs above it rather than a
             // man reaching up.
             charLimb(x - shX, capY, x - reachX, reachY,
-                     2.3*s, npcRamp.dark, x - 8.8*s, y - 11*s);
+                     2.3*s, armLit,       x - 8.8*s, y - 11*s);
             charLimb(x + shX, capY, x + reachX, reachY,
-                     2.3*s, armLit,       x + 8.8*s, y - 11*s);
+                     2.3*s, npcRamp.dark, x + 8.8*s, y - 11*s);
             // No deltoid caps. They work on the hanging pose because the arm
             // drops straight out of them and swallows them; an arm that leaves
             // UPWARD leaves the cap sitting there as a bare ball joint on the
@@ -5809,19 +5876,19 @@ function _drawNPC(npc) {
             // Hands are inside the pipe, so the arms run out and stop — no hand
             // caps. They rock with the torque coming off the wrench.
             charLimb(x - bShX, bCapY, x - 6.0*s + torque, y + 2.6*s,
-                     2.3*s, npcRamp.dark, x - 7.4*s + torque, y - 0.6*s);
+                     2.3*s, armLit,      x - 7.4*s + torque, y - 0.6*s);
             charLimb(x + bShX, bCapY, x + 6.0*s + torque, y + 2.6*s,
-                     2.3*s, armLit,      x + 7.4*s + torque, y - 0.6*s);
-            charDeltoid(x - bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
-            charDeltoid(x + bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+                     2.3*s, npcRamp.dark, x + 7.4*s + torque, y - 0.6*s);
+            charDeltoid(x - bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            charDeltoid(x + bShX, bCapY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
         } else if(!isBackTurn) {
             // Climbing: each hand takes a rung and they alternate up the rails.
             const gripL = y - 11.5*s - climbCycle * 1.5;
             const gripR = y - 11.5*s + climbCycle * 1.5;
             charLimb(x - bShX, bCapY, x - 7.0*s, gripL,
-                     2.3*s, npcRamp.dark, x - 8.6*s, y - 7.0*s);
+                     2.3*s, armLit,      x - 8.6*s, y - 7.0*s);
             charLimb(x + bShX, bCapY, x + 7.0*s, gripR,
-                     2.3*s, armLit,      x + 8.6*s, y - 7.0*s);
+                     2.3*s, npcRamp.dark, x + 8.6*s, y - 7.0*s);
             charHand(x - 7.0*s, gripL, 1.4*s, '#f5c89a');
             charHand(x + 7.0*s, gripR, 1.4*s, '#f5c89a');
         }
@@ -6013,16 +6080,19 @@ function _drawNPC(npc) {
         // only the motion differs.
         const armSkin = '#f5c89a';
         const capY = y - 3.8*s, shX = 5.6*s;
+        // Key light TOP-LEFT, as everywhere else: the screen-LEFT limb is the
+        // lit one. These three poses kept the dark arm on the lit side long
+        // after the standing pose beside them was put right.
         const armDark = npcRamp.dark, armLitF = charMix(npc.color.hex, '#000', 0.10);
         // Both arms from one call: each side gets a tapered limb off a deltoid
         // cap sitting ON the shoulder, ending in a hand at the wrist.
         // handDY carries the hand past the wrist along the limb — down for an
         // arm that hangs, up for one that is raised.
         const npcArms = (wristLX, wristLY, wristRX, wristRY, bendLX, bendLY, bendRX, bendRY, handR, handDY) => {
-            charLimb(x - shX, capY, wristLX, wristLY, 2.3*s, armDark,  bendLX, bendLY);
-            charLimb(x + shX, capY, wristRX, wristRY, 2.3*s, armLitF, bendRX, bendRY);
-            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
-            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            charLimb(x - shX, capY, wristLX, wristLY, 2.3*s, armLitF, bendLX, bendLY);
+            charLimb(x + shX, capY, wristRX, wristRY, 2.3*s, armDark,  bendRX, bendRY);
+            charDeltoid(x - shX, capY, 1.35*s, charMix(npc.color.hex, '#fff', 0.10));
+            charDeltoid(x + shX, capY, 1.35*s, charMix(npc.color.hex, '#000', 0.16));
             const hdy = (handDY === undefined) ? 0.8*s : handDY;
             charHand(wristLX, wristLY + hdy, handR || 1.4*s, armSkin);
             charHand(wristRX, wristRY + hdy, handR || 1.4*s, armSkin);
@@ -6030,8 +6100,8 @@ function _drawNPC(npc) {
         // Legs hinged from a fixed hip, each carrying its foot fore and aft.
         const npcLegs = (amp, lift, phase, dir) => {
             const hip = y + 6*s, sole = y + 13*s;
-            for(const [lx0, col, ph] of [[-5*s, npcRamp.dark, phase],
-                                         [ s,   npcRamp.base, phase + Math.PI]]) {
+            for(const [lx0, col, ph] of [[-5*s, npcRamp.base, phase],
+                                         [ s,   npcRamp.dark, phase + Math.PI]]) {
                 const g = gaitLeg(ph, dir || 0, amp, lift);
                 const bot = sole - g.lift;
                 ctx.fillStyle = col;
@@ -6100,7 +6170,8 @@ function _drawNPC(npc) {
                     // Worried: the near arm folds up so the hand reaches the
                     // cheek — elbow out, forearm rising, hand at the end of it
                     charLimb(x - shX, capY, x - 5.0*s, y - 7.2*s,
-                             2.3*s, npcRamp.dark, x - 8.6*s, y - 3.0*s);
+                             2.3*s, charMix(npc.color.hex, '#fff', 0.06),
+                             x - 8.6*s, y - 3.0*s);
                     charHand(x - 4.8*s, y - 7.8*s, 1.5*s, '#f5c89a');
                 } else {
                     charLimb(x - shX + tArm, capY, x - 7.0*s + npcStride + tArm, y + 4.6*s,
@@ -10775,7 +10846,7 @@ function drawLevel5PipeRoom() {
         if(!level5.mulletPro.deathStartTime) level5.mulletPro.deathStartTime = Date.now();
         drawMulletProDeathAnimatic(level5.mulletPro);
     } else if(!level5.mulletPro.deathDone) {
-        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
+        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward', false, level5.mulletPro);
 
         if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
             drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
@@ -11023,7 +11094,7 @@ function drawLevel6EmployeePipeRoom() {
     // mutant's menu, so he has to be able to leave the screen; without this he
     // kept doing his rounds after being eaten.
     if(!npcDevoured(level5.mulletPro)) {
-        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward');
+        drawMulletPro(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.facing, level5.mulletPro.hasDoc, false, level5.mulletPro.state !== 'idle' && level5.mulletPro.facing !== 'forward', false, level5.mulletPro);
         if(level5.mulletPro.hasDoc && level5.mulletPro.docColor) {
             drawHeldDoc(level5.mulletPro.x, level5.mulletPro.y, level5.mulletPro.docColor.name);
         }
@@ -12682,7 +12753,13 @@ function drawMutantPlayer(x, y, ...rest) {
     shadeSprite(x + 0, gy + -12, 46, 58, () => _drawMutantPlayer(x, gy, ...rest));
 }
 
-function _drawMutantPlayer(x, y, facing, walking, eating) {
+// `ph` is the walk cycle, measured in GROUND by whoever is moving him. Without
+// one the cycle falls back to the wall clock and runs at a fixed rate whatever
+// his body is doing, which put his stance foot forward at 93% of body speed —
+// the moonwalk. The arms ran on a SECOND clock a different length again (110ms
+// against the legs' 95ms), so the two halves of him drifted through each other
+// on a slow beat instead of belonging to one stride.
+function _drawMutantPlayer(x, y, facing, walking, eating, ph = null) {
     // This is the SAME creature that was in the cage — after the detective
     // frees him you are playing his story, so every feature is matched to
     // the caged sprite: squared skull with a bulging brow, thick brows,
@@ -12700,7 +12777,9 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     const t = Date.now();
     const dir = (facing === 'left') ? -1 : 1;
     const isBack = (facing === 'back' || facing === 'up');
-    const gait = walking ? Math.sin(t / 110) : 0;
+    // ONE cycle for the whole creature — legs, arms and the bob off his stride.
+    const gp = (ph !== null && ph !== undefined) ? ph : t / 95;
+    const gait = walking ? Math.sin(gp) : 0;
     const breathe = Math.sin(t / 800) * 2;              // matches cage breathing
     const bob = walking ? Math.abs(gait) * -3 : breathe * 0.5;
     const hipY = y + 4 + bob;
@@ -12723,7 +12802,10 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     // One arm, hung from a shoulder and carried low and forward. `depth` is -1
     // for the far arm (drawn before the torso) and +1 for the near one.
     const mutantArm = (sgn, depth) => {
-        const sw = Math.sin(t / 110 + (sgn < 0 ? Math.PI : 0)) * (walking ? 7 : 0);
+        // Same cos the legs run on, and it CARRIES THE FACING: without it the
+        // arms drove one way while the legs drove the other every time he ran
+        // left.
+        const sw = walking ? -Math.cos(gp + (sgn < 0 ? Math.PI : 0)) * 7 * dir : 0;
         const sx = sgn < 0 ? shL : shR;
         // knuckles ahead of him, and further ahead on the near side
         // The far arm has to clear the torso silhouette or it is simply not
@@ -12795,8 +12877,8 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
     // the cycle and read as one black plank under him. Same gaitLeg every other
     // character in the game uses — the planted foot travels back under him
     // while the airborne one swings through and clears the ground.
-    for(const [sgn, ph] of [[-1, 0], [1, Math.PI]]) {
-        const g = walking ? gaitLeg(t / 95 + ph, dir, 13, 8) : { swing: 0, lift: 0 };
+    for(const [sgn, lph] of [[-1, 0], [1, Math.PI]]) {
+        const g = walking ? gaitLeg(gp + lph, dir, 13, 8) : { swing: 0, lift: 0 };
         const footX = x + sgn * 9 + g.swing;
         const footY = y + 25 - g.lift;
         ctx.strokeStyle = sgn * dir < 0 ? charMix('#cc2222', '#000', 0.12) : '#cc2222';
@@ -12923,6 +13005,7 @@ function _drawMutantPlayer(x, y, facing, walking, eating) {
 // Tracks horizontal movement itself so the gait animates without threading a
 // "walking" flag through a dozen call sites.
 let _mutLastX = null, _mutWalkTimer = 0;
+const _mutGait = {};    // his run cycle, measured in floor rather than in seconds
 // Same idea for RED in his own ending — he is drawn by the pipe manager sprite,
 // which had no reason to know about walking until he became the player.
 let _redsLastX = null, _redsWalkTimer = 0;
@@ -12940,10 +13023,12 @@ function drawL6Player(x, y, facing, holding) {
         if(_mutLastX !== null && Math.abs(x - _mutLastX) > 0.4) _mutWalkTimer = 8;
         else if(_mutWalkTimer > 0) _mutWalkTimer--;
         _mutLastX = x;
-        drawMutantPlayer(x, y, facing, _mutWalkTimer > 0, mm.eating);
+        const running = _mutWalkTimer > 0;
+        drawMutantPlayer(x, y, facing, running, mm.eating,
+                         gaitAdvance(_mutGait, x, running, y));
         return;                       // the mutant is disarmed; nothing to hold
     }
-    drawBaldManager(x, y, facing, holding, hasGun);
+    drawBaldManager(x, y, facing, holding, hasGun, { mem: player });
     drawActiveWeapon();
 }
 
@@ -13330,12 +13415,18 @@ function drawMutantFreeCard() {
 
     // ── THE RUNNER — planted, with the world going past ──────────────────────
     const RUN_X = 208, RUN_FOOT = HZ + 78;
+    // He holds his ground and the WORLD moves, so the ground he covers is the
+    // speed of the band he is standing on — and his stride has to be measured
+    // against THAT or his feet slide over scenery moving at a different rate.
+    // His contact plane sits between the mid-field grass (1.9) and the front
+    // verge (3.4), a little past halfway down the gap, which is 2.7.
+    const RUN_GROUND = 2.7;
     ctx.fillStyle = `rgba(30,60,30,${0.22 * fade})`;          // contact shadow
     ctx.beginPath();
     ctx.ellipse(RUN_X, RUN_FOOT + 2, 26, 6, 0, 0, Math.PI * 2); ctx.fill();
     ctx.save();
     ctx.translate(RUN_X, RUN_FOOT - MUTANT_FOOT_OFS);
-    drawMutantPlayer(0, 0, 'right', true, false);
+    drawMutantPlayer(0, 0, 'right', true, false, t * RUN_GROUND * GAIT_PER_PX);
     ctx.restore();
     // Dust off his heels, trailing back the way the ground is moving
     for(let d = 0; d < 5; d++) {
@@ -20349,7 +20440,11 @@ function _drawCloneFollower(x, y, facing) {
     const s = 2;
     const cf = level6.cloneFollower;
     const isWalking = Math.abs(cf.x - cf.targetX) > 3;
-    const stride = isWalking ? Math.sin(Date.now() / 125) * 3 : 0;
+    // His walk cycle is measured in FLOOR, like the manager he is a clone of.
+    // On the clock it ran at a fixed rate whatever he was doing, so his planted
+    // foot slid along at very nearly the speed he was walking.
+    const clonePh = gaitAdvance(cf, x, isWalking, y);
+    const stride = isWalking ? -Math.cos(clonePh) * 3 : 0;
     const armed = cf.armed;
     const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
 
@@ -20371,7 +20466,7 @@ function _drawCloneFollower(x, y, facing) {
     _drawNPC({
         x, y, color: COLORS[0], state: 'happy',
         needsDoc: false, crackStartTime: null, animOffset: 3,
-        walking: isWalking,
+        walking: isWalking, gaitPhase: clonePh,
         facing: backTurned ? 'back' : facing,
         skipArms: armed || backTurned,
     });
@@ -20381,11 +20476,14 @@ function _drawCloneFollower(x, y, facing) {
         const capY = y - 3.8 * s, shX = 5.6 * s;
         for(const side of [-1, 1]) {
             const sw = stride * side;
+            // Screen-LEFT is the lit side, the same way the manager he is a
+            // clone of is lit — he is drawn by that sprite and cannot be lit
+            // against it.
             charLimb(x + side * shX, capY, x + side * 7.0 * s + sw, y + 4.6 * s,
-                     2.3 * s, side < 0 ? ramp.dark : charMix(COLORS[0].hex, '#000', 0.10),
+                     2.3 * s, side < 0 ? charMix(COLORS[0].hex, '#000', 0.10) : ramp.dark,
                      x + side * 7.4 * s + sw, y - 0.2 * s);
             charDeltoid(x + side * shX, capY, 1.35 * s,
-                        charMix(COLORS[0].hex, '#000', side < 0 ? 0.16 : 0.06));
+                        charMix(COLORS[0].hex, '#000', side < 0 ? 0.06 : 0.16));
             charHand(x + side * 7.0 * s + sw, y + 5.4 * s, 1.4 * s, '#f5c89a');
         }
     }
@@ -20395,14 +20493,18 @@ function _drawCloneFollower(x, y, facing) {
         const side = (facing === 'left') ? -1 : 1;
         const capY = y - 3.8 * s, shX = 5.6 * s;
         const gunY = capY + 1.0;
+        // Shading goes by which side of the SCREEN a limb is on, never by which
+        // way he happens to be facing: keyed to the facing, his lit arm swapped
+        // sides with him and half his turns were lit from the right.
+        const armLit = charMix(COLORS[0].hex, '#000', 0.10);
         charLimb(x + side * shX, capY, x + side * 25, gunY,
-                 2.3 * s, side < 0 ? ramp.dark : charMix(COLORS[0].hex, '#000', 0.10),
+                 2.3 * s, side < 0 ? armLit : ramp.dark,
                  x + side * 17, capY - 1.2);
         charLimb(x - side * shX, capY, x - side * 7.0 * s, y + 4.6 * s,
-                 2.3 * s, side < 0 ? charMix(COLORS[0].hex, '#000', 0.10) : ramp.dark,
+                 2.3 * s, side < 0 ? ramp.dark : armLit,
                  x - side * 7.4 * s, y - 0.2 * s);
-        charDeltoid(x - side * shX, capY, 1.35 * s, charMix(COLORS[0].hex, '#000', 0.16));
-        charDeltoid(x + side * shX, capY, 1.35 * s, charMix(COLORS[0].hex, '#fff', 0.10));
+        charDeltoid(x - shX, capY, 1.35 * s, charMix(COLORS[0].hex, '#fff', 0.10));
+        charDeltoid(x + shX, capY, 1.35 * s, charMix(COLORS[0].hex, '#000', 0.16));
         charHand(x - side * 7.0 * s, y + 5.4 * s, 1.4 * s, '#f5c89a');
         // The ghost gun is gripped, not parked past the wrist — the helper
         // draws the grip, then his fist over it, then the frame across the
@@ -21754,8 +21856,11 @@ function drawLevel6Underbelly() {
     ctx.closePath();
     ctx.fill();
     // Deltoid caps proud of the outline, so the arms have a joint to hang from
-    charDeltoid(mx - 19, my - 30 + breathe, 7.4, charMix('#cc2222', '#000', 0.2));
-    charDeltoid(mx + 19, my - 30 + breathe, 7.4, charMix('#cc2222', '#fff', 0.12));
+    // His torso gradient above puts the light on the LEFT and the chest
+    // highlight below sits left of centre. The shoulder caps, the arms and the
+    // legs were all lit from the RIGHT, so one sprite was lit two ways at once.
+    charDeltoid(mx - 19, my - 30 + breathe, 7.4, charMix('#cc2222', '#fff', 0.12));
+    charDeltoid(mx + 19, my - 30 + breathe, 7.4, charMix('#cc2222', '#000', 0.2));
     ctx.fillStyle = 'rgba(255,255,255,0.07)';        // chest highlight, key light
     ctx.beginPath();
     ctx.ellipse(mx - 7, my - 12 + breathe, 8, 12, 0, 0, Math.PI * 2);
@@ -21809,7 +21914,7 @@ function drawLevel6Underbelly() {
         ctx.lineTo(mx + sgn * 27, my + 3 + breathe);
         ctx.stroke();
         charDeltoid(mx + sgn * 20, my - 25 + breathe, 6,
-                    sgn < 0 ? charMix('#cc2222', '#000', 0.08) : charMix('#cc2222', '#fff', 0.12));
+                    sgn < 0 ? charMix('#cc2222', '#fff', 0.12) : charMix('#cc2222', '#000', 0.08));
         ctx.strokeStyle = '#c4a882';                 // bare forearm into the fist
         ctx.lineWidth = 8.4;
         ctx.beginPath();
@@ -21828,7 +21933,7 @@ function drawLevel6Underbelly() {
     // taper, so the bottom third of the creature was made of different stuff
     // from the rest of him. Same ramp, and a boot with a sole on it.
     for(const lg of [-1, 1]) {
-        const legCol = lg < 0 ? charMix('#cc2222', '#000', 0.20) : '#cc2222';
+        const legCol = lg < 0 ? '#cc2222' : charMix('#cc2222', '#000', 0.20);
         ctx.strokeStyle = legCol;
         ctx.lineCap = 'round';
         ctx.lineWidth = 15;
@@ -25866,6 +25971,7 @@ function ceoAxeHand(x, y, facing) {
 // walked the length of the furnace room to kill a man without taking a step.
 // Measured off his own position instead: if he moved, he is walking.
 let _ceoLastX = null, _ceoWalkTimer = 0;
+const _ceoGait = {};    // his walk cycle, measured in floor rather than in seconds
 
 function _drawCEO(x, y, facing) {
     const s = 2;
@@ -25873,7 +25979,10 @@ function _drawCEO(x, y, facing) {
     else if(_ceoWalkTimer > 0) _ceoWalkTimer--;
     _ceoLastX = x;
     const ceoWalking = _ceoWalkTimer > 0 || (ceo.state === 'hunting' && ceo.moveTimer > 0);
-    const ceoPh = frame * 0.2;
+    // Measured in GROUND, like the rest of the cast. On the frame counter his
+    // cycle ran at a fixed rate whatever he was doing, so the foot he had put
+    // down travelled forward with him for the whole stance.
+    const ceoPh = gaitAdvance(_ceoGait, x, ceoWalking, y);
     const ceoAmp = ceoWalking ? 3.4 : 0, ceoLiftAmt = ceoWalking ? 3.0 : 0;
     const ceoDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
 
@@ -27495,7 +27604,7 @@ function drawSelfDestructHatch() {
     ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(hx - 20, hy, 40, 14);
 
     // Draw player on top of hatch overlay
-    drawBaldManager(player.x, player.y, player.facing);
+    drawBaldManager(player.x, player.y, player.facing, false, false, { mem: player });
 
     // Countdown — top of screen
     if(selfDestructSeq.countdownStarted) {
@@ -27801,7 +27910,7 @@ function drawSelfDestructCave1() {
             drawActionLabel('[ ACTION ] STEP OFF LADDER', 190, 370, {fontSize: 12});
         }
     } else {
-        drawBaldManager(player.x, player.y, player.facing);
+        drawBaldManager(player.x, player.y, player.facing, false, false, { mem: player });
     }
 }
 
@@ -28565,7 +28674,7 @@ function drawSelfDestructCave2() {
         // boss's — and he has nothing in his hands, which is the whole point.
         if(sds.asCEO) drawCEO(player.x, player.y, player.facing);
         else {
-            drawBaldManager(player.x, player.y, player.facing, false, playerArmed);
+            drawBaldManager(player.x, player.y, player.facing, false, playerArmed, { mem: player });
             if(playerArmed) {
                 drawRevolver(player.x, player.y, player.facing);
                 drawAmmoCounter(player.x, player.y, level6.revolverAmmo);
@@ -30194,7 +30303,7 @@ function drawScene() {
                 if(player.holding && !redsEnding.onLadder) drawHeldDoc(player.x, player.y, player.holding);
             }
         } else {
-            drawBaldManager(player.x, player.y, player.facing, player.holding);
+            drawBaldManager(player.x, player.y, player.facing, player.holding, false, { mem: player });
             if(player.holding) {
                 drawHeldDoc(player.x, player.y, player.holding);
             }
@@ -30732,7 +30841,7 @@ function drawScene() {
             // Draw Mullet Pro FIRST (behind PMs) so he doesn't walk on their heads
             for(let npc of level6.exitingNPCs) {
                 if(!npc.isMulletPro) continue;
-                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward');
+                drawMulletPro(npc.x, npc.y, npc.facing, npc.hasSack, false, npc.facing !== 'forward', false, npc);
                 if(npc.hasSack) {
                     const bob = Math.sin(Date.now() / 300 + npc.x) * 1;
                     // Carried above his head, but LOWERED into the gap between
@@ -31869,7 +31978,7 @@ function drawScene() {
                     // Draw using proper game character functions
                     if(npc.isMulletPro) {
                         // holding=true uses the existing raised-arm carrying pose
-                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived, false, !npc.arrived);
+                        drawMulletPro(npc.x, ny, npc.arrived ? 'forward' : npc.facing, allArrived, false, !npc.arrived, false, npc);
                     } else {
                         const tempNPC = {
                             x: npc.x, y: ny,
@@ -32473,7 +32582,7 @@ function drawScene() {
         const meltT = Math.min(1, meltElapsed / 3000);
         drawHellMeltPlayer(player.x, player.y, meltT);
     } else {
-        drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun);
+        drawMulletPro(player.x, player.y, player.facing, player.holding, hasGhostGun, null, false, player);
     }
 
     if(player.holding) {
