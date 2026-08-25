@@ -1988,6 +1988,35 @@ function gaitLeg(phase, dir, amp, lift) {
 // actually read.
 const GAIT_PX = 8.0;
 const GAIT_PER_PX = 1 / GAIT_PX;
+// Did this sprite move, and is it still moving? Measured in BOTH axes.
+//
+// Three sprites each carried their own copy of this keyed to x ALONE — RED in
+// his ending, the mutant, and the CEO — and all three of these rooms have
+// depth: you walk up and down them as well as across. Going up the screen none
+// of them counted as walking, so the legs sat in the standing pose while the
+// body slid, which is a moonwalk with the cycle switched off entirely. The RED
+// clone that follows you is the same sprite fed both axes, which is why he
+// walked and RED himself did not.
+//
+// The little run-on timer is what stops the walk flickering off between frames
+// on a sprite whose position only updates every few. `mem` is any object that
+// lives between frames — the same one that carries the gait phase.
+const MOVE_RUN_ON = 8;
+function movedRecently(mem, x, y) {
+    // Idempotent within a frame, as gaitAdvance is: a sprite drawn twice in one
+    // frame would otherwise see no movement on the second call and tick its own
+    // run-on timer down twice as fast.
+    if(mem._mf !== frame) {
+        mem._mf = frame;
+        const first = mem._mx === undefined;
+        const moved = !first && Math.hypot(x - mem._mx, y - mem._my) > 0.4;
+        if(moved) mem._mt = MOVE_RUN_ON;
+        else if(mem._mt > 0) mem._mt--;
+        mem._mx = x; mem._my = y;
+    }
+    return mem._mt > 0;
+}
+
 // Anything further than this in a single frame is a CUT, not a stride — a room
 // change, a cutscene, the same body handed to a different character — and buys
 // no steps. Without it a sprite that teleports spins its legs for the jump.
@@ -13037,12 +13066,10 @@ function _drawMutantPlayer(x, y, facing, walking, eating, ph = null) {
 // Level-6 player draw — swaps in the mutant sprite during MUTANT ESCAPE.
 // Tracks horizontal movement itself so the gait animates without threading a
 // "walking" flag through a dozen call sites.
-let _mutLastX = null, _mutWalkTimer = 0;
-const _mutGait = {};    // his run cycle, measured in floor rather than in seconds
+const _mutGait = {};    // his run cycle, and whether he is running at all
 // Same idea for RED in his own ending — he is drawn by the pipe manager sprite,
 // which had no reason to know about walking until he became the player.
-let _redsLastX = null, _redsWalkTimer = 0;
-const _redsGait = {};   // his walk cycle, measured in floor rather than in seconds
+const _redsGait = {};   // his walk cycle, and whether he is walking at all
 // Draws the level 6 player AND whatever is in his hand. The weapon used to be a
 // second statement repeated verbatim after all 13 calls to this — so adding a
 // room meant remembering both lines, and forgetting the second gave an armed
@@ -13053,10 +13080,7 @@ function drawL6Player(x, y, facing, holding) {
     const hasGun = !!level6ActiveWeapon();
     const mm = (level === 6) ? level6.mutantMode : null;
     if(mm && mm.active) {
-        if(_mutLastX !== null && Math.abs(x - _mutLastX) > 0.4) _mutWalkTimer = 8;
-        else if(_mutWalkTimer > 0) _mutWalkTimer--;
-        _mutLastX = x;
-        const running = _mutWalkTimer > 0;
+        const running = movedRecently(_mutGait, x, y);
         drawMutantPlayer(x, y, facing, running, mm.eating,
                          gaitAdvance(_mutGait, x, running, y));
         return;                       // the mutant is disarmed; nothing to hold
@@ -26015,15 +26039,12 @@ function ceoAxeHand(x, y, facing) {
 // ENDING he is the executioner, carrying a state left over from level 6, so he
 // walked the length of the furnace room to kill a man without taking a step.
 // Measured off his own position instead: if he moved, he is walking.
-let _ceoLastX = null, _ceoWalkTimer = 0;
-const _ceoGait = {};    // his walk cycle, measured in floor rather than in seconds
+const _ceoGait = {};    // his walk cycle, and whether he is walking at all
 
 function _drawCEO(x, y, facing) {
     const s = 2;
-    if(_ceoLastX !== null && Math.abs(x - _ceoLastX) > 0.4) _ceoWalkTimer = 8;
-    else if(_ceoWalkTimer > 0) _ceoWalkTimer--;
-    _ceoLastX = x;
-    const ceoWalking = _ceoWalkTimer > 0 || (ceo.state === 'hunting' && ceo.moveTimer > 0);
+    const ceoWalking = movedRecently(_ceoGait, x, y)
+                      || (ceo.state === 'hunting' && ceo.moveTimer > 0);
     // Measured in GROUND, like the rest of the cast. On the frame counter his
     // cycle ran at a fixed rate whatever he was doing, so the foot he had put
     // down travelled forward with him for the whole stance.
@@ -30350,15 +30371,13 @@ function drawScene() {
                 // otherwise say anything.
                 // Walking is measured off his own position rather than off the
                 // key state, so it is true whatever moved him.
-                if(_redsLastX !== null && Math.abs(player.x - _redsLastX) > 0.4) _redsWalkTimer = 8;
-                else if(_redsWalkTimer > 0) _redsWalkTimer--;
-                _redsLastX = player.x;
-                const _redsWalking = _redsWalkTimer > 0 && !redsEnding.onLadder;
+                const _redsWalking = movedRecently(_redsGait, player.x, player.y)
+                                     && !redsEnding.onLadder;
                 drawNPC({ x: player.x, y: player.y, color: COLORS[0],
                           state: redsPmState(), needsDoc: false, crackStartTime: null,
                           fixAnim: redsEnding.fixAnim,
                           walking: _redsWalking,
-                          gaitPhase: gaitAdvance(_redsGait, player.x, _redsWalking),
+                          gaitPhase: gaitAdvance(_redsGait, player.x, _redsWalking, player.y),
                           facing: redsEnding.onLadder ? 'back' : player.facing });
                 if(player.holding && !redsEnding.onLadder) drawHeldDoc(player.x, player.y, player.holding);
             }
