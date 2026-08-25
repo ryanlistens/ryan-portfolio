@@ -1986,7 +1986,19 @@ function gaitLeg(phase, dir, amp, lift) {
 // 4.72 px/frame, 94% of body speed, which is a moonwalk. GAIT_PX 8 with a
 // swing of 9 leaves 0.83 — 17%, an 18px stride and a ten-frame cycle you can
 // actually read.
-const GAIT_PX = 8.0;
+// 8px of ground per radian suits the pipe-floor cast, which is what it was
+// measured against: YELLOW carries his ladder in at 1.35px a frame and the
+// delivery man wheels the printer at 2.6-3.1. It does NOT suit the player, who
+// covers 5px a frame — a third again as fast as the fastest of them. Applied to
+// him it gave a ten-frame cycle, twelve steps a second, against the twenty-five
+// frames and under five steps a second this game has always walked him at. That
+// is the frantic scurry: one constant cannot serve a cast whose speeds differ by
+// four times, because a faster walker LENGTHENS HIS STRIDE, he does not just
+// pick his feet up quicker.
+//
+// So: how far the body travels per radian, per speed class.
+const GAIT_PX = 8.0;           // the pipe floor: 1.35-3.1 px a frame
+const GAIT_PX_PLAYER = 20.0;   // anyone moving at the player's 5 px a frame
 const GAIT_PER_PX = 1 / GAIT_PX;
 // Did this sprite move, and is it still moving? Measured in BOTH axes.
 //
@@ -2025,7 +2037,8 @@ const GAIT_CUT_PX = 40;
 // object that lives between frames — the phase and the last position are kept
 // on it. `y` is optional; pass it for anyone who walks up and down the screen
 // as well as across it, or their legs stop moving the moment they turn.
-function gaitAdvance(mem, x, moving, y) {
+function gaitAdvance(mem, x, moving, y, stridePx) {
+    const perPx = 1 / (stridePx || GAIT_PX);
     const gy = (y === undefined) ? 0 : y;
     if(mem._gx === undefined) { mem._gx = x; mem._gy = gy; mem._gp = 0; }
     // Idempotent within a frame. These are called from DRAW code, and a sprite
@@ -2034,7 +2047,7 @@ function gaitAdvance(mem, x, moving, y) {
     if(mem._gf !== frame) {
         mem._gf = frame;
         const d = Math.hypot(x - mem._gx, gy - mem._gy);
-        if(moving && d <= GAIT_CUT_PX) mem._gp += d * GAIT_PER_PX;
+        if(moving && d <= GAIT_CUT_PX) mem._gp += d * perPx;
         mem._gx = x; mem._gy = gy;
     }
     return mem._gp;
@@ -3195,7 +3208,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     const s = 2.4;   // 2 put him 16% shorter than the rest of the cast
     const isBack = (facing === 'back' || facing === 'up');
     const isWalking = walking !== null ? walking : (Date.now() - player.lastMove < 150);
-    const mpPh = mem ? gaitAdvance(mem, x, isWalking, y) : frame * 0.25;
+    const mpPh = mem ? gaitAdvance(mem, x, isWalking, y, GAIT_PX_PLAYER) : frame * 0.25;
     // The arm swing rides the SAME phase the legs do, on the same cos, so the
     // two halves of him cannot drift apart — a sin here was 90 degrees out from
     // the legs, and on the clock the arms and legs kept separate time.
@@ -3822,8 +3835,9 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
     // live between frames — the same contract the pipe managers walk on. On the
     // frame counter it ran at a fixed rate whatever the body was doing, and his
     // planted foot travelled forward at 82% of body speed for the whole stance.
-    const bmPh = (opts && opts.mem) ? gaitAdvance(opts.mem, x, isWalking, y)
-                                    : frame * 0.25;
+    const bmPh = (opts && opts.mem)
+        ? gaitAdvance(opts.mem, x, isWalking, y, GAIT_PX_PLAYER)
+        : frame * 0.25;
     // Arm swing on the SAME phase and the same cos the legs use, so the two
     // halves of him keep time with each other.
     const bmStride = isWalking ? -Math.cos(bmPh) * 3 : 0;
@@ -5824,6 +5838,20 @@ function _drawNPC(npc) {
         const STRIDE = 4;                       // climb amplitude, below
         const climbCycle = isClimbing ? Math.sin(Date.now() / 200) * STRIDE : 0;
         const isFix = npc.state === 'fixing';
+        // WALKING AWAY is not climbing and not reaching. This pose is the man at
+        // his ladder — legs pinned to the rungs and arms up for a sack — and it
+        // was the only back view the sprite had, so RED walking up the floor in
+        // his own ending climbed an invisible ladder while he slid: two static
+        // bars for legs and both arms in the air. The bald manager's back view
+        // is just his back with his ordinary walk on it, which is what a man
+        // walking away from you looks like, and this is that.
+        const backWalk = isBackTurn && npc.walking && !isClimbing && !isFix;
+        const backPh = (npc.gaitPhase !== undefined && npc.gaitPhase !== null)
+            ? npc.gaitPhase : Date.now() / 125;
+        // Walking away there is no fore and aft to read on screen, so the cycle
+        // is all lift — the same answer the face-on pose gives.
+        const bwL = backWalk ? gaitLeg(backPh, 0, 0, 2.6) : { lift: 0 };
+        const bwR = backWalk ? gaitLeg(backPh + Math.PI, 0, 0, 2.6) : { lift: 0 };
         // Torquing motion: arms rock side-to-side when fixing
         const torque = isFix ? Math.sin(npc.fixAnim * 4) * 3 : 0;
 
@@ -5836,20 +5864,23 @@ function _drawNPC(npc) {
         // its foot exactly where the animation puts it while the top always
         // reaches past the hem — and drawing legs before the torso means that
         // overlap is hidden by the body rather than painted across it.
+        // The climb see-saws the legs about the hem; the walk LIFTS one foot at
+        // a time off a fixed floor, so its offset is negative-only.
+        const offL = climbCycle - bwL.lift, offR = -climbCycle - bwR.lift;
         ctx.fillStyle = LEG_LIT;
-        ctx.fillRect(x - 4*s, y + 6*s - STRIDE + climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillRect(x - 4*s, y + 6*s - STRIDE + offL, 4*s, 7*s + STRIDE);
         ctx.fillStyle = LEG_SHADE;
-        ctx.fillRect(x + s,   y + 6*s - STRIDE - climbCycle, 4*s, 7*s + STRIDE);
+        ctx.fillRect(x + s,   y + 6*s - STRIDE + offR, 4*s, 7*s + STRIDE);
         ctx.fillStyle = 'rgba(0,0,0,0.13)';
-        ctx.fillRect(x - 4*s, y + 9.4*s + climbCycle, 4*s, 0.8*s);
-        ctx.fillRect(x + s,   y + 9.4*s - climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x - 4*s, y + 9.4*s + offL, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 9.4*s + offR, 4*s, 0.8*s);
         // Shoes
         ctx.fillStyle = '#fff';
-        pathRoundRect(x - 4*s, y + 13*s + climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
-        pathRoundRect(x + s,   y + 13*s - climbCycle, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        pathRoundRect(x - 4*s, y + 13*s + offL, 4*s, 3.2*s, 1.4*s); ctx.fill();
+        pathRoundRect(x + s,   y + 13*s + offR, 4*s, 3.2*s, 1.4*s); ctx.fill();
         ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.fillRect(x - 4*s, y + 15.4*s + climbCycle, 4*s, 0.8*s);
-        ctx.fillRect(x + s,   y + 15.4*s - climbCycle, 4*s, 0.8*s);
+        ctx.fillRect(x - 4*s, y + 15.4*s + offL, 4*s, 0.8*s);
+        ctx.fillRect(x + s,   y + 15.4*s + offR, 4*s, 0.8*s);
 
         // Torso — same build as the front, so the silhouette and the tone match
         // from either side instead of a flat rectangle standing in for a body
@@ -5861,7 +5892,20 @@ function _drawNPC(npc) {
 
         // skipArms: the RED clone follower borrows this hooded back for walking
         // away from you, and a man walking away is not reaching for a sack.
-        if(isBackTurn && !npc.skipArms) {
+        if(backWalk && !npc.skipArms) {
+            // Hanging, swinging with the walk — the bald manager's back view
+            // again. The swing rides the same cos the legs do.
+            const capY = y - 3.8*s, shX = 5.6*s;
+            const sw = -Math.cos(backPh) * 3.0;
+            charLimb(x - shX, capY, x - 7.0*s + sw, y + 4.6*s,
+                     2.3*s, LIMB_LIT,   x - 7.4*s + sw, y - 0.2*s);
+            charLimb(x + shX, capY, x + 7.0*s - sw, y + 4.6*s,
+                     2.3*s, LIMB_SHADE, x + 7.4*s - sw, y - 0.2*s);
+            charDeltoid(x - shX, capY, 1.35*s, JOINT_LIT);
+            charDeltoid(x + shX, capY, 1.35*s, JOINT_SHADE);
+            charHand(x - 7.0*s + sw, y + 5.4*s, 1.4*s, '#f5c89a');
+            charHand(x + 7.0*s - sw, y + 5.4*s, 1.4*s, '#f5c89a');
+        } else if(isBackTurn && !npc.skipArms) {
             // REACHING UP for the sack Mullet Pro is handing down. With his arms
             // at his sides the sack simply landed on his head and nobody took it.
             //
@@ -13116,7 +13160,7 @@ function drawL6Player(x, y, facing, holding) {
     if(mm && mm.active) {
         const running = movedRecently(_mutGait, x, y);
         drawMutantPlayer(x, y, facing, running, mm.eating,
-                         gaitAdvance(_mutGait, x, running, y));
+                         gaitAdvance(_mutGait, x, running, y, GAIT_PX_PLAYER));
         return;                       // the mutant is disarmed; nothing to hold
     }
     drawBaldManager(x, y, facing, holding, hasGun, { mem: player });
@@ -20546,7 +20590,7 @@ function _drawCloneFollower(x, y, facing) {
     // His walk cycle is measured in FLOOR, like the manager he is a clone of.
     // On the clock it ran at a fixed rate whatever he was doing, so his planted
     // foot slid along at very nearly the speed he was walking.
-    const clonePh = gaitAdvance(cf, x, isWalking, y);
+    const clonePh = gaitAdvance(cf, x, isWalking, y, GAIT_PX_PLAYER);
     const stride = isWalking ? -Math.cos(clonePh) * 3 : 0;
     const armed = cf.armed;
     const ramp = charRamp(COLORS[0].hex, null, COLORS[0].shadow);
@@ -26082,7 +26126,7 @@ function _drawCEO(x, y, facing) {
     // Measured in GROUND, like the rest of the cast. On the frame counter his
     // cycle ran at a fixed rate whatever he was doing, so the foot he had put
     // down travelled forward with him for the whole stance.
-    const ceoPh = gaitAdvance(_ceoGait, x, ceoWalking, y);
+    const ceoPh = gaitAdvance(_ceoGait, x, ceoWalking, y, GAIT_PX_PLAYER);
     const ceoAmp = ceoWalking ? 3.4 : 0, ceoLiftAmt = ceoWalking ? 3.0 : 0;
     const ceoDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
 
@@ -29041,7 +29085,7 @@ function _drawSkeletonPlayer(x, y, facing) {
         // On the clock his stance foot ran forward at 100% of body speed, and
         // with no f in the swing his legs drove the same way on screen whichever
         // way he was going — so walking left he stepped backwards.
-        const skPh = gaitAdvance(_skeletonGait, x, true, y);
+        const skPh = gaitAdvance(_skeletonGait, x, true, y, GAIT_PX_PLAYER);
         const walkCycle = Math.sin(skPh);
         // Each leg gets its own half of the cycle, so one foot is DOWN while the
         // other swings through and clears the ground. Both feet used to sit on
@@ -30411,7 +30455,8 @@ function drawScene() {
                           state: redsPmState(), needsDoc: false, crackStartTime: null,
                           fixAnim: redsEnding.fixAnim,
                           walking: _redsWalking,
-                          gaitPhase: gaitAdvance(_redsGait, player.x, _redsWalking, player.y),
+                          gaitPhase: gaitAdvance(_redsGait, player.x, _redsWalking,
+                                                 player.y, GAIT_PX_PLAYER),
                           // 'up' means walking AWAY from the camera, and the
                           // pipe manager sprite spells that 'back' — the clone
                           // follower does the same translation before handing
