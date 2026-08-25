@@ -2033,45 +2033,11 @@ function gaitAdvance(mem, x, moving, y) {
     // must not take two steps for it.
     if(mem._gf !== frame) {
         mem._gf = frame;
-        const dx = x - mem._gx, dy = gy - mem._gy;
-        const d = Math.hypot(dx, dy);
-        if(moving && d <= GAIT_CUT_PX) {
-            mem._gp += d * GAIT_PER_PX;
-            // How much of that travel was ACROSS the screen — see gaitAcross.
-            // Smoothed, or the stride would snap open and shut as you change
-            // direction. 0.2 is about four frames to follow a turn.
-            if(d > 0.01) {
-                const across = Math.abs(dx) / d;
-                mem._ga = (mem._ga === undefined) ? across : mem._ga * 0.8 + across * 0.2;
-            }
-        }
+        const d = Math.hypot(x - mem._gx, gy - mem._gy);
+        if(moving && d <= GAIT_CUT_PX) mem._gp += d * GAIT_PER_PX;
         mem._gx = x; mem._gy = gy;
     }
     return mem._gp;
-}
-
-// How much of a sprite's recent travel is sideways, 0 to 1.
-//
-// A sprite in profile draws its stride HORIZONTALLY, so the stride can only be
-// as long as the sideways ground the body actually covers. These rooms have
-// depth — you walk up and down them as well as across — and the mover never
-// turns the sprite to face up the screen, so a body climbing the room stays in
-// a side-on pose. Given the full turned stride there, the feet scissor 30px
-// apart over a body that has travelled ZERO sideways: he marches on the spot
-// while sliding upward. Straight up this returns 0 and the sprite steps in
-// place on its face-on amplitude; straight across it returns 1 and he gets the
-// whole stride; diagonally, in between.
-//
-// No memory yet (a sprite on the clock fallback, or one that has not moved)
-// means no reason to shorten anything: 1.
-function gaitAcross(mem) {
-    return (mem && mem._ga !== undefined) ? mem._ga : 1;
-}
-
-// The stride amplitude for a turned sprite, collapsing toward the face-on
-// amplitude as the travel stops being sideways.
-function gaitStride(mem, turnedAmp, faceAmp) {
-    return faceAmp + (turnedAmp - faceAmp) * gaitAcross(mem);
 }
 
 // Where the player works the pipe room during the shift. The pipe managers
@@ -3241,8 +3207,7 @@ function _drawMulletPro(x, y, facing, holding = false, hasGun = false, walking =
     // 3.2px swing left the foot travelling forward for the entire stance. Same
     // 9.0 / 3.4 the pipe managers walk their turned cycle on.
     const mpAmp = isWalking ? 3.2 : 0, mpLift = isWalking ? 2.6 : 0;
-    const mpTurnAmp  = isWalking ? gaitStride(mem, 9.0, 3.2) : 0;
-    const mpTurnLift = isWalking ? gaitStride(mem, 3.4, 2.6) : 0;
+    const mpTurnAmp = isWalking ? 9.0 : 0, mpTurnLift = isWalking ? 3.4 : 0;
     const mpDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
 
     // Shadow — at foot level (y+36 = shoe bottom)
@@ -3857,8 +3822,8 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
     // live between frames — the same contract the pipe managers walk on. On the
     // frame counter it ran at a fixed rate whatever the body was doing, and his
     // planted foot travelled forward at 82% of body speed for the whole stance.
-    const bmMem = opts && opts.mem;
-    const bmPh = bmMem ? gaitAdvance(bmMem, x, isWalking, y) : frame * 0.25;
+    const bmPh = (opts && opts.mem) ? gaitAdvance(opts.mem, x, isWalking, y)
+                                    : frame * 0.25;
     // Arm swing on the SAME phase and the same cos the legs use, so the two
     // halves of him keep time with each other.
     const bmStride = isWalking ? -Math.cos(bmPh) * 3 : 0;
@@ -3867,8 +3832,7 @@ function _drawBaldManager(x, y, facing, holding = false, hasGun = false, opts) {
     // enough for the planted foot to hold its ground over the 25px of floor the
     // body covers in half a cycle. Face-on the legs are side by side and only
     // the lift has anywhere to go.
-    const bmTurnAmp  = isWalking ? gaitStride(bmMem, 9.0, 3.4) : 0;
-    const bmTurnLift = isWalking ? gaitStride(bmMem, 3.4, 2.8) : 0;
+    const bmTurnAmp = isWalking ? 9.0 : 0, bmTurnLift = isWalking ? 3.4 : 0;
     // Which way he is travelling, so the planted foot goes the right way
     const bmDir = (facing === 'left') ? -1 : (facing === 'right') ? 1 : 0;
     // Legs hinged from a fixed hip: top edge stays on the hips, the foot swings
@@ -4435,9 +4399,8 @@ function _drawCloningBoss(bx, by, facing, paused, hasGun, mem) {
         // body covers PI * GAIT_PX = 25px — so it is the house 9.0/3.4 the rest
         // of the cast walks its turned cycle on. dir is applied by the callers
         // below, so these are in FACING space: gaitLeg with dir 1.
-        const amp = gaitStride(mem, 9.0, 2.4), lft = gaitStride(mem, 3.4, 2.2);
-        const gLead  = paused ? { swing: 0, lift: 0 } : gaitLeg(gp, 1, amp, lft);
-        const gTrail = paused ? { swing: 0, lift: 0 } : gaitLeg(gp + Math.PI, 1, amp, lft);
+        const gLead  = paused ? { swing: 0, lift: 0 } : gaitLeg(gp, 1, 9.0, 3.4);
+        const gTrail = paused ? { swing: 0, lift: 0 } : gaitLeg(gp + Math.PI, 1, 9.0, 3.4);
         const stride = gLead.swing;
         const armSwing = walkCycle * 0.7;
         ctx.lineCap = 'round';
@@ -4953,9 +4916,8 @@ function _drawLabTech(bx, by, facing, paused, hasGun, mem) {
         // body covers PI * GAIT_PX = 25px — so it is the house 9.0/3.4 the rest
         // of the cast walks its turned cycle on. dir is applied by the callers
         // below, so these are in FACING space: gaitLeg with dir 1.
-        const amp = gaitStride(mem, 9.0, 2.4), lft = gaitStride(mem, 3.4, 2.2);
-        const gLead  = paused ? { swing: 0, lift: 0 } : gaitLeg(gp, 1, amp, lft);
-        const gTrail = paused ? { swing: 0, lift: 0 } : gaitLeg(gp + Math.PI, 1, amp, lft);
+        const gLead  = paused ? { swing: 0, lift: 0 } : gaitLeg(gp, 1, 9.0, 3.4);
+        const gTrail = paused ? { swing: 0, lift: 0 } : gaitLeg(gp + Math.PI, 1, 9.0, 3.4);
         const stride = gLead.swing;
         const armSwing = walkCycle * 0.7;
         ctx.lineCap = 'round';
@@ -6312,15 +6274,9 @@ function _drawNPC(npc) {
             // and set back and up a little, the near one over the top of it,
             // and the swing opens right up because overlapping is now the
             // point rather than the fault.
-            // Turned, the full stride — but only as far as the body is
-            // actually travelling sideways. Climbing the room in a side-on
-            // pose there is no sideways ground for a stride to cover, and at
-            // the full 9.0 his feet scissored 30px apart over a body that had
-            // moved 0px across: marching on the spot while sliding upward.
             const turned = npcTurn !== 0;
-            const across = (npc.gaitAcross === undefined) ? 1 : npc.gaitAcross;
-            const npcAmp  = npc.walking ? (turned ? 2.4 + 6.6 * across : 2.4) : 0;
-            const npcLift = npc.walking ? (turned ? 2.2 + 1.2 * across : 2.2) : 0;
+            const npcAmp  = npc.walking ? (turned ? 9.0 : 2.4) : 0;
+            const npcLift = npc.walking ? (turned ? 3.4 : 2.2) : 0;
             const legs = turned
                 // [x offset, colour, phase, hip lift, width scale]
                 ? [[-2.4*s - npcTurn * 1.0*s, npcRamp.dark, npcPh + Math.PI, 1.1*s, 1.05],
@@ -12865,7 +12821,7 @@ function drawMutantPlayer(x, y, ...rest) {
 // the moonwalk. The arms ran on a SECOND clock a different length again (110ms
 // against the legs' 95ms), so the two halves of him drifted through each other
 // on a slow beat instead of belonging to one stride.
-function _drawMutantPlayer(x, y, facing, walking, eating, ph = null, across = 1) {
+function _drawMutantPlayer(x, y, facing, walking, eating, ph = null) {
     // This is the SAME creature that was in the cage — after the detective
     // frees him you are playing his story, so every feature is matched to
     // the caged sprite: squared skull with a bulging brow, thick brows,
@@ -12885,9 +12841,6 @@ function _drawMutantPlayer(x, y, facing, walking, eating, ph = null, across = 1)
     const isBack = (facing === 'back' || facing === 'up');
     // ONE cycle for the whole creature — legs, arms and the bob off his stride.
     const gp = (ph !== null && ph !== undefined) ? ph : t / 95;
-    // His run is a long stride drawn sideways; going up the room there is no
-    // sideways ground for it to cover. See gaitAcross.
-    const runAmp = 4 + 9 * across;
     const gait = walking ? Math.sin(gp) : 0;
     const breathe = Math.sin(t / 800) * 2;              // matches cage breathing
     const bob = walking ? Math.abs(gait) * -3 : breathe * 0.5;
@@ -12987,7 +12940,7 @@ function _drawMutantPlayer(x, y, facing, walking, eating, ph = null, across = 1)
     // character in the game uses — the planted foot travels back under him
     // while the airborne one swings through and clears the ground.
     for(const [sgn, lph] of [[-1, 0], [1, Math.PI]]) {
-        const g = walking ? gaitLeg(gp + lph, dir, runAmp, 8) : { swing: 0, lift: 0 };
+        const g = walking ? gaitLeg(gp + lph, dir, 13, 8) : { swing: 0, lift: 0 };
         const footX = x + sgn * 9 + g.swing;
         const footY = y + 25 - g.lift;
         ctx.strokeStyle = sgn * dir < 0 ? charMix('#cc2222', '#000', 0.12) : '#cc2222';
@@ -13129,7 +13082,7 @@ function drawL6Player(x, y, facing, holding) {
     if(mm && mm.active) {
         const running = movedRecently(_mutGait, x, y);
         drawMutantPlayer(x, y, facing, running, mm.eating,
-                         gaitAdvance(_mutGait, x, running, y), gaitAcross(_mutGait));
+                         gaitAdvance(_mutGait, x, running, y));
         return;                       // the mutant is disarmed; nothing to hold
     }
     drawBaldManager(x, y, facing, holding, hasGun, { mem: player });
@@ -20582,7 +20535,7 @@ function _drawCloneFollower(x, y, facing) {
     _drawNPC({
         x, y, color: COLORS[0], state: 'happy',
         needsDoc: false, crackStartTime: null, animOffset: 3,
-        walking: isWalking, gaitPhase: clonePh, gaitAcross: gaitAcross(cf),
+        walking: isWalking, gaitPhase: clonePh,
         facing: backTurned ? 'back' : facing,
         skipArms: armed || backTurned,
     });
@@ -29060,9 +29013,8 @@ function _drawSkeletonPlayer(x, y, facing) {
         // other swings through and clears the ground. Both feet used to sit on
         // the baseline for the whole cycle — with nothing ever lifted, neither
         // foot was ever planted and the pair just slid along under him.
-        const skAmp = gaitStride(_skeletonGait, 9, 2.5);
-        const gA = gaitLeg(skPh, f, skAmp, 5);
-        const gB = gaitLeg(skPh + Math.PI, f, skAmp, 5);
+        const gA = gaitLeg(skPh, f, 9, 5);
+        const gB = gaitLeg(skPh + Math.PI, f, 9, 5);
         const armSwing = Math.cos(skPh) * 6 * f;
 
         // Legs — hip → knee → foot
@@ -30426,8 +30378,14 @@ function drawScene() {
                           fixAnim: redsEnding.fixAnim,
                           walking: _redsWalking,
                           gaitPhase: gaitAdvance(_redsGait, player.x, _redsWalking, player.y),
-                          gaitAcross: gaitAcross(_redsGait),
-                          facing: redsEnding.onLadder ? 'back' : player.facing });
+                          // 'up' means walking AWAY from the camera, and the
+                          // pipe manager sprite spells that 'back' — the clone
+                          // follower does the same translation before handing
+                          // this sprite a facing. Passed through raw, walking
+                          // up the room drew him face-on to the camera.
+                          facing: (redsEnding.onLadder || player.facing === 'up'
+                                   || player.facing === 'back')
+                                  ? 'back' : player.facing });
                 if(player.holding && !redsEnding.onLadder) drawHeldDoc(player.x, player.y, player.holding);
             }
         } else {
@@ -34374,15 +34332,30 @@ function update() {
                     player.lastMove = Date.now();
                 }
             }
+            // Turning to face the way you are TRAVELLING is what every other
+            // mover in the game does — level 6's does it on all four keys, and
+            // the clone follower only ever moves along x so his facing and his
+            // travel can never disagree. This one set the facing on the two
+            // horizontal keys only, so walking up or down the room left the
+            // sprite side-on and sliding: a profile pose draws its stride
+            // across the screen, and there was no across-the-screen travel to
+            // draw. Every character on this floor was doing it, RED in his own
+            // ending included.
             if(keys['ArrowUp'] || keys['up']) {
                 level5.napReclining = false;
                 player.y = Math.max(100, player.y - 5 * stepScale());
-                if(player.y !== prevY) player.lastMove = Date.now();
+                if(player.y !== prevY) {
+                    player.facing = 'up';
+                    player.lastMove = Date.now();
+                }
             }
             if(keys['ArrowDown'] || keys['down']) {
                 level5.napReclining = false;
                 player.y = Math.min(480, player.y + 5 * stepScale());
-                if(player.y !== prevY) player.lastMove = Date.now();
+                if(player.y !== prevY) {
+                    player.facing = 'down';
+                    player.lastMove = Date.now();
+                }
             }
 
             // Collision with window (top wall — between curtains)
